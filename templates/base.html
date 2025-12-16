@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Korean Fencing Tracker{% endblock %}</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <a href="/" class="logo">
+                <span class="logo-icon">⚔️</span>
+                <span class="logo-text">Korean Fencing Tracker</span>
+            </a>
+            <div class="nav-links">
+                <a href="/">대회</a>
+                <a href="/rankings">랭킹</a>
+                <a href="/chat">AI 검색</a>
+                <a href="/search">선수 검색</a>
+            </div>
+            <div class="search-box">
+                <input type="text" id="global-search" placeholder="선수/대회 검색...">
+            </div>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>Korean Fencing Tracker &copy; 2024</p>
+            <p>데이터 출처: <a href="https://fencing.sports.or.kr" target="_blank">대한펜싱협회</a></p>
+        </div>
+    </footer>
+
+    <script src="/static/js/main.js"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

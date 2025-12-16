@@ -1,0 +1,532 @@
+{% extends "base.html" %}
+
+{% block title %}랭킹 - Korean Fencing Tracker{% endblock %}
+
+{% block extra_css %}
+<style>
+    .ranking-container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+    }
+
+    .ranking-header {
+        text-align: center;
+        margin-bottom: 30px;
+    }
+
+    .ranking-header h1 {
+        font-size: 2rem;
+        color: var(--primary-color, #1a5f7a);
+    }
+
+    .filter-section {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 30px;
+    }
+
+    .filter-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 15px;
+    }
+
+    .filter-group {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .filter-group label {
+        font-weight: 600;
+        margin-bottom: 5px;
+        color: #333;
+    }
+
+    .filter-group select {
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 14px;
+    }
+
+    .category-toggle {
+        display: flex;
+        gap: 10px;
+        margin-top: 10px;
+    }
+
+    .category-btn {
+        padding: 10px 20px;
+        border: 2px solid var(--primary-color);
+        background: white;
+        border-radius: 4px;
+        cursor: pointer;
+        font-weight: 600;
+        transition: all 0.3s;
+    }
+
+    .category-btn.active {
+        background: var(--primary-color);
+        color: white;
+    }
+
+    .category-btn:hover:not(.active) {
+        background: #f0f0f0;
+    }
+
+    .category-hidden {
+        display: none !important;
+    }
+
+    .ranking-info {
+        background: linear-gradient(135deg, var(--primary-color) 0%, #2980b9 100%);
+        color: white;
+        padding: 20px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+    }
+
+    .ranking-info h2 {
+        margin: 0 0 10px 0;
+        font-size: 1.5rem;
+    }
+
+    .ranking-info-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+        gap: 10px;
+    }
+
+    .info-item {
+        text-align: center;
+    }
+
+    .info-value {
+        font-size: 1.5rem;
+        font-weight: bold;
+    }
+
+    .info-label {
+        font-size: 0.875rem;
+        opacity: 0.9;
+    }
+
+    .ranking-table-container {
+        overflow-x: auto;
+    }
+
+    .ranking-table {
+        width: 100%;
+        border-collapse: collapse;
+        background: white;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .ranking-table th,
+    .ranking-table td {
+        padding: 12px 15px;
+        text-align: left;
+        border-bottom: 1px solid #eee;
+    }
+
+    .ranking-table th {
+        background: #f8f9fa;
+        font-weight: 600;
+        color: #333;
+    }
+
+    .ranking-table tr:hover {
+        background: #f5f5f5;
+    }
+
+    .rank-cell {
+        font-weight: bold;
+        text-align: center;
+        width: 60px;
+    }
+
+    .rank-1 {
+        color: #FFD700;
+    }
+
+    .rank-2 {
+        color: #C0C0C0;
+    }
+
+    .rank-3 {
+        color: #CD7F32;
+    }
+
+    .medal-cell {
+        text-align: center;
+    }
+
+    .medal {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        font-size: 0.75rem;
+        font-weight: bold;
+        margin: 0 2px;
+    }
+
+    .medal-gold {
+        background: #FFD700;
+        color: #333;
+    }
+
+    .medal-silver {
+        background: #C0C0C0;
+        color: #333;
+    }
+
+    .medal-bronze {
+        background: #CD7F32;
+        color: white;
+    }
+
+    .points-cell {
+        font-weight: bold;
+        color: var(--primary-color);
+    }
+
+    .player-link {
+        color: #333;
+        text-decoration: none;
+    }
+
+    .player-link:hover {
+        color: var(--primary-color);
+        text-decoration: underline;
+    }
+
+    .team-badge {
+        display: inline-block;
+        background: #e9ecef;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 0.8rem;
+        margin: 2px;
+    }
+
+    .loading {
+        text-align: center;
+        padding: 40px;
+        color: #666;
+    }
+
+    .loading-spinner {
+        display: inline-block;
+        width: 40px;
+        height: 40px;
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid var(--primary-color);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+
+    .error-message {
+        text-align: center;
+        padding: 40px;
+        color: #dc3545;
+        background: #ffe6e6;
+        border-radius: 8px;
+    }
+
+    .pagination {
+        display: flex;
+        justify-content: center;
+        gap: 5px;
+        margin-top: 20px;
+    }
+
+    .page-btn {
+        padding: 8px 12px;
+        border: 1px solid #ddd;
+        background: white;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+
+    .page-btn.active {
+        background: var(--primary-color);
+        color: white;
+        border-color: var(--primary-color);
+    }
+
+    .page-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="ranking-container">
+    <div class="ranking-header">
+        <h1>대한펜싱 랭킹</h1>
+        <p>FIE + USA Fencing 포인트 시스템 기반 랭킹</p>
+    </div>
+
+    <div class="filter-section">
+        <div class="filter-grid">
+            <div class="filter-group">
+                <label>무기</label>
+                <select id="weapon-select">
+                    <option value="플러레">플러레</option>
+                    <option value="에뻬">에뻬</option>
+                    <option value="사브르">사브르</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>성별</label>
+                <select id="gender-select">
+                    <option value="남">남자</option>
+                    <option value="여">여자</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>연령대</label>
+                <select id="age-group-select">
+                    <option value="E1" data-has-category="false">초등 1-2 (U9)</option>
+                    <option value="E2" data-has-category="false">초등 3-4 (U11)</option>
+                    <option value="E3" data-has-category="false">초등 5-6 (U13)</option>
+                    <option value="MS" data-has-category="true">중등</option>
+                    <option value="HS" data-has-category="true">고등</option>
+                    <option value="UNI" data-has-category="true" selected>대학</option>
+                    <option value="SR" data-has-category="true">일반</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>시즌</label>
+                <select id="year-select">
+                    <option value="">전체 (롤링)</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="filter-group" id="category-section">
+            <label>구분</label>
+            <div class="category-toggle">
+                <button class="category-btn active" data-category="PRO">전문</button>
+                <button class="category-btn" data-category="CLUB">동호인</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="ranking-info" id="ranking-info">
+        <h2 id="ranking-title">-</h2>
+        <div class="ranking-info-grid">
+            <div class="info-item">
+                <div class="info-value" id="total-players">-</div>
+                <div class="info-label">등록 선수</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="ranking-content">
+        <div class="loading">
+            <div class="loading-spinner"></div>
+            <p>랭킹을 불러오는 중...</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const weaponSelect = document.getElementById('weapon-select');
+    const genderSelect = document.getElementById('gender-select');
+    const ageGroupSelect = document.getElementById('age-group-select');
+    const yearSelect = document.getElementById('year-select');
+    const categorySection = document.getElementById('category-section');
+    const categoryBtns = document.querySelectorAll('.category-btn');
+    const rankingContent = document.getElementById('ranking-content');
+    const rankingTitle = document.getElementById('ranking-title');
+    const totalPlayers = document.getElementById('total-players');
+
+    let currentCategory = 'PRO';
+    let currentPage = 1;
+
+    // Load years
+    fetch('/api/rankings/options')
+        .then(res => res.json())
+        .then(data => {
+            data.years.forEach(year => {
+                const opt = document.createElement('option');
+                opt.value = year;
+                opt.textContent = `${year}년`;
+                yearSelect.appendChild(opt);
+            });
+        });
+
+    // Category buttons
+    categoryBtns.forEach(btn => {
+        btn.addEventListener('click', function() {
+            categoryBtns.forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            currentCategory = this.dataset.category;
+            currentPage = 1;
+            loadRankings();
+        });
+    });
+
+    // Age group change
+    ageGroupSelect.addEventListener('change', function() {
+        const hasCategory = this.selectedOptions[0].dataset.hasCategory === 'true';
+        if (hasCategory) {
+            categorySection.classList.remove('category-hidden');
+        } else {
+            categorySection.classList.add('category-hidden');
+        }
+        currentPage = 1;
+        loadRankings();
+    });
+
+    // Other filters
+    weaponSelect.addEventListener('change', () => { currentPage = 1; loadRankings(); });
+    genderSelect.addEventListener('change', () => { currentPage = 1; loadRankings(); });
+    yearSelect.addEventListener('change', () => { currentPage = 1; loadRankings(); });
+
+    function loadRankings() {
+        const weapon = weaponSelect.value;
+        const gender = genderSelect.value;
+        const ageGroup = ageGroupSelect.value;
+        const year = yearSelect.value;
+        const hasCategory = ageGroupSelect.selectedOptions[0].dataset.hasCategory === 'true';
+
+        let url = `/api/rankings?weapon=${encodeURIComponent(weapon)}&gender=${encodeURIComponent(gender)}&age_group=${ageGroup}&page=${currentPage}&per_page=50`;
+
+        if (hasCategory) {
+            url += `&category=${currentCategory}`;
+        }
+        if (year) {
+            url += `&year=${year}`;
+        }
+
+        rankingContent.innerHTML = `
+            <div class="loading">
+                <div class="loading-spinner"></div>
+                <p>랭킹을 불러오는 중...</p>
+            </div>
+        `;
+
+        fetch(url)
+            .then(res => {
+                if (!res.ok) throw new Error('랭킹을 불러올 수 없습니다');
+                return res.json();
+            })
+            .then(data => {
+                updateTitle(data);
+                renderRankings(data);
+            })
+            .catch(err => {
+                rankingContent.innerHTML = `
+                    <div class="error-message">
+                        <p>${err.message}</p>
+                        <p>데이터가 충분히 수집되지 않았을 수 있습니다.</p>
+                    </div>
+                `;
+            });
+    }
+
+    function updateTitle(data) {
+        let title = `${data.weapon} ${data.gender === '남' ? '남자' : '여자'} ${data.age_group_name}`;
+        if (data.category_name) {
+            title += ` (${data.category_name})`;
+        }
+        rankingTitle.textContent = title;
+        totalPlayers.textContent = data.total;
+    }
+
+    function renderRankings(data) {
+        if (data.rankings.length === 0) {
+            rankingContent.innerHTML = `
+                <div class="error-message">
+                    <p>해당 조건에 맞는 랭킹 데이터가 없습니다.</p>
+                </div>
+            `;
+            return;
+        }
+
+        let html = `
+            <div class="ranking-table-container">
+                <table class="ranking-table">
+                    <thead>
+                        <tr>
+                            <th class="rank-cell">순위</th>
+                            <th>이름</th>
+                            <th>소속</th>
+                            <th class="points-cell">포인트</th>
+                            <th>대회</th>
+                            <th class="medal-cell">메달</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+        `;
+
+        data.rankings.forEach(r => {
+            const rankClass = r.rank <= 3 ? `rank-${r.rank}` : '';
+            const teams = r.teams.slice(0, 2).map(t => `<span class="team-badge">${t}</span>`).join('');
+
+            html += `
+                <tr>
+                    <td class="rank-cell ${rankClass}">${r.rank}</td>
+                    <td><a href="/player/${encodeURIComponent(r.name)}" class="player-link">${r.name}</a></td>
+                    <td>${teams}</td>
+                    <td class="points-cell">${r.points.toFixed(1)}</td>
+                    <td>${r.competitions}</td>
+                    <td class="medal-cell">
+                        ${r.gold > 0 ? `<span class="medal medal-gold">${r.gold}</span>` : ''}
+                        ${r.silver > 0 ? `<span class="medal medal-silver">${r.silver}</span>` : ''}
+                        ${r.bronze > 0 ? `<span class="medal medal-bronze">${r.bronze}</span>` : ''}
+                    </td>
+                </tr>
+            `;
+        });
+
+        html += `
+                    </tbody>
+                </table>
+            </div>
+        `;
+
+        // Pagination
+        const totalPages = Math.ceil(data.total / 50);
+        if (totalPages > 1) {
+            html += '<div class="pagination">';
+            html += `<button class="page-btn" ${currentPage === 1 ? 'disabled' : ''} onclick="changePage(${currentPage - 1})">이전</button>`;
+            for (let i = 1; i <= Math.min(totalPages, 10); i++) {
+                html += `<button class="page-btn ${currentPage === i ? 'active' : ''}" onclick="changePage(${i})">${i}</button>`;
+            }
+            html += `<button class="page-btn" ${currentPage === totalPages ? 'disabled' : ''} onclick="changePage(${currentPage + 1})">다음</button>`;
+            html += '</div>';
+        }
+
+        rankingContent.innerHTML = html;
+    }
+
+    window.changePage = function(page) {
+        currentPage = page;
+        loadRankings();
+        window.scrollTo(0, 0);
+    };
+
+    // Initial load
+    loadRankings();
+});
+</script>
+{% endblock %}

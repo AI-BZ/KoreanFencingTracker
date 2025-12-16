@@ -1,0 +1,399 @@
+{% extends "base.html" %}
+
+{% block title %}{{ player_name }} - 전적 | Korean Fencing Tracker{% endblock %}
+
+{% block extra_css %}
+<style>
+    .player-header {
+        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+        color: white;
+        padding: 3rem 0;
+    }
+    .player-name {
+        font-size: 2.5rem;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+    }
+    .player-teams {
+        opacity: 0.8;
+        font-size: 1.1rem;
+    }
+
+    /* 통계 그리드 */
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        gap: 1rem;
+        margin: -2rem auto 2rem;
+        max-width: 800px;
+        position: relative;
+        z-index: 10;
+    }
+    .stat-card {
+        background: white;
+        padding: 1.5rem;
+        border-radius: 12px;
+        text-align: center;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    .stat-value {
+        font-size: 2rem;
+        font-weight: 700;
+    }
+    .stat-value.gold { color: #ffd700; }
+    .stat-value.silver { color: #c0c0c0; }
+    .stat-value.bronze { color: #cd7f32; }
+    .stat-value.total { color: #007bff; }
+    .stat-label {
+        color: #666;
+        font-size: 0.85rem;
+        margin-top: 0.3rem;
+    }
+
+    /* 필터 */
+    .filter-bar {
+        display: flex;
+        gap: 1rem;
+        margin: 2rem 0;
+        flex-wrap: wrap;
+    }
+    .filter-select {
+        padding: 0.5rem 1rem;
+        border: 2px solid #ddd;
+        border-radius: 8px;
+        font-size: 0.9rem;
+        background: white;
+        cursor: pointer;
+    }
+    .filter-select:focus {
+        border-color: #007bff;
+        outline: none;
+    }
+
+    /* 기록 목록 */
+    .records-section {
+        margin: 2rem 0;
+    }
+    .record-card {
+        background: white;
+        border-radius: 12px;
+        padding: 1.2rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+    }
+    .record-rank {
+        min-width: 60px;
+        text-align: center;
+    }
+    .rank-badge {
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 1.2rem;
+    }
+    .rank-1 { background: linear-gradient(135deg, #ffd700, #ffed4a); color: #333; }
+    .rank-2 { background: linear-gradient(135deg, #c0c0c0, #e8e8e8); color: #333; }
+    .rank-3 { background: linear-gradient(135deg, #cd7f32, #daa06d); color: white; }
+    .rank-other { background: #e9ecef; color: #666; }
+
+    .record-info {
+        flex: 1;
+    }
+    .record-event {
+        font-weight: 600;
+        font-size: 1.1rem;
+        margin-bottom: 0.3rem;
+    }
+    .record-competition {
+        color: #666;
+        font-size: 0.9rem;
+        margin-bottom: 0.5rem;
+    }
+    .record-tags {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+    .tag {
+        padding: 0.2rem 0.6rem;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        font-weight: 500;
+    }
+    .tag-weapon { background: #fff3cd; color: #856404; }
+    .tag-gender { background: #d4edda; color: #155724; }
+    .tag-age { background: #cce5ff; color: #004085; }
+    .tag-type { background: #f8d7da; color: #721c24; }
+    .tag-team { background: #e2e3e5; color: #383d41; }
+
+    .record-date {
+        text-align: right;
+        min-width: 100px;
+    }
+    .record-year {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #333;
+    }
+    .record-date-text {
+        color: #666;
+        font-size: 0.85rem;
+    }
+
+    /* 무기별 통계 차트 */
+    .weapon-stats {
+        display: flex;
+        gap: 1rem;
+        margin: 1rem 0;
+    }
+    .weapon-bar {
+        flex: 1;
+        background: #e9ecef;
+        border-radius: 8px;
+        padding: 1rem;
+        text-align: center;
+    }
+    .weapon-bar.foil { border-left: 4px solid #e74c3c; }
+    .weapon-bar.epee { border-left: 4px solid #3498db; }
+    .weapon-bar.sabre { border-left: 4px solid #2ecc71; }
+    .weapon-count {
+        font-size: 1.5rem;
+        font-weight: 700;
+    }
+    .weapon-name {
+        color: #666;
+        font-size: 0.85rem;
+    }
+
+    /* 로딩/에러 상태 */
+    .loading {
+        text-align: center;
+        padding: 3rem;
+        color: #666;
+    }
+    .loading::after {
+        content: '';
+        display: inline-block;
+        width: 20px;
+        height: 20px;
+        border: 2px solid #ddd;
+        border-top-color: #007bff;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin-left: 0.5rem;
+        vertical-align: middle;
+    }
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+    .error {
+        text-align: center;
+        padding: 3rem;
+        color: #dc3545;
+    }
+    .empty {
+        text-align: center;
+        padding: 3rem;
+        color: #666;
+        background: #f8f9fa;
+        border-radius: 12px;
+    }
+
+    @media (max-width: 768px) {
+        .player-name { font-size: 1.8rem; }
+        .record-card { flex-direction: column; align-items: flex-start; }
+        .record-rank { min-width: auto; }
+        .record-date { text-align: left; margin-top: 0.5rem; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="player-header">
+    <div class="container">
+        <div class="player-name" id="player-name">{{ player_name }}</div>
+        <div class="player-teams" id="player-teams">로딩 중...</div>
+    </div>
+</div>
+
+<div class="container">
+    <!-- 통계 -->
+    <div class="stats-grid" id="stats-grid">
+        <div class="stat-card">
+            <div class="stat-value gold" id="stat-gold">-</div>
+            <div class="stat-label">1위</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value silver" id="stat-silver">-</div>
+            <div class="stat-label">2위</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value bronze" id="stat-bronze">-</div>
+            <div class="stat-label">3위</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value total" id="stat-total">-</div>
+            <div class="stat-label">총 기록</div>
+        </div>
+    </div>
+
+    <!-- 무기별 통계 -->
+    <div class="weapon-stats" id="weapon-stats"></div>
+
+    <!-- 필터 -->
+    <div class="filter-bar">
+        <select class="filter-select" id="filter-weapon">
+            <option value="">전체 무기</option>
+            <option value="플러레">플러레</option>
+            <option value="에뻬">에뻬</option>
+            <option value="사브르">사브르</option>
+        </select>
+        <select class="filter-select" id="filter-year">
+            <option value="">전체 연도</option>
+        </select>
+    </div>
+
+    <!-- 기록 목록 -->
+    <div class="records-section">
+        <h3 style="margin-bottom: 1rem;">대회 기록</h3>
+        <div id="records-list">
+            <div class="loading">데이터 로딩 중</div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const playerName = "{{ player_name }}";
+let playerData = null;
+
+document.addEventListener('DOMContentLoaded', async () => {
+    await loadPlayerData();
+    setupFilters();
+});
+
+async function loadPlayerData(weapon = '', year = '') {
+    const recordsList = document.getElementById('records-list');
+    recordsList.innerHTML = '<div class="loading">데이터 로딩 중</div>';
+
+    try {
+        let url = '/api/player/' + encodeURIComponent(playerName);
+        const params = new URLSearchParams();
+        if (weapon) params.append('weapon', weapon);
+        if (year) params.append('year', year);
+        if (params.toString()) url += '?' + params.toString();
+
+        const res = await fetch(url);
+
+        if (!res.ok) {
+            if (res.status === 404) {
+                recordsList.innerHTML = '<div class="empty">선수를 찾을 수 없습니다</div>';
+                return;
+            }
+            throw new Error('Failed to load');
+        }
+
+        playerData = await res.json();
+        renderPlayerData();
+    } catch (e) {
+        console.error('Load error:', e);
+        recordsList.innerHTML = '<div class="error">데이터 로드 실패</div>';
+    }
+}
+
+function renderPlayerData() {
+    if (!playerData) return;
+
+    // 이름 & 팀
+    document.getElementById('player-name').textContent = playerData.name;
+    document.getElementById('player-teams').textContent =
+        playerData.teams.length > 0 ? playerData.teams.join(', ') : '소속 정보 없음';
+
+    // 통계
+    document.getElementById('stat-gold').textContent = playerData.stats.medals.gold;
+    document.getElementById('stat-silver').textContent = playerData.stats.medals.silver;
+    document.getElementById('stat-bronze').textContent = playerData.stats.medals.bronze;
+    document.getElementById('stat-total').textContent = playerData.total_records;
+
+    // 무기별 통계
+    const weaponStats = document.getElementById('weapon-stats');
+    const weapons = playerData.stats.by_weapon;
+    weaponStats.innerHTML = Object.entries(weapons).map(([weapon, count]) => {
+        const cls = weapon === '플러레' ? 'foil' : weapon === '에뻬' ? 'epee' : 'sabre';
+        return `
+            <div class="weapon-bar ${cls}">
+                <div class="weapon-count">${count}</div>
+                <div class="weapon-name">${weapon}</div>
+            </div>
+        `;
+    }).join('');
+
+    // 연도 필터 옵션
+    const yearSelect = document.getElementById('filter-year');
+    const years = Object.keys(playerData.stats.by_year).sort((a, b) => b - a);
+    yearSelect.innerHTML = '<option value="">전체 연도</option>' +
+        years.map(y => `<option value="${y}">${y}년</option>`).join('');
+
+    // 기록 목록
+    renderRecords(playerData.records);
+}
+
+function renderRecords(records) {
+    const recordsList = document.getElementById('records-list');
+
+    if (!records || records.length === 0) {
+        recordsList.innerHTML = '<div class="empty">기록이 없습니다</div>';
+        return;
+    }
+
+    recordsList.innerHTML = records.map(r => {
+        const rankClass = r.rank === 1 ? 'rank-1' :
+                         r.rank === 2 ? 'rank-2' :
+                         r.rank === 3 ? 'rank-3' : 'rank-other';
+        const rankText = r.rank || '-';
+
+        return `
+            <div class="record-card">
+                <div class="record-rank">
+                    <div class="rank-badge ${rankClass}">${rankText}</div>
+                </div>
+                <div class="record-info">
+                    <div class="record-event">${r.event_name}</div>
+                    <div class="record-competition">${r.competition_name}</div>
+                    <div class="record-tags">
+                        ${r.weapon ? `<span class="tag tag-weapon">${r.weapon}</span>` : ''}
+                        ${r.gender ? `<span class="tag tag-gender">${r.gender}</span>` : ''}
+                        ${r.age_group ? `<span class="tag tag-age">${r.age_group}</span>` : ''}
+                        ${r.event_type ? `<span class="tag tag-type">${r.event_type}</span>` : ''}
+                        ${r.team ? `<span class="tag tag-team">${r.team}</span>` : ''}
+                    </div>
+                </div>
+                <div class="record-date">
+                    <div class="record-year">${r.year}</div>
+                    <div class="record-date-text">${r.competition_date}</div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function setupFilters() {
+    document.getElementById('filter-weapon').addEventListener('change', applyFilters);
+    document.getElementById('filter-year').addEventListener('change', applyFilters);
+}
+
+function applyFilters() {
+    const weapon = document.getElementById('filter-weapon').value;
+    const year = document.getElementById('filter-year').value;
+    loadPlayerData(weapon, year);
+}
+</script>
+{% endblock %}

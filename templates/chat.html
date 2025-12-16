@@ -1,0 +1,462 @@
+{% extends "base.html" %}
+
+{% block title %}AI 검색 - Korean Fencing Tracker{% endblock %}
+
+{% block content %}
+<div class="chat-container">
+    <div class="chat-header">
+        <h1>AI 펜싱 검색</h1>
+        <p>자연어로 선수, 대회, 전적을 검색하세요</p>
+    </div>
+
+    <div class="chat-messages" id="chatMessages">
+        <div class="message bot-message">
+            <div class="message-content">
+                <p>안녕하세요! 펜싱 데이터 AI 검색입니다.</p>
+                <p>다음과 같이 질문해보세요:</p>
+                <ul>
+                    <li>"박소윤의 라이벌은 누구야?"</li>
+                    <li>"김지연 선수 성적"</li>
+                    <li>"전국체육대회 대회 목록"</li>
+                    <li>"통계 보여줘"</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="chat-suggestions" id="chatSuggestions">
+        <button class="suggestion-btn" onclick="sendSuggestion('통계 보여줘')">통계 보여줘</button>
+        <button class="suggestion-btn" onclick="sendSuggestion('전국체육대회')">전국체육대회</button>
+        <button class="suggestion-btn" onclick="sendSuggestion('선수권대회')">선수권대회</button>
+    </div>
+
+    <div class="chat-input-container">
+        <form id="chatForm" onsubmit="sendMessage(event)">
+            <input
+                type="text"
+                id="chatInput"
+                placeholder="질문을 입력하세요... (예: 박소윤의 라이벌은 누구야?)"
+                autocomplete="off"
+            >
+            <button type="submit" id="sendBtn">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="22" y1="2" x2="11" y2="13"></line>
+                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+            </button>
+        </form>
+    </div>
+</div>
+
+<style>
+.chat-container {
+    max-width: 800px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 140px);
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    overflow: hidden;
+}
+
+.chat-header {
+    background: linear-gradient(135deg, var(--primary-color), #1e4d8c);
+    color: white;
+    padding: 20px;
+    text-align: center;
+}
+
+.chat-header h1 {
+    margin: 0 0 5px 0;
+    font-size: 1.5rem;
+}
+
+.chat-header p {
+    margin: 0;
+    opacity: 0.9;
+    font-size: 0.9rem;
+}
+
+.chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.message {
+    display: flex;
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.message-content {
+    max-width: 80%;
+    padding: 12px 16px;
+    border-radius: 16px;
+    line-height: 1.5;
+}
+
+.message-content p {
+    margin: 0 0 8px 0;
+}
+
+.message-content p:last-child {
+    margin-bottom: 0;
+}
+
+.message-content ul {
+    margin: 8px 0;
+    padding-left: 20px;
+}
+
+.message-content li {
+    margin: 4px 0;
+}
+
+.bot-message .message-content {
+    background: #f0f2f5;
+    color: #1a1a1a;
+    border-bottom-left-radius: 4px;
+}
+
+.user-message {
+    justify-content: flex-end;
+}
+
+.user-message .message-content {
+    background: var(--primary-color);
+    color: white;
+    border-bottom-right-radius: 4px;
+}
+
+.chat-suggestions {
+    padding: 10px 20px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    border-top: 1px solid #eee;
+}
+
+.suggestion-btn {
+    background: #f0f2f5;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+}
+
+.suggestion-btn:hover {
+    background: var(--primary-color);
+    color: white;
+}
+
+.chat-input-container {
+    padding: 15px 20px;
+    background: #f8f9fa;
+    border-top: 1px solid #eee;
+}
+
+#chatForm {
+    display: flex;
+    gap: 10px;
+}
+
+#chatInput {
+    flex: 1;
+    padding: 12px 16px;
+    border: 2px solid #e0e0e0;
+    border-radius: 24px;
+    font-size: 1rem;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+#chatInput:focus {
+    border-color: var(--primary-color);
+}
+
+#sendBtn {
+    width: 48px;
+    height: 48px;
+    border: none;
+    border-radius: 50%;
+    background: var(--primary-color);
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+#sendBtn:hover {
+    background: #1e4d8c;
+    transform: scale(1.05);
+}
+
+#sendBtn:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+}
+
+/* 동명이인 선택 버튼 */
+.disambiguation-options {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.disambiguation-btn {
+    background: white;
+    border: 1px solid var(--primary-color);
+    color: var(--primary-color);
+    padding: 10px 15px;
+    border-radius: 8px;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.2s;
+}
+
+.disambiguation-btn:hover {
+    background: var(--primary-color);
+    color: white;
+}
+
+.disambiguation-btn .team {
+    font-size: 0.85rem;
+    opacity: 0.8;
+}
+
+/* 데이터 카드 */
+.data-card {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 15px;
+    margin-top: 10px;
+}
+
+.data-card h4 {
+    margin: 0 0 10px 0;
+    color: var(--primary-color);
+}
+
+.data-card table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.data-card td {
+    padding: 5px 10px;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.data-card td:first-child {
+    font-weight: 500;
+    color: #666;
+}
+
+/* 로딩 인디케이터 */
+.typing-indicator {
+    display: flex;
+    gap: 4px;
+    padding: 12px 16px;
+    background: #f0f2f5;
+    border-radius: 16px;
+    border-bottom-left-radius: 4px;
+    width: fit-content;
+}
+
+.typing-indicator span {
+    width: 8px;
+    height: 8px;
+    background: #999;
+    border-radius: 50%;
+    animation: typing 1.4s infinite ease-in-out;
+}
+
+.typing-indicator span:nth-child(2) {
+    animation-delay: 0.2s;
+}
+
+.typing-indicator span:nth-child(3) {
+    animation-delay: 0.4s;
+}
+
+@keyframes typing {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-5px); }
+}
+</style>
+
+<script>
+const chatMessages = document.getElementById('chatMessages');
+const chatInput = document.getElementById('chatInput');
+const chatSuggestions = document.getElementById('chatSuggestions');
+const sendBtn = document.getElementById('sendBtn');
+
+function scrollToBottom() {
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+function addMessage(content, isUser = false) {
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `message ${isUser ? 'user-message' : 'bot-message'}`;
+    messageDiv.innerHTML = `<div class="message-content">${content}</div>`;
+    chatMessages.appendChild(messageDiv);
+    scrollToBottom();
+}
+
+function addTypingIndicator() {
+    const typing = document.createElement('div');
+    typing.className = 'message bot-message';
+    typing.id = 'typingIndicator';
+    typing.innerHTML = `
+        <div class="typing-indicator">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+    `;
+    chatMessages.appendChild(typing);
+    scrollToBottom();
+}
+
+function removeTypingIndicator() {
+    const typing = document.getElementById('typingIndicator');
+    if (typing) typing.remove();
+}
+
+function updateSuggestions(suggestions) {
+    if (!suggestions || suggestions.length === 0) {
+        chatSuggestions.innerHTML = '';
+        return;
+    }
+
+    chatSuggestions.innerHTML = suggestions.map(s =>
+        `<button class="suggestion-btn" onclick="sendSuggestion('${s}')">${s}</button>`
+    ).join('');
+}
+
+function formatResponse(response) {
+    let html = '';
+
+    // 마크다운 스타일 변환
+    let message = response.message || '';
+    message = message.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    message = message.replace(/\n/g, '<br>');
+    html += `<p>${message}</p>`;
+
+    // 동명이인 선택 버튼
+    if (response.disambiguation && response.disambiguation.length > 0) {
+        html += '<div class="disambiguation-options">';
+        response.disambiguation.forEach(opt => {
+            html += `
+                <button class="disambiguation-btn" onclick="selectPlayer('${opt.name}', '${opt.team}')">
+                    <strong>${opt.name}</strong>
+                    <div class="team">${opt.team} (${opt.event_count}개 대회 참가)</div>
+                </button>
+            `;
+        });
+        html += '</div>';
+    }
+
+    // 데이터 카드
+    if (response.data && response.data.recent_events) {
+        html += '<div class="data-card"><h4>최근 대회 성적</h4><table>';
+        response.data.recent_events.forEach(e => {
+            html += `<tr><td>${e.event || e.competition}</td><td>${e.rank || '-'}위</td></tr>`;
+        });
+        html += '</table></div>';
+    }
+
+    return html;
+}
+
+async function sendMessage(event) {
+    if (event) event.preventDefault();
+
+    const message = chatInput.value.trim();
+    if (!message) return;
+
+    // 사용자 메시지 추가
+    addMessage(message, true);
+    chatInput.value = '';
+    sendBtn.disabled = true;
+
+    // 로딩 표시
+    addTypingIndicator();
+
+    try {
+        const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message })
+        });
+
+        const data = await response.json();
+        removeTypingIndicator();
+
+        // 응답 메시지 추가
+        addMessage(formatResponse(data));
+
+        // 제안 업데이트
+        updateSuggestions(data.suggestions);
+
+    } catch (error) {
+        removeTypingIndicator();
+        addMessage('<p>죄송합니다. 오류가 발생했습니다. 다시 시도해주세요.</p>');
+    }
+
+    sendBtn.disabled = false;
+    chatInput.focus();
+}
+
+function sendSuggestion(text) {
+    chatInput.value = text;
+    sendMessage();
+}
+
+async function selectPlayer(name, team) {
+    addMessage(`${name} (${team}) 선택`, true);
+    addTypingIndicator();
+
+    try {
+        const response = await fetch(`/api/chat/select?player_name=${encodeURIComponent(name)}&team=${encodeURIComponent(team)}`, {
+            method: 'POST'
+        });
+
+        const data = await response.json();
+        removeTypingIndicator();
+        addMessage(formatResponse(data));
+        updateSuggestions(data.suggestions);
+
+    } catch (error) {
+        removeTypingIndicator();
+        addMessage('<p>오류가 발생했습니다.</p>');
+    }
+}
+
+// Enter 키로 전송
+chatInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        sendMessage(e);
+    }
+});
+
+// 페이지 로드시 포커스
+chatInput.focus();
+</script>
+{% endblock %}

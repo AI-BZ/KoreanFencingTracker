@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block title %}검색 - Korean Fencing Tracker{% endblock %}
+
+{% block content %}
+<div class="container">
+    <section class="search-section">
+        <h1>선수/대회 검색</h1>
+
+        <div class="search-form">
+            <input type="text" id="search-query" placeholder="선수 이름 또는 소속팀 검색..." value="{{ query }}">
+            <button onclick="performSearch()" class="btn btn-primary">검색</button>
+        </div>
+
+        <div class="search-results" id="search-results">
+            {% if query %}
+            <p class="searching">검색 중...</p>
+            {% else %}
+            <p class="search-hint">선수 이름이나 소속팀을 입력하세요</p>
+            {% endif %}
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    async function performSearch() {
+        const query = document.getElementById('search-query').value.trim();
+        if (query.length < 2) {
+            alert('2글자 이상 입력하세요');
+            return;
+        }
+
+        const resultsDiv = document.getElementById('search-results');
+        resultsDiv.innerHTML = '<p class="searching">검색 중...</p>';
+
+        try {
+            const response = await fetch(`/api/search/players?q=${encodeURIComponent(query)}`);
+            const data = await response.json();
+
+            if (data.results.length === 0) {
+                resultsDiv.innerHTML = '<p class="no-results">검색 결과가 없습니다</p>';
+                return;
+            }
+
+            let html = `<p class="result-count">${data.count}개 결과</p>`;
+            html += '<table class="result-table">';
+            html += '<thead><tr><th>선수</th><th>소속</th><th>대회</th><th>종목</th><th>순위</th><th>승률</th></tr></thead>';
+            html += '<tbody>';
+
+            data.results.forEach(r => {
+                html += `<tr>
+                    <td class="player-name">${r.player_name}</td>
+                    <td>${r.team}</td>
+                    <td>${r.competition}</td>
+                    <td>${r.event}</td>
+                    <td class="rank">${r.rank || '-'}</td>
+                    <td>${r.win_rate || '-'}</td>
+                </tr>`;
+            });
+
+            html += '</tbody></table>';
+            resultsDiv.innerHTML = html;
+        } catch (error) {
+            resultsDiv.innerHTML = '<p class="error">검색 실패</p>';
+            console.error(error);
+        }
+    }
+
+    // Enter 키 검색
+    document.getElementById('search-query').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') performSearch();
+    });
+
+    // URL 파라미터로 자동 검색
+    const urlQuery = '{{ query }}';
+    if (urlQuery) {
+        performSearch();
+    }
+</script>
+{% endblock %}

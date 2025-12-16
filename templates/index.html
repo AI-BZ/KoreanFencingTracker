@@ -1,0 +1,724 @@
+{% extends "base.html" %}
+
+{% block title %}Korean Fencing Tracker - 선수 중심 검색{% endblock %}
+
+{% block extra_css %}
+<style>
+    .hero {
+        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+        color: white;
+        padding: 3rem 0;
+        text-align: center;
+    }
+    .hero h1 {
+        font-size: 2.5rem;
+        margin-bottom: 0.5rem;
+    }
+    .hero p {
+        opacity: 0.8;
+        font-size: 1.1rem;
+    }
+
+    /* 필터 섹션 */
+    .filter-section {
+        background: #f8f9fa;
+        padding: 1.5rem;
+        border-radius: 12px;
+        margin: 2rem 0;
+    }
+    .filter-group {
+        margin-bottom: 1rem;
+    }
+    .filter-group label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        color: #333;
+    }
+    .filter-buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+    .filter-btn {
+        padding: 0.5rem 1rem;
+        border: 2px solid #ddd;
+        background: white;
+        border-radius: 20px;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-size: 0.9rem;
+    }
+    .filter-btn:hover {
+        border-color: #007bff;
+        background: #f0f7ff;
+    }
+    .filter-btn.active {
+        background: #007bff;
+        color: white;
+        border-color: #007bff;
+    }
+    .filter-btn.weapon-foil.active { background: #e74c3c; border-color: #e74c3c; }
+    .filter-btn.weapon-epee.active { background: #3498db; border-color: #3498db; }
+    .filter-btn.weapon-sabre.active { background: #2ecc71; border-color: #2ecc71; }
+
+    /* 선수 검색 */
+    .player-search {
+        background: white;
+        padding: 2rem;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        margin: 2rem 0;
+    }
+    .search-input-wrapper {
+        position: relative;
+        max-width: 500px;
+        margin: 0 auto;
+    }
+    .search-input {
+        width: 100%;
+        padding: 1rem 1.5rem;
+        font-size: 1.1rem;
+        border: 2px solid #ddd;
+        border-radius: 30px;
+        outline: none;
+        transition: border-color 0.2s;
+        box-sizing: border-box;
+    }
+    .search-input:focus {
+        border-color: #007bff;
+    }
+    .search-suggestions {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background: white;
+        border: 1px solid #ddd;
+        border-radius: 12px;
+        margin-top: 0.5rem;
+        max-height: 300px;
+        overflow-y: auto;
+        display: none;
+        z-index: 100;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+    }
+    .search-suggestions.show {
+        display: block;
+    }
+    .suggestion-item {
+        padding: 0.8rem 1.2rem;
+        cursor: pointer;
+        border-bottom: 1px solid #eee;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .suggestion-item:hover {
+        background: #f8f9fa;
+    }
+    .suggestion-item:last-child {
+        border-bottom: none;
+    }
+    .suggestion-name {
+        font-weight: 600;
+    }
+    .suggestion-team {
+        color: #666;
+        font-size: 0.85rem;
+    }
+    .suggestion-count {
+        background: #e9ecef;
+        padding: 0.2rem 0.6rem;
+        border-radius: 10px;
+        font-size: 0.8rem;
+        color: #666;
+    }
+
+    /* 결과 섹션 */
+    .results-section {
+        margin: 2rem 0;
+    }
+    .results-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+    }
+    .results-count {
+        color: #666;
+    }
+
+    /* 종목 카드 */
+    .event-cards {
+        display: grid;
+        gap: 1rem;
+    }
+    .event-card {
+        background: white;
+        border-radius: 12px;
+        padding: 1.2rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .event-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.12);
+    }
+    .event-info {
+        flex: 1;
+    }
+    .event-name {
+        font-weight: 600;
+        font-size: 1.1rem;
+        margin-bottom: 0.3rem;
+    }
+    .event-meta {
+        color: #666;
+        font-size: 0.9rem;
+    }
+    .event-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+    }
+    .tag {
+        padding: 0.2rem 0.6rem;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        font-weight: 500;
+    }
+    .tag-weapon { background: #fff3cd; color: #856404; }
+    .tag-gender { background: #d4edda; color: #155724; }
+    .tag-age { background: #cce5ff; color: #004085; }
+    .tag-type { background: #f8d7da; color: #721c24; }
+
+    .event-date {
+        text-align: right;
+        color: #666;
+        font-size: 0.9rem;
+        min-width: 80px;
+    }
+    .event-year {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #333;
+    }
+
+    /* 대회 접기/펼치기 */
+    .competitions-toggle {
+        background: #f8f9fa;
+        border-radius: 12px;
+        margin-top: 2rem;
+    }
+    .toggle-header {
+        padding: 1rem 1.5rem;
+        cursor: pointer;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-weight: 600;
+    }
+    .toggle-header:hover {
+        background: #e9ecef;
+        border-radius: 12px;
+    }
+    .toggle-icon {
+        transition: transform 0.3s;
+    }
+    .toggle-icon.open {
+        transform: rotate(180deg);
+    }
+    .competitions-list {
+        display: none;
+        padding: 0 1.5rem 1.5rem;
+    }
+    .competitions-list.show {
+        display: block;
+    }
+    .competition-item {
+        padding: 0.8rem;
+        border-bottom: 1px solid #eee;
+        display: flex;
+        justify-content: space-between;
+        cursor: pointer;
+    }
+    .competition-item:hover {
+        background: white;
+        border-radius: 8px;
+    }
+    .competition-item:last-child {
+        border-bottom: none;
+    }
+
+    /* 통계 카드 */
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 1rem;
+        margin: 2rem 0;
+    }
+    .stat-card {
+        background: white;
+        padding: 1.5rem;
+        border-radius: 12px;
+        text-align: center;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    .stat-value {
+        font-size: 2rem;
+        font-weight: 700;
+        color: #007bff;
+    }
+    .stat-label {
+        color: #666;
+        font-size: 0.9rem;
+        margin-top: 0.3rem;
+    }
+
+    /* 로딩 */
+    .loading {
+        text-align: center;
+        padding: 2rem;
+        color: #666;
+    }
+    .loading::after {
+        content: '';
+        display: inline-block;
+        width: 20px;
+        height: 20px;
+        border: 2px solid #ddd;
+        border-top-color: #007bff;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin-left: 0.5rem;
+        vertical-align: middle;
+    }
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+
+    /* 페이지네이션 */
+    .pagination {
+        display: flex;
+        justify-content: center;
+        gap: 0.5rem;
+        margin: 2rem 0;
+        flex-wrap: wrap;
+    }
+    .page-btn {
+        padding: 0.5rem 1rem;
+        border: 1px solid #ddd;
+        background: white;
+        border-radius: 8px;
+        cursor: pointer;
+    }
+    .page-btn:hover {
+        background: #f8f9fa;
+    }
+    .page-btn.active {
+        background: #007bff;
+        color: white;
+        border-color: #007bff;
+    }
+    .page-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    @media (max-width: 768px) {
+        .hero h1 { font-size: 1.8rem; }
+        .event-card { flex-direction: column; align-items: flex-start; }
+        .event-date { text-align: left; margin-top: 0.5rem; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="hero">
+    <div class="container">
+        <h1>Korean Fencing Tracker</h1>
+        <p>2019년부터의 대한펜싱협회 대회 기록을 선수 중심으로 검색하세요</p>
+    </div>
+</div>
+
+<div class="container">
+    <!-- 통계 -->
+    <div class="stats-grid" id="stats-grid">
+        <div class="stat-card">
+            <div class="stat-value" id="stat-competitions">-</div>
+            <div class="stat-label">대회</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="stat-events">-</div>
+            <div class="stat-label">종목</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="stat-players">-</div>
+            <div class="stat-label">선수</div>
+        </div>
+    </div>
+
+    <!-- 선수 검색 -->
+    <div class="player-search">
+        <h2 style="text-align: center; margin-bottom: 1.5rem;">선수 검색</h2>
+        <div class="search-input-wrapper">
+            <input type="text" class="search-input" id="player-search"
+                   placeholder="선수 이름을 입력하세요..." autocomplete="off">
+            <div class="search-suggestions" id="search-suggestions"></div>
+        </div>
+    </div>
+
+    <!-- 필터 -->
+    <div class="filter-section">
+        <h3 style="margin-bottom: 1rem;">종목 필터</h3>
+
+        <div class="filter-group">
+            <label>무기</label>
+            <div class="filter-buttons" id="filter-weapons">
+                <button class="filter-btn weapon-foil" data-filter="weapon" data-value="플러레">플러레</button>
+                <button class="filter-btn weapon-epee" data-filter="weapon" data-value="에뻬">에뻬</button>
+                <button class="filter-btn weapon-sabre" data-filter="weapon" data-value="사브르">사브르</button>
+            </div>
+        </div>
+
+        <div class="filter-group">
+            <label>성별</label>
+            <div class="filter-buttons" id="filter-genders">
+                <button class="filter-btn" data-filter="gender" data-value="남">남</button>
+                <button class="filter-btn" data-filter="gender" data-value="여">여</button>
+            </div>
+        </div>
+
+        <div class="filter-group">
+            <label>연령대</label>
+            <div class="filter-buttons" id="filter-ages"></div>
+        </div>
+
+        <div class="filter-group">
+            <label>연도</label>
+            <div class="filter-buttons" id="filter-years"></div>
+        </div>
+
+        <div class="filter-group">
+            <label>종목 타입</label>
+            <div class="filter-buttons" id="filter-types">
+                <button class="filter-btn" data-filter="event_type" data-value="개인">개인</button>
+                <button class="filter-btn" data-filter="event_type" data-value="단체">단체</button>
+            </div>
+        </div>
+
+        <div style="margin-top: 1rem;">
+            <button class="filter-btn" id="clear-filters" style="background: #dc3545; color: white; border-color: #dc3545;">
+                필터 초기화
+            </button>
+        </div>
+    </div>
+
+    <!-- 종목 결과 -->
+    <div class="results-section">
+        <div class="results-header">
+            <h3>종목 목록</h3>
+            <span class="results-count" id="results-count"></span>
+        </div>
+        <div class="event-cards" id="event-cards">
+            <div class="loading">데이터 로딩 중</div>
+        </div>
+        <div class="pagination" id="pagination"></div>
+    </div>
+
+    <!-- 대회 목록 (접기/펼치기) -->
+    <div class="competitions-toggle">
+        <div class="toggle-header" id="competitions-toggle">
+            <span>대회별 보기</span>
+            <span class="toggle-icon" id="toggle-icon">▼</span>
+        </div>
+        <div class="competitions-list" id="competitions-list"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// 상태 관리
+const state = {
+    filters: {
+        weapon: null,
+        gender: null,
+        age_group: null,
+        year: null,
+        event_type: null
+    },
+    page: 1,
+    perPage: 30
+};
+
+// 초기화
+document.addEventListener('DOMContentLoaded', async () => {
+    await loadStats();
+    await loadFilters();
+    await loadEvents();
+    await loadCompetitions();
+    setupEventListeners();
+});
+
+// 통계 로드
+async function loadStats() {
+    try {
+        const res = await fetch('/api/stats');
+        const data = await res.json();
+        document.getElementById('stat-competitions').textContent = data.total_competitions.toLocaleString();
+        document.getElementById('stat-events').textContent = data.total_events.toLocaleString();
+        document.getElementById('stat-players').textContent = data.total_players.toLocaleString();
+    } catch (e) {
+        console.error('Stats error:', e);
+    }
+}
+
+// 필터 옵션 로드
+async function loadFilters() {
+    try {
+        const res = await fetch('/api/filters');
+        const data = await res.json();
+
+        // 연령대
+        const agesDiv = document.getElementById('filter-ages');
+        agesDiv.innerHTML = data.age_groups.map(age =>
+            `<button class="filter-btn" data-filter="age_group" data-value="${age}">${age}</button>`
+        ).join('');
+
+        // 연도
+        const yearsDiv = document.getElementById('filter-years');
+        yearsDiv.innerHTML = data.years.map(year =>
+            `<button class="filter-btn" data-filter="year" data-value="${year}">${year}</button>`
+        ).join('');
+    } catch (e) {
+        console.error('Filters error:', e);
+    }
+}
+
+// 종목 로드
+async function loadEvents() {
+    const cardsDiv = document.getElementById('event-cards');
+    cardsDiv.innerHTML = '<div class="loading">데이터 로딩 중</div>';
+
+    try {
+        const params = new URLSearchParams();
+        params.append('page', state.page);
+        params.append('per_page', state.perPage);
+
+        for (const [key, value] of Object.entries(state.filters)) {
+            if (value) params.append(key, value);
+        }
+
+        const res = await fetch('/api/events?' + params.toString());
+        const data = await res.json();
+
+        document.getElementById('results-count').textContent =
+            `총 ${data.total.toLocaleString()}개 종목`;
+
+        if (data.events.length === 0) {
+            cardsDiv.innerHTML = '<div style="text-align: center; padding: 2rem; color: #666;">검색 결과가 없습니다</div>';
+            document.getElementById('pagination').innerHTML = '';
+            return;
+        }
+
+        cardsDiv.innerHTML = data.events.map(event => `
+            <div class="event-card">
+                <div class="event-info">
+                    <div class="event-name">${event.name}</div>
+                    <div class="event-meta">${event.competition_name}</div>
+                    <div class="event-tags">
+                        ${event.weapon ? `<span class="tag tag-weapon">${event.weapon}</span>` : ''}
+                        ${event.gender ? `<span class="tag tag-gender">${event.gender}</span>` : ''}
+                        ${event.age_group ? `<span class="tag tag-age">${event.age_group}</span>` : ''}
+                        ${event.event_type ? `<span class="tag tag-type">${event.event_type}</span>` : ''}
+                    </div>
+                </div>
+                <div class="event-date">
+                    <div class="event-year">${event.year}</div>
+                    <div>${event.competition_date}</div>
+                </div>
+            </div>
+        `).join('');
+
+        // 페이지네이션
+        renderPagination(data.page, data.total_pages);
+    } catch (e) {
+        console.error('Events error:', e);
+        cardsDiv.innerHTML = '<div style="color: red; text-align: center; padding: 2rem;">데이터 로드 실패</div>';
+    }
+}
+
+// 대회 목록 로드
+async function loadCompetitions() {
+    try {
+        const res = await fetch('/api/competitions?per_page=100');
+        const data = await res.json();
+
+        const listDiv = document.getElementById('competitions-list');
+        listDiv.innerHTML = data.competitions.map(comp => `
+            <div class="competition-item" onclick="location.href='/competition/${comp.event_cd}'">
+                <div>
+                    <strong>${comp.name}</strong>
+                    <div style="font-size: 0.85rem; color: #666;">${comp.event_count}개 종목</div>
+                </div>
+                <div style="text-align: right; color: #666;">
+                    ${comp.start_date || ''}
+                </div>
+            </div>
+        `).join('');
+    } catch (e) {
+        console.error('Competitions error:', e);
+    }
+}
+
+// 페이지네이션 렌더링
+function renderPagination(current, total) {
+    if (total <= 1) {
+        document.getElementById('pagination').innerHTML = '';
+        return;
+    }
+
+    let html = '';
+    html += `<button class="page-btn" onclick="goToPage(${current - 1})" ${current <= 1 ? 'disabled' : ''}>이전</button>`;
+
+    const start = Math.max(1, current - 2);
+    const end = Math.min(total, current + 2);
+
+    if (start > 1) {
+        html += `<button class="page-btn" onclick="goToPage(1)">1</button>`;
+        if (start > 2) html += `<span style="padding: 0.5rem;">...</span>`;
+    }
+
+    for (let i = start; i <= end; i++) {
+        html += `<button class="page-btn ${i === current ? 'active' : ''}" onclick="goToPage(${i})">${i}</button>`;
+    }
+
+    if (end < total) {
+        if (end < total - 1) html += `<span style="padding: 0.5rem;">...</span>`;
+        html += `<button class="page-btn" onclick="goToPage(${total})">${total}</button>`;
+    }
+
+    html += `<button class="page-btn" onclick="goToPage(${current + 1})" ${current >= total ? 'disabled' : ''}>다음</button>`;
+
+    document.getElementById('pagination').innerHTML = html;
+}
+
+function goToPage(page) {
+    state.page = page;
+    loadEvents();
+    window.scrollTo({ top: 400, behavior: 'smooth' });
+}
+
+// 이벤트 리스너
+function setupEventListeners() {
+    // 필터 버튼 (이벤트 위임)
+    document.querySelector('.filter-section').addEventListener('click', (e) => {
+        const btn = e.target.closest('.filter-btn[data-filter]');
+        if (!btn) return;
+
+        const filter = btn.dataset.filter;
+        const value = btn.dataset.value;
+
+        // 토글
+        if (state.filters[filter] === value) {
+            state.filters[filter] = null;
+            btn.classList.remove('active');
+        } else {
+            // 같은 필터 그룹의 다른 버튼 비활성화
+            document.querySelectorAll(`.filter-btn[data-filter="${filter}"]`).forEach(b => {
+                b.classList.remove('active');
+            });
+            state.filters[filter] = value;
+            btn.classList.add('active');
+        }
+
+        state.page = 1;
+        loadEvents();
+    });
+
+    // 필터 초기화
+    document.getElementById('clear-filters').addEventListener('click', () => {
+        state.filters = { weapon: null, gender: null, age_group: null, year: null, event_type: null };
+        document.querySelectorAll('.filter-btn[data-filter]').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        state.page = 1;
+        loadEvents();
+    });
+
+    // 대회 토글
+    document.getElementById('competitions-toggle').addEventListener('click', () => {
+        const list = document.getElementById('competitions-list');
+        const icon = document.getElementById('toggle-icon');
+        list.classList.toggle('show');
+        icon.classList.toggle('open');
+    });
+
+    // 선수 검색
+    const searchInput = document.getElementById('player-search');
+    const suggestions = document.getElementById('search-suggestions');
+    let searchTimeout;
+
+    searchInput.addEventListener('input', () => {
+        clearTimeout(searchTimeout);
+        const query = searchInput.value.trim();
+
+        if (query.length < 1) {
+            suggestions.classList.remove('show');
+            return;
+        }
+
+        searchTimeout = setTimeout(async () => {
+            try {
+                const res = await fetch('/api/player/search?q=' + encodeURIComponent(query));
+                const data = await res.json();
+
+                if (data.results.length === 0) {
+                    suggestions.innerHTML = '<div class="suggestion-item"><span style="color: #666;">검색 결과 없음</span></div>';
+                } else {
+                    suggestions.innerHTML = data.results.map(p => `
+                        <div class="suggestion-item" onclick="goToPlayer('${p.name.replace(/'/g, "\\'")}')">
+                            <div>
+                                <div class="suggestion-name">${p.name}</div>
+                                <div class="suggestion-team">${p.teams.join(', ') || '소속 없음'}</div>
+                            </div>
+                            <span class="suggestion-count">${p.record_count}개 기록</span>
+                        </div>
+                    `).join('');
+                }
+                suggestions.classList.add('show');
+            } catch (e) {
+                console.error('Search error:', e);
+            }
+        }, 300);
+    });
+
+    // 검색창 외부 클릭 시 닫기
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.search-input-wrapper')) {
+            suggestions.classList.remove('show');
+        }
+    });
+
+    // Enter 키로 검색
+    searchInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            const query = searchInput.value.trim();
+            if (query) {
+                goToPlayer(query);
+            }
+        }
+    });
+}
+
+function goToPlayer(name) {
+    location.href = '/player/' + encodeURIComponent(name);
+}
+</script>
+{% endblock %}

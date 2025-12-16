@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+
+{% block title %}{{ competition.competition.name }} - Korean Fencing Tracker{% endblock %}
+
+{% block content %}
+<div class="container">
+    <nav class="breadcrumb">
+        <a href="/">대회 목록</a> &gt;
+        <span>{{ competition.competition.name }}</span>
+    </nav>
+
+    <section class="competition-header">
+        <h1>{{ competition.competition.name }}</h1>
+        <div class="competition-meta">
+            <span class="meta-item">
+                <strong>기간:</strong>
+                {{ competition.competition.start_date or '-' }}
+                {% if competition.competition.end_date and competition.competition.end_date != competition.competition.start_date %}
+                ~ {{ competition.competition.end_date }}
+                {% endif %}
+            </span>
+            <span class="meta-item">
+                <strong>상태:</strong>
+                <span class="status-badge">{{ competition.competition.status or '-' }}</span>
+            </span>
+            <span class="meta-item">
+                <strong>종목:</strong> {{ competition.events | length }}개
+            </span>
+        </div>
+    </section>
+
+    <section class="events-section">
+        <h2>종목 목록</h2>
+        <div class="events-grid">
+            {% for event in competition.events %}
+            <div class="event-card" data-sub-event="{{ event.sub_event_cd }}">
+                <div class="event-name">{{ event.name }}</div>
+                <div class="event-details">
+                    {% if event.weapon %}<span class="weapon-tag">{{ event.weapon }}</span>{% endif %}
+                    {% if event.gender %}<span class="gender-tag">{{ event.gender }}</span>{% endif %}
+                    {% if event.event_type %}<span class="type-tag">{{ event.event_type }}</span>{% endif %}
+                </div>
+            </div>
+            {% else %}
+            <p class="no-data">종목 정보가 없습니다</p>
+            {% endfor %}
+        </div>
+    </section>
+
+    {% if competition.results %}
+    <section class="results-section">
+        <h2>경기 결과</h2>
+
+        {% for sub_event_cd, results in competition.results.items() %}
+        {% set event_info = None %}
+        {% for event in competition.events %}
+            {% if event.sub_event_cd == sub_event_cd %}
+                {% set event_info = event %}
+            {% endif %}
+        {% endfor %}
+
+        <div class="event-results" id="results-{{ sub_event_cd }}">
+            <h3>{{ event_info.name if event_info else sub_event_cd }}</h3>
+
+            {% if results.pool_results %}
+            <div class="pool-results">
+                <h4>풀 라운드 결과</h4>
+
+                {% for pool in results.pool_results %}
+                <div class="pool-table">
+                    <div class="pool-header">
+                        <span class="pool-number">Pool {{ pool.pool_number }}</span>
+                    </div>
+                    <table class="result-table">
+                        <thead>
+                            <tr>
+                                <th>No</th>
+                                <th>이름</th>
+                                <th>소속</th>
+                                <th>승률</th>
+                                <th>지수</th>
+                                <th>득점</th>
+                                <th>순위</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for player in pool.results %}
+                            <tr>
+                                <td>{{ player.no }}</td>
+                                <td class="player-name">{{ player.name }}</td>
+                                <td>{{ player.team }}</td>
+                                <td>{{ player.win_rate }}</td>
+                                <td>{{ player.index }}</td>
+                                <td>{{ player.score }}</td>
+                                <td class="rank">{{ player.rank }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            {% if results.final_rankings %}
+            <div class="final-rankings">
+                <h4>최종 순위</h4>
+                <table class="result-table">
+                    <thead>
+                        <tr>
+                            <th>순위</th>
+                            <th>이름</th>
+                            <th>소속</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for ranking in results.final_rankings %}
+                        <tr>
+                            <td class="rank">{{ ranking.rank }}</td>
+                            <td class="player-name">{{ ranking.name }}</td>
+                            <td>{{ ranking.team }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </section>
+    {% endif %}
+</div>
+{% endblock %}
