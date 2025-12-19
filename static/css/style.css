@@ -91,6 +91,43 @@ body {
     font-size: 0.9rem;
 }
 
+/* Auth Navigation */
+.auth-nav {
+    margin-left: 15px;
+}
+
+.auth-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 16px;
+    border-radius: 20px;
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.login-btn {
+    background: rgba(255,255,255,0.15);
+    color: white;
+    border: 1px solid rgba(255,255,255,0.3);
+}
+
+.login-btn:hover {
+    background: rgba(255,255,255,0.25);
+}
+
+.profile-btn {
+    background: var(--accent-color);
+    color: white;
+    min-width: 40px;
+    height: 40px;
+    padding: 0;
+    border-radius: 50%;
+    font-weight: 600;
+}
+
 /* Main Content */
 .main-content {
     min-height: calc(100vh - 200px);

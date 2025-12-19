@@ -1,0 +1,700 @@
+/* FencingLab - Dark Mode + Neon Style */
+
+:root {
+    --fl-bg-primary: #0a0a0f;
+    --fl-bg-secondary: #111118;
+    --fl-bg-card: #1a1a24;
+    --fl-bg-card-hover: #22222e;
+    --fl-text-primary: #ffffff;
+    --fl-text-secondary: #a0a0b0;
+    --fl-text-muted: #606070;
+    --fl-accent-green: #00ff88;
+    --fl-accent-green-dim: rgba(0, 255, 136, 0.15);
+    --fl-accent-blue: #00d4ff;
+    --fl-accent-blue-dim: rgba(0, 212, 255, 0.15);
+    --fl-accent-red: #ff4466;
+    --fl-accent-yellow: #ffcc00;
+    --fl-border: #2a2a3a;
+    --fl-glow-green: 0 0 20px rgba(0, 255, 136, 0.3);
+    --fl-glow-blue: 0 0 20px rgba(0, 212, 255, 0.3);
+}
+
+/* FencingLab Container */
+.fencinglab-container {
+    background: var(--fl-bg-primary);
+    min-height: 100vh;
+    padding: 2rem;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* Header */
+.fl-header {
+    text-align: center;
+    margin-bottom: 3rem;
+}
+
+.fl-logo {
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: var(--fl-text-primary);
+    letter-spacing: -0.02em;
+}
+
+.fl-logo span {
+    color: var(--fl-accent-green);
+    text-shadow: var(--fl-glow-green);
+}
+
+.fl-subtitle {
+    color: var(--fl-text-secondary);
+    font-size: 1rem;
+    margin-top: 0.5rem;
+}
+
+/* Player Card */
+.fl-player-card {
+    background: var(--fl-bg-card);
+    border-radius: 16px;
+    padding: 1.5rem;
+    border: 1px solid var(--fl-border);
+    transition: all 0.3s ease;
+}
+
+.fl-player-card:hover {
+    background: var(--fl-bg-card-hover);
+    border-color: var(--fl-accent-green);
+    box-shadow: var(--fl-glow-green);
+}
+
+.fl-player-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.fl-player-avatar {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--fl-accent-green), var(--fl-accent-blue));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--fl-bg-primary);
+}
+
+.fl-player-info h3 {
+    color: var(--fl-text-primary);
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin: 0;
+}
+
+.fl-player-info .team {
+    color: var(--fl-text-secondary);
+    font-size: 0.875rem;
+}
+
+/* Radar Chart Container */
+.fl-radar-container {
+    position: relative;
+    width: 100%;
+    max-width: 300px;
+    margin: 0 auto 1.5rem;
+}
+
+.fl-radar-canvas {
+    width: 100%;
+    height: auto;
+}
+
+/* Stats Grid */
+.fl-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+}
+
+.fl-stat-item {
+    background: var(--fl-bg-secondary);
+    border-radius: 12px;
+    padding: 1rem;
+    text-align: center;
+}
+
+.fl-stat-value {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--fl-accent-green);
+    text-shadow: var(--fl-glow-green);
+}
+
+.fl-stat-value.blue {
+    color: var(--fl-accent-blue);
+    text-shadow: var(--fl-glow-blue);
+}
+
+.fl-stat-label {
+    color: var(--fl-text-secondary);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-top: 0.25rem;
+}
+
+/* Insight Cards */
+.fl-insight-card {
+    background: var(--fl-bg-secondary);
+    border-radius: 12px;
+    padding: 1rem;
+    margin-top: 1rem;
+    border-left: 3px solid var(--fl-accent-green);
+}
+
+.fl-insight-card.warning {
+    border-left-color: var(--fl-accent-yellow);
+}
+
+.fl-insight-card.danger {
+    border-left-color: var(--fl-accent-red);
+}
+
+.fl-insight-title {
+    color: var(--fl-text-primary);
+    font-weight: 600;
+    font-size: 0.875rem;
+    margin-bottom: 0.5rem;
+}
+
+.fl-insight-text {
+    color: var(--fl-text-secondary);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+}
+
+/* Match History Chart */
+.fl-history-container {
+    background: var(--fl-bg-card);
+    border-radius: 16px;
+    padding: 1.5rem;
+    margin-top: 2rem;
+}
+
+.fl-history-title {
+    color: var(--fl-text-primary);
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+}
+
+.fl-history-chart {
+    height: 200px;
+    position: relative;
+}
+
+/* Grade Badges */
+.fl-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.375rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.fl-badge.strong {
+    background: var(--fl-accent-green-dim);
+    color: var(--fl-accent-green);
+}
+
+.fl-badge.average {
+    background: var(--fl-accent-blue-dim);
+    color: var(--fl-accent-blue);
+}
+
+.fl-badge.weak {
+    background: rgba(255, 68, 102, 0.15);
+    color: var(--fl-accent-red);
+}
+
+/* Recent Matches */
+.fl-matches-list {
+    margin-top: 1.5rem;
+}
+
+.fl-match-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem;
+    background: var(--fl-bg-secondary);
+    border-radius: 8px;
+    margin-bottom: 0.5rem;
+}
+
+.fl-match-info {
+    flex: 1;
+}
+
+.fl-match-event {
+    color: var(--fl-text-primary);
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.fl-match-round {
+    color: var(--fl-text-muted);
+    font-size: 0.75rem;
+}
+
+.fl-match-score {
+    font-size: 1rem;
+    font-weight: 700;
+}
+
+.fl-match-score.win {
+    color: var(--fl-accent-green);
+}
+
+.fl-match-score.loss {
+    color: var(--fl-accent-red);
+}
+
+/* Demo Section (for landing page) */
+.fl-demo-section {
+    background: linear-gradient(180deg, var(--fl-bg-primary) 0%, var(--fl-bg-secondary) 100%);
+    padding: 4rem 2rem;
+    border-top: 1px solid var(--fl-border);
+}
+
+.fl-demo-title {
+    text-align: center;
+    margin-bottom: 3rem;
+}
+
+.fl-demo-title h2 {
+    color: var(--fl-text-primary);
+    font-size: 2rem;
+    font-weight: 700;
+}
+
+.fl-demo-title h2 span {
+    color: var(--fl-accent-green);
+}
+
+.fl-demo-title p {
+    color: var(--fl-text-secondary);
+    margin-top: 0.5rem;
+}
+
+.fl-demo-link {
+    display: inline-block;
+    margin-top: 1rem;
+    padding: 0.75rem 1.5rem;
+    background: var(--fl-accent-green);
+    color: var(--fl-bg-primary);
+    text-decoration: none;
+    border-radius: 4px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.fl-demo-link:hover {
+    background: #00cc6a;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 255, 136, 0.3);
+}
+
+.fl-demo-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .fencinglab-container {
+        padding: 1rem;
+    }
+
+    .fl-logo {
+        font-size: 1.75rem;
+    }
+
+    .fl-stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .fl-demo-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Animation */
+@keyframes fl-glow-pulse {
+    0%, 100% {
+        box-shadow: 0 0 10px rgba(0, 255, 136, 0.2);
+    }
+    50% {
+        box-shadow: 0 0 25px rgba(0, 255, 136, 0.4);
+    }
+}
+
+.fl-glow-animation {
+    animation: fl-glow-pulse 2s ease-in-out infinite;
+}
+
+/* Locked State (for non-members) */
+.fl-locked {
+    position: relative;
+    filter: blur(5px);
+    pointer-events: none;
+}
+
+.fl-locked-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border-radius: 16px;
+    z-index: 10;
+}
+
+.fl-locked-icon {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+}
+
+.fl-locked-text {
+    color: var(--fl-text-primary);
+    font-size: 0.875rem;
+}
+
+/* Player List */
+.fl-player-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-top: 1.5rem;
+}
+
+.fl-player-list-item {
+    background: var(--fl-bg-card);
+    border: 1px solid var(--fl-border);
+    border-radius: 12px;
+    padding: 1rem;
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+
+.fl-player-list-item:hover {
+    border-color: var(--fl-accent-green);
+    transform: translateY(-2px);
+}
+
+.fl-player-list-item h4 {
+    color: var(--fl-text-primary);
+    font-size: 1rem;
+    margin: 0 0 0.25rem;
+}
+
+.fl-player-list-item .stats {
+    color: var(--fl-text-secondary);
+    font-size: 0.75rem;
+}
+
+/* ==================== FencingLab v2 - 실제 데이터 기반 UI ==================== */
+
+/* Section */
+.fl-section {
+    margin-top: 1.5rem;
+}
+
+.fl-section-title {
+    color: var(--fl-text-secondary);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 0.75rem;
+}
+
+/* Stats Grid 4 columns */
+.fl-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.75rem;
+}
+
+.fl-stats-grid.small .fl-stat-item {
+    padding: 0.75rem;
+}
+
+.fl-stats-grid.small .fl-stat-value {
+    font-size: 1.25rem;
+}
+
+.fl-stat-value.green {
+    color: var(--fl-accent-green);
+    text-shadow: var(--fl-glow-green);
+}
+
+.fl-stat-value.red {
+    color: var(--fl-accent-red);
+}
+
+.fl-stat-value.yellow {
+    color: var(--fl-accent-yellow);
+}
+
+/* Comparison Bars (Pool vs DE) */
+.fl-comparison {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.fl-comparison-item {
+    background: var(--fl-bg-secondary);
+    border-radius: 10px;
+    padding: 1rem;
+}
+
+.fl-comparison-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.fl-comparison-label {
+    color: var(--fl-text-primary);
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.fl-comparison-value {
+    color: var(--fl-text-secondary);
+    font-size: 0.75rem;
+}
+
+.fl-comparison-bar {
+    height: 8px;
+    background: var(--fl-bg-card);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.fl-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.5s ease;
+}
+
+.fl-comparison-rate {
+    color: var(--fl-text-primary);
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin-top: 0.5rem;
+    text-align: right;
+}
+
+/* Insight Stats */
+.fl-insight-stats {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+    color: var(--fl-text-secondary);
+    font-size: 0.8125rem;
+}
+
+.fl-insight-rate {
+    color: var(--fl-accent-green);
+    font-weight: 700;
+}
+
+.fl-insight-card.weak .fl-insight-rate {
+    color: var(--fl-accent-red);
+}
+
+/* Notes */
+.fl-note {
+    color: var(--fl-text-muted);
+    font-size: 0.6875rem;
+    font-weight: normal;
+}
+
+/* Text utilities */
+.fl-text-secondary {
+    color: var(--fl-text-secondary);
+    font-size: 0.875rem;
+}
+
+/* Match Details */
+.fl-match-detail {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin-top: 0.25rem;
+}
+
+.fl-match-type {
+    font-size: 0.625rem;
+    padding: 0.125rem 0.375rem;
+    border-radius: 3px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.fl-match-type.pool {
+    background: var(--fl-accent-green-dim);
+    color: var(--fl-accent-green);
+}
+
+.fl-match-type.de {
+    background: var(--fl-accent-blue-dim);
+    color: var(--fl-accent-blue);
+}
+
+.fl-match-opponent {
+    color: var(--fl-text-muted);
+    font-size: 0.75rem;
+}
+
+.fl-match-comp {
+    color: var(--fl-text-muted);
+    font-size: 0.6875rem;
+    margin-bottom: 0.125rem;
+}
+
+.fl-match-date {
+    color: var(--fl-accent-blue);
+    font-size: 0.6875rem;
+    font-weight: 500;
+}
+
+.fl-match-event-link {
+    text-decoration: none;
+    display: block;
+    transition: opacity 0.2s ease;
+}
+
+.fl-match-event-link:hover {
+    opacity: 0.8;
+}
+
+.fl-match-event-link .fl-match-event {
+    color: var(--fl-accent-green);
+}
+
+.fl-match-event-link:hover .fl-match-event {
+    text-decoration: underline;
+}
+
+/* Demo Card v2 */
+.fl-demo-card {
+    background: var(--fl-bg-card);
+    border: 1px solid var(--fl-border);
+    border-radius: 16px;
+    padding: 1.25rem;
+    transition: all 0.3s ease;
+}
+
+.fl-demo-card:hover {
+    border-color: var(--fl-accent-green);
+    transform: translateY(-4px);
+    box-shadow: var(--fl-glow-green);
+}
+
+.fl-demo-player {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.fl-demo-player .fl-player-avatar {
+    width: 48px;
+    height: 48px;
+    font-size: 1.25rem;
+}
+
+.fl-demo-player .fl-player-info h4 {
+    color: var(--fl-text-primary);
+    font-size: 1rem;
+    margin: 0;
+}
+
+.fl-demo-player .fl-player-info span {
+    color: var(--fl-text-secondary);
+    font-size: 0.75rem;
+}
+
+.fl-demo-stats {
+    display: flex;
+    justify-content: space-between;
+    background: var(--fl-bg-secondary);
+    border-radius: 8px;
+    padding: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
+.fl-demo-stats .fl-stat {
+    text-align: center;
+}
+
+.fl-demo-stats .fl-stat .value {
+    display: block;
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: var(--fl-text-primary);
+}
+
+.fl-demo-stats .fl-stat .value.green {
+    color: var(--fl-accent-green);
+}
+
+.fl-demo-stats .fl-stat .label {
+    display: block;
+    font-size: 0.625rem;
+    color: var(--fl-text-muted);
+    text-transform: uppercase;
+    margin-top: 0.125rem;
+}
+
+.fl-demo-badge {
+    text-align: center;
+    padding: 0.5rem;
+    background: var(--fl-bg-secondary);
+    border-radius: 6px;
+    font-size: 0.75rem;
+    color: var(--fl-text-secondary);
+}
+
+.fl-demo-badge.strong {
+    background: var(--fl-accent-green-dim);
+    color: var(--fl-accent-green);
+}
+
+/* Responsive adjustments for v2 */
+@media (max-width: 768px) {
+    .fl-stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .fl-comparison-rate {
+        font-size: 1rem;
+    }
+}

@@ -1,0 +1,287 @@
+{% extends "base.html" %}
+
+{% block title %}회원가입 - Korean Fencing Tracker{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+    <div class="auth-card register-card">
+        <div class="auth-header">
+            <h1>회원가입</h1>
+            <p>Korean Fencing Tracker에 오신 것을 환영합니다</p>
+        </div>
+
+        <form action="/auth/register" method="POST" class="register-form" id="registerForm">
+            <input type="hidden" name="token" value="{{ token }}">
+
+            <!-- 이름 -->
+            <div class="form-group">
+                <label for="full_name">이름 <span class="required">*</span></label>
+                <input
+                    type="text"
+                    id="full_name"
+                    name="full_name"
+                    required
+                    placeholder="실명을 입력하세요"
+                    value="{{ pending.name if pending else '' }}"
+                >
+                <p class="form-hint">협회 등록 이름과 동일해야 인증이 가능합니다</p>
+            </div>
+
+            <!-- 이메일 -->
+            <div class="form-group">
+                <label for="email">이메일 <span class="required">*</span></label>
+                <input
+                    type="email"
+                    id="email"
+                    name="email"
+                    required
+                    placeholder="example@email.com"
+                    value="{{ pending.email if pending else '' }}"
+                    {{ 'readonly' if pending and pending.email else '' }}
+                >
+            </div>
+
+            <!-- 연락처 -->
+            <div class="form-group">
+                <label for="phone">연락처</label>
+                <input
+                    type="tel"
+                    id="phone"
+                    name="phone"
+                    placeholder="010-0000-0000"
+                >
+            </div>
+
+            <!-- 생년월일 -->
+            <div class="form-group">
+                <label for="birth_date">생년월일</label>
+                <input
+                    type="date"
+                    id="birth_date"
+                    name="birth_date"
+                >
+                <p class="form-hint minor-warning" style="display: none; color: #e53e3e;">
+                    14세 미만 선수는 보호자(부모회원)를 통해 등록해야 합니다
+                </p>
+            </div>
+
+            <!-- 회원 유형 -->
+            <div class="form-group">
+                <label for="member_type">회원 유형 <span class="required">*</span></label>
+                <select id="member_type" name="member_type" required>
+                    <option value="">선택하세요</option>
+                    {% for mt in member_types %}
+                    <option value="{{ mt.value }}">{{ mt.label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- 동의 항목 -->
+            <div class="consent-section">
+                <h3>동의 항목</h3>
+
+                <label class="consent-item">
+                    <input type="checkbox" name="terms" required>
+                    <span>[필수] 이용약관에 동의합니다</span>
+                    <a href="/terms" target="_blank">보기</a>
+                </label>
+
+                <label class="consent-item">
+                    <input type="checkbox" name="privacy" required>
+                    <span>[필수] 개인정보처리방침에 동의합니다</span>
+                    <a href="/privacy" target="_blank">보기</a>
+                </label>
+
+                <label class="consent-item">
+                    <input type="checkbox" name="marketing_consent">
+                    <span>[선택] 마케팅 정보 수신에 동의합니다</span>
+                </label>
+
+                <label class="consent-item">
+                    <input type="checkbox" name="promotional_consent">
+                    <span>[선택] 홍보용 SNS 연동에 동의합니다</span>
+                </label>
+            </div>
+
+            <button type="submit" class="submit-btn" id="submitBtn">
+                가입하기
+            </button>
+        </form>
+    </div>
+</div>
+
+<style>
+.auth-container {
+    min-height: 80vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+}
+
+.register-card {
+    max-width: 500px;
+}
+
+.auth-card {
+    background: var(--card-bg, #fff);
+    border-radius: 16px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.1);
+    padding: 2.5rem;
+    width: 100%;
+}
+
+.auth-header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.auth-header h1 {
+    font-size: 1.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.auth-header p {
+    color: var(--text-secondary, #666);
+}
+
+.register-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.form-group label {
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+
+.required {
+    color: #e53e3e;
+}
+
+.form-group input,
+.form-group select {
+    padding: 0.75rem 1rem;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 1rem;
+    transition: border-color 0.2s;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+    outline: none;
+    border-color: var(--primary-color, #3182ce);
+}
+
+.form-group input[readonly] {
+    background: #f5f5f5;
+    cursor: not-allowed;
+}
+
+.form-hint {
+    font-size: 0.8rem;
+    color: var(--text-secondary, #888);
+}
+
+.consent-section {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid #eee;
+}
+
+.consent-section h3 {
+    font-size: 0.95rem;
+    margin-bottom: 1rem;
+}
+
+.consent-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+    margin-bottom: 0.75rem;
+    cursor: pointer;
+}
+
+.consent-item input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+.consent-item a {
+    color: var(--primary-color, #3182ce);
+    text-decoration: none;
+    font-size: 0.8rem;
+    margin-left: auto;
+}
+
+.submit-btn {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: var(--primary-color, #3182ce);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.submit-btn:hover {
+    background: #2c5282;
+}
+
+.submit-btn:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const birthInput = document.getElementById('birth_date');
+    const memberTypeSelect = document.getElementById('member_type');
+    const minorWarning = document.querySelector('.minor-warning');
+    const submitBtn = document.getElementById('submitBtn');
+
+    function checkMinor() {
+        if (!birthInput.value) {
+            minorWarning.style.display = 'none';
+            return false;
+        }
+
+        const birthDate = new Date(birthInput.value);
+        const today = new Date();
+        let age = today.getFullYear() - birthDate.getFullYear();
+        const monthDiff = today.getMonth() - birthDate.getMonth();
+
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+            age--;
+        }
+
+        if (age < 14 && memberTypeSelect.value === 'player') {
+            minorWarning.style.display = 'block';
+            submitBtn.disabled = true;
+            return true;
+        } else {
+            minorWarning.style.display = 'none';
+            submitBtn.disabled = false;
+            return false;
+        }
+    }
+
+    birthInput.addEventListener('change', checkMinor);
+    memberTypeSelect.addEventListener('change', checkMinor);
+});
+</script>
+{% endblock %}

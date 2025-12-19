@@ -55,10 +55,39 @@ class SchedulerConfig(BaseSettings):
         case_sensitive = False
 
 
+class IksanConfig(BaseSettings):
+    """익산 국제대회 스텔스 스크래핑 설정"""
+
+    # 스텔스 딜레이 (봇 탐지 회피)
+    stealth_delay_min: float = Field(default=5.0, description="최소 딜레이 (초)")
+    stealth_delay_max: float = Field(default=10.0, description="최대 딜레이 (초)")
+    page_load_delay: float = Field(default=3.0, description="페이지 로드 대기 (초)")
+
+    # 대회 코드 (KFF 사이트)
+    comp_u17_u20: str = Field(default="COMPM00666", description="U17/U20 대회 코드")
+    comp_u13_u11_u9: str = Field(default="COMPM00673", description="U13/U11/U9 대회 코드")
+
+    # 스케줄 설정
+    update_interval_minutes: int = Field(default=45, description="업데이트 체크 간격 (분)")
+    active_hours_start: int = Field(default=8, description="대회 시작 시간")
+    active_hours_end: int = Field(default=20, description="대회 종료 시간")
+
+    # 대회 기간
+    u17_u20_start: str = Field(default="2025-12-16", description="U17/U20 시작일")
+    u17_u20_end: str = Field(default="2025-12-21", description="U17/U20 종료일")
+    u13_start: str = Field(default="2025-12-20", description="U13/U11/U9 시작일")
+    u13_end: str = Field(default="2025-12-21", description="U13/U11/U9 종료일")
+
+    class Config:
+        env_prefix = "IKSAN_"
+        case_sensitive = False
+
+
 # 전역 설정 인스턴스
 scraper_config = ScraperConfig()
 supabase_config = SupabaseConfig()
 scheduler_config = SchedulerConfig()
+iksan_config = IksanConfig()
 
 
 # API 엔드포인트 정의

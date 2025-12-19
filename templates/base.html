@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Korean Fencing Tracker{% endblock %}</title>
     <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/components.css">
     {% block extra_css %}{% endblock %}
 </head>
 <body>
@@ -15,13 +16,15 @@
                 <span class="logo-text">Korean Fencing Tracker</span>
             </a>
             <div class="nav-links">
-                <a href="/">대회</a>
+                <a href="/">검색</a>
                 <a href="/rankings">랭킹</a>
-                <a href="/chat">AI 검색</a>
-                <a href="/search">선수 검색</a>
+                <a href="/fencinglab">FencingLab</a>
             </div>
             <div class="search-box">
-                <input type="text" id="global-search" placeholder="선수/대회 검색...">
+                <input type="text" id="global-search" placeholder="선수/소속 검색...">
+            </div>
+            <div class="auth-nav" id="authNav">
+                <a href="/auth/login" class="auth-btn login-btn" id="loginBtn">로그인</a>
             </div>
         </div>
     </nav>
@@ -32,12 +35,31 @@
 
     <footer class="footer">
         <div class="container">
-            <p>Korean Fencing Tracker &copy; 2024</p>
-            <p>데이터 출처: <a href="https://fencing.sports.or.kr" target="_blank">대한펜싱협회</a></p>
+            <p>Korean Fencing Tracker &copy; 2024-2025</p>
+            <p>데이터 출처: <a href="https://fencing.sports.or.kr" target="_blank">KFF</a></p>
         </div>
     </footer>
 
     <script src="/static/js/main.js"></script>
+    <script>
+    // 로그인 상태 확인
+    document.addEventListener('DOMContentLoaded', async function() {
+        try {
+            const response = await fetch('/auth/me');
+            if (response.ok) {
+                const member = await response.json();
+                const authNav = document.getElementById('authNav');
+                authNav.innerHTML = `
+                    <a href="/auth/verification" class="auth-btn profile-btn">
+                        ${member.display_name || member.full_name[0]}
+                    </a>
+                `;
+            }
+        } catch (e) {
+            // 로그인 안됨 - 기본 상태 유지
+        }
+    });
+    </script>
     {% block extra_js %}{% endblock %}
 </body>
 </html>

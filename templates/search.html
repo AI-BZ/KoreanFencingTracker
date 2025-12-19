@@ -2,13 +2,344 @@
 
 {% block title %}검색 - Korean Fencing Tracker{% endblock %}
 
+{% block extra_css %}
+<style>
+    .search-section {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 2rem;
+    }
+
+    .search-section h1 {
+        margin-bottom: 1.5rem;
+        color: var(--text-color);
+    }
+
+    .search-form {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 2rem;
+        position: relative;
+    }
+
+    .search-input-wrapper {
+        flex: 1;
+        position: relative;
+    }
+
+    .search-form input {
+        width: 100%;
+        padding: 0.75rem 1rem;
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        font-size: 1rem;
+    }
+
+    .search-form input:focus {
+        outline: none;
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+
+    /* Autocomplete Dropdown */
+    .autocomplete-dropdown {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background: white;
+        border: 1px solid var(--border-color);
+        border-top: none;
+        border-radius: 0 0 8px 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        max-height: 400px;
+        overflow-y: auto;
+        z-index: 1000;
+        display: none;
+    }
+
+    .autocomplete-dropdown.show {
+        display: block;
+    }
+
+    .autocomplete-item {
+        padding: 0.75rem 1rem;
+        cursor: pointer;
+        border-bottom: 1px solid var(--border-color);
+        transition: background 0.15s;
+    }
+
+    .autocomplete-item:last-child {
+        border-bottom: none;
+    }
+
+    .autocomplete-item:hover,
+    .autocomplete-item.selected {
+        background: var(--bg-light);
+    }
+
+    .autocomplete-item.homonym {
+        border-left: 3px solid var(--warning-color);
+    }
+
+    .autocomplete-name {
+        font-weight: 600;
+        color: var(--text-color);
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .autocomplete-name .name-en {
+        font-weight: 400;
+        font-size: 0.85em;
+        color: #666;
+        padding: 1px 6px;
+        background: #f0f0f0;
+        border-radius: 3px;
+    }
+
+    .autocomplete-team {
+        font-size: 0.85rem;
+        color: var(--text-light);
+        margin-top: 0.25rem;
+    }
+
+    .autocomplete-meta {
+        display: flex;
+        gap: 0.75rem;
+        margin-top: 0.25rem;
+        font-size: 0.75rem;
+        color: var(--text-light);
+    }
+
+    .autocomplete-meta .weapon {
+        padding: 1px 6px;
+        border-radius: 3px;
+    }
+
+    .autocomplete-meta .weapon.foil { background: #e3f2fd; color: #1565c0; }
+    .autocomplete-meta .weapon.epee { background: #f3e5f5; color: #7b1fa2; }
+    .autocomplete-meta .weapon.sabre { background: #fff3e0; color: #e65100; }
+
+    .homonym-badge {
+        font-size: 0.7rem;
+        background: var(--warning-light);
+        color: var(--warning-color);
+        padding: 2px 6px;
+        border-radius: 3px;
+    }
+
+    .autocomplete-loading {
+        padding: 1rem;
+        text-align: center;
+        color: var(--text-light);
+    }
+
+    .autocomplete-no-results {
+        padding: 1rem;
+        text-align: center;
+        color: var(--text-light);
+    }
+
+    .search-results {
+        margin-top: 1rem;
+    }
+
+    .result-count {
+        color: var(--text-light);
+        margin-bottom: 1rem;
+    }
+
+    /* Player card styling */
+    .player-card {
+        background: white;
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        padding: 1rem 1.25rem;
+        margin-bottom: 0.75rem;
+        transition: all 0.2s;
+        cursor: pointer;
+    }
+
+    .player-card:hover {
+        border-color: var(--primary-color);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    .player-card.has-disambiguation {
+        border-left: 4px solid var(--warning-color);
+    }
+
+    .player-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 0.5rem;
+    }
+
+    .player-name-section {
+        flex: 1;
+    }
+
+    .player-name {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: var(--text-color);
+        margin-bottom: 0.25rem;
+    }
+
+    .player-name a {
+        color: inherit;
+        text-decoration: none;
+    }
+
+    .player-name a:hover {
+        color: var(--primary-color);
+    }
+
+    .name-en-tag {
+        font-weight: 400;
+        font-size: 0.85em;
+        color: #666;
+        margin-left: 0.5rem;
+        padding: 2px 8px;
+        background: #f0f0f0;
+        border-radius: 4px;
+    }
+
+    .disambiguation-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        font-size: 0.75rem;
+        background: var(--warning-light);
+        color: var(--warning-color);
+        padding: 0.2rem 0.5rem;
+        border-radius: 4px;
+        margin-left: 0.5rem;
+    }
+
+    .player-team {
+        color: var(--text-light);
+        font-size: 0.9rem;
+    }
+
+    .player-stats {
+        display: flex;
+        gap: 1rem;
+        align-items: center;
+    }
+
+    .stat-item {
+        text-align: center;
+    }
+
+    .stat-value {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: var(--text-color);
+    }
+
+    .stat-label {
+        font-size: 0.7rem;
+        color: var(--text-light);
+        text-transform: uppercase;
+    }
+
+    .player-meta {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        margin-top: 0.5rem;
+    }
+
+    .weapon-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        font-size: 0.75rem;
+        padding: 0.2rem 0.5rem;
+        border-radius: 4px;
+        background: var(--bg-light);
+        color: var(--text-light);
+    }
+
+    .weapon-tag.foil { background: #e3f2fd; color: #1565c0; }
+    .weapon-tag.epee { background: #f3e5f5; color: #7b1fa2; }
+    .weapon-tag.sabre { background: #fff3e0; color: #e65100; }
+
+    .team-history {
+        margin-top: 0.75rem;
+        padding-top: 0.75rem;
+        border-top: 1px dashed var(--border-color);
+    }
+
+    .team-history-title {
+        font-size: 0.75rem;
+        color: var(--text-light);
+        margin-bottom: 0.5rem;
+    }
+
+    .team-history-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    .team-history-item {
+        font-size: 0.8rem;
+        background: var(--bg-light);
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        color: var(--text-color);
+    }
+
+    .team-history-item .dates {
+        font-size: 0.7rem;
+        color: var(--text-light);
+        margin-left: 0.25rem;
+    }
+
+    .no-results, .searching, .search-hint, .error {
+        text-align: center;
+        padding: 2rem;
+        color: var(--text-light);
+    }
+
+    .error {
+        color: var(--danger-color);
+    }
+
+    /* Responsive */
+    @media (max-width: 640px) {
+        .search-form {
+            flex-direction: column;
+        }
+
+        .player-card-header {
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .player-stats {
+            width: 100%;
+            justify-content: space-around;
+        }
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container">
     <section class="search-section">
-        <h1>선수/대회 검색</h1>
+        <h1>선수/소속 검색</h1>
 
         <div class="search-form">
-            <input type="text" id="search-query" placeholder="선수 이름 또는 소속팀 검색..." value="{{ query }}">
+            <div class="search-input-wrapper">
+                <input type="text" id="search-query" placeholder="선수 이름 또는 소속(클럽, 학교) 검색..." value="{{ query }}" autocomplete="off">
+                <div class="autocomplete-dropdown" id="autocomplete-dropdown"></div>
+            </div>
             <button onclick="performSearch()" class="btn btn-primary">검색</button>
         </div>
 
@@ -16,7 +347,7 @@
             {% if query %}
             <p class="searching">검색 중...</p>
             {% else %}
-            <p class="search-hint">선수 이름이나 소속팀을 입력하세요</p>
+            <p class="search-hint">선수 이름이나 소속(클럽, 학교 등)을 입력하세요</p>
             {% endif %}
         </div>
     </section>
@@ -25,7 +356,133 @@
 
 {% block extra_js %}
 <script>
+    // Autocomplete state
+    let autocompleteResults = [];
+    let selectedIndex = -1;
+    let debounceTimer = null;
+
+    function getWeaponClass(weapon) {
+        if (weapon === '플러레') return 'foil';
+        if (weapon === '에뻬') return 'epee';
+        if (weapon === '사브르') return 'sabre';
+        return '';
+    }
+
+    function formatDate(dateStr) {
+        if (!dateStr) return '';
+        return dateStr.substring(0, 7);  // YYYY-MM
+    }
+
+    function getPlayerUrl(player) {
+        return player.player_id
+            ? `/player/${encodeURIComponent(player.name)}?id=${encodeURIComponent(player.player_id)}`
+            : `/player/${encodeURIComponent(player.name)}`;
+    }
+
+    // Autocomplete functions
+    function showAutocomplete() {
+        document.getElementById('autocomplete-dropdown').classList.add('show');
+    }
+
+    function hideAutocomplete() {
+        document.getElementById('autocomplete-dropdown').classList.remove('show');
+        selectedIndex = -1;
+    }
+
+    function renderAutocomplete(results) {
+        const dropdown = document.getElementById('autocomplete-dropdown');
+        autocompleteResults = results;
+        selectedIndex = -1;
+
+        if (results.length === 0) {
+            dropdown.innerHTML = '<div class="autocomplete-no-results">검색 결과 없음</div>';
+            showAutocomplete();
+            return;
+        }
+
+        let html = '';
+        results.slice(0, 10).forEach((r, index) => {
+            const isHomonym = r.has_disambiguation;
+            const homonymBadge = isHomonym ? '<span class="homonym-badge">동명이인</span>' : '';
+            const nameEn = r.name_en ? `<span class="name-en">${r.name_en}</span>` : '';
+
+            const weapons = (r.weapons || []).map(w =>
+                `<span class="weapon ${getWeaponClass(w)}">${w}</span>`
+            ).join('');
+
+            html += `
+                <div class="autocomplete-item ${isHomonym ? 'homonym' : ''}"
+                     data-index="${index}"
+                     onclick="selectAutocomplete(${index})">
+                    <div class="autocomplete-name">
+                        ${r.name}
+                        ${nameEn}
+                        ${homonymBadge}
+                    </div>
+                    <div class="autocomplete-team">${r.current_team || r.teams?.join(', ') || '-'}</div>
+                    <div class="autocomplete-meta">
+                        ${weapons}
+                        <span>${r.record_count}회 출전</span>
+                    </div>
+                </div>
+            `;
+        });
+
+        if (results.length > 10) {
+            html += `<div class="autocomplete-no-results">외 ${results.length - 10}명... Enter로 전체 검색</div>`;
+        }
+
+        dropdown.innerHTML = html;
+        showAutocomplete();
+    }
+
+    function selectAutocomplete(index) {
+        if (index >= 0 && index < autocompleteResults.length) {
+            const player = autocompleteResults[index];
+            window.location.href = getPlayerUrl(player);
+        }
+    }
+
+    function updateSelection(newIndex) {
+        const items = document.querySelectorAll('.autocomplete-item');
+        items.forEach(item => item.classList.remove('selected'));
+
+        if (newIndex >= 0 && newIndex < items.length) {
+            selectedIndex = newIndex;
+            items[newIndex].classList.add('selected');
+            items[newIndex].scrollIntoView({ block: 'nearest' });
+        } else {
+            selectedIndex = -1;
+        }
+    }
+
+    async function fetchAutocomplete(query) {
+        if (query.length < 1) {
+            hideAutocomplete();
+            return;
+        }
+
+        const dropdown = document.getElementById('autocomplete-dropdown');
+        dropdown.innerHTML = '<div class="autocomplete-loading">검색 중...</div>';
+        showAutocomplete();
+
+        try {
+            const response = await fetch(`/api/players/search?q=${encodeURIComponent(query)}`);
+            const data = await response.json();
+            renderAutocomplete(data.results);
+        } catch (error) {
+            dropdown.innerHTML = '<div class="autocomplete-no-results">검색 실패</div>';
+            console.error(error);
+        }
+    }
+
+    function debounceAutocomplete(query) {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => fetchAutocomplete(query), 200);
+    }
+
     async function performSearch() {
+        hideAutocomplete();
         const query = document.getElementById('search-query').value.trim();
         if (query.length < 2) {
             alert('2글자 이상 입력하세요');
@@ -36,7 +493,7 @@
         resultsDiv.innerHTML = '<p class="searching">검색 중...</p>';
 
         try {
-            const response = await fetch(`/api/search/players?q=${encodeURIComponent(query)}`);
+            const response = await fetch(`/api/players/search?q=${encodeURIComponent(query)}`);
             const data = await response.json();
 
             if (data.results.length === 0) {
@@ -44,23 +501,64 @@
                 return;
             }
 
-            let html = `<p class="result-count">${data.count}개 결과</p>`;
-            html += '<table class="result-table">';
-            html += '<thead><tr><th>선수</th><th>소속</th><th>대회</th><th>종목</th><th>순위</th><th>승률</th></tr></thead>';
-            html += '<tbody>';
+            let html = `<p class="result-count">${data.total}명의 선수</p>`;
 
             data.results.forEach(r => {
-                html += `<tr>
-                    <td class="player-name">${r.player_name}</td>
-                    <td>${r.team}</td>
-                    <td>${r.competition}</td>
-                    <td>${r.event}</td>
-                    <td class="rank">${r.rank || '-'}</td>
-                    <td>${r.win_rate || '-'}</td>
-                </tr>`;
+                const hasDisambiguation = r.has_disambiguation;
+                const disambiguationBadge = hasDisambiguation
+                    ? '<span class="disambiguation-badge">⚠ 동명이인</span>'
+                    : '';
+                const nameEn = r.name_en ? `<span class="name-en-tag">${r.name_en}</span>` : '';
+
+                const playerUrl = getPlayerUrl(r);
+
+                // Weapons
+                const weaponTags = (r.weapons || []).map(w =>
+                    `<span class="weapon-tag ${getWeaponClass(w)}">${w}</span>`
+                ).join('');
+
+                // Team history
+                let teamHistoryHtml = '';
+                if (r.team_history && r.team_history.length > 0) {
+                    const teamItems = r.team_history.map(t => {
+                        const dates = `${formatDate(t.first_seen)}~${formatDate(t.last_seen)}`;
+                        return `<span class="team-history-item">${t.team}<span class="dates">(${dates})</span></span>`;
+                    }).join('');
+
+                    teamHistoryHtml = `
+                        <div class="team-history">
+                            <div class="team-history-title">소속 이력</div>
+                            <div class="team-history-list">${teamItems}</div>
+                        </div>
+                    `;
+                }
+
+                html += `
+                    <div class="player-card ${hasDisambiguation ? 'has-disambiguation' : ''}" onclick="window.location='${playerUrl}'">
+                        <div class="player-card-header">
+                            <div class="player-name-section">
+                                <div class="player-name">
+                                    <a href="${playerUrl}">${r.name}</a>
+                                    ${nameEn}
+                                    ${disambiguationBadge}
+                                </div>
+                                <div class="player-team">${r.current_team || r.teams?.join(', ') || '-'}</div>
+                            </div>
+                            <div class="player-stats">
+                                <div class="stat-item">
+                                    <div class="stat-value">${r.record_count}</div>
+                                    <div class="stat-label">출전</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="player-meta">
+                            ${weaponTags}
+                        </div>
+                        ${teamHistoryHtml}
+                    </div>
+                `;
             });
 
-            html += '</tbody></table>';
             resultsDiv.innerHTML = html;
         } catch (error) {
             resultsDiv.innerHTML = '<p class="error">검색 실패</p>';
@@ -68,9 +566,57 @@
         }
     }
 
-    // Enter 키 검색
-    document.getElementById('search-query').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') performSearch();
+    // Event listeners
+    const searchInput = document.getElementById('search-query');
+
+    searchInput.addEventListener('input', (e) => {
+        debounceAutocomplete(e.target.value.trim());
+    });
+
+    searchInput.addEventListener('keydown', (e) => {
+        const dropdown = document.getElementById('autocomplete-dropdown');
+        if (!dropdown.classList.contains('show')) {
+            if (e.key === 'Enter') performSearch();
+            return;
+        }
+
+        const items = document.querySelectorAll('.autocomplete-item');
+
+        switch (e.key) {
+            case 'ArrowDown':
+                e.preventDefault();
+                updateSelection(Math.min(selectedIndex + 1, items.length - 1));
+                break;
+            case 'ArrowUp':
+                e.preventDefault();
+                updateSelection(Math.max(selectedIndex - 1, -1));
+                break;
+            case 'Enter':
+                e.preventDefault();
+                if (selectedIndex >= 0) {
+                    selectAutocomplete(selectedIndex);
+                } else {
+                    hideAutocomplete();
+                    performSearch();
+                }
+                break;
+            case 'Escape':
+                hideAutocomplete();
+                break;
+        }
+    });
+
+    searchInput.addEventListener('focus', () => {
+        if (searchInput.value.trim().length >= 1 && autocompleteResults.length > 0) {
+            showAutocomplete();
+        }
+    });
+
+    // Hide dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.search-input-wrapper')) {
+            hideAutocomplete();
+        }
     });
 
     // URL 파라미터로 자동 검색

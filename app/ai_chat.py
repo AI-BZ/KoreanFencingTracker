@@ -382,7 +382,7 @@ class FencingAIChat:
         if results:
             message = f"대회 검색 결과 ({len(results)}개):"
             for r in results[:10]:
-                message += f"\n- {r['name']} ({r['start_date']}) - {r['event_count']}개 종목"
+                message += f"\n- {r['name']} ({r['start_date']}) - {r['event_count']}개 이벤트"
 
             return ChatResponse(
                 message=message,
@@ -413,7 +413,7 @@ class FencingAIChat:
         message = f"""**펜싱 데이터 통계**
 
 - 총 대회 수: {total_comps}개
-- 총 종목 수: {total_events}개
+- 총 이벤트 수: {total_events}개
 - 등록 선수 수: {total_players}명
 
 **연도별 대회 수:**"""

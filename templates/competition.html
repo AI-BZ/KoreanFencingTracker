@@ -24,110 +24,278 @@
                 <span class="status-badge">{{ competition.competition.status or '-' }}</span>
             </span>
             <span class="meta-item">
-                <strong>종목:</strong> {{ competition.events | length }}개
+                <strong>이벤트:</strong> {{ competition.events | length }}개
             </span>
         </div>
     </section>
 
     <section class="events-section">
-        <h2>종목 목록</h2>
+        <h2>이벤트 목록</h2>
         <div class="events-grid">
             {% for event in competition.events %}
-            <div class="event-card" data-sub-event="{{ event.sub_event_cd }}">
-                <div class="event-name">{{ event.name }}</div>
-                <div class="event-details">
-                    {% if event.weapon %}<span class="weapon-tag">{{ event.weapon }}</span>{% endif %}
-                    {% if event.gender %}<span class="gender-tag">{{ event.gender }}</span>{% endif %}
-                    {% if event.event_type %}<span class="type-tag">{{ event.event_type }}</span>{% endif %}
+            <a href="/competition/{{ competition.competition.event_cd }}?event={{ event.sub_event_cd }}" class="event-card-link">
+                <div class="event-card" data-sub-event="{{ event.sub_event_cd }}">
+                    <div class="event-name">{{ event.name }}</div>
+                    <div class="event-details">
+                        {% if event.weapon %}<span class="weapon-tag">{{ event.weapon }}</span>{% endif %}
+                        {% if event.gender %}<span class="gender-tag">{{ event.gender }}</span>{% endif %}
+                        {% if event.event_type %}<span class="type-tag">{{ event.event_type }}</span>{% endif %}
+                    </div>
+                    <div class="event-stats">
+                        {% if event.final_rankings %}
+                        <span class="stat-badge">🏆 {{ event.final_rankings|length }}명</span>
+                        {% endif %}
+                        {% if event.pool_rounds %}
+                        <span class="stat-badge">📋 {{ event.pool_rounds|length }}풀</span>
+                        {% endif %}
+                    </div>
                 </div>
-            </div>
+            </a>
             {% else %}
-            <p class="no-data">종목 정보가 없습니다</p>
+            <p class="no-data">이벤트 정보가 없습니다</p>
             {% endfor %}
         </div>
     </section>
 
-    {% if competition.results %}
     <section class="results-section">
         <h2>경기 결과</h2>
 
-        {% for sub_event_cd, results in competition.results.items() %}
-        {% set event_info = None %}
         {% for event in competition.events %}
-            {% if event.sub_event_cd == sub_event_cd %}
-                {% set event_info = event %}
-            {% endif %}
-        {% endfor %}
+        {% if event.pool_rounds or event.pool_total_ranking or event.final_rankings %}
+        <div class="event-results" id="results-{{ event.sub_event_cd }}">
+            <h3>{{ event.name }}</h3>
 
-        <div class="event-results" id="results-{{ sub_event_cd }}">
-            <h3>{{ event_info.name if event_info else sub_event_cd }}</h3>
+            <!-- 탭 네비게이션 -->
+            <div class="result-tabs">
+                {% if event.pool_rounds %}
+                <button class="tab-btn active" data-tab="pool-{{ event.sub_event_cd }}">Pool</button>
+                {% endif %}
+                {% if event.pool_total_ranking %}
+                <button class="tab-btn" data-tab="pool-ranking-{{ event.sub_event_cd }}">Pool 결과</button>
+                {% endif %}
+                {% if event.final_rankings %}
+                <button class="tab-btn" data-tab="final-{{ event.sub_event_cd }}">최종 순위</button>
+                {% endif %}
+            </div>
 
-            {% if results.pool_results %}
-            <div class="pool-results">
-                <h4>풀 라운드 결과</h4>
-
-                {% for pool in results.pool_results %}
-                <div class="pool-table">
-                    <div class="pool-header">
-                        <span class="pool-number">Pool {{ pool.pool_number }}</span>
+            {% if event.pool_rounds %}
+            <div class="tab-content active" id="pool-{{ event.sub_event_cd }}">
+                <div class="pool-results">
+                    {% for pool in event.pool_rounds %}
+                    <div class="pool-table">
+                        <div class="pool-header">
+                            <span class="pool-number">Pool {{ pool.pool_number }}</span>
+                            {% if pool.piste %}<span class="pool-info">삐스트: {{ pool.piste }}</span>{% endif %}
+                            {% if pool.referee %}<span class="pool-info">심판: {{ pool.referee }}</span>{% endif %}
+                        </div>
+                        <table class="result-table">
+                            <thead>
+                                <tr>
+                                    <th>No</th>
+                                    <th>이름</th>
+                                    <th>소속</th>
+                                    <th>승률</th>
+                                    <th>지수</th>
+                                    <th>득점</th>
+                                    <th>순위</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for player in pool.results %}
+                                <tr>
+                                    <td>{{ player.no }}</td>
+                                    <td class="player-name"><a href="/player/{{ player.name|urlencode }}">{{ player.name }}</a></td>
+                                    <td>{{ player.team }}</td>
+                                    <td>{{ player.win_rate }}</td>
+                                    <td>{{ player.index }}</td>
+                                    <td>{{ player.score }}</td>
+                                    <td class="rank">{{ player.rank }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
                     </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            {% if event.pool_total_ranking %}
+            <div class="tab-content" id="pool-ranking-{{ event.sub_event_cd }}">
+                <div class="pool-total-ranking">
                     <table class="result-table">
                         <thead>
                             <tr>
-                                <th>No</th>
+                                <th>순위</th>
                                 <th>이름</th>
                                 <th>소속</th>
-                                <th>승률</th>
-                                <th>지수</th>
-                                <th>득점</th>
-                                <th>순위</th>
+                                <th>상태</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {% for player in pool.results %}
-                            <tr>
-                                <td>{{ player.no }}</td>
-                                <td class="player-name">{{ player.name }}</td>
-                                <td>{{ player.team }}</td>
-                                <td>{{ player.win_rate }}</td>
-                                <td>{{ player.index }}</td>
-                                <td>{{ player.score }}</td>
-                                <td class="rank">{{ player.rank }}</td>
+                            {% for ranking in event.pool_total_ranking %}
+                            <tr class="{{ 'qualified' if ranking.status == '진출' else 'eliminated' }}">
+                                <td class="rank">{{ ranking.rank }}</td>
+                                <td class="player-name"><a href="/player/{{ ranking.name|urlencode }}">{{ ranking.name }}</a></td>
+                                <td>{{ ranking.team }}</td>
+                                <td>
+                                    {% if ranking.status == '진출' %}
+                                    <span class="status-badge status-qualified">✓ 진출</span>
+                                    {% else %}
+                                    <span class="status-badge status-eliminated">탈락</span>
+                                    {% endif %}
+                                </td>
                             </tr>
                             {% endfor %}
                         </tbody>
                     </table>
                 </div>
-                {% endfor %}
             </div>
             {% endif %}
 
-            {% if results.final_rankings %}
-            <div class="final-rankings">
-                <h4>최종 순위</h4>
-                <table class="result-table">
-                    <thead>
-                        <tr>
-                            <th>순위</th>
-                            <th>이름</th>
-                            <th>소속</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for ranking in results.final_rankings %}
-                        <tr>
-                            <td class="rank">{{ ranking.rank }}</td>
-                            <td class="player-name">{{ ranking.name }}</td>
-                            <td>{{ ranking.team }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+            {% if event.final_rankings %}
+            <div class="tab-content" id="final-{{ event.sub_event_cd }}">
+                <div class="final-rankings">
+                    <table class="result-table">
+                        <thead>
+                            <tr>
+                                <th>순위</th>
+                                <th>이름</th>
+                                <th>소속</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for ranking in event.final_rankings %}
+                            <tr>
+                                <td class="rank">{{ ranking.rank }}</td>
+                                <td class="player-name"><a href="/player/{{ ranking.name|urlencode }}">{{ ranking.name }}</a></td>
+                                <td>{{ ranking.team }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
             </div>
             {% endif %}
         </div>
+        {% endif %}
         {% endfor %}
     </section>
-    {% endif %}
 </div>
+
+<style>
+/* 탭 스타일 */
+.result-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    border-bottom: 2px solid #e5e7eb;
+    padding-bottom: 0;
+}
+
+.tab-btn {
+    padding: 0.75rem 1.5rem;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: #6b7280;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    transition: all 0.2s;
+}
+
+.tab-btn:hover {
+    color: #1f2937;
+    background: #f9fafb;
+}
+
+.tab-btn.active {
+    color: #2563eb;
+    border-bottom-color: #2563eb;
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+/* Pool 정보 스타일 */
+.pool-info {
+    font-size: 0.85rem;
+    color: #6b7280;
+    margin-left: 1rem;
+}
+
+/* 상태 배지 스타일 */
+.status-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.status-qualified {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.status-eliminated {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+/* 행 스타일 */
+tr.qualified {
+    background: #f0fdf4;
+}
+
+tr.eliminated {
+    background: #fef2f2;
+}
+
+tr.qualified:hover {
+    background: #dcfce7;
+}
+
+tr.eliminated:hover {
+    background: #fee2e2;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 탭 클릭 이벤트
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const targetId = this.getAttribute('data-tab');
+            const parent = this.closest('.event-results');
+
+            // 모든 탭 버튼 비활성화
+            parent.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            // 모든 탭 콘텐츠 숨기기
+            parent.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+            // 선택된 탭 활성화
+            this.classList.add('active');
+            document.getElementById(targetId).classList.add('active');
+        });
+    });
+
+    // 첫 번째 탭 자동 활성화
+    document.querySelectorAll('.event-results').forEach(eventDiv => {
+        const firstTab = eventDiv.querySelector('.tab-btn');
+        const firstContent = eventDiv.querySelector('.tab-content');
+        if (firstTab && firstContent) {
+            firstTab.classList.add('active');
+            firstContent.classList.add('active');
+        }
+    });
+});
+</script>
 {% endblock %}

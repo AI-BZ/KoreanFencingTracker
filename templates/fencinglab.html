@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}FencingLab - 선수 분석{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/fencinglab.css">
+{% endblock %}
+
+{% block content %}
+<div class="fencinglab-container">
+    <div class="fl-header">
+        <div class="fl-logo">Fencing<span>Lab</span></div>
+        <p class="fl-subtitle">AI 기반 선수 분석 서비스</p>
+    </div>
+
+    <!-- Club Player List -->
+    <div class="fl-section">
+        <h3 style="color: var(--fl-text-primary); margin-bottom: 1rem;">
+            최병철펜싱클럽 선수 분석
+        </h3>
+        <p style="color: var(--fl-text-secondary); margin-bottom: 1.5rem;">
+            현재 최병철펜싱클럽 소속 선수에 대해서만 분석 서비스가 제공됩니다.
+        </p>
+
+        <div class="fl-player-list" id="playerList">
+            <p style="color: var(--fl-text-muted);">선수 목록을 불러오는 중...</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="/static/js/fencinglab.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async function() {
+    const playerList = document.getElementById('playerList');
+
+    try {
+        const data = await FencingLab.loadClubPlayers('최병철펜싱클럽');
+        if (data && data.players && data.players.length > 0) {
+            playerList.innerHTML = data.players.map(player => `
+                <a href="/fencinglab/player/${encodeURIComponent(player.name)}?team=${encodeURIComponent(player.team)}" class="fl-player-list-item">
+                    <h4>${player.name}</h4>
+                    <span class="stats">클릭하여 분석 보기</span>
+                </a>
+            `).join('');
+        } else {
+            playerList.innerHTML = '<p style="color: var(--fl-text-muted);">등록된 선수가 없습니다.</p>';
+        }
+    } catch (error) {
+        playerList.innerHTML = '<p style="color: var(--fl-accent-red);">데이터를 불러올 수 없습니다.</p>';
+    }
+});
+</script>
+{% endblock %}

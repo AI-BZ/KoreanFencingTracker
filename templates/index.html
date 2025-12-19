@@ -1,8 +1,9 @@
 {% extends "base.html" %}
 
-{% block title %}Korean Fencing Tracker - 선수 중심 검색{% endblock %}
+{% block title %}Korean Fencing Tracker - Player Search{% endblock %}
 
 {% block extra_css %}
+<link rel="stylesheet" href="/static/css/fencinglab.css">
 <style>
     .hero {
         background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
@@ -18,49 +19,6 @@
         opacity: 0.8;
         font-size: 1.1rem;
     }
-
-    /* 필터 섹션 */
-    .filter-section {
-        background: #f8f9fa;
-        padding: 1.5rem;
-        border-radius: 12px;
-        margin: 2rem 0;
-    }
-    .filter-group {
-        margin-bottom: 1rem;
-    }
-    .filter-group label {
-        display: block;
-        font-weight: 600;
-        margin-bottom: 0.5rem;
-        color: #333;
-    }
-    .filter-buttons {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.5rem;
-    }
-    .filter-btn {
-        padding: 0.5rem 1rem;
-        border: 2px solid #ddd;
-        background: white;
-        border-radius: 20px;
-        cursor: pointer;
-        transition: all 0.2s;
-        font-size: 0.9rem;
-    }
-    .filter-btn:hover {
-        border-color: #007bff;
-        background: #f0f7ff;
-    }
-    .filter-btn.active {
-        background: #007bff;
-        color: white;
-        border-color: #007bff;
-    }
-    .filter-btn.weapon-foil.active { background: #e74c3c; border-color: #e74c3c; }
-    .filter-btn.weapon-epee.active { background: #3498db; border-color: #3498db; }
-    .filter-btn.weapon-sabre.active { background: #2ecc71; border-color: #2ecc71; }
 
     /* 선수 검색 */
     .player-search {
@@ -135,6 +93,105 @@
         color: #666;
     }
 
+    /* Event Selection 섹션 */
+    .filter-section {
+        background: white;
+        padding: 2rem;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        margin: 2rem 0;
+    }
+    .filter-section h3 {
+        margin-bottom: 1.5rem;
+        color: #1a1a2e;
+        font-size: 1.3rem;
+    }
+    .filter-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1.5rem;
+    }
+    .filter-group {
+        background: #f8f9fa;
+        padding: 1rem;
+        border-radius: 10px;
+    }
+    .filter-group label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 0.75rem;
+        color: #333;
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    .filter-buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+    .filter-btn {
+        padding: 0.5rem 1rem;
+        border: 2px solid #ddd;
+        background: white;
+        border-radius: 20px;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-size: 0.9rem;
+    }
+    .filter-btn:hover {
+        border-color: #007bff;
+        background: #f0f7ff;
+    }
+    .filter-btn.active {
+        background: #007bff;
+        color: white;
+        border-color: #007bff;
+    }
+    .filter-btn.weapon-foil.active { background: #e74c3c; border-color: #e74c3c; }
+    .filter-btn.weapon-epee.active { background: #3498db; border-color: #3498db; }
+    .filter-btn.weapon-sabre.active { background: #2ecc71; border-color: #2ecc71; }
+
+    .filter-actions {
+        display: flex;
+        gap: 1rem;
+        margin-top: 1.5rem;
+        padding-top: 1rem;
+        border-top: 1px solid #eee;
+    }
+    .btn-search {
+        padding: 0.75rem 2rem;
+        background: #007bff;
+        color: white;
+        border: none;
+        border-radius: 25px;
+        cursor: pointer;
+        font-size: 1rem;
+        font-weight: 600;
+        transition: background 0.2s;
+    }
+    .btn-search:hover {
+        background: #0056b3;
+    }
+    .btn-search:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+    }
+    .btn-clear {
+        padding: 0.75rem 1.5rem;
+        background: transparent;
+        color: #666;
+        border: 2px solid #ddd;
+        border-radius: 25px;
+        cursor: pointer;
+        font-size: 0.9rem;
+        transition: all 0.2s;
+    }
+    .btn-clear:hover {
+        border-color: #dc3545;
+        color: #dc3545;
+    }
+
     /* 결과 섹션 */
     .results-section {
         margin: 2rem 0;
@@ -149,7 +206,29 @@
         color: #666;
     }
 
-    /* 종목 카드 */
+    /* 필터 선택 안내 메시지 */
+    .filter-prompt {
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        border-radius: 12px;
+        padding: 3rem;
+        text-align: center;
+        color: #666;
+    }
+    .filter-prompt-icon {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+    }
+    .filter-prompt h4 {
+        color: #333;
+        margin-bottom: 0.5rem;
+        font-size: 1.2rem;
+    }
+    .filter-prompt p {
+        margin: 0;
+        font-size: 0.95rem;
+    }
+
+    /* Event 카드 */
     .event-cards {
         display: grid;
         gap: 1rem;
@@ -255,31 +334,6 @@
         border-bottom: none;
     }
 
-    /* 통계 카드 */
-    .stats-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-        gap: 1rem;
-        margin: 2rem 0;
-    }
-    .stat-card {
-        background: white;
-        padding: 1.5rem;
-        border-radius: 12px;
-        text-align: center;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-    }
-    .stat-value {
-        font-size: 2rem;
-        font-weight: 700;
-        color: #007bff;
-    }
-    .stat-label {
-        color: #666;
-        font-size: 0.9rem;
-        margin-top: 0.3rem;
-    }
-
     /* 로딩 */
     .loading {
         text-align: center;
@@ -330,10 +384,36 @@
         cursor: not-allowed;
     }
 
+    /* 선택된 필터 표시 */
+    .active-filters {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+    }
+    .active-filter-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.4rem 0.8rem;
+        background: #007bff;
+        color: white;
+        border-radius: 20px;
+        font-size: 0.85rem;
+    }
+    .active-filter-tag .remove {
+        cursor: pointer;
+        opacity: 0.8;
+    }
+    .active-filter-tag .remove:hover {
+        opacity: 1;
+    }
+
     @media (max-width: 768px) {
         .hero h1 { font-size: 1.8rem; }
         .event-card { flex-direction: column; align-items: flex-start; }
         .event-date { text-align: left; margin-top: 0.5rem; }
+        .filter-grid { grid-template-columns: 1fr; }
     }
 </style>
 {% endblock %}
@@ -342,27 +422,11 @@
 <div class="hero">
     <div class="container">
         <h1>Korean Fencing Tracker</h1>
-        <p>2019년부터의 대한펜싱협회 대회 기록을 선수 중심으로 검색하세요</p>
+        <p>나의 펜싱 경기 기록을 확인하고 분석하세요</p>
     </div>
 </div>
 
 <div class="container">
-    <!-- 통계 -->
-    <div class="stats-grid" id="stats-grid">
-        <div class="stat-card">
-            <div class="stat-value" id="stat-competitions">-</div>
-            <div class="stat-label">대회</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-value" id="stat-events">-</div>
-            <div class="stat-label">종목</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-value" id="stat-players">-</div>
-            <div class="stat-label">선수</div>
-        </div>
-    </div>
-
     <!-- 선수 검색 -->
     <div class="player-search">
         <h2 style="text-align: center; margin-bottom: 1.5rem;">선수 검색</h2>
@@ -373,60 +437,68 @@
         </div>
     </div>
 
-    <!-- 필터 -->
+    <!-- Event Selection -->
     <div class="filter-section">
-        <h3 style="margin-bottom: 1rem;">종목 필터</h3>
+        <h3>Event Selection</h3>
 
-        <div class="filter-group">
-            <label>무기</label>
-            <div class="filter-buttons" id="filter-weapons">
-                <button class="filter-btn weapon-foil" data-filter="weapon" data-value="플러레">플러레</button>
-                <button class="filter-btn weapon-epee" data-filter="weapon" data-value="에뻬">에뻬</button>
-                <button class="filter-btn weapon-sabre" data-filter="weapon" data-value="사브르">사브르</button>
+        <div class="filter-grid">
+            <div class="filter-group">
+                <label>Weapon</label>
+                <div class="filter-buttons" id="filter-weapons">
+                    <button class="filter-btn weapon-foil" data-filter="weapon" data-value="플러레">Foil(플러레)</button>
+                    <button class="filter-btn weapon-epee" data-filter="weapon" data-value="에뻬">Epee(에페)</button>
+                    <button class="filter-btn weapon-sabre" data-filter="weapon" data-value="사브르">Saber(사브르)</button>
+                </div>
+            </div>
+
+            <div class="filter-group">
+                <label>Gender</label>
+                <div class="filter-buttons" id="filter-genders">
+                    <button class="filter-btn" data-filter="gender" data-value="남">남</button>
+                    <button class="filter-btn" data-filter="gender" data-value="여">여</button>
+                </div>
+            </div>
+
+            <div class="filter-group">
+                <label>Event</label>
+                <div class="filter-buttons" id="filter-ages"></div>
+            </div>
+
+            <div class="filter-group">
+                <label>Season</label>
+                <div class="filter-buttons" id="filter-years"></div>
+            </div>
+
+            <div class="filter-group">
+                <label>Type</label>
+                <div class="filter-buttons" id="filter-types">
+                    <button class="filter-btn" data-filter="event_type" data-value="개인">개인</button>
+                    <button class="filter-btn" data-filter="event_type" data-value="단체">단체</button>
+                </div>
             </div>
         </div>
 
-        <div class="filter-group">
-            <label>성별</label>
-            <div class="filter-buttons" id="filter-genders">
-                <button class="filter-btn" data-filter="gender" data-value="남">남</button>
-                <button class="filter-btn" data-filter="gender" data-value="여">여</button>
-            </div>
-        </div>
-
-        <div class="filter-group">
-            <label>연령대</label>
-            <div class="filter-buttons" id="filter-ages"></div>
-        </div>
-
-        <div class="filter-group">
-            <label>연도</label>
-            <div class="filter-buttons" id="filter-years"></div>
-        </div>
-
-        <div class="filter-group">
-            <label>종목 타입</label>
-            <div class="filter-buttons" id="filter-types">
-                <button class="filter-btn" data-filter="event_type" data-value="개인">개인</button>
-                <button class="filter-btn" data-filter="event_type" data-value="단체">단체</button>
-            </div>
-        </div>
-
-        <div style="margin-top: 1rem;">
-            <button class="filter-btn" id="clear-filters" style="background: #dc3545; color: white; border-color: #dc3545;">
-                필터 초기화
-            </button>
+        <div class="filter-actions">
+            <button class="btn-search" id="search-events" disabled>검색</button>
+            <button class="btn-clear" id="clear-filters">초기화</button>
         </div>
     </div>
 
-    <!-- 종목 결과 -->
+    <!-- Event 결과 -->
     <div class="results-section">
         <div class="results-header">
-            <h3>종목 목록</h3>
+            <div>
+                <h3>검색 결과</h3>
+                <div class="active-filters" id="active-filters"></div>
+            </div>
             <span class="results-count" id="results-count"></span>
         </div>
         <div class="event-cards" id="event-cards">
-            <div class="loading">데이터 로딩 중</div>
+            <div class="filter-prompt">
+                <div class="filter-prompt-icon">🎯</div>
+                <h4>Event를 선택하세요</h4>
+                <p>위의 필터(Weapon, Gender, Event, Season, Type) 중 하나 이상을 선택하면 해당 경기 목록이 표시됩니다.</p>
+            </div>
         </div>
         <div class="pagination" id="pagination"></div>
     </div>
@@ -440,10 +512,42 @@
         <div class="competitions-list" id="competitions-list"></div>
     </div>
 </div>
+
+<!-- FencingLab Demo Section -->
+<div id="fencinglab-demo"></div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
+// US Fencing / FIE Age Group Labels
+const AGE_GROUP_LABELS = {
+    'Y8': 'Y8(초등1~2)',
+    'Y10': 'Y10(초등3~4)',
+    'Y12': 'Y12(초등5~6)',
+    'Y14': 'Y14(중등)',
+    'Cadet': 'Cadet(고등)',
+    'Junior': 'Junior(대학)',
+    'Veteran': 'Veteran(일반)',
+    'National': 'National(국가대표)'
+};
+
+// Bilingual display mapping
+const WEAPON_DISPLAY = {
+    '플러레': 'Foil(플러레)',
+    '에뻬': 'Epee(에페)',
+    '사브르': 'Saber(사브르)'
+};
+
+const GENDER_DISPLAY = {
+    '남': '남',
+    '여': '여'
+};
+
+const TYPE_DISPLAY = {
+    '개인': '개인',
+    '단체': '단체'
+};
+
 // 상태 관리
 const state = {
     filters: {
@@ -454,30 +558,17 @@ const state = {
         event_type: null
     },
     page: 1,
-    perPage: 30
+    perPage: 30,
+    hasSearched: false
 };
 
 // 초기화
 document.addEventListener('DOMContentLoaded', async () => {
-    await loadStats();
     await loadFilters();
-    await loadEvents();
     await loadCompetitions();
     setupEventListeners();
+    updateSearchButton();
 });
-
-// 통계 로드
-async function loadStats() {
-    try {
-        const res = await fetch('/api/stats');
-        const data = await res.json();
-        document.getElementById('stat-competitions').textContent = data.total_competitions.toLocaleString();
-        document.getElementById('stat-events').textContent = data.total_events.toLocaleString();
-        document.getElementById('stat-players').textContent = data.total_players.toLocaleString();
-    } catch (e) {
-        console.error('Stats error:', e);
-    }
-}
 
 // 필터 옵션 로드
 async function loadFilters() {
@@ -485,26 +576,104 @@ async function loadFilters() {
         const res = await fetch('/api/filters');
         const data = await res.json();
 
-        // 연령대
+        // Event (연령대)
         const agesDiv = document.getElementById('filter-ages');
         agesDiv.innerHTML = data.age_groups.map(age =>
-            `<button class="filter-btn" data-filter="age_group" data-value="${age}">${age}</button>`
+            `<button class="filter-btn" data-filter="age_group" data-value="${age}">${AGE_GROUP_LABELS[age] || age}</button>`
         ).join('');
 
-        // 연도
+        // Season (연도) - 현재 연도 기본 선택
+        const currentYear = new Date().getFullYear();
         const yearsDiv = document.getElementById('filter-years');
-        yearsDiv.innerHTML = data.years.map(year =>
-            `<button class="filter-btn" data-filter="year" data-value="${year}">${year}</button>`
-        ).join('');
+        yearsDiv.innerHTML = data.years.map(year => {
+            const isCurrentYear = year === currentYear;
+            return `<button class="filter-btn${isCurrentYear ? ' active' : ''}" data-filter="year" data-value="${year}">${year}</button>`;
+        }).join('');
+
+        // 현재 연도가 데이터에 있으면 기본 선택
+        if (data.years.includes(currentYear)) {
+            state.filters.year = currentYear;
+        }
+
+        // Type "개인" 기본 선택
+        state.filters.event_type = '개인';
+        document.querySelector('.filter-btn[data-filter="event_type"][data-value="개인"]').classList.add('active');
+
+        // 기본 선택 상태 반영
+        updateSearchButton();
+        updateActiveFilters();
     } catch (e) {
         console.error('Filters error:', e);
     }
 }
 
-// 종목 로드
+// 검색 버튼 활성화 상태 업데이트
+function updateSearchButton() {
+    const hasFilter = Object.values(state.filters).some(v => v !== null);
+    document.getElementById('search-events').disabled = !hasFilter;
+}
+
+// 선택된 필터 태그 표시
+function updateActiveFilters() {
+    const container = document.getElementById('active-filters');
+    const tags = [];
+
+    if (state.filters.weapon) {
+        tags.push(`<span class="active-filter-tag">${WEAPON_DISPLAY[state.filters.weapon] || state.filters.weapon}<span class="remove" data-filter="weapon">×</span></span>`);
+    }
+    if (state.filters.gender) {
+        tags.push(`<span class="active-filter-tag">${GENDER_DISPLAY[state.filters.gender] || state.filters.gender}<span class="remove" data-filter="gender">×</span></span>`);
+    }
+    if (state.filters.age_group) {
+        tags.push(`<span class="active-filter-tag">${AGE_GROUP_LABELS[state.filters.age_group] || state.filters.age_group}<span class="remove" data-filter="age_group">×</span></span>`);
+    }
+    if (state.filters.year) {
+        tags.push(`<span class="active-filter-tag">${state.filters.year}<span class="remove" data-filter="year">×</span></span>`);
+    }
+    if (state.filters.event_type) {
+        tags.push(`<span class="active-filter-tag">${TYPE_DISPLAY[state.filters.event_type] || state.filters.event_type}<span class="remove" data-filter="event_type">×</span></span>`);
+    }
+
+    container.innerHTML = tags.join('');
+
+    // 태그 삭제 이벤트
+    container.querySelectorAll('.remove').forEach(el => {
+        el.addEventListener('click', (e) => {
+            const filter = e.target.dataset.filter;
+            state.filters[filter] = null;
+            document.querySelectorAll(`.filter-btn[data-filter="${filter}"]`).forEach(btn => {
+                btn.classList.remove('active');
+            });
+            updateSearchButton();
+            updateActiveFilters();
+            if (state.hasSearched) {
+                loadEvents();
+            }
+        });
+    });
+}
+
+// Event 로드
 async function loadEvents() {
     const cardsDiv = document.getElementById('event-cards');
-    cardsDiv.innerHTML = '<div class="loading">데이터 로딩 중</div>';
+
+    // 필터가 하나도 없으면 안내 메시지 표시
+    const hasFilter = Object.values(state.filters).some(v => v !== null);
+    if (!hasFilter) {
+        cardsDiv.innerHTML = `
+            <div class="filter-prompt">
+                <div class="filter-prompt-icon">🎯</div>
+                <h4>Event를 선택하세요</h4>
+                <p>위의 필터(Weapon, Gender, Event, Season, Type) 중 하나 이상을 선택하면 해당 경기 목록이 표시됩니다.</p>
+            </div>
+        `;
+        document.getElementById('results-count').textContent = '';
+        document.getElementById('pagination').innerHTML = '';
+        return;
+    }
+
+    cardsDiv.innerHTML = '<div class="loading">로딩 중</div>';
+    state.hasSearched = true;
 
     try {
         const params = new URLSearchParams();
@@ -519,7 +688,7 @@ async function loadEvents() {
         const data = await res.json();
 
         document.getElementById('results-count').textContent =
-            `총 ${data.total.toLocaleString()}개 종목`;
+            `총 ${data.total.toLocaleString()}개`;
 
         if (data.events.length === 0) {
             cardsDiv.innerHTML = '<div style="text-align: center; padding: 2rem; color: #666;">검색 결과가 없습니다</div>';
@@ -528,15 +697,15 @@ async function loadEvents() {
         }
 
         cardsDiv.innerHTML = data.events.map(event => `
-            <div class="event-card">
+            <div class="event-card" onclick="location.href='/competition/${event.event_cd}?event=${event.sub_event_cd}'" style="cursor: pointer;">
                 <div class="event-info">
                     <div class="event-name">${event.name}</div>
                     <div class="event-meta">${event.competition_name}</div>
                     <div class="event-tags">
-                        ${event.weapon ? `<span class="tag tag-weapon">${event.weapon}</span>` : ''}
-                        ${event.gender ? `<span class="tag tag-gender">${event.gender}</span>` : ''}
-                        ${event.age_group ? `<span class="tag tag-age">${event.age_group}</span>` : ''}
-                        ${event.event_type ? `<span class="tag tag-type">${event.event_type}</span>` : ''}
+                        ${event.weapon ? `<span class="tag tag-weapon">${WEAPON_DISPLAY[event.weapon] || event.weapon}</span>` : ''}
+                        ${event.gender ? `<span class="tag tag-gender">${GENDER_DISPLAY[event.gender] || event.gender}</span>` : ''}
+                        ${event.age_group ? `<span class="tag tag-age">${AGE_GROUP_LABELS[event.age_group] || event.age_group}</span>` : ''}
+                        ${event.event_type ? `<span class="tag tag-type">${TYPE_DISPLAY[event.event_type] || event.event_type}</span>` : ''}
                     </div>
                 </div>
                 <div class="event-date">
@@ -638,6 +807,12 @@ function setupEventListeners() {
             btn.classList.add('active');
         }
 
+        updateSearchButton();
+        updateActiveFilters();
+    });
+
+    // 검색 버튼
+    document.getElementById('search-events').addEventListener('click', () => {
         state.page = 1;
         loadEvents();
     });
@@ -649,7 +824,20 @@ function setupEventListeners() {
             btn.classList.remove('active');
         });
         state.page = 1;
-        loadEvents();
+        state.hasSearched = false;
+        updateSearchButton();
+        updateActiveFilters();
+
+        // 초기 상태로 되돌리기
+        document.getElementById('event-cards').innerHTML = `
+            <div class="filter-prompt">
+                <div class="filter-prompt-icon">🎯</div>
+                <h4>Event를 선택하세요</h4>
+                <p>위의 필터(Weapon, Gender, Event, Season, Type) 중 하나 이상을 선택하면 해당 경기 목록이 표시됩니다.</p>
+            </div>
+        `;
+        document.getElementById('results-count').textContent = '';
+        document.getElementById('pagination').innerHTML = '';
     });
 
     // 대회 토글
@@ -676,7 +864,7 @@ function setupEventListeners() {
 
         searchTimeout = setTimeout(async () => {
             try {
-                const res = await fetch('/api/player/search?q=' + encodeURIComponent(query));
+                const res = await fetch('/api/players/search?q=' + encodeURIComponent(query));
                 const data = await res.json();
 
                 if (data.results.length === 0) {
@@ -720,5 +908,25 @@ function setupEventListeners() {
 function goToPlayer(name) {
     location.href = '/player/' + encodeURIComponent(name);
 }
+
+// FencingLab Demo Section
+document.addEventListener('DOMContentLoaded', function() {
+    // Load Chart.js first
+    const script1 = document.createElement('script');
+    script1.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js';
+    script1.onload = function() {
+        // Then load FencingLab
+        const script2 = document.createElement('script');
+        script2.src = '/static/js/fencinglab.js';
+        script2.onload = function() {
+            // Render demo section
+            if (window.FencingLab) {
+                FencingLab.renderDemoSection('fencinglab-demo');
+            }
+        };
+        document.head.appendChild(script2);
+    };
+    document.head.appendChild(script1);
+});
 </script>
 {% endblock %}

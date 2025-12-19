@@ -1,0 +1,546 @@
+{% extends "base.html" %}
+
+{% block title %}{{ player.name }} - Korean Fencing Tracker{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/components.css">
+<link rel="stylesheet" href="/static/css/fencinglab.css">
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <nav class="breadcrumb">
+        <a href="/">홈</a> &gt;
+        <a href="/search">선수 검색</a> &gt;
+        <span>{{ player.name }}</span>
+    </nav>
+
+    <!-- Player Header -->
+    <div class="player-header">
+        <div class="player-name">
+            {{ player.name }}
+            {% if player.name_en %}
+            <span class="name-en">{{ player.name_en }}</span>
+            {% endif %}
+            {% if player.has_disambiguation %}
+            <span class="disambiguation-badge">동명이인 존재</span>
+            {% endif %}
+        </div>
+
+        <!-- International Links -->
+        {% if player.fie_id or player.fencingtracker_id %}
+        <div class="international-links">
+            {% if player.fie_id %}
+            <a href="https://fie.org/athletes/{{ player.fie_id }}" target="_blank" class="external-link fie-link">
+                <span class="link-icon">🌍</span> FIE Profile
+                {% if player.name_en_verified %}<span class="verified-badge">✓</span>{% endif %}
+            </a>
+            {% endif %}
+            {% if player.fencingtracker_id %}
+            <a href="https://fencingtracker.com/p/{{ player.fencingtracker_id }}" target="_blank" class="external-link ft-link">
+                <span class="link-icon">📊</span> FencingTracker
+                {% if player.name_en_verified %}<span class="verified-badge">✓</span>{% endif %}
+            </a>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <div class="player-team">{{ player.teams|join(', ') if player.teams else '-' }}</div>
+
+        <!-- Team History (소속 변경 이력) -->
+        {% if player.team_history and player.team_history|length > 1 %}
+        <div class="team-history-section">
+            <div class="team-history-title">소속 이력</div>
+            <div class="team-history-list">
+                {% for t in player.team_history %}
+                <span class="team-history-item">
+                    {{ t.team }}
+                    <span class="dates">({{ t.first_seen[:7] }}~{{ t.last_seen[:7] }})</span>
+                </span>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Other Profiles with Same Name (동명이인) -->
+        {% if player.other_profiles %}
+        <div class="disambiguation-section">
+            <div class="disambiguation-title">동명이인 선수:</div>
+            <div class="other-profiles-list">
+                {% for p in player.other_profiles %}
+                <a href="/player/{{ player.name }}?id={{ p.player_id }}" class="other-profile-link">
+                    {{ p.current_team or p.teams|join(', ') }}
+                    <span class="profile-count">({{ p.competition_count }}회 출전)</span>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Rating Display -->
+        <div class="rating-display">
+            {% for weapon, rating in player.ratings.items() %}
+            <div class="rating-badge {% if loop.first %}active{% endif %}">
+                <div class="rating-value">{{ rating.current or 'U' }}</div>
+                <div class="rating-weapon">{{ weapon }}</div>
+            </div>
+            {% else %}
+            <div class="rating-badge active">
+                <div class="rating-value">U</div>
+                <div class="rating-weapon">Unrated</div>
+            </div>
+            {% endfor %}
+        </div>
+        <div class="rating-date">as of {{ today }}</div>
+    </div>
+
+    <!-- Tab Navigation -->
+    <div class="tabs">
+        <button class="tab-btn active" data-tab="summary">
+            <span>Summary</span>
+        </button>
+        <button class="tab-btn" data-tab="history">
+            <span>History</span>
+        </button>
+        <button class="tab-btn" data-tab="strength">
+            <span>Strength</span>
+        </button>
+        <button class="tab-btn" data-tab="analysis">
+            <span>Analysis</span>
+        </button>
+    </div>
+
+    <!-- Summary Tab -->
+    <div id="tab-summary" class="tab-content active">
+        <!-- Rating History -->
+        <div class="stat-card-large">
+            <h4>레이팅 히스토리</h4>
+            <table class="podium-table">
+                <thead>
+                    <tr>
+                        <th>Rating</th>
+                        <th>Weapon</th>
+                        <th>Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for history in player.rating_history %}
+                    <tr>
+                        <td><strong>{{ history.rating }}</strong></td>
+                        <td>{{ history.weapon }}</td>
+                        <td>{{ history.date }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="3" style="text-align: center; color: var(--text-light);">레이팅 기록이 없습니다</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Podium Finishes -->
+        <div class="stat-card-large">
+            <h4>시상대 기록 (Podium Finishes)</h4>
+            <table class="podium-table">
+                <thead>
+                    <tr>
+                        <th class="season-cell">Season</th>
+                        <th>🥇</th>
+                        <th>🥈</th>
+                        <th>🥉</th>
+                        <th>5-8위</th>
+                        <th>Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for season, stats in player.podium_by_season.items() %}
+                    <tr>
+                        <td class="season-cell">{{ season }}</td>
+                        <td>{{ stats.gold }}</td>
+                        <td>{{ stats.silver }}</td>
+                        <td>{{ stats.bronze }}</td>
+                        <td>{{ stats.top8 }}</td>
+                        <td>{{ stats.total }}</td>
+                    </tr>
+                    {% endfor %}
+                    <tr class="total-row">
+                        <td class="season-cell">All Time</td>
+                        <td>{{ player.stats.medals.gold }}</td>
+                        <td>{{ player.stats.medals.silver }}</td>
+                        <td>{{ player.stats.medals.bronze }}</td>
+                        <td>{{ player.stats.medals.top8 or 0 }}</td>
+                        <td>{{ player.total_records }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Upcoming/Recent Registrations -->
+        {% if player.upcoming_events %}
+        <div class="stat-card-large">
+            <h4>예정된 대회 (Registrations)</h4>
+            <table class="podium-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Tournament</th>
+                        <th>Event Strength</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for event in player.upcoming_events %}
+                    <tr>
+                        <td>{{ event.date }}</td>
+                        <td>{{ event.tournament }}</td>
+                        <td>{{ event.strength }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- History Tab -->
+    <div id="tab-history" class="tab-content">
+        <!-- Filters -->
+        <div class="history-filters">
+            <select id="filter-season">
+                <option value="">시즌 전체</option>
+                {% for year in player.years|sort(reverse=true) %}
+                <option value="{{ year }}">{{ year }}</option>
+                {% endfor %}
+            </select>
+            <select id="filter-weapon">
+                <option value="">무기 전체</option>
+                {% for weapon in player.weapons %}
+                <option value="{{ weapon }}">{{ weapon }}</option>
+                {% endfor %}
+            </select>
+            <select id="filter-result">
+                <option value="">결과 전체</option>
+                <option value="medal">메달만</option>
+                <option value="top8">Top 8</option>
+            </select>
+            <button class="btn btn-primary" onclick="filterHistory()">검색</button>
+        </div>
+
+        <!-- Results List -->
+        <div class="history-section">
+            <h4>경기 결과 (Results)</h4>
+
+            {% for record in player.records %}
+            <div class="result-card" data-year="{{ record.year }}" data-weapon="{{ record.weapon }}" data-rank="{{ record.rank }}">
+                <div class="result-card-header" onclick="toggleResultDetail(this)">
+                    <div class="result-info">
+                        <div class="result-date">{{ record.competition_date }}</div>
+                        <div class="result-tournament">{{ record.competition_name }}</div>
+                        <div class="result-event">{{ record.event_name }}</div>
+                    </div>
+                    <div class="result-stats">
+                        <div class="result-place {% if record.rank == 1 %}gold{% elif record.rank == 2 %}silver{% elif record.rank == 3 %}bronze{% endif %}">
+                            {% if record.rank == 1 %}🥇{% elif record.rank == 2 %}🥈{% elif record.rank == 3 %}🥉{% else %}{{ record.rank or '-' }}{% endif %}
+                            {% if record.total_participants %}/{{ record.total_participants }}{% endif %}
+                        </div>
+                        {% if record.rating_earned %}
+                        <div class="result-rating">{{ record.rating_earned }}</div>
+                        {% endif %}
+                        <span class="result-expand-icon">▼</span>
+                    </div>
+                </div>
+                <div class="result-card-detail">
+                    <!-- Pool Results -->
+                    {% if record.pool_results %}
+                    <div class="detail-section">
+                        <h5><span class="section-icon">📋</span> Pool {{ record.pool_number or '' }}</h5>
+                        <div class="pool-summary">
+                            <span class="pool-summary-item">순위: <strong>{{ record.pool_rank or '-' }}위</strong></span>
+                            <span class="pool-summary-item">전적: <strong>{{ record.pool_wins or 0 }}승 {{ record.pool_losses or 0 }}패</strong></span>
+                            <span class="pool-summary-item">승률: <strong>{{ record.win_rate or '-' }}</strong></span>
+                            <span class="pool-summary-item">지수: <strong>{% if record.indicator > 0 %}+{% endif %}{{ record.indicator or 0 }}</strong></span>
+                        </div>
+                        <div class="bout-detail-list">
+                            {% for bout in record.pool_bouts %}
+                            <div class="bout-detail-item">
+                                <div class="bout-opponent">
+                                    <div class="bout-opponent-name">vs {{ bout.opponent_name }}</div>
+                                    <div class="bout-opponent-team">{{ bout.opponent_team }}</div>
+                                </div>
+                                <div class="bout-detail-score">{{ bout.my_score }} - {{ bout.opponent_score }}</div>
+                                <div class="bout-detail-result {% if bout.result == 'V' %}v{% else %}d{% endif %}">
+                                    {% if bout.result == 'V' %}✅ V{% else %}❌ D{% endif %}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Tournament Results -->
+                    {% if record.tournament_results %}
+                    <div class="detail-section">
+                        <h5><span class="section-icon">🏆</span> Direct Elimination</h5>
+                        <div class="tournament-progress">
+                            {% for round in record.tournament_path %}
+                            <span class="progress-step {% if round.completed %}completed{% endif %} {% if round.current %}current{% endif %}">
+                                {{ round.name }}
+                            </span>
+                            {% if not loop.last %}<span class="progress-arrow">→</span>{% endif %}
+                            {% endfor %}
+                        </div>
+                        <div class="bout-detail-list">
+                            {% for bout in record.tournament_bouts %}
+                            <div class="bout-detail-item">
+                                <span style="min-width: 60px; color: var(--primary-color); font-weight: 500;">{{ bout.round_name }}</span>
+                                <div class="bout-opponent">
+                                    <div class="bout-opponent-name">vs {{ bout.opponent_name }}</div>
+                                    <div class="bout-opponent-team">{{ bout.opponent_team }}</div>
+                                </div>
+                                <div class="bout-detail-score">{{ bout.my_score }} - {{ bout.opponent_score }}</div>
+                                <div class="bout-detail-result {% if bout.result == 'V' %}v{% else %}d{% endif %}">
+                                    {% if bout.result == 'V' %}✅ V{% else %}❌ D{% endif %}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% else %}
+            <div class="empty">경기 기록이 없습니다</div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Strength Tab -->
+    <div id="tab-strength" class="tab-content">
+        <!-- Overview Stats -->
+        <div class="strength-overview">
+            <div class="strength-card">
+                <div class="strength-value">{{ player.bout_stats.total }}</div>
+                <div class="strength-label">총 경기</div>
+            </div>
+            <div class="strength-card">
+                <div class="strength-value">{{ player.bout_stats.wins }}</div>
+                <div class="strength-label">승</div>
+            </div>
+            <div class="strength-card">
+                <div class="strength-value">{{ player.bout_stats.losses }}</div>
+                <div class="strength-label">패</div>
+            </div>
+            <div class="strength-card">
+                <div class="strength-value">{{ player.bout_stats.win_rate }}%</div>
+                <div class="strength-label">승률</div>
+            </div>
+        </div>
+
+        <!-- Win Rate by Stage -->
+        <div class="stat-card-large">
+            <h4>단계별 승률</h4>
+            <div class="strength-overview" style="margin-bottom: 0">
+                <div class="strength-card">
+                    <div class="strength-value">{{ player.stage_stats.pool_rate }}%</div>
+                    <div class="strength-label">Pool</div>
+                    <small style="color: var(--text-light)">{{ player.stage_stats.pool_wins }}승 {{ player.stage_stats.pool_losses }}패</small>
+                </div>
+                <div class="strength-card">
+                    <div class="strength-value">{{ player.stage_stats.de_rate }}%</div>
+                    <div class="strength-label">DE (본선)</div>
+                    <small style="color: var(--text-light)">{{ player.stage_stats.de_wins }}승 {{ player.stage_stats.de_losses }}패</small>
+                </div>
+                <div class="strength-card">
+                    <div class="strength-value">{{ player.stage_stats.final_rate }}%</div>
+                    <div class="strength-label">결승전</div>
+                    <small style="color: var(--text-light)">{{ player.stage_stats.final_wins }}승 {{ player.stage_stats.final_losses }}패</small>
+                </div>
+            </div>
+        </div>
+
+        <!-- Head to Head Records -->
+        <div class="stat-card-large">
+            <h4>주요 상대 전적</h4>
+            <table class="opponent-table">
+                <thead>
+                    <tr>
+                        <th>상대</th>
+                        <th>소속</th>
+                        <th>전적</th>
+                        <th>승률</th>
+                        <th>최근</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for opponent in player.head_to_head %}
+                    <tr class="opponent-row" onclick="toggleOpponentDetail(this)">
+                        <td><strong>{{ opponent.name }}</strong></td>
+                        <td>{{ opponent.team }}</td>
+                        <td class="record-cell">{{ opponent.wins }}-{{ opponent.losses }}</td>
+                        <td class="winrate-cell">
+                            {{ opponent.win_rate }}%
+                            <div class="winrate-bar">
+                                <div class="winrate-fill" style="width: {{ opponent.win_rate }}%"></div>
+                            </div>
+                        </td>
+                        <td>
+                            {% if opponent.last_result == 'V' %}
+                            <span style="color: var(--success-color)">✅ {{ opponent.last_score }}</span>
+                            {% else %}
+                            <span style="color: var(--danger-color)">❌ {{ opponent.last_score }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr class="opponent-detail">
+                        <td colspan="5">
+                            <div class="opponent-matches">
+                                {% for match in opponent.matches %}
+                                <div class="opponent-match-item">
+                                    <span style="min-width: 100px">{{ match.date }}</span>
+                                    <span style="min-width: 60px; color: var(--primary-color)">{{ match.round }}</span>
+                                    <span style="flex: 1">{{ match.tournament }}</span>
+                                    <span style="min-width: 60px; font-weight: bold">{{ match.score }}</span>
+                                    <span style="min-width: 40px">
+                                        {% if match.result == 'V' %}✅{% else %}❌{% endif %}
+                                    </span>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" style="text-align: center; color: var(--text-light);">상대 전적 데이터가 없습니다</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Analysis Tab (FencingLab) -->
+    <div id="tab-analysis" class="tab-content">
+        <div class="analysis-container" id="analysis-content">
+            <div class="analysis-loading">
+                <p>분석 데이터를 불러오는 중...</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="/static/js/fencinglab.js"></script>
+<script>
+// Tab switching
+document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+    });
+});
+
+// Toggle result detail
+function toggleResultDetail(header) {
+    const card = header.parentElement;
+    card.classList.toggle('expanded');
+}
+
+// Toggle opponent detail
+function toggleOpponentDetail(row) {
+    const detail = row.nextElementSibling;
+    detail.classList.toggle('expanded');
+}
+
+// Filter history
+function filterHistory() {
+    const season = document.getElementById('filter-season').value;
+    const weapon = document.getElementById('filter-weapon').value;
+    const result = document.getElementById('filter-result').value;
+
+    document.querySelectorAll('.result-card').forEach(card => {
+        let show = true;
+
+        if (season && card.dataset.year !== season) {
+            show = false;
+        }
+
+        if (weapon && card.dataset.weapon !== weapon) {
+            show = false;
+        }
+
+        if (result === 'medal') {
+            const rank = parseInt(card.dataset.rank);
+            if (rank > 3) show = false;
+        } else if (result === 'top8') {
+            const rank = parseInt(card.dataset.rank);
+            if (rank > 8) show = false;
+        }
+
+        card.style.display = show ? 'block' : 'none';
+    });
+}
+
+// Analysis tab - FencingLab integration
+let analysisLoaded = false;
+const playerName = "{{ player.name }}";
+const playerTeam = "{{ player.current_team or (player.teams[0] if player.teams else '') }}";
+
+document.querySelector('[data-tab="analysis"]').addEventListener('click', async () => {
+    if (analysisLoaded) return;
+
+    const container = document.getElementById('analysis-content');
+
+    try {
+        const analytics = await FencingLab.loadPlayerAnalytics(playerName, playerTeam);
+
+        if (analytics && analytics.total_matches > 0) {
+            container.innerHTML = `
+                <div class="fl-player-card" id="player-analysis-card"></div>
+                <div class="fl-history-container" id="analysis-history" style="margin-top: 1.5rem;">
+                    <h4 class="fl-history-title">Match History (승률 추이)</h4>
+                    <div class="fl-history-chart">
+                        <canvas id="analysisHistoryChart"></canvas>
+                    </div>
+                </div>
+                <div class="fl-history-container" id="analysis-recent" style="margin-top: 1.5rem;"></div>
+            `;
+
+            // Render player card
+            FencingLab.renderPlayerCard(analytics, 'player-analysis-card');
+
+            // Render match history chart
+            if (analytics.match_history && analytics.match_history.length > 0) {
+                FencingLab.createHistoryChart('analysisHistoryChart', analytics.match_history);
+            }
+
+            // Render recent matches
+            if (analytics.recent_matches && analytics.recent_matches.length > 0) {
+                FencingLab.renderRecentMatches(analytics.recent_matches, 'analysis-recent');
+            }
+
+            analysisLoaded = true;
+        } else {
+            container.innerHTML = `
+                <div class="analysis-notice">
+                    <p>이 선수의 분석 데이터가 아직 준비되지 않았습니다.</p>
+                    <p style="font-size: 0.875rem; color: var(--text-light); margin-top: 0.5rem;">
+                        현재 최병철펜싱클럽 소속 선수만 분석 서비스가 제공됩니다.
+                    </p>
+                </div>
+            `;
+        }
+    } catch (error) {
+        container.innerHTML = `
+            <div class="analysis-notice error">
+                <p>분석 데이터를 불러올 수 없습니다.</p>
+                <p style="font-size: 0.875rem; color: var(--text-light); margin-top: 0.5rem;">
+                    ${error.message || '잠시 후 다시 시도해주세요.'}
+                </p>
+            </div>
+        `;
+    }
+});
+</script>
+{% endblock %}

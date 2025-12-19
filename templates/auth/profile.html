@@ -1,0 +1,463 @@
+{% extends "base.html" %}
+
+{% block title %}내 프로필 - Korean Fencing Tracker{% endblock %}
+
+{% block content %}
+<div class="profile-container">
+    <div class="profile-card">
+        <div class="profile-header">
+            <div class="profile-avatar">
+                {{ member.full_name[0] if member.full_name else 'U' }}
+            </div>
+            <div class="profile-info">
+                <h1>{{ member.full_name }}</h1>
+                <p class="member-type">
+                    {% if member.member_type == 'player' %}선수회원
+                    {% elif member.member_type == 'player_parent' %}선수 부모회원
+                    {% elif member.member_type == 'club_coach' %}클럽 코치
+                    {% elif member.member_type == 'school_coach' %}학교 코치
+                    {% else %}일반 회원
+                    {% endif %}
+                </p>
+                <div class="verification-badge badge-{{ member.verification_status }}">
+                    {% if member.verification_status == 'verified' %}
+                    ✅ 인증 완료
+                    {% elif member.verification_status == 'submitted' %}
+                    ⏳ 인증 검토중
+                    {% elif member.verification_status == 'rejected' %}
+                    ❌ 인증 거부됨
+                    {% else %}
+                    📋 인증 대기
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- 기본 정보 -->
+        <div class="profile-section">
+            <h2>기본 정보</h2>
+            <div class="info-grid">
+                <div class="info-item">
+                    <label>이메일</label>
+                    <span>{{ member.email }}</span>
+                </div>
+                <div class="info-item">
+                    <label>연락처</label>
+                    <span>{{ member.phone or '-' }}</span>
+                </div>
+                <div class="info-item">
+                    <label>가입일</label>
+                    <span>{{ member.created_at[:10] if member.created_at else '-' }}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 개인정보 설정 -->
+        <div class="profile-section">
+            <h2>개인정보 설정</h2>
+            <form id="privacyForm" class="privacy-form">
+                <label class="toggle-item">
+                    <span class="toggle-label">
+                        <strong>정보 공개</strong>
+                        <p>다른 사용자에게 실명과 소속을 공개합니다</p>
+                    </span>
+                    <input type="checkbox" name="privacy_public"
+                        {{ 'checked' if member.privacy_public else '' }}>
+                    <span class="toggle-switch"></span>
+                </label>
+
+                <label class="toggle-item">
+                    <span class="toggle-label">
+                        <strong>마케팅 수신</strong>
+                        <p>이벤트 및 프로모션 정보를 받습니다</p>
+                    </span>
+                    <input type="checkbox" name="marketing_consent"
+                        {{ 'checked' if member.marketing_consent else '' }}>
+                    <span class="toggle-switch"></span>
+                </label>
+
+                <label class="toggle-item">
+                    <span class="toggle-label">
+                        <strong>홍보 연동</strong>
+                        <p>SNS 홍보 콘텐츠에 정보를 사용합니다</p>
+                    </span>
+                    <input type="checkbox" name="promotional_consent"
+                        {{ 'checked' if member.promotional_consent else '' }}>
+                    <span class="toggle-switch"></span>
+                </label>
+
+                <button type="submit" class="save-btn">저장</button>
+            </form>
+        </div>
+
+        <!-- 공개 프로필 미리보기 -->
+        <div class="profile-section">
+            <h2>공개 프로필 미리보기</h2>
+            <div class="preview-card">
+                <div class="preview-name">
+                    {% if member.privacy_public %}
+                    {{ member.full_name }}
+                    {% else %}
+                    {{ member.display_name or 'H.G.D.' }}
+                    {% endif %}
+                </div>
+                <div class="preview-team">
+                    {% if member.privacy_public %}
+                    {{ team_name or '소속 미등록' }}
+                    {% else %}
+                    {{ anonymous_team or '서울(클럽)' }}
+                    {% endif %}
+                </div>
+            </div>
+            <p class="preview-note">
+                {% if member.privacy_public %}
+                현재 공개 설정: 다른 사용자가 실명과 소속을 볼 수 있습니다
+                {% else %}
+                현재 비공개 설정: 다른 사용자에게 이니셜과 지역만 표시됩니다
+                {% endif %}
+            </p>
+        </div>
+
+        <!-- 연결된 계정 -->
+        <div class="profile-section">
+            <h2>연결된 계정</h2>
+            <div class="oauth-list">
+                {% for oauth in oauth_connections %}
+                <div class="oauth-item">
+                    <span class="oauth-icon">
+                        {% if oauth.provider == 'kakao' %}💬
+                        {% elif oauth.provider == 'google' %}🔍
+                        {% else %}✖️
+                        {% endif %}
+                    </span>
+                    <div class="oauth-info">
+                        <strong>{{ oauth.provider|title }}</strong>
+                        <span>{{ oauth.provider_email or oauth.provider_name or '연결됨' }}</span>
+                    </div>
+                    {% if oauth.is_primary %}
+                    <span class="primary-badge">기본</span>
+                    {% endif %}
+                </div>
+                {% else %}
+                <p class="no-oauth">연결된 계정이 없습니다</p>
+                {% endfor %}
+            </div>
+
+            {% if not has_x_connection %}
+            <a href="/auth/login/x?promotional=true" class="add-oauth-btn">
+                ✖️ X(Twitter) 홍보 계정 연결하기
+            </a>
+            {% endif %}
+        </div>
+
+        <!-- 로그아웃 -->
+        <div class="profile-actions">
+            <a href="/auth/logout" class="logout-btn">로그아웃</a>
+        </div>
+    </div>
+</div>
+
+<style>
+.profile-container {
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+.profile-card {
+    background: var(--card-bg, #fff);
+    border-radius: 16px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.1);
+    overflow: hidden;
+}
+
+.profile-header {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    padding: 2rem;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+.profile-avatar {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    font-weight: 600;
+}
+
+.profile-info h1 {
+    font-size: 1.5rem;
+    margin-bottom: 0.25rem;
+}
+
+.member-type {
+    opacity: 0.9;
+    font-size: 0.9rem;
+    margin-bottom: 0.5rem;
+}
+
+.verification-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.badge-verified { background: rgba(255,255,255,0.9); color: #22543d; }
+.badge-submitted { background: rgba(255,255,255,0.9); color: #744210; }
+.badge-rejected { background: rgba(255,255,255,0.9); color: #742a2a; }
+.badge-pending { background: rgba(255,255,255,0.9); color: #4a5568; }
+
+.profile-section {
+    padding: 1.5rem 2rem;
+    border-bottom: 1px solid #eee;
+}
+
+.profile-section h2 {
+    font-size: 1rem;
+    margin-bottom: 1rem;
+    color: var(--text-secondary, #666);
+}
+
+.info-grid {
+    display: grid;
+    gap: 1rem;
+}
+
+.info-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.info-item label {
+    font-size: 0.8rem;
+    color: var(--text-secondary, #888);
+}
+
+.info-item span {
+    font-size: 1rem;
+}
+
+.privacy-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.toggle-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 0;
+    cursor: pointer;
+}
+
+.toggle-label {
+    flex: 1;
+}
+
+.toggle-label strong {
+    display: block;
+    margin-bottom: 0.25rem;
+}
+
+.toggle-label p {
+    font-size: 0.85rem;
+    color: var(--text-secondary, #666);
+    margin: 0;
+}
+
+.toggle-item input {
+    display: none;
+}
+
+.toggle-switch {
+    width: 50px;
+    height: 26px;
+    background: #cbd5e0;
+    border-radius: 13px;
+    position: relative;
+    transition: background 0.2s;
+}
+
+.toggle-switch::after {
+    content: '';
+    position: absolute;
+    width: 22px;
+    height: 22px;
+    background: white;
+    border-radius: 50%;
+    top: 2px;
+    left: 2px;
+    transition: left 0.2s;
+}
+
+.toggle-item input:checked + .toggle-switch {
+    background: var(--primary-color, #3182ce);
+}
+
+.toggle-item input:checked + .toggle-switch::after {
+    left: 26px;
+}
+
+.save-btn {
+    padding: 0.75rem 1.5rem;
+    background: var(--primary-color, #3182ce);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    align-self: flex-start;
+    margin-top: 0.5rem;
+}
+
+.save-btn:hover {
+    background: #2c5282;
+}
+
+.preview-card {
+    background: #f7fafc;
+    padding: 1rem;
+    border-radius: 8px;
+    text-align: center;
+}
+
+.preview-name {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+}
+
+.preview-team {
+    color: var(--text-secondary, #666);
+    font-size: 0.9rem;
+}
+
+.preview-note {
+    font-size: 0.8rem;
+    color: var(--text-secondary, #888);
+    margin-top: 0.75rem;
+}
+
+.oauth-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.oauth-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem;
+    background: #f7fafc;
+    border-radius: 8px;
+}
+
+.oauth-icon {
+    font-size: 1.5rem;
+}
+
+.oauth-info {
+    flex: 1;
+}
+
+.oauth-info strong {
+    display: block;
+    font-size: 0.9rem;
+}
+
+.oauth-info span {
+    font-size: 0.8rem;
+    color: var(--text-secondary, #666);
+}
+
+.primary-badge {
+    background: var(--primary-color, #3182ce);
+    color: white;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.7rem;
+}
+
+.no-oauth {
+    color: var(--text-secondary, #888);
+    font-size: 0.9rem;
+}
+
+.add-oauth-btn {
+    display: inline-block;
+    margin-top: 1rem;
+    padding: 0.5rem 1rem;
+    border: 1px dashed #cbd5e0;
+    border-radius: 8px;
+    color: var(--text-secondary, #666);
+    text-decoration: none;
+    font-size: 0.9rem;
+    transition: all 0.2s;
+}
+
+.add-oauth-btn:hover {
+    border-color: var(--primary-color, #3182ce);
+    color: var(--primary-color, #3182ce);
+}
+
+.profile-actions {
+    padding: 1.5rem 2rem;
+    text-align: center;
+}
+
+.logout-btn {
+    color: #e53e3e;
+    text-decoration: none;
+    font-size: 0.9rem;
+}
+
+.logout-btn:hover {
+    text-decoration: underline;
+}
+</style>
+
+<script>
+document.getElementById('privacyForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const formData = {
+        privacy_public: this.querySelector('[name="privacy_public"]').checked,
+        marketing_consent: this.querySelector('[name="marketing_consent"]').checked,
+        promotional_consent: this.querySelector('[name="promotional_consent"]').checked
+    };
+
+    try {
+        const response = await fetch('/auth/me/privacy', {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(formData)
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            alert('설정이 저장되었습니다');
+            location.reload();
+        } else {
+            alert('저장 중 오류가 발생했습니다');
+        }
+    } catch (error) {
+        alert('네트워크 오류가 발생했습니다');
+    }
+});
+</script>
+{% endblock %}

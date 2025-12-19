@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}{{ player_name }} - FencingLab{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/fencinglab.css">
+{% endblock %}
+
+{% block content %}
+<div class="fencinglab-container">
+    <div class="fl-header">
+        <a href="/fencinglab" style="text-decoration: none;">
+            <div class="fl-logo">Fencing<span>Lab</span></div>
+        </a>
+        <p class="fl-subtitle">선수 분석 리포트</p>
+    </div>
+
+    <!-- Player Analytics -->
+    <div class="container" style="max-width: 800px; margin: 0 auto;">
+        <!-- Player Card -->
+        <div id="playerCard">
+            <p style="color: var(--fl-text-muted); text-align: center;">분석 데이터를 불러오는 중...</p>
+        </div>
+
+        <!-- Match History Chart -->
+        <div class="fl-history-container" id="historySection" style="display: none;">
+            <h4 class="fl-history-title">Match History (승률 추이)</h4>
+            <div class="fl-history-chart">
+                <canvas id="historyChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Recent Matches -->
+        <div class="fl-history-container" id="recentMatches" style="display: none;">
+            <!-- Populated by JS -->
+        </div>
+
+        <!-- Back Button -->
+        <div style="text-align: center; margin-top: 2rem;">
+            <a href="/fencinglab" class="fl-badge average" style="padding: 0.75rem 1.5rem; font-size: 0.875rem; text-decoration: none;">
+                ← 선수 목록으로 돌아가기
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="/static/js/fencinglab.js"></script>
+<script>
+const playerName = "{{ player_name }}";
+const urlParams = new URLSearchParams(window.location.search);
+const playerTeam = urlParams.get('team') || '최병철펜싱클럽';
+
+document.addEventListener('DOMContentLoaded', async function() {
+    try {
+        const analytics = await FencingLab.loadPlayerAnalytics(playerName, playerTeam);
+
+        // Render Player Card
+        FencingLab.renderPlayerCard(analytics, 'playerCard');
+
+        // Render Match History Chart
+        if (analytics.match_history && analytics.match_history.length > 0) {
+            document.getElementById('historySection').style.display = 'block';
+            FencingLab.createHistoryChart('historyChart', analytics.match_history);
+        }
+
+        // Render Recent Matches
+        if (analytics.recent_matches && analytics.recent_matches.length > 0) {
+            document.getElementById('recentMatches').style.display = 'block';
+            FencingLab.renderRecentMatches(analytics.recent_matches, 'recentMatches');
+        }
+
+    } catch (error) {
+        document.getElementById('playerCard').innerHTML = `
+            <div class="fl-insight-card danger">
+                <div class="fl-insight-title">오류</div>
+                <div class="fl-insight-text">${error.message || '분석 데이터를 불러올 수 없습니다.'}</div>
+            </div>
+        `;
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,562 @@
+{% extends "base.html" %}
+
+{% block title %}{{ event.name }} - {{ competition.competition.name }}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/components.css">
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <nav class="breadcrumb">
+        <a href="/">대회 목록</a> &gt;
+        <a href="/competition/{{ competition.competition.event_cd }}">{{ competition.competition.name }}</a> &gt;
+        <span>{{ event.name }}</span>
+    </nav>
+
+    <!-- Event Header -->
+    <section class="competition-header">
+        <h1>{{ event.name }}</h1>
+        <div class="competition-meta">
+            <span class="meta-item">
+                <strong>대회:</strong> {{ competition.competition.name }}
+            </span>
+            <span class="meta-item">
+                <strong>기간:</strong>
+                {{ competition.competition.start_date or '-' }}
+                {% if competition.competition.end_date and competition.competition.end_date != competition.competition.start_date %}
+                ~ {{ competition.competition.end_date }}
+                {% endif %}
+            </span>
+            <span class="meta-item">
+                <strong>참가:</strong> {{ event.total_participants or (event.final_rankings|length) or '-' }}명
+            </span>
+            <span class="meta-item">
+                {% if event.weapon %}<span class="weapon-tag">{{ event.weapon }}</span>{% endif %}
+                {% if event.gender %}<span class="gender-tag">{{ event.gender }}</span>{% endif %}
+                {% if event.event_type %}<span class="type-tag">{{ event.event_type }}</span>{% endif %}
+            </span>
+        </div>
+    </section>
+
+    <!-- Tab Navigation -->
+    <div class="tabs">
+        <button class="tab-btn active" data-tab="pools">
+            <span class="tab-icon">📋</span>
+            <span>Pool</span>
+        </button>
+        <button class="tab-btn" data-tab="tournament">
+            <span class="tab-icon">🏆</span>
+            <span>Direct Elimination</span>
+        </button>
+        <button class="tab-btn" data-tab="final">
+            <span class="tab-icon">🥇</span>
+            <span>최종결과</span>
+        </button>
+    </div>
+
+    <!-- Tab Contents -->
+    <div id="tab-pools" class="tab-content active">
+        {% if event.pool_rounds %}
+        <div class="pool-selector">
+            {% for pool in event.pool_rounds %}
+            <button class="pool-btn{% if loop.first %} active{% endif %}" data-pool="{{ loop.index }}">Pool {{ loop.index }}</button>
+            {% endfor %}
+            {% if event.pool_total_ranking %}
+            <button class="pool-btn pool-total-btn" data-pool="total">Pool Total</button>
+            {% endif %}
+        </div>
+
+        <!-- Pool Total Ranking Section -->
+        {% if event.pool_total_ranking %}
+        <div class="pool-container pool-item" data-pool-id="total" style="display:none">
+            <div class="pool-title">
+                <h4>Pool 최종 랭킹</h4>
+                <span class="pool-info">전체 {{ event.pool_total_ranking|length }}명</span>
+            </div>
+            <table class="result-table">
+                <thead>
+                    <tr>
+                        <th>순위</th>
+                        <th style="text-align:left">이름</th>
+                        <th style="text-align:left">소속</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for player in event.pool_total_ranking %}
+                    <tr>
+                        <td class="rank">{{ player.rank }}</td>
+                        <td class="player-name"><a href="/player/{{ player.name|urlencode }}?team={{ player.team|urlencode }}">{{ player.name }}</a></td>
+                        <td>{{ player.team }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+
+        {% for pool in event.pool_rounds %}
+        <div class="pool-container pool-item" data-pool-id="{{ loop.index }}">
+            <div class="pool-title">
+                <h4>Pool {{ loop.index }}</h4>
+                <span class="pool-info">
+                    {% if pool.piste %}피스트: {{ pool.piste }} | {% endif %}
+                    {% if pool.time %}시간: {{ pool.time }} | {% endif %}
+                    {% if pool.referee %}심판: {{ pool.referee }}{% endif %}
+                </span>
+            </div>
+
+            <!-- Pool Standings -->
+            <table class="result-table">
+                <thead>
+                    <tr>
+                        <th>순위</th>
+                        <th style="text-align:left">이름</th>
+                        <th style="text-align:left">소속</th>
+                        <th>승</th>
+                        <th>패</th>
+                        <th>지수</th>
+                        <th>득점</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for player in pool.results|sort(attribute='rank') %}
+                    <tr>
+                        <td class="rank">{{ player.rank or '-' }}</td>
+                        <td class="player-name"><a href="/player/{{ player.name|urlencode }}?team={{ player.team|urlencode }}">{{ player.name }}</a></td>
+                        <td>{{ player.team }}</td>
+                        <td>{{ player.wins or 0 }}</td>
+                        <td>{{ player.losses or 0 }}</td>
+                        <td>{% if player.indicator > 0 %}+{% endif %}{{ player.indicator or 0 }}</td>
+                        <td>{{ player.touches or player.score or 0 }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            <!-- Pool Matrix (if scores available) -->
+            {% if pool.results and pool.results[0].scores %}
+            <div class="bout-list">
+                <div class="bout-list-header" onclick="togglePoolMatrix(this)">
+                    <span>📊 대진표 보기</span>
+                    <span class="result-expand-icon">▼</span>
+                </div>
+                <div class="pool-matrix" style="display:none">
+                    <table class="matrix-table">
+                        <thead>
+                            <tr>
+                                <th></th>
+                                <th>이름</th>
+                                {% for p in pool.results %}
+                                <th>{{ loop.index }}</th>
+                                {% endfor %}
+                                <th>승</th>
+                                <th>패</th>
+                                <th>지수</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for player in pool.results %}
+                            <tr>
+                                <td><strong>{{ loop.index }}</strong></td>
+                                <td class="player-col"><a href="/player/{{ player.name|urlencode }}?team={{ player.team|urlencode }}">{{ player.name }}</a></td>
+                                {% for score in player.scores %}
+                                    {% if score is none %}
+                                    <td class="self">X</td>
+                                    {% elif score.type == 'V' %}
+                                    <td class="victory">V{{ score.score }}</td>
+                                    {% else %}
+                                    <td class="defeat">{{ score.score }}</td>
+                                    {% endif %}
+                                {% endfor %}
+                                <td class="stats-col">{{ player.wins or 0 }}</td>
+                                <td class="stats-col">{{ player.losses or 0 }}</td>
+                                <td class="stats-col">{% if player.indicator > 0 %}+{% endif %}{{ player.indicator or 0 }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Individual Bouts -->
+            {% if pool.bouts %}
+            <div class="bout-list">
+                <div class="bout-list-header" onclick="toggleBoutList(this)">
+                    <span>⚔️ 개별 경기 ({{ pool.bouts|length }}경기)</span>
+                    <span class="result-expand-icon">▼</span>
+                </div>
+                <div class="bout-items" style="display:none">
+                    {% for bout in pool.bouts %}
+                    <div class="bout-item">
+                        <div class="bout-players">
+                            <div class="bout-player {% if bout.winner_name == bout.player1_name %}winner{% else %}loser{% endif %}">
+                                <div><a href="/player/{{ bout.player1_name|urlencode }}?team={{ bout.player1_team|urlencode }}">{{ bout.player1_name }}</a></div>
+                                <small>{{ bout.player1_team }}</small>
+                            </div>
+                            <div class="bout-score">
+                                {{ bout.player1_score }} - {{ bout.player2_score }}
+                            </div>
+                            <div class="bout-player {% if bout.winner_name == bout.player2_name %}winner{% else %}loser{% endif %}">
+                                <div><a href="/player/{{ bout.player2_name|urlencode }}?team={{ bout.player2_team|urlencode }}">{{ bout.player2_name }}</a></div>
+                                <small>{{ bout.player2_team }}</small>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="empty">Pool 결과 데이터가 없습니다</div>
+        {% endif %}
+    </div>
+
+    <div id="tab-tournament" class="tab-content">
+        {% if event.de_bracket or event.de_seeding or event.de_matches %}
+        <div class="tournament-container">
+            <!-- Seeding Display -->
+            {% if event.de_seeding %}
+            <div class="de-seeding-section">
+                <div class="bout-list-header" onclick="toggleSeeding(this)">
+                    <span>🎯 Seeding ({{ event.de_seeding|length }}명)</span>
+                    <span class="result-expand-icon">▼</span>
+                </div>
+                <div class="seeding-content" style="display:none">
+                    <div class="seeding-grid">
+                        {% for player in event.de_seeding|sort(attribute='seed') %}
+                        {% if not loop.previtem or loop.previtem.seed != player.seed %}
+                        <div class="seeding-item">
+                            <span class="seeding-rank">{{ player.seed }}</span>
+                            <span class="seeding-name"><a href="/player/{{ player.name|urlencode }}?team={{ player.team|urlencode }}">{{ player.name }}</a></span>
+                            <span class="seeding-team">{{ player.team }}</span>
+                        </div>
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Round Tabs -->
+            <div class="de-round-tabs">
+                {% set rounds = ['64강', '32강', '16강', '8강', '준결승', '결승'] %}
+                {% for round_name in rounds %}
+                {% if event.de_bracket.get(round_name) %}
+                <button class="de-round-tab{% if loop.first %} active{% endif %}" data-de-round="{{ round_name }}">
+                    {{ round_name }}
+                </button>
+                {% endif %}
+                {% endfor %}
+                <button class="de-round-tab" data-de-round="all">전체 대진표</button>
+            </div>
+
+            <!-- Individual Round Brackets -->
+            {% for round_name in rounds %}
+            {% if event.de_bracket.get(round_name) %}
+            <div class="de-round-content{% if loop.first %} active{% endif %}" data-de-round-content="{{ round_name }}">
+                <div class="de-round-header">
+                    <h3>🏆 {{ round_name }}</h3>
+                    <span class="de-round-info">{{ event.de_bracket[round_name]|length }}경기</span>
+                </div>
+                <div class="de-matches-grid">
+                    {% for match in event.de_bracket[round_name] %}
+                    <div class="de-match-card">
+                        <div class="de-match-number">Match {{ loop.index }}</div>
+                        <div class="de-match-players">
+                            <div class="de-player {% if match.winner_seed == match.player1_seed %}winner{% else %}loser{% endif %}">
+                                <span class="de-seed">{{ match.player1_seed }}</span>
+                                <div class="de-player-info">
+                                    <div class="de-player-name"><a href="/player/{{ match.player1_name|urlencode }}?team={{ match.player1_team|urlencode }}">{{ match.player1_name }}</a></div>
+                                    <div class="de-player-team">{{ match.player1_team }}</div>
+                                </div>
+                                <span class="de-score">{{ match.player1_score }}</span>
+                            </div>
+                            <div class="de-vs">VS</div>
+                            <div class="de-player {% if match.winner_seed == match.player2_seed %}winner{% else %}loser{% endif %}">
+                                <span class="de-seed">{{ match.player2_seed }}</span>
+                                <div class="de-player-info">
+                                    <div class="de-player-name"><a href="/player/{{ match.player2_name|urlencode }}?team={{ match.player2_team|urlencode }}">{{ match.player2_name }}</a></div>
+                                    <div class="de-player-team">{{ match.player2_team }}</div>
+                                </div>
+                                <span class="de-score">{{ match.player2_score }}</span>
+                            </div>
+                        </div>
+                        <div class="de-match-result">
+                            <span class="de-winner-badge">🏆 <a href="/player/{{ match.winner_name|urlencode }}?team={{ match.player1_team if match.winner_name == match.player1_name else match.player2_team|urlencode }}">{{ match.winner_name }}</a></span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+            {% endfor %}
+
+            <!-- Full Tree Bracket View -->
+            <div class="de-round-content" data-de-round-content="all">
+                <div class="de-round-header">
+                    <h3>🏆 전체 대진표 (Tree View)</h3>
+                </div>
+                <div class="de-tree-wrapper">
+                    <div class="de-tree-bracket">
+                        {% for round_name in rounds %}
+                        {% if event.de_bracket.get(round_name) %}
+                        <div class="de-tree-round" data-round="{{ round_name }}">
+                            <div class="de-tree-round-title">{{ round_name }}</div>
+                            <div class="de-tree-matches">
+                                {% for match in event.de_bracket[round_name] %}
+                                <div class="de-tree-match">
+                                    <div class="de-tree-player {% if match.winner_seed == match.player1_seed %}winner{% endif %}">
+                                        <span class="seed">[{{ match.player1_seed }}]</span>
+                                        <span class="name"><a href="/player/{{ match.player1_name|urlencode }}?team={{ match.player1_team|urlencode }}">{{ match.player1_name }}</a></span>
+                                        <span class="score">{{ match.player1_score }}</span>
+                                    </div>
+                                    <div class="de-tree-player {% if match.winner_seed == match.player2_seed %}winner{% endif %}">
+                                        <span class="seed">[{{ match.player2_seed }}]</span>
+                                        <span class="name"><a href="/player/{{ match.player2_name|urlencode }}?team={{ match.player2_team|urlencode }}">{{ match.player2_name }}</a></span>
+                                        <span class="score">{{ match.player2_score }}</span>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Match List Table (Fallback/Simple View) -->
+            {% if event.de_matches %}
+            <div class="de-simple-list">
+                <div class="bout-list-header" onclick="toggleDEList(this)">
+                    <span>📋 경기 목록 (Table View)</span>
+                    <span class="result-expand-icon">▼</span>
+                </div>
+                <div class="de-list-content" style="display:none">
+                    <table class="match-list-table">
+                        <thead>
+                            <tr>
+                                <th>시드</th>
+                                <th>선수</th>
+                                <th>소속</th>
+                                <th>점수</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for match in event.de_matches %}
+                            <tr>
+                                <td class="seed-cell">{{ match.seed }}</td>
+                                <td class="name-cell"><a href="/player/{{ match.name|urlencode }}?team={{ match.team|urlencode }}">{{ match.name }}</a></td>
+                                <td>{{ match.team }}</td>
+                                <td class="score-cell">{{ match.winner_score }} : {{ match.loser_score }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        {% else %}
+        <div class="empty">
+            <p>DE (Direct Elimination) 데이터가 없습니다</p>
+            <p style="font-size: 0.9rem; color: var(--text-light);">대진표 데이터 수집 예정입니다</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <div id="tab-final" class="tab-content">
+        {% if event.final_rankings %}
+        <!-- Podium -->
+        <div class="podium-section">
+            <h3>🏆 시상대</h3>
+            <div class="podium">
+                {% set silver = event.final_rankings|selectattr('rank', 'equalto', 2)|first %}
+                {% set gold = event.final_rankings|selectattr('rank', 'equalto', 1)|first %}
+                {% set bronzes = event.final_rankings|selectattr('rank', 'equalto', 3)|list %}
+
+                {% if silver %}
+                <div class="podium-place second">
+                    <div class="podium-medal">🥈</div>
+                    <div class="podium-box">
+                        <div class="podium-name"><a href="/player/{{ silver.name|urlencode }}?team={{ silver.team|urlencode }}">{{ silver.name }}</a></div>
+                        <div class="podium-team">{{ silver.team }}</div>
+                    </div>
+                    <div class="podium-rank">2위</div>
+                </div>
+                {% endif %}
+
+                {% if gold %}
+                <div class="podium-place first">
+                    <div class="podium-medal">🥇</div>
+                    <div class="podium-box">
+                        <div class="podium-name"><a href="/player/{{ gold.name|urlencode }}?team={{ gold.team|urlencode }}">{{ gold.name }}</a></div>
+                        <div class="podium-team">{{ gold.team }}</div>
+                    </div>
+                    <div class="podium-rank">1위</div>
+                </div>
+                {% endif %}
+
+                {% if bronzes %}
+                <div class="podium-place third">
+                    <div class="podium-medal">🥉</div>
+                    <div class="podium-box">
+                        {% for bronze in bronzes %}
+                        <div class="podium-name"><a href="/player/{{ bronze.name|urlencode }}?team={{ bronze.team|urlencode }}">{{ bronze.name }}</a></div>
+                        <div class="podium-team">{{ bronze.team }}</div>
+                        {% if not loop.last %}<hr style="margin: 8px 0; opacity: 0.3">{% endif %}
+                        {% endfor %}
+                    </div>
+                    <div class="podium-rank">{% if bronzes|length > 1 %}공동 {% endif %}3위</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Full Rankings -->
+        <table class="final-table">
+            <thead>
+                <tr>
+                    <th>순위</th>
+                    <th>이름</th>
+                    <th>소속</th>
+                    <th>순위/참가</th>
+                    <th>포인트</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% set total_participants = event.final_rankings|length %}
+                {% for ranking in event.final_rankings %}
+                <tr>
+                    <td class="rank-cell {% if ranking.rank == 1 %}gold{% elif ranking.rank == 2 %}silver{% elif ranking.rank == 3 %}bronze{% endif %}">
+                        {% if ranking.rank == 1 %}🥇{% elif ranking.rank == 2 %}🥈{% elif ranking.rank == 3 %}🥉{% else %}{{ ranking.rank }}{% endif %}
+                    </td>
+                    <td class="name-cell">
+                        <a href="/player/{{ ranking.name|urlencode }}?team={{ ranking.team|urlencode }}">{{ ranking.name }}</a>
+                    </td>
+                    <td>{{ ranking.team }}</td>
+                    <td class="place-cell">{{ ranking.rank }}/{{ total_participants }}</td>
+                    <td class="points-cell">{{ ranking.points or '-' }}pt</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <!-- Stats Summary -->
+        <div class="stats-summary-box">
+            <div class="stat-item">
+                <div class="value">{{ event.final_rankings|length }}</div>
+                <div class="label">참가 인원</div>
+            </div>
+            <div class="stat-item">
+                <div class="value">{{ event.final_rankings|map(attribute='team')|unique|list|length }}</div>
+                <div class="label">참가 팀</div>
+            </div>
+        </div>
+        {% else %}
+        <div class="empty">최종 결과 데이터가 없습니다</div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+// Tab switching
+document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+    });
+});
+
+// Pool selector
+document.querySelectorAll('.pool-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.pool-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const poolId = btn.dataset.pool;
+        document.querySelectorAll('.pool-item').forEach(pool => {
+            pool.style.display = pool.dataset.poolId === poolId ? 'block' : 'none';
+        });
+    });
+});
+
+// Initialize: show only first pool (not Pool Total)
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.pool-item').forEach((pool) => {
+        // Show only Pool 1, hide Pool Total and other pools
+        pool.style.display = pool.dataset.poolId === '1' ? 'block' : 'none';
+    });
+});
+
+// DE Round tabs
+document.querySelectorAll('.de-round-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.de-round-tab').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const round = btn.dataset.deRound;
+        document.querySelectorAll('.de-round-content').forEach(content => {
+            content.classList.remove('active');
+            if (content.dataset.deRoundContent === round) {
+                content.classList.add('active');
+            }
+        });
+    });
+});
+
+// Toggle DE list
+function toggleDEList(header) {
+    const content = header.nextElementSibling;
+    const icon = header.querySelector('.result-expand-icon');
+    if (content.style.display === 'none') {
+        content.style.display = 'block';
+        icon.textContent = '▲';
+    } else {
+        content.style.display = 'none';
+        icon.textContent = '▼';
+    }
+}
+
+// Toggle functions
+function togglePoolMatrix(header) {
+    const matrix = header.nextElementSibling;
+    const icon = header.querySelector('.result-expand-icon');
+    if (matrix.style.display === 'none') {
+        matrix.style.display = 'block';
+        icon.textContent = '▲';
+    } else {
+        matrix.style.display = 'none';
+        icon.textContent = '▼';
+    }
+}
+
+function toggleBoutList(header) {
+    const bouts = header.nextElementSibling;
+    const icon = header.querySelector('.result-expand-icon');
+    if (bouts.style.display === 'none') {
+        bouts.style.display = 'block';
+        icon.textContent = '▲';
+    } else {
+        bouts.style.display = 'none';
+        icon.textContent = '▼';
+    }
+}
+
+function toggleSeeding(header) {
+    const content = header.nextElementSibling;
+    const icon = header.querySelector('.result-expand-icon');
+    if (content.style.display === 'none') {
+        content.style.display = 'block';
+        icon.textContent = '▲';
+    } else {
+        content.style.display = 'none';
+        icon.textContent = '▼';
+    }
+}
+</script>
+{% endblock %}

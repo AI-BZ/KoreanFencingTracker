@@ -1,0 +1,530 @@
+{% extends "base.html" %}
+
+{% block title %}본인 인증 - Korean Fencing Tracker{% endblock %}
+
+{% block content %}
+<div class="verification-container">
+    <div class="verification-card">
+        <div class="verification-header">
+            <h1>선수 인증</h1>
+            <p>펜싱 선수임을 인증하면 모든 기능을 이용할 수 있습니다</p>
+        </div>
+
+        <!-- 현재 인증 상태 -->
+        <div class="verification-status status-{{ member.verification_status }}">
+            {% if member.verification_status == 'verified' %}
+                <span class="status-icon">✅</span>
+                <span>인증 완료</span>
+            {% elif member.verification_status == 'submitted' %}
+                <span class="status-icon">⏳</span>
+                <span>검토 중</span>
+            {% elif member.verification_status == 'rejected' %}
+                <span class="status-icon">❌</span>
+                <span>인증 거부 - 다시 시도해주세요</span>
+            {% else %}
+                <span class="status-icon">📋</span>
+                <span>인증 대기 중</span>
+            {% endif %}
+        </div>
+
+        <!-- 인증 방법 선택 -->
+        {% if member.verification_status != 'verified' %}
+        <div class="verification-methods">
+            <h2>인증 방법 선택</h2>
+
+            <div class="method-cards">
+                {% for vt in verification_types %}
+                <div class="method-card" data-type="{{ vt.value }}">
+                    <div class="method-icon">
+                        {% if vt.value == 'association_card' %}
+                        📇
+                        {% elif vt.value == 'mask_photo' %}
+                        🎭
+                        {% else %}
+                        👕
+                        {% endif %}
+                    </div>
+                    <h3>{{ vt.label }}</h3>
+                    <p class="method-desc">
+                        {% if vt.value == 'association_card' %}
+                        대한펜싱협회 등록증을 촬영해주세요
+                        {% elif vt.value == 'mask_photo' %}
+                        펜싱 마스크와 함께<br>이름/날짜를 적은 종이를 촬영
+                        {% else %}
+                        펜싱 도복과 함께<br>이름/날짜를 적은 종이를 촬영
+                        {% endif %}
+                    </p>
+                    <button class="select-btn" onclick="selectMethod('{{ vt.value }}')">
+                        선택
+                    </button>
+                </div>
+                {% endfor %}
+            </div>
+
+            <!-- 업로드 폼 -->
+            <div class="upload-section" id="uploadSection" style="display: none;">
+                <h3 id="uploadTitle">이미지 업로드</h3>
+
+                <div class="upload-guide" id="uploadGuide"></div>
+
+                <form id="uploadForm" enctype="multipart/form-data">
+                    <input type="hidden" name="verification_type" id="verificationType">
+
+                    <div class="upload-area" id="uploadArea">
+                        <input type="file" id="fileInput" name="file" accept="image/*" style="display: none;">
+                        <div class="upload-placeholder" id="uploadPlaceholder">
+                            <span class="upload-icon">📷</span>
+                            <p>클릭하거나 이미지를 드래그하세요</p>
+                            <p class="upload-hint">JPG, PNG, WEBP (최대 10MB)</p>
+                        </div>
+                        <img id="previewImage" style="display: none; max-width: 100%; border-radius: 8px;">
+                    </div>
+
+                    <button type="submit" class="upload-btn" id="uploadBtn" disabled>
+                        인증 요청하기
+                    </button>
+                </form>
+
+                <div class="upload-result" id="uploadResult" style="display: none;"></div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- 인증 내역 -->
+        {% if verifications %}
+        <div class="verification-history">
+            <h2>인증 내역</h2>
+            <table class="history-table">
+                <thead>
+                    <tr>
+                        <th>유형</th>
+                        <th>상태</th>
+                        <th>신뢰도</th>
+                        <th>추출된 이름</th>
+                        <th>날짜</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for v in verifications %}
+                    <tr class="status-row-{{ v.status }}">
+                        <td>
+                            {% if v.verification_type == 'association_card' %}
+                            협회 등록증
+                            {% elif v.verification_type == 'mask_photo' %}
+                            마스크 사진
+                            {% else %}
+                            도복 사진
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if v.status == 'approved' %}
+                            <span class="badge badge-success">승인</span>
+                            {% elif v.status == 'rejected' %}
+                            <span class="badge badge-danger">거부</span>
+                            {% elif v.status == 'processing' %}
+                            <span class="badge badge-warning">처리중</span>
+                            {% else %}
+                            <span class="badge badge-secondary">대기</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ (v.gemini_confidence * 100)|round(1) if v.gemini_confidence else '-' }}%</td>
+                        <td>{{ v.extracted_name or '-' }}</td>
+                        <td>{{ v.created_at[:10] if v.created_at else '-' }}</td>
+                    </tr>
+                    {% if v.rejection_reason %}
+                    <tr class="rejection-reason">
+                        <td colspan="5">거부 사유: {{ v.rejection_reason }}</td>
+                    </tr>
+                    {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<style>
+.verification-container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+.verification-card {
+    background: var(--card-bg, #fff);
+    border-radius: 16px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.1);
+    padding: 2rem;
+}
+
+.verification-header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.verification-header h1 {
+    font-size: 1.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.verification-header p {
+    color: var(--text-secondary, #666);
+}
+
+.verification-status {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 2rem;
+    font-weight: 500;
+}
+
+.verification-status.status-verified {
+    background: #c6f6d5;
+    color: #22543d;
+}
+
+.verification-status.status-submitted {
+    background: #fefcbf;
+    color: #744210;
+}
+
+.verification-status.status-rejected {
+    background: #fed7d7;
+    color: #742a2a;
+}
+
+.verification-status.status-pending {
+    background: #e2e8f0;
+    color: #4a5568;
+}
+
+.status-icon {
+    font-size: 1.25rem;
+}
+
+.verification-methods h2 {
+    font-size: 1.1rem;
+    margin-bottom: 1rem;
+}
+
+.method-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.method-card {
+    background: #f7fafc;
+    border: 2px solid transparent;
+    border-radius: 12px;
+    padding: 1.5rem;
+    text-align: center;
+    transition: all 0.2s;
+    cursor: pointer;
+}
+
+.method-card:hover {
+    border-color: var(--primary-color, #3182ce);
+}
+
+.method-card.selected {
+    border-color: var(--primary-color, #3182ce);
+    background: #ebf8ff;
+}
+
+.method-icon {
+    font-size: 2.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.method-card h3 {
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+}
+
+.method-desc {
+    font-size: 0.8rem;
+    color: var(--text-secondary, #666);
+    margin-bottom: 1rem;
+    line-height: 1.4;
+}
+
+.select-btn {
+    padding: 0.5rem 1.5rem;
+    background: var(--primary-color, #3182ce);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+
+.select-btn:hover {
+    background: #2c5282;
+}
+
+.upload-section {
+    margin-top: 2rem;
+    padding-top: 2rem;
+    border-top: 1px solid #eee;
+}
+
+.upload-section h3 {
+    margin-bottom: 1rem;
+}
+
+.upload-guide {
+    background: #fffbeb;
+    border-left: 4px solid #f59e0b;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border-radius: 0 8px 8px 0;
+    font-size: 0.9rem;
+    line-height: 1.6;
+}
+
+.upload-area {
+    border: 2px dashed #cbd5e0;
+    border-radius: 12px;
+    padding: 2rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-bottom: 1rem;
+}
+
+.upload-area:hover {
+    border-color: var(--primary-color, #3182ce);
+    background: #f7fafc;
+}
+
+.upload-area.dragover {
+    border-color: var(--primary-color, #3182ce);
+    background: #ebf8ff;
+}
+
+.upload-placeholder {
+    color: var(--text-secondary, #666);
+}
+
+.upload-icon {
+    font-size: 3rem;
+    display: block;
+    margin-bottom: 0.5rem;
+}
+
+.upload-hint {
+    font-size: 0.8rem;
+    color: #a0aec0;
+    margin-top: 0.5rem;
+}
+
+.upload-btn {
+    width: 100%;
+    padding: 1rem;
+    background: var(--primary-color, #3182ce);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.upload-btn:disabled {
+    background: #cbd5e0;
+    cursor: not-allowed;
+}
+
+.upload-result {
+    margin-top: 1rem;
+    padding: 1rem;
+    border-radius: 8px;
+}
+
+.upload-result.success {
+    background: #c6f6d5;
+    color: #22543d;
+}
+
+.upload-result.error {
+    background: #fed7d7;
+    color: #742a2a;
+}
+
+.verification-history {
+    margin-top: 2rem;
+    padding-top: 2rem;
+    border-top: 1px solid #eee;
+}
+
+.verification-history h2 {
+    font-size: 1.1rem;
+    margin-bottom: 1rem;
+}
+
+.history-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.history-table th,
+.history-table td {
+    padding: 0.75rem;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+}
+
+.history-table th {
+    background: #f7fafc;
+    font-weight: 600;
+}
+
+.badge {
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.badge-success { background: #c6f6d5; color: #22543d; }
+.badge-danger { background: #fed7d7; color: #742a2a; }
+.badge-warning { background: #fefcbf; color: #744210; }
+.badge-secondary { background: #e2e8f0; color: #4a5568; }
+
+.rejection-reason {
+    background: #fff5f5;
+}
+
+.rejection-reason td {
+    font-size: 0.85rem;
+    color: #742a2a;
+    padding-left: 1.5rem;
+}
+</style>
+
+<script>
+const guides = {
+    'association_card': '대한펜싱협회 등록증을 촬영해주세요. 이름, 등록번호, 소속이 보이도록 촬영하세요.',
+    'mask_photo': '펜싱 마스크와 함께 <strong>오늘 날짜</strong>와 <strong>본인 이름</strong>을 적은 종이를 들고 촬영하세요.<br>마스크에 이름이 있다면 함께 보이도록 촬영하세요.',
+    'uniform_photo': '펜싱 도복과 함께 <strong>오늘 날짜</strong>와 <strong>본인 이름</strong>을 적은 종이를 들고 촬영하세요.<br>도복에 이름이 있다면 함께 보이도록 촬영하세요.'
+};
+
+function selectMethod(type) {
+    // 카드 선택 상태
+    document.querySelectorAll('.method-card').forEach(card => {
+        card.classList.remove('selected');
+    });
+    document.querySelector(`[data-type="${type}"]`).classList.add('selected');
+
+    // 업로드 섹션 표시
+    document.getElementById('uploadSection').style.display = 'block';
+    document.getElementById('verificationType').value = type;
+    document.getElementById('uploadGuide').innerHTML = guides[type];
+
+    // 미리보기 초기화
+    document.getElementById('previewImage').style.display = 'none';
+    document.getElementById('uploadPlaceholder').style.display = 'block';
+    document.getElementById('fileInput').value = '';
+    document.getElementById('uploadBtn').disabled = true;
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const uploadArea = document.getElementById('uploadArea');
+    const fileInput = document.getElementById('fileInput');
+    const previewImage = document.getElementById('previewImage');
+    const placeholder = document.getElementById('uploadPlaceholder');
+    const uploadBtn = document.getElementById('uploadBtn');
+    const uploadForm = document.getElementById('uploadForm');
+    const uploadResult = document.getElementById('uploadResult');
+
+    uploadArea.addEventListener('click', () => fileInput.click());
+
+    uploadArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        uploadArea.classList.add('dragover');
+    });
+
+    uploadArea.addEventListener('dragleave', () => {
+        uploadArea.classList.remove('dragover');
+    });
+
+    uploadArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        uploadArea.classList.remove('dragover');
+        const files = e.dataTransfer.files;
+        if (files.length) {
+            fileInput.files = files;
+            showPreview(files[0]);
+        }
+    });
+
+    fileInput.addEventListener('change', (e) => {
+        if (e.target.files.length) {
+            showPreview(e.target.files[0]);
+        }
+    });
+
+    function showPreview(file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            previewImage.src = e.target.result;
+            previewImage.style.display = 'block';
+            placeholder.style.display = 'none';
+            uploadBtn.disabled = false;
+        };
+        reader.readAsDataURL(file);
+    }
+
+    uploadForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        uploadBtn.disabled = true;
+        uploadBtn.textContent = '처리 중...';
+
+        const formData = new FormData(uploadForm);
+
+        try {
+            const response = await fetch('/auth/verification/upload', {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await response.json();
+
+            uploadResult.style.display = 'block';
+            if (result.success) {
+                uploadResult.className = 'upload-result success';
+                uploadResult.innerHTML = `
+                    <strong>${result.message}</strong><br>
+                    ${result.extracted_name ? '추출된 이름: ' + result.extracted_name : ''}
+                    ${result.confidence ? ' (신뢰도: ' + (result.confidence * 100).toFixed(1) + '%)' : ''}
+                `;
+
+                if (result.status === 'approved') {
+                    setTimeout(() => location.reload(), 2000);
+                }
+            } else {
+                uploadResult.className = 'upload-result error';
+                uploadResult.textContent = result.error || '오류가 발생했습니다';
+            }
+        } catch (error) {
+            uploadResult.style.display = 'block';
+            uploadResult.className = 'upload-result error';
+            uploadResult.textContent = '네트워크 오류가 발생했습니다';
+        }
+
+        uploadBtn.disabled = false;
+        uploadBtn.textContent = '인증 요청하기';
+    });
+});
+</script>
+{% endblock %}

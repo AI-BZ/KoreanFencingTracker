@@ -71,36 +71,69 @@ def get_participant_factor(count: int) -> float:
     else:
         return 0.4
 
-# 연령대 코드
+# 연령대 코드 (FIE/US Fencing 글로벌 표준)
+# Y = Youth, Cadet = U17, Junior = U20, Veteran = Open/Senior
 AGE_GROUP_CODES = {
-    "E1": "초등 1-2",
-    "E2": "초등 3-4",
-    "E3": "초등 5-6",
-    "MS": "중등",
-    "HS": "고등",
-    "UNI": "대학",
-    "SR": "일반",
+    "Y8": "Y8",           # Youth 8 (초등 1-2학년, Under 8)
+    "Y10": "Y10",         # Youth 10 (초등 3-4학년, Under 10)
+    "Y12": "Y12",         # Youth 12 (초등 5-6학년, Under 12)
+    "Y14": "Y14",         # Youth 14 (중등부, Under 14)
+    "Cadet": "Cadet",     # Cadet (고등부, Under 17)
+    "Junior": "Junior",   # Junior (대학부, Under 20)
+    "Veteran": "Veteran", # Veteran/Senior (일반부, Open)
 }
 
-# 연령대별 가중치
+# 한국어 표시명 (UI용)
+AGE_GROUP_NAMES_KR = {
+    "Y8": "Y8 (초등1-2)",
+    "Y10": "Y10 (초등3-4)",
+    "Y12": "Y12 (초등5-6)",
+    "Y14": "Y14 (중등)",
+    "Cadet": "Cadet (고등)",
+    "Junior": "Junior (대학)",
+    "Veteran": "Veteran (일반)",
+}
+
+# 레거시 코드 매핑 (기존 데이터 호환)
+LEGACY_AGE_GROUP_MAP = {
+    "E1": "Y8",
+    "E2": "Y10",
+    "E3": "Y12",
+    "MS": "Y14",
+    "HS": "Cadet",
+    "UNI": "Junior",
+    "SR": "Veteran",
+    # 한국어 직접 매핑
+    "초등": "Y12",      # 기본 초등 → Y12
+    "초등1-2": "Y8",
+    "초등3-4": "Y10",
+    "초등5-6": "Y12",
+    "중등": "Y14",
+    "고등": "Cadet",
+    "대학": "Junior",
+    "일반": "Veteran",
+    "마스터즈": "Veteran",
+}
+
+# 연령대별 가중치 (글로벌 코드)
 AGE_GROUP_WEIGHTS = {
-    "E1": 0.4,
-    "E2": 0.5,
-    "E3": 0.6,
-    "MS": 0.7,
-    "HS": 0.8,
-    "UNI": 0.9,
-    "SR": 1.0,
+    "Y8": 0.4,
+    "Y10": 0.5,
+    "Y12": 0.6,
+    "Y14": 0.7,
+    "Cadet": 0.8,
+    "Junior": 0.9,
+    "Veteran": 1.0,
 }
 
-# 선수 구분 (중학교 이상부터 적용)
+# 선수 구분 (Y14 이상부터 적용)
 CATEGORY_CODES = {
-    "PRO": "전문",
-    "CLUB": "동호인",
+    "PRO": "Pro",       # 전문 선수
+    "CLUB": "Club",     # 클럽/동호인
 }
 
-# 동호인/전문 분류가 적용되는 연령대 (중학교 이상)
-CATEGORY_APPLICABLE_AGE_GROUPS = ["MS", "HS", "UNI", "SR"]
+# 동호인/전문 분류가 적용되는 연령대 (Y14 이상)
+CATEGORY_APPLICABLE_AGE_GROUPS = ["Y14", "Cadet", "Junior", "Veteran"]
 
 
 # =====================================================
@@ -187,6 +220,29 @@ def classify_category(competition_name: str) -> str:
             return "CLUB"
 
     return "PRO"
+
+
+def classify_competition_level(competition_name: str) -> str:
+    """
+    대회 레벨 분류: ELITE, AMATEUR, NATIONAL
+
+    - NATIONAL: 대회명에 '국가대표' 포함된 모든 대회
+    - AMATEUR: 동호인/클럽/생활체육 대회
+    - ELITE: 나머지 모든 공식 대회 (종별, 선수권, 교육청 등)
+    """
+    name = competition_name
+
+    # NATIONAL (최우선) - 대회명에 '국가대표' 포함
+    if '국가대표' in name:
+        return 'NATIONAL'
+
+    # AMATEUR 키워드
+    amateur_keywords = ['동호인', '클럽', '생활체육', '아마추어', 'Club', 'Amateur']
+    if any(kw in name for kw in amateur_keywords):
+        return 'AMATEUR'
+
+    # ELITE (기본값 - 나머지 모든 공식 대회)
+    return 'ELITE'
 
 
 def extract_age_group(event_name: str) -> str:
