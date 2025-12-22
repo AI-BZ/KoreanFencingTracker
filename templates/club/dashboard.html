@@ -604,8 +604,8 @@ function getRoleLabel(role) {
 }
 
 function getRoleClass(role) {
-    if (['owner', 'head_coach', 'coach'].includes(role)) return 'coach';
-    if (['student', 'assistant'].includes(role)) return 'student';
+    if (['owner', 'head_coach', 'coach', 'assistant'].includes(role)) return 'coach';
+    if (role === 'student') return 'student';
     if (role === 'owner') return 'owner';
     return '';
 }
