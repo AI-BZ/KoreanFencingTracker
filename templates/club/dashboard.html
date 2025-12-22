@@ -1,0 +1,616 @@
+{% extends "base.html" %}
+
+{% block title %}클럽 대시보드 - Korean Fencing Tracker{% endblock %}
+
+{% block extra_css %}
+<style>
+.club-dashboard {
+    padding: 2rem 0;
+}
+
+.dashboard-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+}
+
+.dashboard-header h1 {
+    font-size: 1.8rem;
+    color: #1a1a2e;
+}
+
+.dashboard-header .club-name {
+    color: #667eea;
+}
+
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.dashboard-card {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    padding: 1.5rem;
+}
+
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.card-header h3 {
+    font-size: 1rem;
+    color: #666;
+    font-weight: 500;
+}
+
+.card-header .icon {
+    font-size: 1.5rem;
+}
+
+.card-value {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: #1a1a2e;
+}
+
+.card-value.highlight {
+    color: #667eea;
+}
+
+.card-value.warning {
+    color: #f5a623;
+}
+
+.card-value.success {
+    color: #4caf50;
+}
+
+.card-subtitle {
+    font-size: 0.9rem;
+    color: #888;
+    margin-top: 0.5rem;
+}
+
+/* Team Roster */
+.roster-section {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.roster-section h2 {
+    font-size: 1.3rem;
+    margin-bottom: 1rem;
+    color: #1a1a2e;
+}
+
+.roster-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.roster-table th,
+.roster-table td {
+    padding: 0.8rem;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+}
+
+.roster-table th {
+    font-weight: 600;
+    color: #666;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+}
+
+.roster-table tr:hover {
+    background: #f8f9ff;
+}
+
+.player-name {
+    font-weight: 600;
+    color: #1a1a2e;
+}
+
+.player-name a {
+    color: inherit;
+    text-decoration: none;
+}
+
+.player-name a:hover {
+    color: #667eea;
+}
+
+.role-badge {
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.role-badge.coach {
+    background: #e3f2fd;
+    color: #1976d2;
+}
+
+.role-badge.student {
+    background: #f3e5f5;
+    color: #7b1fa2;
+}
+
+.role-badge.owner {
+    background: #fff3e0;
+    color: #e65100;
+}
+
+.weapon-badge {
+    display: inline-block;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    background: #f5f5f5;
+    color: #666;
+}
+
+.stat-value {
+    font-weight: 600;
+    color: #667eea;
+}
+
+/* Today's Attendance */
+.attendance-section {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    padding: 1.5rem;
+}
+
+.attendance-section h2 {
+    font-size: 1.3rem;
+    margin-bottom: 1rem;
+    color: #1a1a2e;
+}
+
+.checkin-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.checkin-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.8rem 0;
+    border-bottom: 1px solid #eee;
+}
+
+.checkin-item:last-child {
+    border-bottom: none;
+}
+
+.checkin-name {
+    font-weight: 600;
+}
+
+.checkin-time {
+    color: #888;
+    font-size: 0.9rem;
+}
+
+.checkin-type {
+    font-size: 0.8rem;
+    color: #667eea;
+}
+
+/* Alerts */
+.alerts-section {
+    margin-bottom: 2rem;
+}
+
+.alert {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 0.5rem;
+}
+
+.alert.warning {
+    background: #fff8e1;
+    border: 1px solid #ffcc02;
+}
+
+.alert.info {
+    background: #e3f2fd;
+    border: 1px solid #90caf9;
+}
+
+.alert.error {
+    background: #ffebee;
+    border: 1px solid #ef9a9a;
+}
+
+.alert-icon {
+    font-size: 1.2rem;
+}
+
+/* Loading */
+.loading {
+    text-align: center;
+    padding: 3rem;
+    color: #888;
+}
+
+.loading::after {
+    content: '...';
+    animation: dots 1.5s infinite;
+}
+
+@keyframes dots {
+    0%, 20% { content: '.'; }
+    40% { content: '..'; }
+    60%, 100% { content: '...'; }
+}
+
+/* Empty state */
+.empty-state {
+    text-align: center;
+    padding: 2rem;
+    color: #888;
+}
+
+/* Actions */
+.action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: #667eea;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background 0.2s;
+}
+
+.action-btn:hover {
+    background: #5a6fd6;
+}
+
+.action-btn.secondary {
+    background: #f5f5f5;
+    color: #333;
+}
+
+.action-btn.secondary:hover {
+    background: #eee;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container club-dashboard">
+    <div class="dashboard-header">
+        <h1>
+            <span class="club-name" id="clubName">Loading...</span> 대시보드
+        </h1>
+        <div class="actions" id="headerActions">
+            <button class="action-btn" onclick="location.href='/club/checkin'">
+                ✓ 출석 체크인
+            </button>
+            <!-- 회계관리 버튼은 owner에게만 동적으로 표시 -->
+        </div>
+    </div>
+
+    <!-- Alerts -->
+    <div class="alerts-section" id="alertsSection"></div>
+
+    <!-- Stats Grid -->
+    <div class="dashboard-grid">
+        <div class="dashboard-card">
+            <div class="card-header">
+                <h3>오늘 출석</h3>
+                <span class="icon">📋</span>
+            </div>
+            <div class="card-value highlight" id="todayAttendance">-</div>
+            <div class="card-subtitle">명 체크인</div>
+        </div>
+
+        <div class="dashboard-card">
+            <div class="card-header">
+                <h3>전체 회원</h3>
+                <span class="icon">👥</span>
+            </div>
+            <div class="card-value" id="totalMembers">-</div>
+            <div class="card-subtitle">수강생 <span id="studentCount">-</span>명 / 코치 <span id="coachCount">-</span>명</div>
+        </div>
+
+        <div class="dashboard-card">
+            <div class="card-header">
+                <h3>이번 주 훈련</h3>
+                <span class="icon">🗓️</span>
+            </div>
+            <div class="card-value" id="weeklyTraining">-</div>
+            <div class="card-subtitle">회 예정</div>
+        </div>
+
+        <div class="dashboard-card">
+            <div class="card-header">
+                <h3>예정 대회</h3>
+                <span class="icon">🏆</span>
+            </div>
+            <div class="card-value" id="upcomingComps">-</div>
+            <div class="card-subtitle">건</div>
+        </div>
+    </div>
+
+    <!-- Team Roster -->
+    <div class="roster-section">
+        <h2>🏆 소속 선수 현황</h2>
+        <div id="rosterContent">
+            <div class="loading">선수 데이터 로딩 중</div>
+        </div>
+    </div>
+
+    <!-- Today's Attendance -->
+    <div class="attendance-section">
+        <h2>📋 오늘 출석 현황</h2>
+        <div id="attendanceContent">
+            <div class="loading">출석 데이터 로딩 중</div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// 테스트 모드: 기본 활성화 (로그인 시스템 완성 전까지)
+// TODO: 로그인 시스템 완성 후 false로 변경
+const TEST_MODE = true;
+const API_BASE = '/api/club';
+const API_SUFFIX = TEST_MODE ? '?test=1' : '';
+
+// 대시보드 데이터 로드
+async function loadDashboard() {
+    try {
+        const headers = TEST_MODE ? {} : {
+            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+        };
+        const response = await fetch(`${API_BASE}/dashboard${API_SUFFIX}`, { headers });
+
+        if (!response.ok) {
+            if (response.status === 401) {
+                window.location.href = '/auth/login?redirect=/club/';
+                return;
+            }
+            throw new Error('대시보드 로드 실패');
+        }
+
+        const data = await response.json();
+        renderDashboard(data);
+
+    } catch (error) {
+        console.error('Dashboard error:', error);
+        document.querySelector('.club-dashboard').innerHTML = `
+            <div class="empty-state">
+                <p>대시보드를 불러올 수 없습니다.</p>
+                <p><a href="/auth/login?redirect=/club/">로그인</a>이 필요합니다.</p>
+            </div>
+        `;
+    }
+}
+
+function renderDashboard(data) {
+    // Club name
+    document.getElementById('clubName').textContent = data.organization_name;
+
+    // Stats
+    document.getElementById('todayAttendance').textContent = data.today_attendance;
+    document.getElementById('totalMembers').textContent = data.total_members;
+    document.getElementById('studentCount').textContent = data.active_students;
+    document.getElementById('coachCount').textContent = data.active_coaches;
+    document.getElementById('weeklyTraining').textContent = data.weekly_training || 5;  // 기본값
+    document.getElementById('upcomingComps').textContent = data.upcoming_competitions?.length || 0;
+
+    // Alerts (비용 관련 알림은 필터링 - owner만 회계관리에서 확인)
+    const filteredAlerts = (data.alerts || []).filter(a => a.alert_type !== 'overdue_fee');
+    renderAlerts(filteredAlerts);
+
+    // Attendance
+    renderAttendance(data.today_checkins);
+
+    // Load team roster separately
+    loadTeamRoster();
+
+    // 회계관리 버튼 추가 (owner만)
+    // TEST_MODE에서는 owner로 설정되어 있으므로 버튼 표시
+    if (TEST_MODE) {
+        addAccountingButton();
+    }
+}
+
+function addAccountingButton() {
+    const actionsDiv = document.getElementById('headerActions');
+    if (!actionsDiv.querySelector('.accounting-btn')) {
+        const btn = document.createElement('button');
+        btn.className = 'action-btn secondary accounting-btn';
+        btn.innerHTML = '💰 회계관리';
+        btn.onclick = () => location.href = '/club/accounting';
+        actionsDiv.appendChild(btn);
+    }
+}
+
+function renderAlerts(alerts) {
+    const container = document.getElementById('alertsSection');
+    if (!alerts || alerts.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+
+    const icons = {
+        'warning': '⚠️',
+        'info': 'ℹ️',
+        'error': '🚨'
+    };
+
+    container.innerHTML = alerts.map(alert => `
+        <div class="alert ${alert.severity}">
+            <span class="alert-icon">${icons[alert.severity] || 'ℹ️'}</span>
+            <span>${alert.message}</span>
+        </div>
+    `).join('');
+}
+
+function renderAttendance(checkins) {
+    const container = document.getElementById('attendanceContent');
+
+    if (!checkins || checkins.length === 0) {
+        container.innerHTML = '<div class="empty-state">오늘 출석한 회원이 없습니다</div>';
+        return;
+    }
+
+    container.innerHTML = `
+        <ul class="checkin-list">
+            ${checkins.map(c => `
+                <li class="checkin-item">
+                    <div>
+                        <span class="checkin-name">${c.member_name}</span>
+                        <span class="checkin-type">${getAttendanceTypeLabel(c.attendance_type)}</span>
+                    </div>
+                    <span class="checkin-time">${formatTime(c.check_in_at)}</span>
+                </li>
+            `).join('')}
+        </ul>
+    `;
+}
+
+async function loadTeamRoster() {
+    try {
+        const headers = TEST_MODE ? {} : {
+            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+        };
+        const response = await fetch(`${API_BASE}/players/team/roster${API_SUFFIX}`, { headers });
+
+        if (!response.ok) throw new Error('로스터 로드 실패');
+
+        const data = await response.json();
+        renderRoster(data);
+
+    } catch (error) {
+        console.error('Roster error:', error);
+        document.getElementById('rosterContent').innerHTML =
+            '<div class="empty-state">선수 데이터를 불러올 수 없습니다</div>';
+    }
+}
+
+function renderRoster(data) {
+    const container = document.getElementById('rosterContent');
+
+    if (!data.players || data.players.length === 0) {
+        container.innerHTML = '<div class="empty-state">등록된 선수가 없습니다</div>';
+        return;
+    }
+
+    container.innerHTML = `
+        <table class="roster-table">
+            <thead>
+                <tr>
+                    <th>이름</th>
+                    <th>역할</th>
+                    <th>무기</th>
+                    <th>대회 수</th>
+                    <th>최근 결과</th>
+                    <th>상세</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${data.players.map(player => `
+                    <tr>
+                        <td class="player-name">
+                            ${player.player_id
+                                ? `<a href="/player/${player.player_id}">${player.name}</a>`
+                                : player.name}
+                        </td>
+                        <td>
+                            <span class="role-badge ${getRoleClass(player.club_role)}">
+                                ${getRoleLabel(player.club_role)}
+                            </span>
+                        </td>
+                        <td>
+                            ${player.weapon
+                                ? `<span class="weapon-badge">${player.weapon}</span>`
+                                : '-'}
+                        </td>
+                        <td class="stat-value">${player.competition_count || 0}</td>
+                        <td>${player.recent_result || '-'}</td>
+                        <td>
+                            ${player.player_id
+                                ? `<a href="/club/players/${player.player_id}/profile" class="action-btn secondary">상세</a>`
+                                : '<span style="color:#999">미연결</span>'}
+                        </td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `;
+}
+
+// Helpers
+function formatCurrency(amount) {
+    return new Intl.NumberFormat('ko-KR').format(amount || 0);
+}
+
+function formatTime(isoString) {
+    const date = new Date(isoString);
+    return date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function getAttendanceTypeLabel(type) {
+    const labels = {
+        'regular': '정규 훈련',
+        'lesson': '레슨',
+        'competition': '대회',
+        'makeup': '보강',
+        'trial': '체험'
+    };
+    return labels[type] || type;
+}
+
+function getRoleLabel(role) {
+    const labels = {
+        'owner': '대표',
+        'head_coach': '수석코치',
+        'coach': '코치',
+        'assistant': '보조코치',
+        'student': '수강생',
+        'parent': '학부모',
+        'staff': '스태프'
+    };
+    return labels[role] || role;
+}
+
+function getRoleClass(role) {
+    if (['owner', 'head_coach', 'coach'].includes(role)) return 'coach';
+    if (['student', 'assistant'].includes(role)) return 'student';
+    if (role === 'owner') return 'owner';
+    return '';
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', loadDashboard);
+</script>
+{% endblock %}

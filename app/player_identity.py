@@ -330,10 +330,11 @@ class PlayerIdentityResolver:
         Main identity resolution algorithm.
 
         Strategy:
-        1. For each name group, identify clear splits (overlapping competitions)
-        2. Group remaining records by team continuity
-        3. Handle team transitions (same person, different teams)
-        4. Assign special IDs for reference players
+        1. FIRST: Group by weapons - completely different weapons = different people
+        2. For each weapon group, identify clear splits (overlapping competitions)
+        3. Group remaining records by team continuity
+        4. Handle team transitions (same person, different teams)
+        5. Assign special IDs for reference players
 
         Returns: Number of special IDs assigned
         """
@@ -344,18 +345,190 @@ class PlayerIdentityResolver:
             # Sort records by date
             sorted_records = sorted(group.records, key=lambda x: x["comp_date"])
 
-            # Step 1: Find overlapping competitions (definite different people)
-            overlapping_teams = self._find_overlapping_teams(sorted_records)
+            # Step 0: CRITICAL - Group by weapons first
+            # Completely different weapons (e.g., 플러레 vs 사브르) = DEFINITELY different people
+            weapon_groups = self._group_by_weapons(sorted_records)
 
-            if overlapping_teams:
-                # Multiple people with same name
-                self._create_separate_profiles(name, sorted_records, overlapping_teams)
+            if len(weapon_groups) > 1:
+                # Multiple weapon groups = definitely different people
+                # Process each weapon group separately
+                for weapon_key, weapon_records in weapon_groups.items():
+                    overlapping_teams = self._find_overlapping_teams(weapon_records)
+                    if overlapping_teams:
+                        self._create_separate_profiles(name, weapon_records, overlapping_teams)
+                    else:
+                        # Check if we should still separate (e.g., different team types)
+                        if self._should_separate_by_team_pattern(weapon_records):
+                            pseudo_overlapping = self._create_pseudo_overlapping(weapon_records)
+                            self._create_separate_profiles(name, weapon_records, pseudo_overlapping)
+                        else:
+                            self._create_single_profile(name, weapon_records)
             else:
-                # Likely same person with possible team changes
-                self._create_single_profile(name, sorted_records)
+                # Single weapon group - proceed with traditional algorithm
+                # Step 1: Find overlapping competitions (definite different people)
+                overlapping_teams = self._find_overlapping_teams(sorted_records)
+
+                if overlapping_teams:
+                    # Multiple people with same name
+                    self._create_separate_profiles(name, sorted_records, overlapping_teams)
+                else:
+                    # Check for team pattern based separation
+                    if self._should_separate_by_team_pattern(sorted_records):
+                        pseudo_overlapping = self._create_pseudo_overlapping(sorted_records)
+                        self._create_separate_profiles(name, sorted_records, pseudo_overlapping)
+                    else:
+                        # Likely same person with possible team changes
+                        self._create_single_profile(name, sorted_records)
 
         # Post-resolution: Assign special IDs for reference players
         return self._assign_special_ids()
+
+    def _group_by_weapons(self, records: List[Dict]) -> Dict[str, List[Dict]]:
+        """
+        Group records by weapon sets.
+
+        Key insight: A fencer typically specializes in ONE weapon.
+        - Same weapon = could be same person
+        - Completely different weapons = DEFINITELY different people
+
+        Returns: Dict[weapon_key, records]
+        - weapon_key is frozenset of weapons for that group
+        """
+        # First, get weapons per team
+        team_weapons = defaultdict(set)
+        team_records = defaultdict(list)
+
+        for record in records:
+            team = record.get("team", "")
+            weapon = record.get("weapon", "")
+            if team and weapon:
+                team_weapons[team].add(weapon)
+                team_records[team].append(record)
+
+        if not team_weapons:
+            return {"all": records}
+
+        # Use Union-Find to group teams with overlapping weapons
+        teams_list = list(team_weapons.keys())
+        parent = {t: t for t in teams_list}
+
+        def find(x):
+            if parent[x] != x:
+                parent[x] = find(parent[x])
+            return parent[x]
+
+        def union(x, y):
+            px, py = find(x), find(y)
+            if px != py:
+                parent[py] = px
+
+        # Union teams that share ANY weapon (could be same person)
+        for i, t1 in enumerate(teams_list):
+            for t2 in teams_list[i+1:]:
+                # If weapons overlap, they COULD be the same person
+                if team_weapons[t1].intersection(team_weapons[t2]):
+                    union(t1, t2)
+
+        # Group teams by root
+        team_groups = defaultdict(list)
+        for team in teams_list:
+            root = find(team)
+            team_groups[root].append(team)
+
+        # If all teams are in one group, return single group
+        if len(team_groups) == 1:
+            return {"all": records}
+
+        # Create weapon groups with their records
+        result = {}
+        for root, teams in team_groups.items():
+            # Collect all weapons for this group
+            group_weapons = set()
+            group_records = []
+            for team in teams:
+                group_weapons.update(team_weapons[team])
+                group_records.extend(team_records[team])
+
+            # Add records without team
+            for record in records:
+                if not record.get("team"):
+                    # Assign to matching weapon group or first group
+                    if record.get("weapon") in group_weapons:
+                        group_records.append(record)
+
+            weapon_key = "_".join(sorted(group_weapons)) if group_weapons else "unknown"
+            result[weapon_key] = group_records
+
+        return result
+
+    def _should_separate_by_team_pattern(self, records: List[Dict]) -> bool:
+        """
+        Check if records should be separated based on team patterns even without overlap.
+
+        Separation indicators:
+        1. School-type teams from different schools at same level active simultaneously
+        2. Very long gap (>3 years) between teams with no progression logic
+        """
+        team_info = defaultdict(lambda: {"first": None, "last": None, "type": None})
+
+        for record in records:
+            team = record.get("team", "")
+            date = record.get("comp_date", "")
+            if not team or not date:
+                continue
+
+            if team_info[team]["first"] is None or date < team_info[team]["first"]:
+                team_info[team]["first"] = date
+            if team_info[team]["last"] is None or date > team_info[team]["last"]:
+                team_info[team]["last"] = date
+            team_info[team]["type"] = get_team_type(team)
+
+        if len(team_info) < 2:
+            return False
+
+        teams_list = list(team_info.keys())
+
+        # Check for simultaneous same-level schools (different schools)
+        for i, t1 in enumerate(teams_list):
+            info1 = team_info[t1]
+            type1 = info1["type"]
+
+            for t2 in teams_list[i+1:]:
+                info2 = team_info[t2]
+                type2 = info2["type"]
+
+                # Same school level (both middle schools, both high schools)
+                if type1 == type2 and type1 in ('middle', 'high', 'university'):
+                    # Check for time overlap
+                    if info1["first"] and info1["last"] and info2["first"] and info2["last"]:
+                        # If time ranges overlap significantly, probably different people
+                        overlap_start = max(info1["first"], info2["first"])
+                        overlap_end = min(info1["last"], info2["last"])
+                        if overlap_start <= overlap_end:
+                            # Time overlap at same school level = different people
+                            return True
+
+        return False
+
+    def _create_pseudo_overlapping(self, records: List[Dict]) -> Set[Tuple[str, str]]:
+        """
+        Create pseudo-overlapping set for teams that should be separated
+        based on team pattern analysis (not actual competition overlap).
+        """
+        teams = set()
+        for record in records:
+            team = record.get("team", "")
+            if team:
+                teams.add(team)
+
+        # Return all pairs as "overlapping" to force separation
+        result = set()
+        teams_list = list(teams)
+        for i, t1 in enumerate(teams_list):
+            for t2 in teams_list[i+1:]:
+                result.add(tuple(sorted([t1, t2])))
+
+        return result
 
     def _find_overlapping_teams(self, records: List[Dict]) -> Set[Tuple[str, str]]:
         """
@@ -562,20 +735,38 @@ class PlayerIdentityResolver:
                     pass  # 합치지 않음
 
                 else:
-                    # 클럽→클럽: 시간적으로 합리적이고 무기가 같으면 같은 사람일 수 있음
-                    # 하지만 클럽 동명이인이 많으므로 엄격하게 처리
-                    if range1_end <= range2_start:
+                    # 클럽→클럽: 소속 이적은 흔한 일
+                    # 조건 완화: 무기가 겹치면 동일인일 수 있음 (정확히 같을 필요 없음)
+
+                    # 무기 겹침 여부 확인 (이미 위에서 완전 불일치는 걸러짐)
+                    weapons_compatible = (
+                        not weapons1 or not weapons2 or  # 무기 정보 없으면 호환
+                        bool(weapons1.intersection(weapons2))  # 겹치면 호환
+                    )
+
+                    if not weapons_compatible:
+                        pass  # 무기가 완전히 다르면 합치지 않음
+                    elif range1_end <= range2_start:
                         gap_years = year2_start - year1_end
-                        # 클럽 간 전환은 1년 이내에만 허용
-                        if gap_years <= 1:
-                            # 추가 조건: 무기가 정확히 같아야 함
-                            if weapons1 == weapons2:
-                                should_union = True
+                        # 클럽 간 전환은 2년 이내 허용 (휴식기 고려)
+                        if gap_years <= 2:
+                            should_union = True
                     elif range2_end <= range1_start:
                         gap_years = year1_start - year2_end
-                        if gap_years <= 1:
-                            if weapons1 == weapons2:
-                                should_union = True
+                        if gap_years <= 2:
+                            should_union = True
+                    else:
+                        # 시간이 겹치는 경우: 동시에 두 클럽 활동은 드물지만 가능
+                        # 무기가 완전히 같고 시간 겹침이 적으면 허용
+                        if weapons1 == weapons2:
+                            # 겹치는 기간 계산
+                            overlap_start = max(range1_start, range2_start)
+                            overlap_end = min(range1_end, range2_end)
+                            if overlap_start <= overlap_end:
+                                # 약간의 겹침은 이적 과도기로 허용
+                                overlap_years = parse_year(overlap_end) - parse_year(overlap_start)
+                                if overlap_years <= 1:
+                                    should_union = True
 
                 if should_union:
                     union(team1, team2)
@@ -942,8 +1133,15 @@ def build_player_database(data_path: str) -> PlayerIdentityResolver:
 
 if __name__ == "__main__":
     # Test the resolver
+    # 🚨 NOTE: JSON 파일 테스트 비활성화 (2025-12-22)
+    # 실제 서비스는 Supabase 캐시 데이터 사용
     import sys
 
+    print("⚠️ JSON 테스트 비활성화됨. 서버 환경에서 테스트하세요.")
+    print("서버는 Supabase에서 데이터를 로드합니다.")
+    sys.exit(0)
+
+    # (레거시 코드 - 참조용으로만 유지)
     data_path = "data/fencing_full_data_v2.json"
 
     print("Building player database...")
