@@ -18,6 +18,9 @@ from loguru import logger
 import aiohttp
 from bs4 import BeautifulSoup
 
+# DE Scraper v4 import
+from scraper.de_scraper_v4 import DEScraper
+
 # ============================================
 # 스로틀링 설정 (봇 차단 방지)
 # ============================================
@@ -43,6 +46,7 @@ class Competition:
     status: str = ""
     location: str = ""
     category: str = ""
+    page_num: int = 1  # 이 대회가 위치한 페이지 번호
 
 
 @dataclass
@@ -203,7 +207,8 @@ class KFFFullScraper:
                             name=data['name'],
                             start_date=start_date,
                             end_date=end_date,
-                            status=data['status']
+                            status=data['status'],
+                            page_num=page_num  # 이 대회가 위치한 실제 페이지 번호 저장
                         ))
 
                 logger.info(f"페이지 {page_num}: {len(comps_data)}개 대회")
@@ -259,36 +264,52 @@ class KFFFullScraper:
         """대회의 종목 목록 조회"""
         page = await self._browser.new_page()
         events = []
-        page.set_default_timeout(10000)
+        page.set_default_timeout(15000)
 
         try:
-            await page.goto(f"{self.BASE_URL}/game/compList?code=game", wait_until="domcontentloaded", timeout=10000)
+            logger.debug(f"get_events: {event_cd}, page_num={page_num}")
+            await page.goto(f"{self.BASE_URL}/game/compList?code=game", wait_until="domcontentloaded", timeout=15000)
+            await page.wait_for_timeout(1500)
 
             # 페이지 이동
             if page_num > 1:
-                for _ in range(page_num - 1):
+                for i in range(page_num - 1):
                     try:
                         next_btn = page.locator("a:has-text('다음페이지')")
-                        await next_btn.click(timeout=3000)
-                        await page.wait_for_timeout(1000)
-                    except:
+                        await next_btn.click(timeout=5000)
+                        await page.wait_for_timeout(1500)
+                        logger.debug(f"  페이지 {i+2}로 이동")
+                    except Exception as e:
+                        logger.warning(f"  페이지 이동 실패: {e}")
                         break
 
             # 대회 클릭
             try:
-                await page.click(f"a[onclick*=\"{event_cd}\"]", timeout=5000)
-                await page.wait_for_timeout(1500)
+                link = page.locator(f"a[onclick*=\"{event_cd}\"]")
+                link_count = await link.count()
+                logger.debug(f"  대회 링크 수: {link_count}")
+                if link_count == 0:
+                    logger.warning(f"  대회 링크 없음: {event_cd}")
+                    return events
+                await link.first.click(timeout=7000)
+                await page.wait_for_timeout(2000)
                 await throttle_request()  # 스로틀링 적용
-            except:
+            except Exception as e:
+                logger.warning(f"  대회 클릭 실패 ({event_cd}): {e}")
                 return events
 
             # 경기결과 탭 클릭 (onclick 속성으로 정확히 탭만 선택)
             try:
                 result_tab = page.locator("a[onclick*='funcLeftSub']:has-text('경기결과')").first
-                await result_tab.click(timeout=3000)
-                await page.wait_for_timeout(1500)
-            except:
-                pass
+                tab_count = await result_tab.count()
+                if tab_count > 0:
+                    await result_tab.click(timeout=5000)
+                    await page.wait_for_timeout(2000)
+                    logger.debug(f"  경기결과 탭 클릭 성공")
+                else:
+                    logger.debug(f"  경기결과 탭 없음")
+            except Exception as e:
+                logger.debug(f"  경기결과 탭 클릭 실패: {e}")
 
             # SELECT에서 종목 추출
             options = await page.evaluate("""
@@ -303,6 +324,7 @@ class KFFFullScraper:
                     return [];
                 }
             """)
+            logger.debug(f"  종목 수: {len(options)}")
 
             for opt in options:
                 weapon, gender, event_type, age_group = self._parse_event_name(opt["text"])
@@ -479,15 +501,17 @@ class KFFFullScraper:
                 await page.wait_for_timeout(1500)
                 logger.info("Direct Elimination 대진표 탭 클릭 완료")
 
-                # 실제 대진표 트리 데이터 수집
-                bracket_data = await self._parse_de_bracket(page)
+                # 실제 대진표 트리 데이터 수집 (v3: 전체 브래킷 구조 분석)
+                bracket_data = await self._parse_de_bracket_v3(page)
                 results["de_bracket"] = bracket_data
 
-                # match_results를 de_matches로 복사 (호환성 유지)
+                # bouts를 de_matches로도 저장 (호환성 유지)
+                bouts = bracket_data.get("bouts", [])
                 de_matches = bracket_data.get("match_results", [])
                 results["de_matches"] = de_matches
 
-                logger.info(f"엘리미나시옹디렉트 대진표 수집 완료: {len(de_matches)}개 경기, 시드: {len(bracket_data.get('seeding', []))}명")
+                rounds_found = bracket_data.get("rounds", [])
+                logger.info(f"엘리미나시옹디렉트 대진표 수집 완료: {len(bouts)}개 경기, 라운드: {rounds_found}, 시드: {len(bracket_data.get('seeding', []))}명")
             except Exception as e:
                 logger.debug(f"대진표 파싱 오류: {e}")
 
@@ -562,12 +586,14 @@ class KFFFullScraper:
             await de_bracket_tab.click(timeout=5000, force=True)
             await page.wait_for_timeout(1500)
 
-            # DE 데이터 파싱
-            bracket_data = await self._parse_de_bracket(page)
+            # DE 데이터 파싱 (v3: 전체 브래킷 구조 분석)
+            bracket_data = await self._parse_de_bracket_v3(page)
             results["de_bracket"] = bracket_data
             results["de_matches"] = bracket_data.get("match_results", [])
 
-            logger.debug(f"DE 수집: {len(results['de_matches'])}개 경기")
+            bouts = bracket_data.get("bouts", [])
+            rounds_found = bracket_data.get("rounds", [])
+            logger.debug(f"DE 수집: {len(bouts)}개 경기, 라운드: {rounds_found}")
 
         except Exception as e:
             logger.debug(f"DE 수집 오류 ({event_cd}/{sub_event_cd}): {e}")
@@ -1244,6 +1270,1321 @@ class KFFFullScraper:
             logger.error(f"대진표 파싱 오류: {e}")
             return {"rounds": [], "matches": [], "bracket_tree": {}, "seeding": [], "match_results": []}
 
+    async def _parse_de_bracket_v3(self, page: Page) -> Dict[str, Any]:
+        """
+        DE 대진표 파싱 v3 → v4로 위임
+
+        v4 개선사항:
+        1. fnGetMatch() 함수로 탭 로드
+        2. row_table 컬럼 기반 파싱
+        3. 다음 라운드에서 점수 추출
+        4. 멀티 탭 병합 (32강전 + 8강전)
+        """
+        try:
+            # DEScraper v4 사용
+            scraper = DEScraper(page)
+            bracket = await scraper.parse_de_bracket()
+            return bracket.to_dict()
+        except Exception as e:
+            logger.warning(f"DE v4 파싱 실패, v3 fallback 시도: {e}")
+
+        # Fallback to original v3 logic
+        try:
+            bracket_data = {
+                "bracket_size": 0,
+                "participant_count": 0,
+                "starting_round": "",
+                "rounds": [],
+                "seeding": [],
+                "bouts": [],
+                "bouts_by_round": {},
+                "final_ranking": [],
+                "results_by_round": {},
+                "match_results": [],
+                "full_bouts": []
+            }
+
+            # 1. 전체 브래킷 테이블 구조 파싱 (모든 라운드 컬럼을 한 번에)
+            # v3.2: 더 강력한 테이블 찾기 로직
+            all_columns_data = await page.evaluate("""
+                () => {
+                    const result = {
+                        columns: [],
+                        round_names: [],
+                        debug: {
+                            totalCells: 0,
+                            nonEmptyCells: 0,
+                            emptyCells: 0,
+                            foundBracketTable: false,
+                            tableCount: 0
+                        }
+                    };
+
+                    // 라운드 헤더 찾기
+                    const allCells = document.querySelectorAll('table td, table th');
+                    const roundHeaders = [];
+
+                    allCells.forEach(cell => {
+                        const text = cell.textContent.trim();
+                        let match = text.match(/^(\\d+)\\s*엘리미나시옹디렉트$/);
+                        if (match) {
+                            roundHeaders.push({
+                                size: parseInt(match[1]),
+                                name: match[1] + '강전'
+                            });
+                        }
+                        else if (/^(8강전|준결승|결승)$/.test(text)) {
+                            let size = 8;
+                            if (text === '준결승') size = 4;
+                            if (text === '결승') size = 2;
+                            roundHeaders.push({ size: size, name: text });
+                        }
+                    });
+
+                    result.round_names = roundHeaders.map(h => h.name);
+
+                    // DE 브래킷 테이블 찾기 v3.3 - rowgroup 구조 지원
+                    // 전략: 1) 테이블 텍스트에 "엘리미나시옹디렉트" 포함 2) 중첩 테이블 3개 이상
+                    const tables = document.querySelectorAll('table');
+                    result.debug.tableCount = tables.length;
+                    let bracketTable = null;
+
+                    for (const table of tables) {
+                        const tableText = table.textContent || '';
+                        // 테이블이 DE 관련 텍스트를 포함하는지 확인
+                        if (!tableText.includes('엘리미나시옹디렉트') && !tableText.includes('8강전')) {
+                            continue;
+                        }
+
+                        // 중첩 테이블이 3개 이상 있어야 브래킷 테이블
+                        const nestedTables = table.querySelectorAll('table');
+                        if (nestedTables.length >= 3) {
+                            // 시드 번호(1-64)가 있는지 확인
+                            let hasData = false;
+                            nestedTables.forEach(nt => {
+                                const divs = nt.querySelectorAll('div');
+                                divs.forEach(div => {
+                                    const num = parseInt(div.textContent.trim());
+                                    if (num >= 1 && num <= 64) {
+                                        hasData = true;
+                                    }
+                                });
+                            });
+
+                            if (hasData) {
+                                bracketTable = table;
+                                break;  // 첫 번째 유효한 테이블 사용
+                            }
+                        }
+                    }
+
+                    if (!bracketTable) {
+                        result.debug.foundBracketTable = false;
+                        return result;
+                    }
+
+                    result.debug.foundBracketTable = true;
+
+                    // 데이터 행 찾기 - 중첩 테이블을 포함하는 행
+                    // rowgroup 구조: table > tbody/rowgroup > tr 또는 table > tr
+                    const allRows = bracketTable.querySelectorAll('tr');
+                    let dataRow = null;
+                    let maxNestedTables = 0;
+
+                    for (const row of allRows) {
+                        const cells = row.querySelectorAll(':scope > td');
+                        let nestedCount = 0;
+                        cells.forEach(cell => {
+                            if (cell.querySelector('table')) nestedCount++;
+                        });
+
+                        // 중첩 테이블이 가장 많은 행 = 데이터 행
+                        if (nestedCount > maxNestedTables) {
+                            maxNestedTables = nestedCount;
+                            dataRow = row;
+                        }
+                    }
+
+                    if (!dataRow) {
+                        return result;
+                    }
+
+                    const cells = dataRow.querySelectorAll(':scope > td');
+                    result.debug.totalCells = cells.length;
+
+                    let columnIndex = 0;
+
+                    cells.forEach((cell, cellIdx) => {
+                        const nestedTable = cell.querySelector('table');
+                        if (!nestedTable) {
+                            result.debug.emptyCells++;
+                            return;
+                        }
+
+                        const columnData = {
+                            tableIndex: columnIndex,
+                            cellIndex: cellIdx,
+                            entries: []
+                        };
+
+                        // 중첩 테이블의 모든 행 파싱
+                        const tableRows = nestedTable.querySelectorAll('tr');
+                        let hasValidEntry = false;
+
+                        tableRows.forEach((row, rowIdx) => {
+                            const td = row.querySelector('td');
+                            if (!td) return;
+
+                            // div 기반 파싱 (seed_div + info_div)
+                            const divs = td.querySelectorAll(':scope > div');
+                            if (divs.length < 2) return;
+
+                            const posDiv = divs[0];
+                            const posText = posDiv.textContent.trim();
+                            const position = parseInt(posText);
+                            if (!position || isNaN(position)) return;
+
+                            const infoDiv = divs[1];
+                            const paragraphs = infoDiv.querySelectorAll('p');
+                            if (paragraphs.length < 1) return;
+
+                            // 이름 추출 (paragraph 내부의 span 또는 직접 텍스트)
+                            let name = '';
+                            const nameEl = paragraphs[0].querySelector('span, generic') || paragraphs[0];
+                            name = nameEl.textContent.trim();
+                            if (!name) return;
+
+                            let team = '';
+                            let score = null;
+                            let hasScore = false;
+
+                            if (paragraphs.length >= 2) {
+                                const infoEl = paragraphs[1].querySelector('span, generic') || paragraphs[1];
+                                const infoText = infoEl.textContent.trim();
+                                const scoreMatch = infoText.match(/(\\d+)\\s*:\\s*(\\d+)/);
+
+                                if (scoreMatch) {
+                                    score = {
+                                        winner: parseInt(scoreMatch[1]),
+                                        loser: parseInt(scoreMatch[2])
+                                    };
+                                    hasScore = true;
+                                } else {
+                                    team = infoText;
+                                }
+                            }
+
+                            columnData.entries.push({
+                                rowIndex: rowIdx,
+                                position: position,
+                                name: name,
+                                team: team,
+                                score: score,
+                                hasScore: hasScore
+                            });
+                            hasValidEntry = true;
+                        });
+
+                        if (hasValidEntry && columnData.entries.length > 0) {
+                            result.columns.push(columnData);
+                            result.debug.nonEmptyCells++;
+                            columnIndex++;
+                        } else {
+                            result.debug.emptyCells++;
+                        }
+                    });
+
+                    return result;
+                }
+            """)
+
+            columns = all_columns_data.get("columns", [])
+            debug_info = all_columns_data.get("debug", {})
+
+            if not columns:
+                logger.debug(f"DE 컬럼 데이터 없음 (debug: {debug_info}), 기존 방식으로 fallback")
+                return await self._parse_de_bracket_v2_fallback(page)
+
+            logger.debug(f"DE v3.1 파싱: 총 셀 {debug_info.get('totalCells', '?')}개, 데이터 셀 {debug_info.get('nonEmptyCells', '?')}개, 빈 셀 {debug_info.get('emptyCells', '?')}개")
+            logger.debug(f"파싱된 컬럼 수: {len(columns)} (라운드: {all_columns_data.get('round_names', [])})")
+
+            # 2. 첫 번째 컬럼 분석 (시딩 라운드)
+            first_column = columns[0]
+            seeding_entries = first_column['entries']
+
+            # 시딩 정보 저장
+            seeding_list = []
+            for entry in seeding_entries:
+                if not entry['hasScore']:  # 점수가 없는 엔트리 = 시딩
+                    seeding_list.append({
+                        'seed': entry['position'],
+                        'name': entry['name'],
+                        'team': entry['team']
+                    })
+
+            # 시드 순으로 정렬
+            seeding_list.sort(key=lambda x: x['seed'])
+            bracket_data["seeding"] = seeding_list
+            bracket_data["participant_count"] = len(seeding_list)
+
+            # 브래킷 크기 결정
+            pc = len(seeding_list)
+            for size in [8, 16, 32, 64, 128]:
+                if pc <= size:
+                    bracket_data["bracket_size"] = size
+                    break
+
+            # 3. 라운드별 경기 생성
+            all_bouts = []
+            bout_id_counter = 1
+
+            # bracket_pos -> match 매핑 (각 라운드별)
+            # Key: (round_idx, bracket_pos), Value: {player1, player2}
+            bracket_pos_to_match = {}
+
+            # 첫 번째 컬럼에서 초기 대진 생성 (인접 2명씩)
+            first_round_entries = seeding_entries
+            first_round_name = self._get_round_name_by_size(len(first_round_entries))
+
+            for i in range(0, len(first_round_entries), 2):
+                p1_entry = first_round_entries[i] if i < len(first_round_entries) else None
+                p2_entry = first_round_entries[i + 1] if (i + 1) < len(first_round_entries) else None
+
+                if not p1_entry:
+                    continue
+
+                # 브래킷 포지션 = 두 시드 중 작은 값
+                seed1 = p1_entry['position']
+                seed2 = p2_entry['position'] if p2_entry else seed1
+                bracket_pos = min(seed1, seed2)
+
+                # 첫 라운드 매칭 저장
+                bracket_pos_to_match[(0, bracket_pos)] = {
+                    'player1': {
+                        'seed': p1_entry['position'],
+                        'name': p1_entry['name'],
+                        'team': p1_entry['team']
+                    },
+                    'player2': {
+                        'seed': p2_entry['position'] if p2_entry else None,
+                        'name': p2_entry['name'] if p2_entry else None,
+                        'team': p2_entry['team'] if p2_entry else None
+                    } if p2_entry else None
+                }
+
+            # 4. 이후 컬럼(라운드) 순회하며 경기 결과 매칭
+            # 브래킷 크기 기준으로 라운드 이름 계산
+            bracket_size = bracket_data["bracket_size"]
+            for col_idx, column in enumerate(columns):
+                entries = column['entries']
+                # col_idx 0 = 시딩 컬럼 (점수 없음)
+                # col_idx 1 = 첫 라운드 결과 (32강 결과, bracket_size명 경쟁)
+                # col_idx 2 = 16강 결과 (bracket_size/2명 경쟁)
+                # 공식: col_idx=1부터 실제 라운드 결과, 라운드 크기 = bracket_size / (2^(col_idx-1))
+                if col_idx == 0:
+                    round_size = bracket_size  # 시딩 라운드
+                else:
+                    round_size = bracket_size // (2 ** (col_idx - 1))
+                round_name = self._get_round_name_by_size(round_size)
+
+                for entry in entries:
+                    if not entry['hasScore']:
+                        continue  # 점수 없으면 스킵
+
+                    bracket_pos = entry['position']
+                    winner_name = entry['name']
+                    score = entry['score']
+
+                    # 이전 라운드에서 이 bracket_pos의 대진 찾기
+                    prev_match = None
+                    for prev_col_idx in range(col_idx, -1, -1):
+                        if (prev_col_idx, bracket_pos) in bracket_pos_to_match:
+                            prev_match = bracket_pos_to_match[(prev_col_idx, bracket_pos)]
+                            break
+
+                    if not prev_match:
+                        # 이전 대진을 못 찾으면 시딩에서 찾기
+                        prev_match = self._find_match_by_bracket_pos(bracket_pos, seeding_list)
+
+                    if not prev_match:
+                        logger.debug(f"이전 대진 찾기 실패: bracket_pos={bracket_pos}, winner={winner_name}")
+                        continue
+
+                    # 승자/패자 결정
+                    p1 = prev_match.get('player1', {})
+                    p2 = prev_match.get('player2', {})
+
+                    if p1 and p1.get('name') == winner_name:
+                        winner = p1
+                        loser = p2
+                    elif p2 and p2.get('name') == winner_name:
+                        winner = p2
+                        loser = p1
+                    else:
+                        # 이름 매칭 실패 시 부분 매칭 시도
+                        winner = {'name': winner_name, 'seed': bracket_pos, 'team': ''}
+                        loser = p2 if p1.get('name') == winner_name else p1
+                        logger.debug(f"이름 매칭 부정확: {winner_name} vs ({p1.get('name')}, {p2.get('name') if p2 else 'None'})")
+
+                    # bout 생성
+                    bout = {
+                        'bout_id': f"{round_name}_{bout_id_counter:02d}",
+                        'round': round_name.replace('전', ''),
+                        'round_order': self._get_round_order(round_name),
+                        'matchNumber': bout_id_counter,
+                        'tableIndex': col_idx,
+                        'bracket_pos': bracket_pos,
+                        'player1': {
+                            'seed': winner.get('seed'),
+                            'name': winner.get('name'),
+                            'team': winner.get('team', ''),
+                            'score': score['winner'] if score else None
+                        },
+                        'player2': {
+                            'seed': loser.get('seed') if loser else None,
+                            'name': loser.get('name') if loser else None,
+                            'team': loser.get('team', '') if loser else '',
+                            'score': score['loser'] if score else None
+                        } if loser else None,
+                        'winnerSeed': winner.get('seed'),
+                        'winnerName': winner.get('name'),
+                        'isCompleted': True,
+                        'isBye': loser is None
+                    }
+                    all_bouts.append(bout)
+                    bout_id_counter += 1
+
+                    # 다음 라운드용 매핑 업데이트
+                    next_bracket_pos = bracket_pos  # 승자는 같은 bracket_pos 유지
+                    bracket_pos_to_match[(col_idx + 1, next_bracket_pos)] = {
+                        'player1': winner,
+                        'player2': None  # 다음 상대는 아직 미정
+                    }
+
+            # 5. 중복 bout 제거 및 라운드 재계산
+            # 같은 bracket_pos + 같은 선수 조합은 중복 → 가장 마지막(정확한) 것만 유지
+            unique_bouts = {}
+            for bout in all_bouts:
+                bp = bout['bracket_pos']
+                p1_name = bout.get('player1', {}).get('name', '')
+                p2_name = bout.get('player2', {}).get('name', '') if bout.get('player2') else 'BYE'
+                key = (bp, p1_name, p2_name)
+
+                # 같은 키가 있으면 tableIndex가 더 큰 것(나중 라운드)으로 업데이트
+                if key not in unique_bouts or bout['tableIndex'] > unique_bouts[key]['tableIndex']:
+                    unique_bouts[key] = bout
+
+            # 중복 제거된 bouts
+            deduped_bouts = list(unique_bouts.values())
+
+            # 6. tableIndex 기반으로 라운드 이름 재계산
+            # tableIndex 0 = 시딩 컬럼 (점수 없음, bouts에 포함 안됨)
+            # tableIndex 1 = 32강 결과 (32명 경쟁)
+            # tableIndex 2 = 16강 결과 (16명 경쟁)
+            # tableIndex 3 = 8강 결과 (8명 경쟁)
+            for bout in deduped_bouts:
+                col_idx = bout['tableIndex']
+                # col_idx=1부터 점수 있는 컬럼, 라운드 크기 = bracket_size / 2^(col_idx-1)
+                if col_idx == 0:
+                    round_size = bracket_size
+                else:
+                    round_size = bracket_size // (2 ** (col_idx - 1))
+                round_name = self._get_round_name_by_size(round_size)
+                bout['round'] = round_name.replace('전', '')
+                bout['round_order'] = self._get_round_order(round_name)
+                bout['bout_id'] = f"{round_name}_{bout['matchNumber']:02d}"
+
+            bracket_data["bouts"] = deduped_bouts
+
+            # 7. 라운드별 그룹화
+            rounds_found = sorted(
+                set(b['round'] for b in deduped_bouts),
+                key=lambda r: self._get_round_order(r + '전')
+            )
+            bracket_data["rounds"] = rounds_found
+
+            if rounds_found:
+                bracket_data["starting_round"] = rounds_found[0]
+
+            bouts_by_round = {}
+            for bout in deduped_bouts:
+                r = bout['round']
+                if r not in bouts_by_round:
+                    bouts_by_round[r] = []
+                bouts_by_round[r].append(bout)
+            bracket_data["bouts_by_round"] = bouts_by_round
+
+            # 하위 호환성
+            bracket_data["results_by_round"] = self._convert_bouts_to_legacy(deduped_bouts)
+            bracket_data["match_results"] = self._flatten_bouts_to_results(deduped_bouts)
+            bracket_data["full_bouts"] = self._convert_to_full_bouts(deduped_bouts)
+
+            logger.info(f"DE v3 파싱 완료: {len(deduped_bouts)}개 경기 (중복제거 전 {len(all_bouts)}개), {len(rounds_found)}개 라운드, 시딩: {len(seeding_list)}명")
+            return bracket_data
+
+        except Exception as e:
+            logger.error(f"DE v3 파싱 오류: {e}")
+            import traceback
+            traceback.print_exc()
+            return {"rounds": [], "bouts": [], "seeding": [], "bouts_by_round": {}}
+
+    def _get_round_name_by_size(self, size: int) -> str:
+        """참가자 수로 라운드 이름 결정"""
+        if size >= 64:
+            return "64강전"
+        elif size >= 32:
+            return "32강전"
+        elif size >= 16:
+            return "16강전"
+        elif size >= 8:
+            return "8강전"
+        elif size >= 4:
+            return "준결승"
+        elif size >= 2:
+            return "결승"
+        return "3-4위전"
+
+    def _get_round_order(self, round_name: str) -> int:
+        """라운드 순서 반환"""
+        order = {
+            '128강전': 1, '64강전': 2, '32강전': 3, '16강전': 4,
+            '8강전': 5, '준결승': 6, '결승': 7, '3-4위전': 8
+        }
+        return order.get(round_name, order.get(round_name.replace('전', '') + '전', 99))
+
+    def _find_match_by_bracket_pos(self, bracket_pos: int, seeding_list: List[Dict]) -> Optional[Dict]:
+        """
+        시딩 리스트에서 bracket_pos에 해당하는 대진 찾기
+
+        FIE 시딩 규칙:
+        - 32강: 1v32, 17v16, 9v24, 25v8, 5v28, 21v12, 13v20, 29v4, ...
+        - bracket_pos = min(seed1, seed2)
+        """
+        # 표준 FIE 시딩 페어링
+        bracket_size = len(seeding_list)
+        if bracket_size <= 0:
+            return None
+
+        # bracket_pos에 해당하는 상대 시드 계산
+        opponent_seed = bracket_size + 1 - bracket_pos
+
+        p1 = next((s for s in seeding_list if s['seed'] == bracket_pos), None)
+        p2 = next((s for s in seeding_list if s['seed'] == opponent_seed), None)
+
+        if p1:
+            return {
+                'player1': p1,
+                'player2': p2
+            }
+        return None
+
+    async def _parse_de_bracket_v2_fallback(self, page: Page) -> Dict[str, Any]:
+        """v3 실패 시 기존 v2 로직으로 fallback"""
+        return await self._parse_de_bracket_v2_original(page)
+
+    async def _parse_de_bracket_v2_original(self, page: Page) -> Dict[str, Any]:
+        """기존 _parse_de_bracket_v2 로직 (fallback용) - 라운드 탭 순회"""
+        try:
+            bracket_data = {
+                "bracket_size": 0,
+                "participant_count": 0,
+                "starting_round": "",
+                "rounds": [],
+                "seeding": [],
+                "bouts": [],
+                "bouts_by_round": {},
+                "final_ranking": [],
+                "results_by_round": {},
+                "match_results": [],
+                "full_bouts": []
+            }
+
+            # 라운드 탭 목록 수집
+            round_tabs = await page.evaluate("""
+                () => {
+                    const tabs = [];
+                    const links = document.querySelectorAll('ul li a');
+                    links.forEach((link, idx) => {
+                        const text = link.textContent.trim();
+                        if (text.match(/^\\d+강전$|^준결승$|^결승$/)) {
+                            tabs.push({ text: text, index: idx });
+                        }
+                    });
+                    return tabs;
+                }
+            """)
+
+            if not round_tabs:
+                return await self._parse_de_bracket(page)
+
+            ROUND_ORDER = {
+                '128강전': 1, '64강전': 2, '32강전': 3, '16강전': 4,
+                '8강전': 5, '준결승': 6, '결승': 7
+            }
+            round_tabs.sort(key=lambda x: ROUND_ORDER.get(x['text'], 99))
+
+            all_bouts = []
+            all_seeding = []
+            bout_id_counter = 1
+
+            for tab_info in round_tabs:
+                round_name = tab_info['text']
+                round_order = ROUND_ORDER.get(round_name, 99)
+
+                try:
+                    tab_selector = f"ul li a:has-text('{round_name}')"
+                    await page.click(tab_selector, timeout=3000)
+                    await page.wait_for_timeout(800)
+
+                    round_bouts = await page.evaluate("""
+                        (roundName) => {
+                            const bouts = [];
+                            const tables = document.querySelectorAll('table table');
+
+                            tables.forEach((table, tableIdx) => {
+                                const rows = table.querySelectorAll('tr');
+                                const players = [];
+
+                                rows.forEach(row => {
+                                    const cell = row.querySelector('td');
+                                    if (!cell) return;
+
+                                    const divs = cell.querySelectorAll(':scope > div');
+                                    if (divs.length < 2) return;
+
+                                    const seed = parseInt(divs[0].textContent.trim());
+                                    if (!seed || isNaN(seed)) return;
+
+                                    const paragraphs = divs[1].querySelectorAll('p');
+                                    if (paragraphs.length < 1) return;
+
+                                    const name = paragraphs[0].textContent.trim();
+                                    if (!name) return;
+
+                                    let team = '', score = null, isWinner = false;
+                                    if (paragraphs.length >= 2) {
+                                        const infoText = paragraphs[1].textContent.trim();
+                                        const scoreMatch = infoText.match(/(\\d+)\\s*:\\s*(\\d+)/);
+                                        if (scoreMatch) {
+                                            score = { winner_score: parseInt(scoreMatch[1]), loser_score: parseInt(scoreMatch[2]) };
+                                            isWinner = true;
+                                        } else {
+                                            team = infoText;
+                                        }
+                                    }
+
+                                    players.push({ seed, name, team, score, isWinner });
+                                });
+
+                                for (let i = 0; i < players.length; i += 2) {
+                                    const p1 = players[i];
+                                    const p2 = players[i + 1];
+                                    if (!p1) continue;
+
+                                    if (!p2) {
+                                        if (p1.isWinner) {
+                                            bouts.push({
+                                                tableIndex: tableIdx, matchNumber: Math.floor(i / 2) + 1,
+                                                player1: p1, player2: null, winnerSeed: p1.seed, winnerName: p1.name,
+                                                isBye: true, isCompleted: true
+                                            });
+                                        }
+                                        continue;
+                                    }
+
+                                    let winner = null, loser = null;
+                                    if (p1.isWinner) { winner = p1; loser = p2; }
+                                    else if (p2.isWinner) { winner = p2; loser = p1; }
+
+                                    bouts.push({
+                                        tableIndex: tableIdx, matchNumber: Math.floor(i / 2) + 1,
+                                        player1: { seed: p1.seed, name: p1.name, team: p1.team || p2.team || '',
+                                                   score: winner && winner.seed === p1.seed ? winner.score?.winner_score : (winner ? winner.score?.loser_score : null) },
+                                        player2: { seed: p2.seed, name: p2.name, team: p2.team || p1.team || '',
+                                                   score: winner && winner.seed === p2.seed ? winner.score?.winner_score : (winner ? winner.score?.loser_score : null) },
+                                        winnerSeed: winner ? winner.seed : null, winnerName: winner ? winner.name : null,
+                                        isBye: false, isCompleted: !!winner
+                                    });
+                                }
+                            });
+                            return bouts;
+                        }
+                    """, round_name)
+
+                    for bout in round_bouts:
+                        bout['round'] = round_name.replace('전', '')
+                        bout['round_order'] = round_order
+                        bout['bout_id'] = f"{bout['round']}_{bout_id_counter:02d}"
+                        bout_id_counter += 1
+                        all_bouts.append(bout)
+
+                except Exception as e:
+                    logger.warning(f"  {round_name} 탭 파싱 오류: {e}")
+
+            bracket_data["bouts"] = all_bouts
+            rounds_found = sorted(set(b['round'] for b in all_bouts), key=lambda r: ROUND_ORDER.get(r + '전', 99))
+            bracket_data["rounds"] = rounds_found
+
+            if rounds_found:
+                bracket_data["starting_round"] = rounds_found[0]
+
+            bouts_by_round = {}
+            for bout in all_bouts:
+                r = bout['round']
+                if r not in bouts_by_round:
+                    bouts_by_round[r] = []
+                bouts_by_round[r].append(bout)
+            bracket_data["bouts_by_round"] = bouts_by_round
+
+            bracket_data["results_by_round"] = self._convert_bouts_to_legacy(all_bouts)
+            bracket_data["match_results"] = self._flatten_bouts_to_results(all_bouts)
+            bracket_data["full_bouts"] = self._convert_to_full_bouts(all_bouts)
+
+            return bracket_data
+
+        except Exception as e:
+            logger.error(f"DE v2 original 파싱 오류: {e}")
+            return {"rounds": [], "bouts": [], "seeding": [], "bouts_by_round": {}}
+
+    async def _parse_de_bracket_v2(self, page: Page) -> Dict[str, Any]:
+        """
+        DE 대진표 파싱 v2 - 라운드 탭 순회 방식
+
+        각 라운드 탭(32강전, 16강전, 8강전, 준결승, 결승)을 클릭하며 데이터 수집.
+        완전한 경기(bout) 정보를 수집: 양 선수 정보 + 점수 + 승패
+        """
+        try:
+            bracket_data = {
+                "bracket_size": 0,
+                "participant_count": 0,
+                "starting_round": "",
+                "rounds": [],
+                "seeding": [],
+                "bouts": [],
+                "bouts_by_round": {},
+                "final_ranking": [],
+                # 하위 호환성을 위한 기존 필드
+                "results_by_round": {},
+                "match_results": [],
+                "full_bouts": []
+            }
+
+            # 1. 먼저 라운드 탭 목록 수집
+            round_tabs = await page.evaluate("""
+                () => {
+                    const tabs = [];
+                    const links = document.querySelectorAll('ul li a');
+
+                    links.forEach((link, idx) => {
+                        const text = link.textContent.trim();
+                        // 라운드 탭 패턴: N강전, 준결승, 결승
+                        if (text.match(/^\\d+강전$|^준결승$|^결승$/)) {
+                            tabs.push({
+                                text: text,
+                                index: idx
+                            });
+                        }
+                    });
+
+                    return tabs;
+                }
+            """)
+
+            logger.debug(f"발견된 라운드 탭: {round_tabs}")
+
+            if not round_tabs:
+                # 탭이 없으면 현재 페이지에서 직접 파싱 시도
+                logger.debug("라운드 탭 없음, 단일 페이지 파싱 시도")
+                return await self._parse_de_single_page(page)
+
+            # 라운드 순서 정의
+            ROUND_ORDER = {
+                '128강전': 1, '64강전': 2, '32강전': 3, '16강전': 4,
+                '8강전': 5, '준결승': 6, '결승': 7
+            }
+
+            # 탭을 라운드 순서대로 정렬
+            round_tabs.sort(key=lambda x: ROUND_ORDER.get(x['text'], 99))
+
+            all_bouts = []
+            all_seeding = []
+            bout_id_counter = 1
+
+            # 2. 각 라운드 탭을 클릭하며 데이터 수집
+            for tab_info in round_tabs:
+                round_name = tab_info['text']
+                round_order = ROUND_ORDER.get(round_name, 99)
+
+                try:
+                    # 라운드 탭 클릭
+                    tab_selector = f"ul li a:has-text('{round_name}')"
+                    await page.click(tab_selector, timeout=3000)
+                    await page.wait_for_timeout(800)
+
+                    # 현재 라운드의 경기 데이터 파싱
+                    round_bouts = await page.evaluate("""
+                        (roundName) => {
+                            const bouts = [];
+
+                            // 대진표 테이블에서 선수 정보 추출
+                            // 각 경기는 연속된 2개 행으로 구성
+                            const tables = document.querySelectorAll('table table');
+
+                            tables.forEach((table, tableIdx) => {
+                                const rows = table.querySelectorAll('tr');
+                                const players = [];
+
+                                rows.forEach(row => {
+                                    const cell = row.querySelector('td');
+                                    if (!cell) return;
+
+                                    const divs = cell.querySelectorAll(':scope > div');
+                                    if (divs.length < 2) return;
+
+                                    // 시드 번호
+                                    const seedDiv = divs[0];
+                                    const seed = parseInt(seedDiv.textContent.trim());
+                                    if (!seed || isNaN(seed)) return;
+
+                                    // 선수 정보
+                                    const infoDiv = divs[1];
+                                    const paragraphs = infoDiv.querySelectorAll('p');
+                                    if (paragraphs.length < 1) return;
+
+                                    const name = paragraphs[0].textContent.trim();
+                                    if (!name) return;
+
+                                    // 소속/점수 파싱
+                                    let team = '';
+                                    let score = null;
+                                    let isWinner = false;
+
+                                    if (paragraphs.length >= 2) {
+                                        const infoText = paragraphs[1].textContent.trim();
+                                        const scoreMatch = infoText.match(/(\\d+)\\s*:\\s*(\\d+)/);
+
+                                        if (scoreMatch) {
+                                            // 점수가 있으면 승자
+                                            score = {
+                                                winner_score: parseInt(scoreMatch[1]),
+                                                loser_score: parseInt(scoreMatch[2])
+                                            };
+                                            isWinner = true;
+                                        } else {
+                                            // 점수가 없으면 소속
+                                            team = infoText;
+                                        }
+                                    }
+
+                                    players.push({
+                                        seed: seed,
+                                        name: name,
+                                        team: team,
+                                        score: score,
+                                        isWinner: isWinner
+                                    });
+                                });
+
+                                // 2명씩 경기로 매칭
+                                for (let i = 0; i < players.length; i += 2) {
+                                    const p1 = players[i];
+                                    const p2 = players[i + 1];
+
+                                    if (!p1) continue;
+
+                                    // 부전승 처리
+                                    if (!p2) {
+                                        if (p1.isWinner) {
+                                            bouts.push({
+                                                tableIndex: tableIdx,
+                                                matchNumber: Math.floor(i / 2) + 1,
+                                                player1: p1,
+                                                player2: null,
+                                                winnerSeed: p1.seed,
+                                                winnerName: p1.name,
+                                                isBye: true,
+                                                isCompleted: true
+                                            });
+                                        }
+                                        continue;
+                                    }
+
+                                    // 승자/패자 결정
+                                    let winner = null, loser = null;
+                                    if (p1.isWinner) {
+                                        winner = p1;
+                                        loser = p2;
+                                    } else if (p2.isWinner) {
+                                        winner = p2;
+                                        loser = p1;
+                                    }
+
+                                    const bout = {
+                                        tableIndex: tableIdx,
+                                        matchNumber: Math.floor(i / 2) + 1,
+                                        player1: {
+                                            seed: p1.seed,
+                                            name: p1.name,
+                                            team: p1.team || p2.team || '',
+                                            score: winner && winner.seed === p1.seed ?
+                                                   winner.score?.winner_score :
+                                                   (winner ? winner.score?.loser_score : null)
+                                        },
+                                        player2: {
+                                            seed: p2.seed,
+                                            name: p2.name,
+                                            team: p2.team || p1.team || '',
+                                            score: winner && winner.seed === p2.seed ?
+                                                   winner.score?.winner_score :
+                                                   (winner ? winner.score?.loser_score : null)
+                                        },
+                                        winnerSeed: winner ? winner.seed : null,
+                                        winnerName: winner ? winner.name : null,
+                                        isBye: false,
+                                        isCompleted: !!winner
+                                    };
+
+                                    bouts.push(bout);
+                                }
+                            });
+
+                            return bouts;
+                        }
+                    """, round_name)
+
+                    # 라운드 정보 추가
+                    for bout in round_bouts:
+                        bout['round'] = round_name.replace('전', '')  # "32강전" -> "32강"
+                        bout['round_order'] = round_order
+                        bout['bout_id'] = f"{bout['round']}_{bout_id_counter:02d}"
+                        bout_id_counter += 1
+                        all_bouts.append(bout)
+
+                    logger.debug(f"  {round_name}: {len(round_bouts)}개 경기 수집")
+
+                except Exception as e:
+                    logger.warning(f"  {round_name} 탭 클릭/파싱 오류: {e}")
+                    continue
+
+            # 3. 시딩 정보 수집 (첫 번째 라운드에서)
+            if round_tabs:
+                first_round = round_tabs[0]['text']
+                try:
+                    await page.click(f"ul li a:has-text('{first_round}')", timeout=3000)
+                    await page.wait_for_timeout(500)
+
+                    seeding = await page.evaluate("""
+                        () => {
+                            const players = [];
+                            const tables = document.querySelectorAll('table table');
+
+                            tables.forEach(table => {
+                                const rows = table.querySelectorAll('tr');
+
+                                rows.forEach(row => {
+                                    const cell = row.querySelector('td');
+                                    if (!cell) return;
+
+                                    const divs = cell.querySelectorAll(':scope > div');
+                                    if (divs.length < 2) return;
+
+                                    const seed = parseInt(divs[0].textContent.trim());
+                                    if (!seed || isNaN(seed)) return;
+
+                                    const paragraphs = divs[1].querySelectorAll('p');
+                                    const name = paragraphs[0]?.textContent.trim() || '';
+
+                                    let team = '';
+                                    if (paragraphs.length >= 2) {
+                                        const text = paragraphs[1].textContent.trim();
+                                        if (!text.match(/\\d+\\s*:\\s*\\d+/)) {
+                                            team = text;
+                                        }
+                                    }
+
+                                    if (name) {
+                                        players.push({ seed, name, team });
+                                    }
+                                });
+                            });
+
+                            // 중복 제거
+                            const unique = [];
+                            const seen = new Set();
+                            players.forEach(p => {
+                                if (!seen.has(p.seed)) {
+                                    seen.add(p.seed);
+                                    unique.push(p);
+                                }
+                            });
+
+                            return unique.sort((a, b) => a.seed - b.seed);
+                        }
+                    """)
+
+                    all_seeding = seeding
+                    logger.debug(f"시딩 정보: {len(all_seeding)}명")
+                except Exception as e:
+                    logger.warning(f"시딩 수집 오류: {e}")
+
+            # 4. 결과 구성
+            bracket_data["seeding"] = all_seeding
+            bracket_data["bouts"] = all_bouts
+            bracket_data["participant_count"] = len(all_seeding)
+
+            # 라운드 목록 (순서대로)
+            rounds_found = sorted(
+                set(b['round'] for b in all_bouts),
+                key=lambda r: ROUND_ORDER.get(r + '전', ROUND_ORDER.get(r, 99))
+            )
+            bracket_data["rounds"] = rounds_found
+
+            # 브래킷 크기 결정
+            if all_seeding:
+                pc = len(all_seeding)
+                for size in [8, 16, 32, 64, 128]:
+                    if pc <= size:
+                        bracket_data["bracket_size"] = size
+                        break
+                else:
+                    bracket_data["bracket_size"] = 128
+
+            # 시작 라운드 결정
+            if rounds_found:
+                bracket_data["starting_round"] = rounds_found[0]
+
+            # 5. 준결승/결승이 없으면 최종랭킹에서 추론
+            if '준결승' not in rounds_found or '결승' not in rounds_found:
+                try:
+                    final_ranking = await self._get_de_final_ranking(page)
+                    if final_ranking:
+                        bracket_data["final_ranking"] = final_ranking
+                        # 최종랭킹에서 준결승/결승 경기 추론
+                        inferred_bouts = self._infer_semifinal_final_bouts(final_ranking, bout_id_counter)
+                        for bout in inferred_bouts:
+                            all_bouts.append(bout)
+                            if bout['round'] not in rounds_found:
+                                rounds_found.append(bout['round'])
+                        # 라운드 재정렬
+                        rounds_found = sorted(
+                            set(b['round'] for b in all_bouts),
+                            key=lambda r: ROUND_ORDER.get(r + '전', ROUND_ORDER.get(r, 99))
+                        )
+                        bracket_data["rounds"] = rounds_found
+                        bracket_data["bouts"] = all_bouts
+                        logger.info(f"최종랭킹에서 {len(inferred_bouts)}개 경기 추론 완료")
+                except Exception as e:
+                    logger.debug(f"최종랭킹 추론 오류: {e}")
+
+            # 라운드별 그룹화
+            bouts_by_round = {}
+            for bout in all_bouts:
+                r = bout['round']
+                if r not in bouts_by_round:
+                    bouts_by_round[r] = []
+                bouts_by_round[r].append(bout)
+            bracket_data["bouts_by_round"] = bouts_by_round
+
+            # 하위 호환성: 기존 형식으로도 저장
+            bracket_data["results_by_round"] = self._convert_bouts_to_legacy(all_bouts)
+            bracket_data["match_results"] = self._flatten_bouts_to_results(all_bouts)
+            bracket_data["full_bouts"] = self._convert_to_full_bouts(all_bouts)
+
+            logger.info(f"DE v2 파싱 완료: {len(all_bouts)}개 경기, {len(rounds_found)}개 라운드")
+            return bracket_data
+
+        except Exception as e:
+            logger.error(f"DE v2 파싱 오류: {e}")
+            import traceback
+            traceback.print_exc()
+            return {"rounds": [], "bouts": [], "seeding": [], "bouts_by_round": {}}
+
+    async def _parse_de_single_page(self, page: Page) -> Dict[str, Any]:
+        """단일 페이지에서 DE 파싱 (탭이 없는 경우)"""
+        return await self._parse_de_bracket(page)
+
+    def _convert_bouts_to_legacy(self, bouts: List[Dict]) -> Dict[str, List[Dict]]:
+        """새 bout 형식을 기존 results_by_round 형식으로 변환"""
+        results_by_round = {}
+        for bout in bouts:
+            round_name = bout['round'] + '전'  # "32강" -> "32강전"
+            if round_name not in results_by_round:
+                results_by_round[round_name] = []
+
+            # 각 선수를 개별 레코드로
+            if bout.get('player1'):
+                p1 = bout['player1']
+                results_by_round[round_name].append({
+                    'seed': p1['seed'],
+                    'name': p1['name'],
+                    'team': p1.get('team', ''),
+                    'score': {
+                        'winner_score': p1.get('score') if bout.get('winnerSeed') == p1['seed'] else None,
+                        'loser_score': p1.get('score') if bout.get('winnerSeed') != p1['seed'] else None
+                    } if p1.get('score') else None,
+                    'is_match_result': bout.get('isCompleted', False),
+                    'table_index': bout.get('tableIndex', 0)
+                })
+
+            if bout.get('player2'):
+                p2 = bout['player2']
+                results_by_round[round_name].append({
+                    'seed': p2['seed'],
+                    'name': p2['name'],
+                    'team': p2.get('team', ''),
+                    'score': {
+                        'winner_score': p2.get('score') if bout.get('winnerSeed') == p2['seed'] else None,
+                        'loser_score': p2.get('score') if bout.get('winnerSeed') != p2['seed'] else None
+                    } if p2.get('score') else None,
+                    'is_match_result': bout.get('isCompleted', False),
+                    'table_index': bout.get('tableIndex', 0)
+                })
+
+        return results_by_round
+
+    def _flatten_bouts_to_results(self, bouts: List[Dict]) -> List[Dict]:
+        """bout 리스트를 match_results 리스트로 평탄화"""
+        results = []
+        for bout in bouts:
+            if not bout.get('isCompleted'):
+                continue
+
+            winner_seed = bout.get('winnerSeed')
+            if bout.get('player1') and bout['player1']['seed'] == winner_seed:
+                winner = bout['player1']
+            elif bout.get('player2') and bout['player2']['seed'] == winner_seed:
+                winner = bout['player2']
+            else:
+                continue
+
+            # player2가 None인 경우 (부전승) 처리
+            p1 = bout.get('player1')
+            p2 = bout.get('player2')
+            loser_score = None
+            if winner.get('score') and p1 and p2:
+                loser_score = p2.get('score') if p1['seed'] == winner_seed else p1.get('score')
+
+            results.append({
+                'seed': winner['seed'],
+                'name': winner['name'],
+                'team': winner.get('team', ''),
+                'score': {
+                    'winner_score': winner.get('score'),
+                    'loser_score': loser_score
+                } if winner.get('score') else None,
+                'is_match_result': True,
+                'round': bout['round'] + '전',
+                'table_index': bout.get('tableIndex', 0)
+            })
+
+        return results
+
+    def _convert_to_full_bouts(self, bouts: List[Dict]) -> List[Dict]:
+        """새 bout 형식을 full_bouts 형식으로 변환"""
+        full_bouts = []
+        for bout in bouts:
+            if not bout.get('isCompleted') or bout.get('isBye'):
+                continue
+
+            winner_seed = bout.get('winnerSeed')
+            p1, p2 = bout.get('player1'), bout.get('player2')
+
+            if not p1 or not p2:
+                continue
+
+            if p1['seed'] == winner_seed:
+                winner, loser = p1, p2
+            else:
+                winner, loser = p2, p1
+
+            full_bouts.append({
+                'table_index': bout.get('tableIndex', 0),
+                'round': bout['round'] + '전',
+                'winner': {
+                    'seed': winner['seed'],
+                    'name': winner['name'],
+                    'team': winner.get('team', ''),
+                    'score': winner.get('score')
+                },
+                'loser': {
+                    'seed': loser['seed'],
+                    'name': loser['name'],
+                    'team': loser.get('team', ''),
+                    'score': loser.get('score')
+                },
+                'score': {
+                    'winner_score': winner.get('score'),
+                    'loser_score': loser.get('score')
+                }
+            })
+
+        return full_bouts
+
+    async def _get_de_final_ranking(self, page: Page) -> List[Dict]:
+        """DE 최종 랭킹 수집 (준결승/결승 추론용)"""
+        try:
+            # "최종랭킹" 또는 "엘리미나시옹디렉트" 섹션에서 랭킹 데이터 추출
+            ranking = await page.evaluate("""
+                () => {
+                    const rankings = [];
+
+                    // 테이블에서 순위 데이터 찾기
+                    const tables = document.querySelectorAll('table');
+
+                    for (const table of tables) {
+                        const rows = table.querySelectorAll('tr');
+                        let foundRanking = false;
+
+                        rows.forEach((row, idx) => {
+                            const cells = row.querySelectorAll('td');
+                            if (cells.length < 2) return;
+
+                            const firstCellText = cells[0]?.textContent.trim();
+                            const secondCellText = cells[1]?.textContent.trim();
+
+                            // 순위 패턴: "1위", "2위", "3위" 등
+                            if (firstCellText && firstCellText.match(/^\\d+위?$/)) {
+                                foundRanking = true;
+                                const rank = parseInt(firstCellText);
+                                rankings.push({
+                                    rank: rank,
+                                    name: secondCellText,
+                                    team: cells[2]?.textContent.trim() || ''
+                                });
+                            }
+                        });
+
+                        if (foundRanking && rankings.length >= 4) {
+                            break;  // 충분한 데이터 수집됨
+                        }
+                    }
+
+                    return rankings.slice(0, 8);  // 상위 8명만
+                }
+            """)
+
+            return ranking
+        except Exception as e:
+            logger.debug(f"최종랭킹 수집 오류: {e}")
+            return []
+
+    def _infer_semifinal_final_bouts(self, final_ranking: List[Dict], bout_id_start: int) -> List[Dict]:
+        """최종 랭킹에서 준결승/결승 경기 추론
+
+        DE 토너먼트 구조:
+        - 1위: 결승 승자
+        - 2위: 결승 패자
+        - 3위, 4위: 준결승 패자들 (동률 3위인 경우 rank==3이 2명)
+        """
+        inferred_bouts = []
+
+        if len(final_ranking) < 4:
+            return inferred_bouts
+
+        # 1위, 2위 찾기
+        rank1 = next((p for p in final_ranking if p['rank'] == 1), None)
+        rank2 = next((p for p in final_ranking if p['rank'] == 2), None)
+
+        # 준결승 패자들: 3위가 2명이면 둘 다, 아니면 3위와 4위
+        rank3_players = [p for p in final_ranking if p['rank'] == 3]
+        if len(rank3_players) < 2:
+            # 3위가 1명이면 4위도 포함
+            rank4 = next((p for p in final_ranking if p['rank'] == 4), None)
+            if rank4:
+                rank3_players.append(rank4)
+
+        if not rank1 or not rank2:
+            return inferred_bouts
+
+        bout_id = bout_id_start
+
+        # 결승 경기 생성
+        final_bout = {
+            'bout_id': f"결승_{bout_id:02d}",
+            'round': '결승',
+            'round_order': 7,
+            'matchNumber': 1,
+            'tableIndex': 0,
+            'player1': {
+                'seed': None,
+                'name': rank1['name'],
+                'team': rank1.get('team', ''),
+                'score': None  # 점수는 알 수 없음
+            },
+            'player2': {
+                'seed': None,
+                'name': rank2['name'],
+                'team': rank2.get('team', ''),
+                'score': None
+            },
+            'winnerSeed': None,
+            'winnerName': rank1['name'],
+            'isCompleted': True,
+            'isBye': False,
+            'isInferred': True  # 추론된 경기임을 표시
+        }
+        inferred_bouts.append(final_bout)
+        bout_id += 1
+
+        # 준결승 경기 생성 (3위 선수가 2명이면)
+        if len(rank3_players) >= 2:
+            # 준결승 1: 1위 vs 3위 첫 번째
+            semifinal1 = {
+                'bout_id': f"준결승_{bout_id:02d}",
+                'round': '준결승',
+                'round_order': 6,
+                'matchNumber': 1,
+                'tableIndex': 0,
+                'player1': {
+                    'seed': None,
+                    'name': rank1['name'],
+                    'team': rank1.get('team', ''),
+                    'score': None
+                },
+                'player2': {
+                    'seed': None,
+                    'name': rank3_players[0]['name'],
+                    'team': rank3_players[0].get('team', ''),
+                    'score': None
+                },
+                'winnerSeed': None,
+                'winnerName': rank1['name'],
+                'isCompleted': True,
+                'isBye': False,
+                'isInferred': True
+            }
+            inferred_bouts.append(semifinal1)
+            bout_id += 1
+
+            # 준결승 2: 2위 vs 3위 두 번째
+            semifinal2 = {
+                'bout_id': f"준결승_{bout_id:02d}",
+                'round': '준결승',
+                'round_order': 6,
+                'matchNumber': 2,
+                'tableIndex': 0,
+                'player1': {
+                    'seed': None,
+                    'name': rank2['name'],
+                    'team': rank2.get('team', ''),
+                    'score': None
+                },
+                'player2': {
+                    'seed': None,
+                    'name': rank3_players[1]['name'],
+                    'team': rank3_players[1].get('team', ''),
+                    'score': None
+                },
+                'winnerSeed': None,
+                'winnerName': rank2['name'],
+                'isCompleted': True,
+                'isBye': False,
+                'isInferred': True
+            }
+            inferred_bouts.append(semifinal2)
+
+        return inferred_bouts
+
     async def _parse_de_bracket_simple(self, page: Page) -> List[Dict]:
         """간단한 엘리미나시옹디렉트 대진표 파싱 - 개별 경기 결과만"""
         try:
@@ -1376,11 +2717,11 @@ class KFFFullScraper:
             if i < start_comp:
                 continue
 
-            page_num = (i // 10) + 1
-            logger.info(f"[{i+1}/{len(competitions)}] {comp.name} (page {page_num})")
+            # comp.page_num 사용 - 대회가 실제로 위치한 페이지
+            logger.info(f"[{i+1}/{len(competitions)}] {comp.name} (page {comp.page_num})")
 
             try:
-                comp_data = await self.scrape_competition_full(comp, page_num=page_num)
+                comp_data = await self.scrape_competition_full(comp, page_num=comp.page_num)
 
                 # resume 모드: 기존 대회 데이터 업데이트
                 if resume_file and i < len(all_data.get("competitions", [])):
@@ -1429,7 +2770,8 @@ async def main():
     parser.add_argument("--output", type=str, default="data/fencing_full_data.json", help="출력 파일")
     parser.add_argument("--limit", type=int, default=None, help="수집할 대회 수 제한 (테스트용)")
     parser.add_argument("--status", type=str, default=None, help="상태 필터 (종료, 진행중, 접수마감 등)")
-    parser.add_argument("--headless", action="store_true", default=True, help="헤드리스 모드")
+    parser.add_argument("--headless", action="store_true", default=False, help="헤드리스 모드 (기본: headful)")
+    parser.add_argument("--headful", action="store_true", default=False, help="헤드풀 모드 (GUI 브라우저)")
     parser.add_argument("--start-comp", type=int, default=0, help="시작할 대회 인덱스 (0-based)")
     parser.add_argument("--resume", type=str, default=None, help="기존 데이터 파일에서 이어서 수집")
 

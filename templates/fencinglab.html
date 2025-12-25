@@ -4,6 +4,146 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="/static/css/fencinglab.css">
+<style>
+    .fl-club-section {
+        margin-bottom: 2rem;
+    }
+
+    .fl-club-header {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 2px solid var(--fl-primary, #00d4ff);
+    }
+
+    .fl-club-header h3 {
+        color: var(--fl-text-primary, #fff);
+        margin: 0;
+        font-size: 1.1rem;
+    }
+
+    .fl-club-header .badge {
+        background: var(--fl-primary, #00d4ff);
+        color: #000;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+
+    .fl-player-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 1rem;
+    }
+
+    .fl-player-card {
+        background: rgba(255,255,255,0.05);
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 12px;
+        padding: 1rem;
+        text-decoration: none;
+        transition: all 0.3s ease;
+    }
+
+    .fl-player-card:hover {
+        background: rgba(255,255,255,0.1);
+        border-color: var(--fl-primary, #00d4ff);
+        transform: translateY(-2px);
+    }
+
+    .fl-player-card .name {
+        color: var(--fl-text-primary, #fff);
+        font-weight: 600;
+        font-size: 1rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .fl-player-card .team {
+        color: var(--fl-text-muted, #888);
+        font-size: 0.8rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .fl-player-stats {
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+
+    .fl-stat-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .fl-stat-value {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: var(--fl-primary, #00d4ff);
+    }
+
+    .fl-stat-label {
+        font-size: 0.7rem;
+        color: var(--fl-text-muted, #888);
+    }
+
+    .fl-trend {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+
+    .fl-trend.up {
+        background: rgba(0, 255, 136, 0.2);
+        color: #00ff88;
+    }
+
+    .fl-trend.down {
+        background: rgba(255, 68, 68, 0.2);
+        color: #ff4444;
+    }
+
+    .fl-trend.stable {
+        background: rgba(255, 255, 255, 0.1);
+        color: var(--fl-text-secondary, #aaa);
+    }
+
+    .fl-affiliated-badge {
+        background: rgba(255, 170, 0, 0.2);
+        color: #ffaa00;
+        padding: 2px 6px;
+        border-radius: 8px;
+        font-size: 0.65rem;
+        margin-left: 0.5rem;
+    }
+
+    .fl-loading {
+        text-align: center;
+        padding: 3rem;
+        color: var(--fl-text-muted, #888);
+    }
+
+    .fl-loading-spinner {
+        width: 40px;
+        height: 40px;
+        border: 3px solid rgba(255,255,255,0.1);
+        border-top-color: var(--fl-primary, #00d4ff);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 1rem;
+    }
+
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+</style>
 {% endblock %}
 
 {% block content %}
@@ -13,17 +153,20 @@
         <p class="fl-subtitle">AI 기반 선수 분석 서비스</p>
     </div>
 
-    <!-- Club Player List -->
+    <!-- Tracked Players by Club -->
     <div class="fl-section">
-        <h3 style="color: var(--fl-text-primary); margin-bottom: 1rem;">
-            최병철펜싱클럽 선수 분석
+        <h3 style="color: var(--fl-text-primary); margin-bottom: 0.5rem;">
+            분석 대상 선수
         </h3>
         <p style="color: var(--fl-text-secondary); margin-bottom: 1.5rem;">
-            현재 최병철펜싱클럽 소속 선수에 대해서만 분석 서비스가 제공됩니다.
+            최병철펜싱클럽 및 산하 관리 선수들의 실시간 분석 데이터
         </p>
 
-        <div class="fl-player-list" id="playerList">
-            <p style="color: var(--fl-text-muted);">선수 목록을 불러오는 중...</p>
+        <div id="trackedPlayers">
+            <div class="fl-loading">
+                <div class="fl-loading-spinner"></div>
+                <p>선수 데이터를 불러오는 중...</p>
+            </div>
         </div>
     </div>
 </div>
@@ -34,22 +177,85 @@
 <script src="/static/js/fencinglab.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', async function() {
-    const playerList = document.getElementById('playerList');
+    const container = document.getElementById('trackedPlayers');
 
     try {
-        const data = await FencingLab.loadClubPlayers('최병철펜싱클럽');
-        if (data && data.players && data.players.length > 0) {
-            playerList.innerHTML = data.players.map(player => `
-                <a href="/fencinglab/player/${encodeURIComponent(player.name)}?team=${encodeURIComponent(player.team)}" class="fl-player-list-item">
-                    <h4>${player.name}</h4>
-                    <span class="stats">클릭하여 분석 보기</span>
-                </a>
-            `).join('');
-        } else {
-            playerList.innerHTML = '<p style="color: var(--fl-text-muted);">등록된 선수가 없습니다.</p>';
+        const response = await fetch('/api/fencinglab/tracked-players');
+        const data = await response.json();
+
+        if (!data.tracked_clubs || Object.keys(data.tracked_clubs).length === 0) {
+            container.innerHTML = '<p style="color: var(--fl-text-muted);">등록된 선수가 없습니다.</p>';
+            return;
         }
+
+        let html = '';
+
+        // 클럽 순서: 최병철펜싱클럽을 먼저, 나머지는 알파벳순
+        const clubs = Object.keys(data.tracked_clubs).sort((a, b) => {
+            if (a.includes('최병철')) return -1;
+            if (b.includes('최병철')) return 1;
+            return a.localeCompare(b, 'ko');
+        });
+
+        for (const clubName of clubs) {
+            const players = data.tracked_clubs[clubName];
+            const isMainClub = clubName.includes('최병철');
+
+            html += `
+                <div class="fl-club-section">
+                    <div class="fl-club-header">
+                        <h3>${clubName}</h3>
+                        <span class="badge">${players.length}명</span>
+                        ${!isMainClub ? '<span class="fl-affiliated-badge">산하 관리</span>' : ''}
+                    </div>
+                    <div class="fl-player-grid">
+            `;
+
+            // 승률 높은 순으로 정렬
+            players.sort((a, b) => b.win_rate - a.win_rate);
+
+            for (const player of players) {
+                const trendClass = player.recent_6_trend === '상승' ? 'up' :
+                                   player.recent_6_trend === '하락' ? 'down' : 'stable';
+                const trendIcon = player.recent_6_trend === '상승' ? '↑' :
+                                  player.recent_6_trend === '하락' ? '↓' : '→';
+
+                html += `
+                    <a href="/fencinglab/player/${encodeURIComponent(player.name)}?team=${encodeURIComponent(player.team)}" class="fl-player-card">
+                        <div class="name">${player.name}</div>
+                        <div class="team">${player.team}</div>
+                        <div class="fl-player-stats">
+                            <div class="fl-stat-item">
+                                <span class="fl-stat-value">${player.win_rate}%</span>
+                                <span class="fl-stat-label">전체 승률</span>
+                            </div>
+                            <div class="fl-stat-item">
+                                <span class="fl-stat-value">${player.total_matches}</span>
+                                <span class="fl-stat-label">경기수</span>
+                            </div>
+                            <div class="fl-stat-item">
+                                <span class="fl-stat-value">${player.recent_6_win_rate}%</span>
+                                <span class="fl-stat-label">최근6경기</span>
+                            </div>
+                            <div class="fl-stat-item">
+                                <span class="fl-trend ${trendClass}">${trendIcon} ${player.recent_6_trend}</span>
+                            </div>
+                        </div>
+                    </a>
+                `;
+            }
+
+            html += `
+                    </div>
+                </div>
+            `;
+        }
+
+        container.innerHTML = html;
+
     } catch (error) {
-        playerList.innerHTML = '<p style="color: var(--fl-accent-red);">데이터를 불러올 수 없습니다.</p>';
+        console.error('Error loading tracked players:', error);
+        container.innerHTML = '<p style="color: var(--fl-accent-red);">데이터를 불러올 수 없습니다.</p>';
     }
 });
 </script>

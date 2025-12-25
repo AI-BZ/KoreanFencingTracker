@@ -61,6 +61,121 @@ SCHOOL_LEVEL = {
     'club': 0  # 클럽은 별도 트랙
 }
 
+# 나이그룹 레벨 (성장 순서 - 시간이 지나면 레벨이 올라가야 함)
+AGE_GROUP_LEVEL = {
+    # 유년부
+    'U9': 1, 'Y9': 1,
+    'U11': 2, 'Y11': 2,
+    'U13': 3, 'Y13': 3,
+    # 초등
+    '초등저': 4, '초등고': 5, '초등부': 5,
+    # 중등
+    'U14': 6, 'Y14': 6, '여중': 6, '남중': 6, '중등부': 6,
+    # 고등
+    'U17': 7, 'Y17': 7, '여고': 7, '남고': 7, '고등부': 7,
+    # 대학/청년
+    'U20': 8, 'Y20': 8, '대학': 8, '청년부': 8,
+    # 일반/성인
+    '일반부': 9, '일반': 9, '시니어': 10,
+}
+
+
+def get_age_group_level(age_group: str) -> int:
+    """나이그룹의 레벨을 반환 (높을수록 나이가 많음)"""
+    if not age_group:
+        return 0
+
+    # 정확한 매칭
+    for key, level in AGE_GROUP_LEVEL.items():
+        if key in age_group:
+            return level
+    return 0
+
+
+def is_valid_age_progression(old_age_group: str, old_date: str, new_age_group: str, new_date: str) -> bool:
+    """
+    나이그룹 진행이 유효한지 확인
+    시간이 지나면 나이그룹이 올라가거나 유지되어야 함 (내려가면 안 됨)
+
+    Returns:
+        True if valid progression, False if suspicious (might be different person)
+    """
+    if not old_age_group or not new_age_group:
+        return True  # 정보 없으면 유효로 처리
+
+    old_level = get_age_group_level(old_age_group)
+    new_level = get_age_group_level(new_age_group)
+
+    if old_level == 0 or new_level == 0:
+        return True  # 레벨 파악 불가면 유효로 처리
+
+    # 날짜 비교
+    if old_date and new_date:
+        if new_date > old_date:
+            # 시간이 지났는데 나이그룹이 내려가면 이상함
+            if new_level < old_level:
+                return False
+
+    return True
+
+
+def extract_gender(event_name: str) -> str:
+    """
+    이벤트 이름에서 성별 추출
+
+    Returns:
+        'M' for 남자, 'F' for 여자, '' for unknown
+    """
+    if not event_name:
+        return ''
+
+    # 여자 패턴 (먼저 체크 - "여자", "여중", "여고", "여대" 등)
+    if re.search(r'여자|여중|여고|여대|여초', event_name):
+        return 'F'
+
+    # 남자 패턴
+    if re.search(r'남자|남중|남고|남대|남초', event_name):
+        return 'M'
+
+    return ''
+
+
+def is_gender_consistent(records: List[Dict]) -> Tuple[bool, str]:
+    """
+    레코드들의 성별이 일관성 있는지 확인
+
+    Returns:
+        (is_consistent, warning_message)
+        - True, '' if consistent or unknown
+        - False, warning_message if inconsistent (definitely different people)
+    """
+    genders = set()
+    gender_records = []
+
+    for record in records:
+        event_name = record.get('event_name', '')
+        gender = extract_gender(event_name)
+        if gender:
+            genders.add(gender)
+            gender_records.append({
+                'date': record.get('comp_date', ''),
+                'gender': '남자' if gender == 'M' else '여자',
+                'event': event_name
+            })
+
+    if len(genders) > 1:
+        # 남자와 여자가 섞여있음 - 확실히 다른 사람
+        male_record = next((r for r in gender_records if r['gender'] == '남자'), None)
+        female_record = next((r for r in gender_records if r['gender'] == '여자'), None)
+
+        warning = f"성별 불일치 감지 (동명이인): "
+        if male_record and female_record:
+            warning += f"남자({male_record['date']}) vs 여자({female_record['date']})"
+
+        return False, warning
+
+    return True, ''
+
 
 @dataclass
 class TeamRecord:
@@ -121,6 +236,9 @@ class PlayerProfile:
     # Podium counts by season
     podium_by_season: Dict[str, Dict[str, int]] = field(default_factory=dict)
 
+    # Disambiguation warnings
+    _age_group_warning: Optional[str] = field(default=None, repr=False)
+
     @property
     def current_team(self) -> str:
         """Get most recent team"""
@@ -158,6 +276,65 @@ class PlayerProfile:
 
         # Sort by first_seen date
         self.team_history.sort(key=lambda x: x.first_seen)
+
+    def check_data_integrity(self) -> Optional[str]:
+        """
+        데이터 무결성 검사 - 동명이인 오류 감지
+
+        검사 순서 (우선순위):
+        1. 성별 불일치 (절대적 - 남/여 바뀔 수 없음)
+        2. 나이그룹 역행 (시간이 지나면 나이가 어려질 수 없음)
+
+        Returns:
+            None if valid, warning message if suspicious
+        """
+        if not self.records:
+            return None
+
+        # 1. 성별 일관성 체크 (가장 중요 - 절대 불변)
+        is_consistent, gender_warning = is_gender_consistent(self.records)
+        if not is_consistent:
+            return gender_warning
+
+        # 2. 나이그룹 진행 체크
+        sorted_records = sorted(
+            [r for r in self.records if r.get('age_group')],
+            key=lambda x: x.get('comp_date', '')
+        )
+
+        if len(sorted_records) >= 2:
+            prev_record = None
+            for record in sorted_records:
+                if prev_record:
+                    prev_date = prev_record.get('comp_date', '')
+                    curr_date = record.get('comp_date', '')
+                    prev_age = prev_record.get('age_group', '')
+                    curr_age = record.get('age_group', '')
+
+                    if not is_valid_age_progression(prev_age, prev_date, curr_age, curr_date):
+                        return f"나이그룹 역행 감지: {prev_age}({prev_date[:10]}) → {curr_age}({curr_date[:10]})"
+
+                prev_record = record
+
+        return None
+
+    def check_age_group_validity(self) -> Optional[str]:
+        """Deprecated: use check_data_integrity instead"""
+        return self.check_data_integrity()
+
+    @property
+    def has_disambiguation_warning(self) -> bool:
+        """동명이인 오류 가능성이 있는지 확인"""
+        if self._age_group_warning is None:
+            self._age_group_warning = self.check_data_integrity() or ""
+        return bool(self._age_group_warning)
+
+    @property
+    def disambiguation_warning(self) -> str:
+        """동명이인 오류 경고 메시지"""
+        if self._age_group_warning is None:
+            self._age_group_warning = self.check_data_integrity() or ""
+        return self._age_group_warning
 
 
 @dataclass
@@ -311,11 +488,21 @@ class PlayerIdentityResolver:
     def _extract_age_group(self, event_name: str) -> str:
         """Extract age group from event name"""
         import re
+
+        # 전국남녀종별 형식: "여중", "남중", "여고", "남고", "여대", "남대", "일반"
+        # 클럽/동호인 형식: "초등부", "중등부", "고등부", "대학부", "일반부"
+        # 국제 형식: "U9", "U11", "U13", "U14", "U17", "U20"
         patterns = [
+            # 전국남녀종별 형식 (가장 먼저 체크 - 짧은 패턴)
+            r"(여중|남중|여고|남고|여대|남대)",
+            # 세이하부 형식
             r"(\d+세이하부)",
-            r"(초등부|중등부|고등부|대학부|일반부)",
-            r"(U\d+)",
-            r"(시니어|주니어|마스터)",
+            # 부별 형식
+            r"(초등부|중등부|고등부|대학부|일반부|초등저|초등고)",
+            # 국제 형식
+            r"([UY]\d+)",
+            # 기타
+            r"(시니어|주니어|마스터|일반)",
         ]
 
         for pattern in patterns:
@@ -329,8 +516,9 @@ class PlayerIdentityResolver:
         """
         Main identity resolution algorithm.
 
-        Strategy:
-        1. FIRST: Group by weapons - completely different weapons = different people
+        Strategy (우선순위):
+        0. ABSOLUTE FIRST: Group by GENDER - 남/여 절대 불변 (다른 사람 확정)
+        1. SECOND: Group by weapons - completely different weapons = different people
         2. For each weapon group, identify clear splits (overlapping competitions)
         3. Group remaining records by team continuity
         4. Handle team transitions (same person, different teams)
@@ -345,43 +533,244 @@ class PlayerIdentityResolver:
             # Sort records by date
             sorted_records = sorted(group.records, key=lambda x: x["comp_date"])
 
-            # Step 0: CRITICAL - Group by weapons first
-            # Completely different weapons (e.g., 플러레 vs 사브르) = DEFINITELY different people
-            weapon_groups = self._group_by_weapons(sorted_records)
+            # DEBUG: Check age regression on ALL records BEFORE gender split
+            # This catches impossible progressions like 일반부→여중
+            all_records_age_split = self._find_age_regression_split(sorted_records)
+            if all_records_age_split:
+                print(f"[DEBUG] Pre-gender age split for {name}: split at {all_records_age_split}")
+                self._create_separate_profiles_by_age_split(name, sorted_records, all_records_age_split)
+                continue  # Skip gender grouping - already split by age
+
+            # Step 0: ABSOLUTE FIRST - Group by GENDER
+            # Gender CANNOT change - Male vs Female = DEFINITELY different people
+            gender_groups = self._group_by_gender(sorted_records)
+
+            for gender_key, gender_records in gender_groups.items():
+                # Step 1: Group by weapons within each gender group
+                weapon_groups = self._group_by_weapons(gender_records)
+
+                if len(weapon_groups) > 1:
+                    # Multiple weapon groups = definitely different people
+                    for weapon_key, weapon_records in weapon_groups.items():
+                        overlapping_teams = self._find_overlapping_teams(weapon_records)
+                        if overlapping_teams:
+                            self._create_separate_profiles(name, weapon_records, overlapping_teams)
+                        else:
+                            if self._should_separate_by_team_pattern(weapon_records):
+                                pseudo_overlapping = self._create_pseudo_overlapping(weapon_records)
+                                self._create_separate_profiles(name, weapon_records, pseudo_overlapping)
+                            else:
+                                self._create_single_profile(name, weapon_records)
+                else:
+                    # Single weapon group - proceed with traditional algorithm
+                    overlapping_teams = self._find_overlapping_teams(gender_records)
+
+                    if overlapping_teams:
+                        self._create_separate_profiles(name, gender_records, overlapping_teams)
+                    else:
+                        # Step 2: Check for AGE GROUP REGRESSION (impossible - different people)
+                        age_split_point = self._find_age_regression_split(gender_records)
+                        if age_split_point:
+                            # DEBUG: print when age split is found
+                            print(f"[DEBUG] Age split found for {name}: split at {age_split_point}")
+                            self._create_separate_profiles_by_age_split(name, gender_records, age_split_point)
+                        elif self._should_separate_by_team_pattern(gender_records):
+                            pseudo_overlapping = self._create_pseudo_overlapping(gender_records)
+                            self._create_separate_profiles(name, gender_records, pseudo_overlapping)
+                        else:
+                            self._create_single_profile(name, gender_records)
+
+        # Post-resolution: Assign special IDs for reference players
+        return self._assign_special_ids()
+
+    def _find_age_regression_split(self, records: List[Dict]) -> Optional[str]:
+        """
+        Find the date where age group regression occurs (impossible = different people).
+
+        나이그룹 역행이 감지되면 분리 시점을 반환.
+        예: 일반부(2024) → 여중(2025) = 불가능, 분리 필요
+
+        Returns:
+            The comp_date where regression starts, or None if no regression
+        """
+        sorted_records = sorted(
+            [r for r in records if r.get('age_group')],
+            key=lambda x: x.get('comp_date', '')
+        )
+
+        if len(sorted_records) < 2:
+            return None
+
+        prev_record = None
+        for record in sorted_records:
+            if prev_record:
+                prev_date = prev_record.get('comp_date', '')
+                curr_date = record.get('comp_date', '')
+                prev_age = prev_record.get('age_group', '')
+                curr_age = record.get('age_group', '')
+
+                if prev_date and curr_date and curr_date > prev_date:
+                    prev_level = get_age_group_level(prev_age)
+                    curr_level = get_age_group_level(curr_age)
+
+                    # Significant regression (2+ levels down) = definitely different person
+                    # 일반부(9) → 여중(6) = 3 levels down = IMPOSSIBLE
+                    if prev_level > 0 and curr_level > 0 and prev_level - curr_level >= 2:
+                        return curr_date
+
+            prev_record = record
+
+        return None
+
+    def _create_separate_profiles_by_age_split(
+        self,
+        name: str,
+        records: List[Dict],
+        split_date: str
+    ) -> None:
+        """
+        Split records into two profiles based on age regression split point.
+
+        Records before split_date = Person A (older/adult)
+        Records from split_date = Person B (younger)
+
+        IMPORTANT: Each split group still needs gender/overlap processing!
+        """
+        before_records = []
+        after_records = []
+
+        for record in records:
+            comp_date = record.get('comp_date', '')
+            if comp_date < split_date:
+                before_records.append(record)
+            else:
+                after_records.append(record)
+
+        # Process each group through gender/overlap detection
+        for record_group in [before_records, after_records]:
+            if not record_group:
+                continue
+
+            # Apply gender grouping to this subset
+            self._process_records_with_gender_grouping(name, record_group)
+
+    def _process_records_with_gender_grouping(self, name: str, records: List[Dict]) -> None:
+        """
+        Process records through gender and overlap detection.
+        This is called for subsets after age-based splitting.
+        """
+        gender_groups = self._group_by_gender(records)
+
+        for gender_key, gender_records in gender_groups.items():
+            # Check for age regression within this gender group
+            age_split_point = self._find_age_regression_split(gender_records)
+            if age_split_point:
+                print(f"[DEBUG] Post-gender age split for {name} ({gender_key}): split at {age_split_point}")
+                # Recursively process the split groups
+                self._create_separate_profiles_by_age_split(name, gender_records, age_split_point)
+                continue
+
+            weapon_groups = self._group_by_weapons(gender_records)
 
             if len(weapon_groups) > 1:
-                # Multiple weapon groups = definitely different people
-                # Process each weapon group separately
                 for weapon_key, weapon_records in weapon_groups.items():
                     overlapping_teams = self._find_overlapping_teams(weapon_records)
                     if overlapping_teams:
                         self._create_separate_profiles(name, weapon_records, overlapping_teams)
                     else:
-                        # Check if we should still separate (e.g., different team types)
                         if self._should_separate_by_team_pattern(weapon_records):
                             pseudo_overlapping = self._create_pseudo_overlapping(weapon_records)
                             self._create_separate_profiles(name, weapon_records, pseudo_overlapping)
                         else:
                             self._create_single_profile(name, weapon_records)
             else:
-                # Single weapon group - proceed with traditional algorithm
-                # Step 1: Find overlapping competitions (definite different people)
-                overlapping_teams = self._find_overlapping_teams(sorted_records)
+                overlapping_teams = self._find_overlapping_teams(gender_records)
 
                 if overlapping_teams:
-                    # Multiple people with same name
-                    self._create_separate_profiles(name, sorted_records, overlapping_teams)
+                    self._create_separate_profiles(name, gender_records, overlapping_teams)
                 else:
-                    # Check for team pattern based separation
-                    if self._should_separate_by_team_pattern(sorted_records):
-                        pseudo_overlapping = self._create_pseudo_overlapping(sorted_records)
-                        self._create_separate_profiles(name, sorted_records, pseudo_overlapping)
+                    if self._should_separate_by_team_pattern(gender_records):
+                        pseudo_overlapping = self._create_pseudo_overlapping(gender_records)
+                        self._create_separate_profiles(name, gender_records, pseudo_overlapping)
                     else:
-                        # Likely same person with possible team changes
-                        self._create_single_profile(name, sorted_records)
+                        self._create_single_profile(name, gender_records)
 
-        # Post-resolution: Assign special IDs for reference players
-        return self._assign_special_ids()
+    def _group_by_gender(self, records: List[Dict]) -> Dict[str, List[Dict]]:
+        """
+        Group records by gender (ABSOLUTE - cannot change).
+
+        Key insight: Gender is IMMUTABLE.
+        - Same gender = could be same person
+        - Different gender = DEFINITELY different people (absolute rule)
+
+        Unknown gender records ('U') are assigned to known gender groups
+        if they share the same team (team continuity assumption).
+        If both M and F exist, unknown stays separate.
+
+        Returns:
+            Dict with keys: 'M' (male), 'F' (female), 'U' (unknown)
+        """
+        groups = {'M': [], 'F': [], 'U': []}
+
+        # First pass: separate by known gender
+        for record in records:
+            event_name = record.get('event_name', '')
+            gender = extract_gender(event_name)
+
+            if gender == 'M':
+                groups['M'].append(record)
+            elif gender == 'F':
+                groups['F'].append(record)
+            else:
+                groups['U'].append(record)
+
+        # Second pass: try to assign unknown gender records to known groups
+        # based on team continuity (same team = likely same person)
+        if groups['U']:
+            unknown_records = groups['U']
+            groups['U'] = []
+
+            # Get teams from known gender groups
+            male_teams = set(r.get('team', '') for r in groups['M'] if r.get('team'))
+            female_teams = set(r.get('team', '') for r in groups['F'] if r.get('team'))
+
+            for record in unknown_records:
+                team = record.get('team', '')
+
+                if team:
+                    # If team exists in only ONE gender group, assign to that group
+                    in_male = team in male_teams
+                    in_female = team in female_teams
+
+                    if in_male and not in_female:
+                        groups['M'].append(record)
+                    elif in_female and not in_male:
+                        groups['F'].append(record)
+                    elif not in_male and not in_female:
+                        # Team not in either group - check if only one gender exists
+                        if groups['M'] and not groups['F']:
+                            groups['M'].append(record)
+                        elif groups['F'] and not groups['M']:
+                            groups['F'].append(record)
+                        else:
+                            # Both exist or neither - keep unknown
+                            groups['U'].append(record)
+                    else:
+                        # Team exists in both groups - ambiguous, keep unknown
+                        groups['U'].append(record)
+                else:
+                    # No team info - keep unknown
+                    groups['U'].append(record)
+
+        # Remove empty groups
+        return {k: v for k, v in groups.items() if v}
+
+    def _try_assign_unknown_gender(self, records: List[Dict], known_genders: Dict[str, List[Dict]]) -> Dict[str, List[Dict]]:
+        """
+        Try to assign unknown gender records to known gender groups based on team/time proximity.
+        """
+        # For now, keep unknowns separate - they'll be merged later if teams match
+        return known_genders
 
     def _group_by_weapons(self, records: List[Dict]) -> Dict[str, List[Dict]]:
         """
@@ -941,11 +1330,16 @@ class PlayerIdentityResolver:
 
         return assigned
 
-    def search_players(self, query: str) -> List[PlayerProfile]:
-        """Search for players by name or current team
+    def search_players(self, query: str, include_history: bool = False) -> List[PlayerProfile]:
+        """Search for players by name or team
+
+        Args:
+            query: Search query (name or team name)
+            include_history: If True, also search team_history (for finding alumni/transferred players)
 
         When searching by team:
-        - Only returns players whose most recent competition was with that team
+        - Default: Only returns players whose most recent competition was with that team
+        - With include_history=True: Returns all players who ever played for that team
         """
         results = []
         results_set = set()  # To avoid duplicates
@@ -967,6 +1361,18 @@ class PlayerIdentityResolver:
             if profile.current_team and query_lower in profile.current_team.lower():
                 results.append(profile)
                 results_set.add(player_id)
+
+        # 3. Search by team history (alumni/transferred players)
+        if include_history:
+            for player_id, profile in self.profiles.items():
+                if player_id in results_set:
+                    continue
+                # Check if query matches any team in history
+                for team_record in profile.team_history:
+                    if team_record.team and query_lower in team_record.team.lower():
+                        results.append(profile)
+                        results_set.add(player_id)
+                        break
 
         return results
 

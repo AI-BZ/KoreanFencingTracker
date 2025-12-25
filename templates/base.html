@@ -4,27 +4,38 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Korean Fencing Tracker{% endblock %}</title>
-    <link rel="stylesheet" href="/static/css/style.css">
+
+    <!-- Modern Fonts: Pretendard (Korean) + Inter (English) -->
+    <link rel="preconnect" href="https://cdn.jsdelivr.net">
+    <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="/static/css/dark-theme.css">
     <link rel="stylesheet" href="/static/css/components.css">
     {% block extra_css %}{% endblock %}
 </head>
 <body>
+    <!-- Parallax Background Container -->
+    <div class="parallax-bg" id="parallaxBg">
+        <div class="parallax-overlay"></div>
+    </div>
+
     <nav class="navbar">
         <div class="container">
             <a href="/" class="logo">
                 <span class="logo-icon">⚔️</span>
                 <span class="logo-text">Korean Fencing Tracker</span>
             </a>
+            <div class="auth-nav" id="authNav">
+                <a href="/auth/login" class="auth-btn login-btn" id="loginBtn">로그인</a>
+            </div>
             <div class="nav-links">
                 <a href="/">검색</a>
-                <a href="/rankings">랭킹</a>
+                <a href="/rankings">Ranking</a>
                 <a href="/fencinglab">FencingLab</a>
             </div>
             <div class="search-box">
                 <input type="text" id="global-search" placeholder="선수/소속 검색...">
-            </div>
-            <div class="auth-nav" id="authNav">
-                <a href="/auth/login" class="auth-btn login-btn" id="loginBtn">로그인</a>
             </div>
         </div>
     </nav>
@@ -42,6 +53,38 @@
 
     <script src="/static/js/main.js"></script>
     <script>
+    // Parallax Scrolling Effect
+    (function() {
+        const parallaxBg = document.getElementById('parallaxBg');
+        let ticking = false;
+
+        function updateParallax() {
+            const scrollY = window.scrollY;
+            const windowHeight = window.innerHeight;
+            const docHeight = document.documentElement.scrollHeight;
+
+            // Calculate scroll progress (0 to 1)
+            const scrollProgress = scrollY / (docHeight - windowHeight);
+
+            // Move background from top (mask area) to bottom (legs area)
+            // Image moves slower than scroll for parallax effect
+            const bgPosition = scrollProgress * 50; // 0% to 50% vertical movement
+
+            parallaxBg.style.backgroundPositionY = `${bgPosition}%`;
+            ticking = false;
+        }
+
+        window.addEventListener('scroll', function() {
+            if (!ticking) {
+                requestAnimationFrame(updateParallax);
+                ticking = true;
+            }
+        });
+
+        // Initial position
+        updateParallax();
+    })();
+
     // 로그인 상태 확인
     document.addEventListener('DOMContentLoaded', async function() {
         try {

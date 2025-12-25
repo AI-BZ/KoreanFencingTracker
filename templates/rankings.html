@@ -1,36 +1,89 @@
 {% extends "base.html" %}
 
-{% block title %}랭킹 - Korean Fencing Tracker{% endblock %}
+{% block title %}FencingLab Ranking - Korean Fencing Tracker{% endblock %}
 
 {% block extra_css %}
 <style>
     .ranking-container {
-        max-width: 1200px;
+        max-width: 1400px;
         margin: 0 auto;
-        padding: 20px;
+        padding: 24px;
     }
 
+    /* Modern Header */
     .ranking-header {
         text-align: center;
-        margin-bottom: 30px;
+        margin-bottom: 32px;
+        padding: 40px 20px;
+        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+        border-radius: 16px;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .ranking-header::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
+        background: radial-gradient(circle, rgba(255,215,0,0.1) 0%, transparent 50%);
+        animation: pulse 4s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+        0%, 100% { transform: scale(1); opacity: 0.5; }
+        50% { transform: scale(1.1); opacity: 0.8; }
     }
 
     .ranking-header h1 {
-        font-size: 2rem;
-        color: var(--primary-color, #1a5f7a);
+        font-size: 2.5rem;
+        color: #fff;
+        margin-bottom: 8px;
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
     }
 
+    .ranking-header h1::before {
+        content: '🏆';
+        font-size: 2rem;
+    }
+
+    .ranking-header p {
+        color: rgba(255,255,255,0.7);
+        font-size: 0.95rem;
+        position: relative;
+    }
+
+    /* Filter Section */
     .filter-section {
-        background: #f8f9fa;
-        border-radius: 8px;
-        padding: 20px;
-        margin-bottom: 30px;
+        background: linear-gradient(145deg, #f8fafc, #e2e8f0);
+        border-radius: 16px;
+        padding: 24px;
+        margin-bottom: 24px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        border: 1px solid rgba(255,255,255,0.8);
     }
 
     .filter-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-        gap: 15px;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 16px;
+    }
+
+    @media (max-width: 1024px) {
+        .filter-grid {
+            grid-template-columns: repeat(3, 1fr);
+        }
+    }
+
+    @media (max-width: 640px) {
+        .filter-grid {
+            grid-template-columns: 1fr 1fr;
+        }
     }
 
     .filter-group {
@@ -40,126 +93,198 @@
 
     .filter-group label {
         font-weight: 600;
-        margin-bottom: 5px;
-        color: #333;
+        margin-bottom: 8px;
+        color: #334155;
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
     }
 
     .filter-group select {
-        padding: 10px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
+        padding: 12px 16px;
+        border: 2px solid #e2e8f0;
+        border-radius: 10px;
         font-size: 14px;
+        background: #fff;
+        color: #1e293b;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23334155' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 12px center;
+        padding-right: 36px;
+    }
+
+    .filter-group select:hover {
+        border-color: var(--primary-color);
+    }
+
+    .filter-group select:focus {
+        outline: none;
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 3px rgba(26, 95, 122, 0.15);
+    }
+
+    /* Category Toggle */
+    .category-section {
+        margin-top: 16px;
+        padding-top: 16px;
+        border-top: 1px solid #e2e8f0;
     }
 
     .category-toggle {
         display: flex;
-        gap: 10px;
-        margin-top: 10px;
+        gap: 8px;
+        flex-wrap: wrap;
     }
 
     .category-btn {
-        padding: 10px 20px;
-        border: 2px solid var(--primary-color);
-        background: white;
-        border-radius: 4px;
+        padding: 10px 24px;
+        border: 2px solid #e2e8f0;
+        background: #fff;
+        color: #475569;
+        border-radius: 8px;
         cursor: pointer;
         font-weight: 600;
-        transition: all 0.3s;
+        font-size: 14px;
+        transition: all 0.2s ease;
+    }
+
+    .category-btn:hover:not(.active) {
+        border-color: var(--primary-color);
+        color: var(--primary-color);
+        background: rgba(26, 95, 122, 0.05);
     }
 
     .category-btn.active {
         background: var(--primary-color);
-        color: white;
-    }
-
-    .category-btn:hover:not(.active) {
-        background: #f0f0f0;
+        color: #fff;
+        border-color: var(--primary-color);
+        box-shadow: 0 4px 12px rgba(26, 95, 122, 0.3);
     }
 
     .category-hidden {
         display: none !important;
     }
 
+    /* Ranking Info Card */
     .ranking-info {
-        background: linear-gradient(135deg, var(--primary-color) 0%, #2980b9 100%);
-        color: white;
-        padding: 20px;
-        border-radius: 8px;
-        margin-bottom: 20px;
+        background: linear-gradient(135deg, #1a5f7a 0%, #0f3460 100%);
+        color: #fff;
+        padding: 24px 32px;
+        border-radius: 16px;
+        margin-bottom: 24px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 20px;
+        box-shadow: 0 8px 32px rgba(26, 95, 122, 0.3);
     }
 
     .ranking-info h2 {
-        margin: 0 0 10px 0;
-        font-size: 1.5rem;
+        margin: 0;
+        font-size: 1.75rem;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .ranking-info h2::before {
+        content: '📊';
     }
 
     .ranking-info-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
-        gap: 10px;
+        display: flex;
+        gap: 32px;
     }
 
     .info-item {
         text-align: center;
+        padding: 8px 16px;
+        background: rgba(255,255,255,0.1);
+        border-radius: 12px;
     }
 
     .info-value {
-        font-size: 1.5rem;
-        font-weight: bold;
+        font-size: 2rem;
+        font-weight: 700;
+        line-height: 1.2;
     }
 
     .info-label {
-        font-size: 0.875rem;
-        opacity: 0.9;
+        font-size: 0.8rem;
+        opacity: 0.85;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
     }
 
+    /* Ranking Table */
     .ranking-table-container {
         overflow-x: auto;
+        border-radius: 16px;
+        box-shadow: 0 4px 24px rgba(0,0,0,0.12);
     }
 
     .ranking-table {
         width: 100%;
         border-collapse: collapse;
-        background: white;
-        border-radius: 8px;
+        background: #1a1a2e;
+        border-radius: 16px;
         overflow: hidden;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
 
     .ranking-table th,
     .ranking-table td {
-        padding: 12px 15px;
+        padding: 16px 20px;
         text-align: left;
-        border-bottom: 1px solid #eee;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        color: #e2e8f0;
     }
 
     .ranking-table th {
-        background: #f8f9fa;
+        background: linear-gradient(180deg, #16213e 0%, #1a1a2e 100%);
         font-weight: 600;
-        color: #333;
+        color: #94a3b8;
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        position: sticky;
+        top: 0;
     }
 
-    .ranking-table tr:hover {
-        background: #f5f5f5;
+    .ranking-table tbody tr {
+        transition: all 0.2s ease;
+    }
+
+    .ranking-table tbody tr:hover {
+        background: rgba(99, 102, 241, 0.1);
+    }
+
+    /* Top 3 Row Styles */
+    .ranking-table tbody tr:nth-child(1) {
+        background: linear-gradient(90deg, rgba(255,215,0,0.15) 0%, transparent 100%);
+    }
+
+    .ranking-table tbody tr:nth-child(2) {
+        background: linear-gradient(90deg, rgba(192,192,192,0.1) 0%, transparent 100%);
+    }
+
+    .ranking-table tbody tr:nth-child(3) {
+        background: linear-gradient(90deg, rgba(205,127,50,0.1) 0%, transparent 100%);
     }
 
     .rank-cell {
-        font-weight: bold;
+        font-weight: 700;
         text-align: center;
-        width: 60px;
+        width: 70px;
+        font-size: 1.1rem;
     }
 
-    .rank-1 {
-        color: #FFD700;
-    }
-
-    .rank-2 {
-        color: #C0C0C0;
-    }
-
-    .rank-3 {
-        color: #CD7F32;
-    }
+    .rank-1 { color: #FFD700; text-shadow: 0 0 10px rgba(255,215,0,0.5); }
+    .rank-2 { color: #C0C0C0; text-shadow: 0 0 10px rgba(192,192,192,0.5); }
+    .rank-3 { color: #CD7F32; text-shadow: 0 0 10px rgba(205,127,50,0.5); }
 
     .medal-cell {
         text-align: center;
@@ -169,67 +294,76 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 24px;
-        height: 24px;
+        width: 28px;
+        height: 28px;
         border-radius: 50%;
         font-size: 0.75rem;
-        font-weight: bold;
-        margin: 0 2px;
+        font-weight: 700;
+        margin: 0 3px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
     }
 
     .medal-gold {
-        background: #FFD700;
-        color: #333;
+        background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+        color: #1a1a2e;
     }
 
     .medal-silver {
-        background: #C0C0C0;
-        color: #333;
+        background: linear-gradient(135deg, #E8E8E8 0%, #A0A0A0 100%);
+        color: #1a1a2e;
     }
 
     .medal-bronze {
-        background: #CD7F32;
-        color: white;
+        background: linear-gradient(135deg, #CD7F32 0%, #8B4513 100%);
+        color: #fff;
     }
 
     .points-cell {
-        font-weight: bold;
-        color: var(--primary-color);
+        font-weight: 700;
+        color: #60a5fa !important;
+        font-size: 1.05rem;
     }
 
     .player-link {
-        color: #333;
+        color: #f1f5f9;
         text-decoration: none;
+        font-weight: 500;
+        transition: color 0.2s;
     }
 
     .player-link:hover {
-        color: var(--primary-color);
-        text-decoration: underline;
+        color: #60a5fa;
     }
 
     .team-badge {
         display: inline-block;
-        background: #e9ecef;
-        padding: 2px 8px;
-        border-radius: 12px;
-        font-size: 0.8rem;
+        background: rgba(99, 102, 241, 0.15);
+        color: #a5b4fc;
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 0.75rem;
         margin: 2px;
+        border: 1px solid rgba(99, 102, 241, 0.3);
     }
 
+    /* Loading State */
     .loading {
         text-align: center;
-        padding: 40px;
-        color: #666;
+        padding: 60px 40px;
+        color: #64748b;
+        background: linear-gradient(145deg, #f8fafc, #e2e8f0);
+        border-radius: 16px;
     }
 
     .loading-spinner {
         display: inline-block;
-        width: 40px;
-        height: 40px;
-        border: 4px solid #f3f3f3;
+        width: 48px;
+        height: 48px;
+        border: 4px solid #e2e8f0;
         border-top: 4px solid var(--primary-color);
         border-radius: 50%;
-        animation: spin 1s linear infinite;
+        animation: spin 0.8s linear infinite;
+        margin-bottom: 16px;
     }
 
     @keyframes spin {
@@ -239,36 +373,94 @@
 
     .error-message {
         text-align: center;
-        padding: 40px;
-        color: #dc3545;
-        background: #ffe6e6;
-        border-radius: 8px;
+        padding: 48px;
+        color: #ef4444;
+        background: linear-gradient(145deg, #fef2f2, #fee2e2);
+        border-radius: 16px;
+        border: 1px solid #fecaca;
     }
 
+    .error-message p {
+        margin: 8px 0;
+    }
+
+    /* Pagination */
     .pagination {
         display: flex;
         justify-content: center;
-        gap: 5px;
-        margin-top: 20px;
+        gap: 8px;
+        margin-top: 24px;
+        padding: 16px;
     }
 
     .page-btn {
-        padding: 8px 12px;
-        border: 1px solid #ddd;
-        background: white;
-        border-radius: 4px;
+        padding: 10px 16px;
+        border: 2px solid #334155;
+        background: #1e293b;
+        color: #e2e8f0;
+        border-radius: 8px;
         cursor: pointer;
+        font-weight: 600;
+        transition: all 0.2s;
     }
 
     .page-btn.active {
         background: var(--primary-color);
-        color: white;
+        color: #fff;
         border-color: var(--primary-color);
+        box-shadow: 0 4px 12px rgba(26, 95, 122, 0.4);
+    }
+
+    .page-btn:hover:not(.active):not(:disabled) {
+        background: #334155;
+        border-color: #475569;
     }
 
     .page-btn:disabled {
-        opacity: 0.5;
+        opacity: 0.4;
         cursor: not-allowed;
+    }
+
+    /* National Team Badge */
+    .national-team-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        background: linear-gradient(135deg, #dc2626, #991b1b);
+        color: #fff;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        margin-left: 8px;
+    }
+
+    .national-team-badge::before {
+        content: '🇰🇷';
+        font-size: 0.8rem;
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+        .ranking-header h1 {
+            font-size: 1.75rem;
+        }
+
+        .ranking-info {
+            flex-direction: column;
+            text-align: center;
+        }
+
+        .ranking-info-grid {
+            width: 100%;
+            justify-content: center;
+        }
+
+        .ranking-table th,
+        .ranking-table td {
+            padding: 12px 10px;
+            font-size: 0.9rem;
+        }
     }
 </style>
 {% endblock %}
@@ -276,8 +468,8 @@
 {% block content %}
 <div class="ranking-container">
     <div class="ranking-header">
-        <h1>대한펜싱 랭킹</h1>
-        <p>FIE + USA Fencing 포인트 시스템 기반 랭킹</p>
+        <h1>FencingLab Ranking</h1>
+        <p>FIE + USA Fencing 포인트 시스템 기반 비공식 커뮤니티 랭킹</p>
     </div>
 
     <div class="filter-section">
@@ -305,8 +497,9 @@
                     <option value="E3" data-has-category="false">초등 5-6 (U13)</option>
                     <option value="MS" data-has-category="true">중등</option>
                     <option value="HS" data-has-category="true">고등</option>
-                    <option value="UNI" data-has-category="true" selected>대학</option>
-                    <option value="SR" data-has-category="true">일반</option>
+                    <option value="UNI" data-has-category="true">대학</option>
+                    <option value="SR" data-has-category="true" selected>일반</option>
+                    <option value="NT" data-has-category="false" data-is-national="true">🇰🇷 국가대표</option>
                 </select>
             </div>
             <div class="filter-group">
@@ -361,7 +554,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let currentCategory = 'PRO';
     let currentPage = 1;
 
-    // Load years
+    // Load years and set default to 2025 (most recent year in DB)
     fetch('/api/rankings/options')
         .then(res => res.json())
         .then(data => {
@@ -371,6 +564,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 opt.textContent = `${year}년`;
                 yearSelect.appendChild(opt);
             });
+            // Set default to 2025 (latest competition year)
+            if (data.years.includes(2025)) {
+                yearSelect.value = '2025';
+            } else if (data.years.length > 0) {
+                yearSelect.value = data.years[0];  // 가장 최신 연도
+            }
+            loadRankings();  // 연도 설정 후 로드
         });
 
     // Category buttons
@@ -525,8 +725,7 @@ document.addEventListener('DOMContentLoaded', function() {
         window.scrollTo(0, 0);
     };
 
-    // Initial load
-    loadRankings();
+    // Initial load is triggered after years are loaded (see above)
 });
 </script>
 {% endblock %}

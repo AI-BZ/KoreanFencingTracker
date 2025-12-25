@@ -2128,3 +2128,584 @@
 #tab-analysis .fl-history-title {
     color: var(--text-color, #333);
 }
+
+/* =====================================================
+   DARK THEME OVERRIDES
+   ===================================================== */
+
+/* Tab Navigation */
+.tabs {
+    background: rgba(26, 26, 37, 0.6);
+    border-bottom-color: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-radius: 8px 8px 0 0;
+}
+
+.tab-btn {
+    color: var(--text-secondary, #7f8c8d);
+}
+
+.tab-btn:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-primary, #2c3e50);
+}
+
+.tab-btn.active {
+    background: var(--accent-primary, #c9302c);
+}
+
+/* Pool Section */
+.pool-selector {
+    background: var(--bg-tertiary, #f8f9fa);
+}
+
+.pool-btn {
+    background: var(--bg-card, white);
+    border-color: var(--border-color, #e0e0e0);
+    color: var(--text-primary, #333);
+}
+
+.pool-btn:hover {
+    border-color: var(--accent-primary, #c9302c);
+    color: var(--accent-primary, #c9302c);
+}
+
+.pool-btn.active {
+    background: var(--accent-primary, #c9302c);
+    border-color: var(--accent-primary, #c9302c);
+    color: white;
+}
+
+.pool-container {
+    background: var(--bg-card, white);
+}
+
+.pool-title {
+    border-bottom-color: var(--accent-primary, #c9302c);
+}
+
+.pool-title h4 {
+    color: var(--accent-gold, #d4a574);
+}
+
+.pool-info {
+    color: var(--text-muted, #7f8c8d);
+}
+
+/* Matrix Table */
+.matrix-table th {
+    background: var(--accent-primary, #c9302c);
+}
+
+.matrix-table .player-col,
+.matrix-table .team-col {
+    background: var(--bg-tertiary, #f8f9fa);
+    color: var(--text-primary, #333);
+}
+
+.matrix-table .team-col {
+    color: var(--text-muted, #666);
+}
+
+.matrix-table .victory {
+    background: rgba(16, 185, 129, 0.2);
+    color: var(--success-color, #10b981);
+}
+
+.matrix-table .defeat {
+    background: rgba(239, 68, 68, 0.2);
+    color: var(--danger-color, #ef4444);
+}
+
+.matrix-table .self {
+    background: var(--bg-tertiary, #e0e0e0);
+}
+
+.matrix-table .stats-col {
+    background: var(--bg-secondary, #f5f5f5);
+}
+
+/* Bout List */
+.bout-list {
+    border-top-color: var(--border-color, #e0e0e0);
+}
+
+.bout-list-header {
+    background: var(--bg-tertiary, #f8f9fa);
+}
+
+.bout-list-header:hover {
+    background: var(--bg-secondary, #e8e8e8);
+}
+
+.bout-item {
+    border-bottom-color: var(--border-color, #f0f0f0);
+}
+
+.bout-player.winner {
+    color: var(--success-color, #10b981);
+}
+
+.bout-player.loser {
+    color: var(--text-muted, #7f8c8d);
+}
+
+.bout-score {
+    background: var(--bg-tertiary, #f5f5f5);
+    color: var(--text-primary, #333);
+}
+
+/* Tournament Container */
+.tournament-container {
+    background: var(--bg-card, white);
+}
+
+/* DE Seeding */
+.seeding-content {
+    background: var(--bg-tertiary, linear-gradient(135deg, #f8f9fa, #fff));
+}
+
+.seeding-item {
+    background: var(--bg-card, white);
+    border-color: var(--border-color, #eee);
+}
+
+.seeding-rank {
+    color: var(--accent-primary, #c9302c);
+    background: rgba(201, 48, 44, 0.1);
+}
+
+.seeding-name a:hover {
+    color: var(--accent-primary, #c9302c);
+}
+
+.seeding-team {
+    color: var(--text-muted, #666);
+}
+
+/* DE Round Tabs */
+.de-round-tabs {
+    background: var(--bg-tertiary, linear-gradient(135deg, #f8f9fa, #e9ecef));
+}
+
+.de-round-tab {
+    background: var(--bg-card, white);
+    border-color: var(--border-color, #ddd);
+    color: var(--text-primary, #333);
+}
+
+.de-round-tab:hover {
+    border-color: var(--accent-primary, #c9302c);
+    color: var(--accent-primary, #c9302c);
+}
+
+.de-round-tab.active {
+    background: linear-gradient(135deg, var(--accent-primary, #c9302c), #a02320);
+    border-color: var(--accent-primary, #c9302c);
+}
+
+/* DE Match Card */
+.de-match-card {
+    background: var(--bg-card, white);
+    border-color: var(--border-color, #e0e0e0);
+}
+
+.de-match-card:hover {
+    box-shadow: 0 8px 25px rgba(201, 48, 44, 0.2);
+}
+
+.de-match-number {
+    background: var(--bg-tertiary, #f5f5f5);
+    color: var(--text-muted, #666);
+}
+
+.de-player {
+    background: transparent;
+}
+
+.de-player.winner {
+    background: rgba(16, 185, 129, 0.15);
+    border-left-color: var(--success-color, #10b981);
+}
+
+.de-player.loser {
+    background: var(--bg-tertiary, #f5f5f5);
+}
+
+.de-seed {
+    background: var(--accent-primary, #c9302c);
+}
+
+.de-player.loser .de-seed {
+    background: var(--text-muted, #9e9e9e);
+}
+
+.de-player-name {
+    color: var(--text-primary, #333);
+}
+
+.de-player-team {
+    color: var(--text-muted, #666);
+}
+
+.de-score {
+    color: var(--accent-primary, #c9302c);
+}
+
+.de-player.loser .de-score {
+    color: var(--text-muted, #666);
+}
+
+.de-vs {
+    color: var(--text-muted, #666);
+}
+
+.de-match-result {
+    background: var(--bg-tertiary, #f8f9fa);
+}
+
+.de-winner-badge {
+    background: linear-gradient(135deg, var(--accent-gold, #FFD700), var(--accent-bronze, #FFA500));
+}
+
+/* Tree Bracket */
+.de-tree-match {
+    background: var(--bg-card, white);
+}
+
+.de-tree-player {
+    border-bottom-color: var(--border-color, #eee);
+}
+
+.de-tree-player .seed {
+    color: var(--accent-primary, #c9302c);
+    background: rgba(201, 48, 44, 0.1);
+}
+
+.de-tree-player .name {
+    color: var(--text-primary, #333);
+}
+
+.de-tree-player.winner .name {
+    color: var(--success-color, #155724);
+}
+
+.de-tree-player .score {
+    color: var(--accent-primary, #c9302c);
+}
+
+/* Podium */
+.podium-section {
+    background: var(--bg-card, linear-gradient(135deg, #f5f5f5, #fff));
+}
+
+.podium-box {
+    background: var(--bg-card, white);
+}
+
+.podium-rank {
+    color: var(--text-muted, #666);
+}
+
+/* Final Rankings */
+.final-table {
+    background: var(--bg-card, white);
+}
+
+.final-table th {
+    background: var(--accent-primary, #c9302c);
+}
+
+.final-table tbody tr:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.final-table td {
+    border-bottom-color: var(--border-color, #e0e0e0);
+}
+
+.final-table .rank-cell.gold { color: var(--accent-gold, #FFD700); }
+.final-table .rank-cell.silver { color: var(--accent-silver, #C0C0C0); }
+.final-table .rank-cell.bronze { color: var(--accent-bronze, #CD7F32); }
+
+/* Stats Summary Box */
+.stats-summary-box {
+    background: var(--bg-tertiary, #f8f9fa);
+}
+
+.stat-item .value {
+    color: var(--accent-primary, #c9302c);
+}
+
+.stat-item .label {
+    color: var(--text-muted, #666);
+}
+
+/* Player Header */
+.player-header {
+    background: linear-gradient(135deg, rgba(26, 95, 122, 0.85), rgba(21, 152, 149, 0.85));
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+}
+
+/* Rating Badge */
+.rating-badge {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.rating-badge.active {
+    background: rgba(255, 255, 255, 0.25);
+}
+
+/* Player Stats Cards */
+.stat-card-large {
+    background: rgba(26, 26, 37, 0.75);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.stat-card-large h4 {
+    color: var(--text-muted, #666);
+}
+
+/* Podium Table */
+.podium-table th {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary, #e5e7eb);
+}
+
+.podium-table .total-row {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+/* History Section */
+.history-section {
+    background: rgba(26, 26, 37, 0.75);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+}
+
+.history-filters select {
+    background: rgba(26, 26, 37, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-primary, #e5e7eb);
+}
+
+.result-card {
+    background: rgba(26, 26, 37, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+.result-card-header {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.result-card-header:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.result-date {
+    color: var(--text-muted, #666);
+}
+
+.result-tournament {
+    color: var(--text-primary, #333);
+}
+
+.result-event {
+    color: var(--accent-gold, #d4a574);
+}
+
+.result-place {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.result-place.gold { color: var(--accent-gold, #FFD700); }
+.result-place.silver { color: var(--accent-silver, #C0C0C0); }
+.result-place.bronze { color: var(--accent-bronze, #CD7F32); }
+
+.result-rating {
+    color: var(--accent-primary, #c9302c);
+}
+
+.result-expand-icon {
+    color: var(--text-muted, #666);
+}
+
+.result-card-detail {
+    border-top-color: rgba(255, 255, 255, 0.1);
+    background: rgba(26, 26, 37, 0.5);
+}
+
+/* Detail Sections */
+.detail-section h5 {
+    color: var(--accent-gold, #d4a574);
+}
+
+.pool-summary {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.pool-summary-item strong {
+    color: var(--accent-primary, #c9302c);
+}
+
+.bout-detail-item {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.bout-opponent-name {
+    color: var(--text-primary, #333);
+}
+
+.bout-opponent-team {
+    color: var(--text-muted, #666);
+}
+
+/* Tournament Progress */
+.tournament-progress {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.progress-step {
+    background: rgba(255, 255, 255, 0.15);
+    color: var(--text-primary, #e5e7eb);
+}
+
+.progress-step.completed {
+    background: var(--success-color, #10b981);
+}
+
+.progress-step.current {
+    background: var(--accent-primary, #c9302c);
+}
+
+/* Strength Tab */
+.strength-card {
+    background: rgba(26, 26, 37, 0.75);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.strength-value {
+    color: var(--accent-primary, #c9302c);
+}
+
+.strength-label {
+    color: var(--text-muted, #666);
+}
+
+.opponent-table {
+    background: rgba(26, 26, 37, 0.7);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.opponent-table th {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary, #e5e7eb);
+}
+
+.opponent-row:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.opponent-detail {
+    background: rgba(26, 26, 37, 0.6);
+}
+
+.opponent-match-item {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+/* Event Card */
+.event-card .event-stats .stat-badge {
+    background: var(--bg-tertiary, #f0f0f0);
+    color: var(--text-muted, #666);
+}
+
+/* Disambiguation UI - Dark Theme */
+.player-header .disambiguation-badge {
+    background: rgba(245, 158, 11, 0.25);
+}
+
+.team-history-section {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.team-history-item {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.disambiguation-section {
+    background: rgba(245, 158, 11, 0.15);
+    border-left-color: var(--warning-color, #f59e0b);
+}
+
+.other-profile-link {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.other-profile-link:hover {
+    background: rgba(255, 255, 255, 0.35);
+}
+
+/* Name English Tag */
+.name-en {
+    background: var(--bg-tertiary, #f0f0f0);
+    color: var(--text-muted, #666);
+}
+
+/* External Links */
+.fie-link {
+    background: rgba(30, 58, 138, 0.2);
+    color: #60a5fa;
+    border-color: rgba(30, 58, 138, 0.4);
+}
+
+.ft-link {
+    background: rgba(234, 88, 12, 0.2);
+    color: #fb923c;
+    border-color: rgba(234, 88, 12, 0.4);
+}
+
+/* Analysis Tab */
+.analysis-container {
+    background: rgba(26, 26, 37, 0.75);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 1.5rem;
+}
+
+.analysis-notice {
+    background: rgba(26, 26, 37, 0.6);
+    color: var(--text-muted, #666);
+}
+
+.analysis-notice.error {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.3);
+    color: var(--danger-color, #ef4444);
+}
+
+/* Player name links in dark theme */
+.player-name a:hover,
+.player-col a:hover,
+.name-cell a:hover,
+.podium-name a:hover,
+.de-player-name a:hover,
+.de-winner-badge a:hover,
+.de-tree-player .name a:hover,
+.bout-player a:hover {
+    color: var(--accent-gold, #d4a574);
+}

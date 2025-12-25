@@ -93,7 +93,7 @@ body {
 
 /* Auth Navigation */
 .auth-nav {
-    margin-left: 15px;
+    margin-left: auto;
 }
 
 .auth-btn {
@@ -588,13 +588,7 @@ body {
 
 /* Responsive */
 @media (max-width: 768px) {
-    .navbar .container {
-        flex-direction: column;
-    }
-
-    .search-box input {
-        width: 100%;
-    }
+    /* Mobile navbar handled by dark-theme.css */
 
     .hero h1 {
         font-size: 1.8rem;

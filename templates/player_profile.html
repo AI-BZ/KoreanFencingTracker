@@ -45,7 +45,7 @@
         </div>
         {% endif %}
 
-        <div class="player-team">{{ player.teams|join(', ') if player.teams else '-' }}</div>
+        <div class="player-team">{{ player.current_team if player.current_team else '-' }}</div>
 
         <!-- Team History (소속 변경 이력) -->
         {% if player.team_history and player.team_history|length > 1 %}

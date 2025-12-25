@@ -264,11 +264,12 @@
     color: var(--fl-accent-red);
 }
 
-/* Demo Section (for landing page) */
+/* Demo Section (for landing page) - 투명 배경 */
 .fl-demo-section {
-    background: linear-gradient(180deg, var(--fl-bg-primary) 0%, var(--fl-bg-secondary) 100%);
+    background: transparent !important;
     padding: 4rem 2rem;
-    border-top: 1px solid var(--fl-border);
+    border-top: none !important;
+    border: none !important;
 }
 
 .fl-demo-title {

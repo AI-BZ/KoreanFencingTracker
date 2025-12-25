@@ -368,3 +368,139 @@ async def get_team_analytics(
             reverse=True
         )[:5]
     }
+
+
+# =============================================
+# 선수 자동 등록 및 활동 상태 관리
+# =============================================
+
+@router.post("/team/sync")
+async def sync_players_from_competition(
+    member: ClubMemberContext = Depends(require_coach)
+):
+    """
+    대회 데이터에서 선수 자동 등록
+
+    클럽명으로 대회에 출전한 모든 선수를 members 테이블에 자동 등록합니다.
+    이미 등록된 선수는 건너뜁니다.
+
+    - 코치 이상 권한 필요
+    """
+    # 조직 이름 조회
+    from database.supabase_client import get_supabase_client
+    supabase = get_supabase_client()
+    org_response = supabase.table("organizations").select("name").eq(
+        "id", member.organization_id
+    ).single().execute()
+
+    if not org_response.data:
+        raise HTTPException(status_code=404, detail="조직을 찾을 수 없습니다")
+
+    org_name = org_response.data["name"]
+
+    result = await player_service.sync_players_from_competition_data(
+        member.organization_id, org_name
+    )
+
+    if not result.get("success"):
+        raise HTTPException(status_code=500, detail=result.get("error", "동기화 실패"))
+
+    return result
+
+
+@router.get("/team/roster-status")
+async def get_roster_with_status(
+    active_months: int = Query(3, ge=1, le=12, description="활동 기준 개월 수"),
+    member: ClubMemberContext = Depends(get_current_club_member)
+):
+    """
+    활동/미활동 선수 분류 조회
+
+    최근 N개월 내 대회 출전 여부로 선수를 분류합니다.
+    - 소속선수현황: 활동 선수
+    - 미활동리스트: 미활동 선수 (현재 소속 표시)
+
+    전체회원 수는 활동 선수 기준입니다.
+    """
+    try:
+        roster = await player_service.get_roster_with_activity_status(
+            member.organization_id, active_months
+        )
+        return roster
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.get("/team/roster-by-age-group")
+async def get_roster_by_age_group(
+    active_months: int = Query(12, ge=1, le=24, description="활동 기준 개월 수"),
+    member: ClubMemberContext = Depends(get_current_club_member)
+):
+    """
+    나이그룹별 선수 분류 조회
+
+    선수를 나이그룹별로 분류합니다.
+    - 탭: 전체, 초등, 중등, 고등, 대학, 일반
+    - 최근 2개 대회 기준으로 분류
+    - 각 카테고리별 인원수 표시
+    """
+    try:
+        roster = await player_service.get_roster_by_age_group(
+            member.organization_id, active_months
+        )
+        return roster
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.post("/team/move-player")
+async def move_player_status(
+    member_id: str = Query(..., description="회원 ID"),
+    status: str = Query(..., regex="^(active|inactive)$", description="새 상태"),
+    member: ClubMemberContext = Depends(require_coach)
+):
+    """
+    선수 상태 수동 변경 (드래그앤드롭용)
+
+    코치가 선수를 활동/미활동 리스트 간 이동시킵니다.
+
+    - 코치 이상 권한 필요
+    """
+    success = await player_service.move_player_status(
+        member_id, member.organization_id, status
+    )
+
+    if success:
+        return {"message": f"선수 상태가 {status}로 변경되었습니다"}
+    raise HTTPException(status_code=400, detail="상태 변경에 실패했습니다")
+
+
+@router.post("/team/add-player")
+async def add_player_to_roster(
+    player_id: Optional[str] = Query(None, description="기존 선수 ID (KOP...)"),
+    player_name: Optional[str] = Query(None, description="선수 이름 (수동 등록)"),
+    weapon: Optional[str] = Query(None, description="무기 (수동 등록)"),
+    member: ClubMemberContext = Depends(require_coach)
+):
+    """
+    선수 추가
+
+    - player_id: 기존 데이터에서 선수 검색해서 추가
+    - player_name + weapon: 대회 미출전 신규 선수 수동 등록
+
+    - 코치 이상 권한 필요
+    """
+    if not player_id and not player_name:
+        raise HTTPException(
+            status_code=400,
+            detail="player_id 또는 player_name이 필요합니다"
+        )
+
+    result = await player_service.add_player_to_roster(
+        member.organization_id, player_id, player_name, weapon
+    )
+
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error", "등록 실패"))
+
+    return result

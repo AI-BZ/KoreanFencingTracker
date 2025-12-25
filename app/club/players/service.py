@@ -770,5 +770,467 @@ class PlayerService:
         return None
 
 
+    # =============================================
+    # 선수 자동 등록 및 활동 상태 관리
+    # =============================================
+
+    async def sync_players_from_competition_data(
+        self,
+        organization_id: int,
+        organization_name: str
+    ) -> Dict[str, Any]:
+        """
+        대회 데이터에서 클럽 소속 선수들을 members 테이블에 자동 등록
+        - 해당 클럽명으로 대회에 출전한 모든 선수를 조회
+        - 아직 members에 없는 선수만 자동 등록
+        """
+        try:
+            # 메인 API에서 클럽 소속 선수 검색 (현재 + 과거 소속 모두 포함)
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"http://localhost:71/api/players/search",
+                    params={"q": organization_name, "limit": 200, "include_history": "true"},
+                    timeout=10.0
+                )
+                if response.status_code != 200:
+                    return {"success": False, "error": "선수 검색 실패"}
+
+                data = response.json()
+                all_players = data.get("results", [])
+
+            # 클럽 소속 선수만 필터링 (현재 또는 과거에 해당 클럽 소속)
+            club_players = []
+            for player in all_players:
+                teams = player.get("teams", [])
+                team_history = player.get("team_history", [])
+                current_team = player.get("current_team", "")
+
+                is_club_member = False
+                club_history = None
+
+                # 1. team_history에서 해당 클럽 기록 확인
+                for history in team_history:
+                    team_name = history.get("team", "")
+                    if organization_name in team_name or team_name in organization_name:
+                        is_club_member = True
+                        club_history = history
+                        break
+
+                # 2. teams 리스트에서 확인
+                if not is_club_member:
+                    for team in teams:
+                        if organization_name in team or team in organization_name:
+                            is_club_member = True
+                            break
+
+                # 3. current_team에서 확인
+                if not is_club_member:
+                    if organization_name in current_team or current_team in organization_name:
+                        is_club_member = True
+
+                if is_club_member:
+                    club_players.append({
+                        **player,
+                        "club_history": club_history
+                    })
+
+            # 현재 members에 등록된 선수 조회
+            existing_response = self.supabase.table("members").select(
+                "full_name"
+            ).eq("organization_id", organization_id).execute()
+
+            existing_names = set(m["full_name"] for m in (existing_response.data or []))
+
+            # 새로 등록할 선수
+            new_players = []
+            for player in club_players:
+                if player["name"] not in existing_names:
+                    new_players.append(player)
+
+            # members 테이블에 등록
+            registered = []
+            errors = []
+            for player in new_players:
+                try:
+                    # player_id에서 숫자 추출 (KOP00123 -> 123)
+                    player_id_str = player.get('player_id', '')
+                    player_id_num = None
+                    if player_id_str and player_id_str.startswith('KOP'):
+                        try:
+                            player_id_num = int(player_id_str[3:])
+                        except ValueError:
+                            pass
+
+                    # 고유 이메일 생성 (player_id + timestamp)
+                    import time
+                    unique_suffix = int(time.time() * 1000) % 100000
+                    dummy_email = f"{player_id_str or 'unknown'}_{unique_suffix}@placeholder.local"
+
+                    insert_data = {
+                        "full_name": player["name"],
+                        "display_name": player["name"],
+                        "email": dummy_email,
+                        "member_type": "player",
+                        "organization_id": organization_id,
+                        "club_role": "student",
+                        "member_status": "active",
+                        "verification_status": "auto_synced"
+                    }
+
+                    # player_id가 있으면 추가
+                    if player_id_num is not None:
+                        insert_data["player_id"] = player_id_num
+
+                    result = self.supabase.table("members").insert(insert_data).execute()
+                    if result.data:
+                        registered.append(player["name"])
+                except Exception as e:
+                    # 에러 기록
+                    errors.append(f"{player['name']}: {str(e)}")
+                    continue
+
+            return {
+                "success": True,
+                "found": len(club_players),
+                "already_registered": len(existing_names),
+                "registered": len(registered),
+                "registered_names": registered,
+                "errors": errors[:5] if errors else []  # 처음 5개 에러만
+            }
+
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    async def get_roster_with_activity_status(
+        self,
+        organization_id: int,
+        active_months: int = 3
+    ) -> Dict[str, Any]:
+        """
+        클럽 로스터를 활동/미활동으로 분류하여 반환
+        - active_months 이내 대회 출전 = 활동 선수
+        - 그 외 = 미활동 선수 (현재 소속 표시)
+        """
+        from datetime import datetime, timedelta
+
+        # 조직 정보
+        org_response = self.supabase.table("organizations").select(
+            "id, name"
+        ).eq("id", organization_id).single().execute()
+
+        if not org_response.data:
+            raise ValueError("조직을 찾을 수 없습니다")
+
+        org = org_response.data
+        org_name = org["name"]
+
+        # 활성 기준일
+        cutoff_date = (datetime.now() - timedelta(days=active_months * 30)).strftime("%Y-%m-%d")
+
+        # 조직의 모든 회원 (학생만)
+        members_response = self.supabase.table("members").select(
+            "id, full_name, club_role, member_status"
+        ).eq("organization_id", organization_id).eq("club_role", "student").execute()
+
+        members = members_response.data or []
+
+        active_players = []
+        inactive_players = []
+
+        for member in members:
+            player_name = member["full_name"]
+            player_info = await self._get_player_activity_info(player_name, org_name)
+
+            player_data = {
+                "member_id": member["id"],
+                "name": player_name,
+                "player_id": player_info.get("player_id"),
+                "weapon": player_info.get("weapon"),
+                "competition_count": player_info.get("competition_count", 0),
+                "last_competition_date": player_info.get("last_competition_date"),
+                "current_team": player_info.get("current_team"),
+                "recent_result": player_info.get("recent_result"),
+                "disambiguation_warning": player_info.get("disambiguation_warning")
+            }
+
+            # 활동/미활동 분류
+            last_date = player_info.get("last_competition_date")
+            if last_date and last_date >= cutoff_date:
+                active_players.append(player_data)
+            else:
+                # 미활동 선수는 이적 여부 표시
+                if player_info.get("current_team") and player_info.get("current_team") != org_name:
+                    player_data["transfer_status"] = "이적"
+                    player_data["transferred_to"] = player_info.get("current_team")
+                inactive_players.append(player_data)
+
+        # 정렬: 최근 대회순
+        active_players.sort(key=lambda x: x.get("last_competition_date") or "", reverse=True)
+        inactive_players.sort(key=lambda x: x.get("last_competition_date") or "", reverse=True)
+
+        return {
+            "organization_id": org["id"],
+            "organization_name": org_name,
+            "active_months": active_months,
+            "cutoff_date": cutoff_date,
+            "active_count": len(active_players),
+            "inactive_count": len(inactive_players),
+            "total_count": len(active_players),  # 전체회원 = 활동 선수 기준
+            "active_players": active_players,
+            "inactive_players": inactive_players
+        }
+
+    async def _get_player_activity_info(
+        self,
+        player_name: str,
+        club_name: str
+    ) -> Dict[str, Any]:
+        """선수의 활동 정보 조회 (최근 대회일, 현재 소속 등)"""
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"http://localhost:71/api/players/search",
+                    params={"q": player_name},
+                    timeout=5.0
+                )
+                if response.status_code != 200:
+                    return {}
+
+                data = response.json()
+                results = data.get("results", [])
+
+                for result in results:
+                    if result.get("name") != player_name:
+                        continue
+
+                    # 해당 클럽 기록 찾기
+                    team_history = result.get("team_history", [])
+                    club_record = None
+                    for history in team_history:
+                        if history.get("team") == club_name:
+                            club_record = history
+                            break
+
+                    if not club_record:
+                        continue
+
+                    weapons = result.get("weapons", [])
+
+                    # 최근 대회 결과
+                    recent_result = await self._get_recent_competition_result(
+                        result.get("player_id")
+                    )
+
+                    return {
+                        "player_id": result.get("player_id"),
+                        "weapon": weapons[0] if weapons else None,
+                        "competition_count": result.get("record_count", 0),
+                        "last_competition_date": club_record.get("last_seen"),
+                        "current_team": result.get("current_team"),
+                        "recent_result": recent_result,
+                        "disambiguation_warning": result.get("disambiguation_warning")
+                    }
+
+        except Exception:
+            pass
+
+        return {}
+
+    async def move_player_status(
+        self,
+        member_id: str,
+        organization_id: int,
+        new_status: str  # "active" or "inactive"
+    ) -> bool:
+        """
+        선수를 활동/미활동 상태로 수동 이동 (드래그앤드롭용)
+        - 코치가 직접 선수 상태를 관리할 수 있도록
+        """
+        # member_status 필드로 관리
+        status_value = "active" if new_status == "active" else "inactive"
+
+        result = self.supabase.table("members").update({
+            "member_status": status_value
+        }).eq("id", member_id).eq("organization_id", organization_id).execute()
+
+        return len(result.data or []) > 0
+
+    async def get_roster_by_age_group(
+        self,
+        organization_id: int,
+        active_months: int = 12
+    ) -> Dict[str, Any]:
+        """
+        클럽 로스터를 나이그룹별로 분류
+        - 최근 2개 대회에서 확실한 이벤트 분류 기준
+        - 탭: 전체, 초등, 중등, 고등, 대학, 일반
+        """
+        # 기존 활동 상태 로스터 가져오기
+        roster_data = await self.get_roster_with_activity_status(
+            organization_id, active_months
+        )
+
+        # 활동/미활동 선수 합치기
+        all_players = roster_data.get("active_players", []) + roster_data.get("inactive_players", [])
+
+        # 나이그룹별 분류
+        age_groups = {
+            "전체": [],
+            "초등": [],
+            "중등": [],
+            "고등": [],
+            "대학": [],
+            "일반": []
+        }
+
+        for player in all_players:
+            player_id = player.get("player_id")
+            if player_id:
+                age_group_category = await self._classify_age_group(player_id)
+                player["age_group_category"] = age_group_category
+            else:
+                player["age_group_category"] = "일반"  # 기본값
+
+            # 전체에 추가
+            age_groups["전체"].append(player)
+
+            # 해당 카테고리에 추가
+            category = player.get("age_group_category", "일반")
+            if category in age_groups:
+                age_groups[category].append(player)
+
+        # 카테고리별 카운트
+        counts = {k: len(v) for k, v in age_groups.items()}
+
+        return {
+            "organization_id": roster_data.get("organization_id"),
+            "organization_name": roster_data.get("organization_name"),
+            "counts": counts,
+            "age_groups": age_groups
+        }
+
+    async def _classify_age_group(self, player_id: str) -> str:
+        """
+        선수의 나이그룹 분류 (최근 2개 대회 기준)
+        - 초등부, U11, U13 -> 초등
+        - 중등부, U14, 여중, 남중 -> 중등
+        - 고등부, U17, 여고, 남고 -> 고등
+        - 대학부, U20, 청년부 -> 대학
+        - 일반부, 시니어 -> 일반
+        """
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"http://localhost:71/api/players/by-id/{player_id}",
+                    timeout=5.0
+                )
+                if response.status_code != 200:
+                    return "일반"
+
+                data = response.json()
+                age_groups = data.get("age_groups", [])
+
+                # 나이그룹이 없으면 기본값
+                if not age_groups:
+                    return "일반"
+
+                # 카테고리 매핑
+                category_mapping = {
+                    "초등": ["초등부", "초등저", "초등고", "U9", "U11", "U13", "Y9", "Y11", "Y13"],
+                    "중등": ["중등부", "U14", "Y14", "여중", "남중"],
+                    "고등": ["고등부", "U17", "Y17", "여고", "남고"],
+                    "대학": ["대학부", "U20", "Y20", "청년부", "대학", "여대", "남대"],
+                    "일반": ["일반부", "일반", "시니어"]
+                }
+
+                # 가장 최근 나이그룹으로 분류
+                # (age_groups는 set이므로 명확한 분류가 필요)
+                found_categories = []
+                for ag in age_groups:
+                    for category, patterns in category_mapping.items():
+                        for pattern in patterns:
+                            if pattern in ag:
+                                found_categories.append(category)
+                                break
+
+                if found_categories:
+                    # 우선순위: 초등 < 중등 < 고등 < 대학 < 일반
+                    # 여러 개면 가장 높은 것 선택
+                    priority = ["초등", "중등", "고등", "대학", "일반"]
+                    for p in reversed(priority):
+                        if p in found_categories:
+                            return p
+
+                return "일반"
+
+        except Exception:
+            return "일반"
+
+    async def add_player_to_roster(
+        self,
+        organization_id: int,
+        player_id: str = None,
+        player_name: str = None,
+        weapon: str = None
+    ) -> Dict[str, Any]:
+        """
+        선수를 로스터에 추가
+        - player_id로 검색 추가 또는
+        - 이름/무기로 수동 등록 (대회 미출전 신규 선수)
+        """
+        if player_id:
+            # 기존 선수 검색해서 추가
+            try:
+                async with httpx.AsyncClient() as client:
+                    response = await client.get(
+                        f"http://localhost:71/api/players/by-id/{player_id}",
+                        timeout=5.0
+                    )
+                    if response.status_code == 200:
+                        data = response.json()
+                        player_name = data.get("name")
+                        weapons = data.get("weapons", [])
+                        weapon = weapons[0] if weapons else None
+            except Exception:
+                return {"success": False, "error": "선수 정보 조회 실패"}
+
+        if not player_name:
+            return {"success": False, "error": "선수 이름이 필요합니다"}
+
+        # 중복 체크
+        existing = self.supabase.table("members").select("id").eq(
+            "organization_id", organization_id
+        ).eq("full_name", player_name).execute()
+
+        if existing.data:
+            return {"success": False, "error": "이미 등록된 선수입니다"}
+
+        # 등록
+        dummy_email = f"manual_{datetime.now().timestamp()}@placeholder.local"
+
+        insert_data = {
+            "full_name": player_name,
+            "display_name": player_name,
+            "email": dummy_email,
+            "member_type": "player",
+            "organization_id": organization_id,
+            "club_role": "student",
+            "member_status": "active",
+            "verification_status": "manual",
+            "notes": f"무기: {weapon}" if weapon else None
+        }
+
+        result = self.supabase.table("members").insert(insert_data).execute()
+
+        if result.data:
+            return {
+                "success": True,
+                "member_id": result.data[0]["id"],
+                "name": player_name
+            }
+
+        return {"success": False, "error": "등록 실패"}
+
+
 # 싱글톤 인스턴스
 player_service = PlayerService()

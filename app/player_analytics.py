@@ -119,6 +119,13 @@ class PlayerAnalytics:
     # 최근 경기
     recent_matches: list = field(default_factory=list)
 
+    # 최근 6경기 분석
+    recent_6_matches: list = field(default_factory=list)
+    recent_6_win_rate: float = 0.0
+    recent_6_wins: int = 0
+    recent_6_losses: int = 0
+    recent_6_trend: str = ""  # "상승", "하락", "유지"
+
     # 월별 히스토리 (그래프용)
     match_history: list = field(default_factory=list)
 
@@ -131,9 +138,27 @@ class FencingLabAnalyzer:
 
     ALLOWED_CLUBS = ["최병철펜싱클럽"]  # 허용된 클럽 목록
 
-    def __init__(self, data_path: str = "data/fencing_full_data_v3.json"):
-        self.data_path = data_path
-        self.data = None
+    # 최병철펜싱클럽 산하로 관리되는 외부 소속 선수들
+    # {현재소속(실제 데이터 팀명 포함): [선수이름, ...]}
+    AFFILIATED_PLAYERS = {
+        "성남펜싱아카데미": ["이홍"],
+        "광주시G-스포츠클럽": ["한지우"],
+        "이지펜싱클럽": ["김시연"],  # 동명이인 있음 (중경고, 은성중)
+        "엔티언 펜싱클럽 김포": ["박민지"],  # 동명이인 있음 (경남대, 전남여고)
+        "하이브 펜싱클럽": ["박보경"],
+        "스킬펜싱클럽": ["한지호"],
+        "라피크엔시스": ["오시울"],
+        "엔티언펜싱클럽": ["한준열"],
+    }
+
+    def __init__(self, data: Optional[Dict] = None):
+        """FencingLab 분석기 초기화
+
+        Args:
+            data: 대회 데이터 딕셔너리 (Supabase 캐시에서 전달)
+                  None인 경우 서버의 _data_cache 사용
+        """
+        self.data = data
         # 키: "이름|팀" 형태로 동명이인 구분
         self.player_matches: Dict[str, List[MatchResult]] = defaultdict(list)
         # 이름 -> [팀1, 팀2, ...] (동명이인 조회용)
@@ -142,7 +167,49 @@ class FencingLabAnalyzer:
 
     def is_allowed_player(self, player_name: str, team: str) -> bool:
         """허용된 클럽 소속 선수인지 확인"""
-        return any(club in team for club in self.ALLOWED_CLUBS)
+        # 허용된 클럽 소속인지 확인
+        if any(club in team for club in self.ALLOWED_CLUBS):
+            return True
+
+        # 산하 관리 선수인지 확인
+        for affiliated_team, players in self.AFFILIATED_PLAYERS.items():
+            if affiliated_team in team and player_name in players:
+                return True
+
+        return False
+
+    def get_all_tracked_players(self) -> Dict[str, List[Dict[str, str]]]:
+        """모든 추적 대상 선수를 소속별로 반환
+
+        Returns:
+            {소속명: [{name, team}, ...], ...}
+        """
+        result = {}
+
+        # 최병철펜싱클럽 선수들
+        for club in self.ALLOWED_CLUBS:
+            club_players = self.get_club_players(club)
+            if club_players:
+                result[club] = club_players
+
+        # 산하 관리 선수들
+        for affiliated_team, player_names in self.AFFILIATED_PLAYERS.items():
+            affiliated_list = []
+            for player_name in player_names:
+                # 해당 선수의 실제 팀 정보 찾기
+                teams = self.get_teams_for_name(player_name)
+                for team in teams:
+                    if affiliated_team in team:
+                        affiliated_list.append({"name": player_name, "team": team})
+                        break
+                else:
+                    # 팀 정보를 찾지 못한 경우 지정된 소속 사용
+                    affiliated_list.append({"name": player_name, "team": affiliated_team})
+
+            if affiliated_list:
+                result[affiliated_team] = affiliated_list
+
+        return result
 
     def get_teams_for_name(self, player_name: str) -> List[str]:
         """이름에 해당하는 모든 팀 목록 반환 (동명이인 조회)"""
@@ -154,21 +221,33 @@ class FencingLabAnalyzer:
         return len(teams) > 1
 
     def _load_data(self):
-        """데이터 로드 및 선수별 경기 인덱싱"""
-        try:
-            with open(self.data_path, 'r', encoding='utf-8') as f:
-                self.data = json.load(f)
-            self._index_all_matches()
+        """데이터 로드 및 선수별 경기 인덱싱
 
-            # 통계 계산
-            unique_players = len(self.player_matches)
-            unique_names = len(self.name_to_teams)
-            homonyms = sum(1 for teams in self.name_to_teams.values() if len(teams) > 1)
+        🚨 NOTE: JSON 파일 로드 제거됨 (2025-12-22)
+        이제 서버의 Supabase 캐시에서 데이터를 전달받습니다.
+        """
+        # 데이터가 None이면 서버 캐시에서 가져옴
+        if self.data is None:
+            try:
+                from app.server import _data_cache
+                self.data = _data_cache if _data_cache else {"competitions": []}
+            except ImportError:
+                logger.warning("서버 캐시를 가져올 수 없음")
+                self.data = {"competitions": []}
 
-            logger.info(f"FencingLab 데이터 로드 완료: {unique_players}명 (동명이인: {homonyms}건)")
-        except FileNotFoundError:
-            logger.warning(f"데이터 파일 없음: {self.data_path}")
+        if not self.data or not self.data.get("competitions"):
+            logger.warning("FencingLab: 데이터 없음")
             self.data = {"competitions": []}
+            return
+
+        self._index_all_matches()
+
+        # 통계 계산
+        unique_players = len(self.player_matches)
+        unique_names = len(self.name_to_teams)
+        homonyms = sum(1 for teams in self.name_to_teams.values() if len(teams) > 1)
+
+        logger.info(f"FencingLab 데이터 로드 완료: {unique_players}명 (동명이인: {homonyms}건)")
 
     def _index_all_matches(self):
         """선수별 모든 경기 기록 인덱싱 (Pool + DE)"""
@@ -197,7 +276,14 @@ class FencingLabAnalyzer:
                 de_bracket = event.get("de_bracket", {})
                 if isinstance(de_bracket, dict):
                     full_bouts = de_bracket.get("full_bouts", [])
-                    self._parse_full_bouts(full_bouts, comp_name, event_name, comp_date, event_cd)
+                    bouts_by_round = de_bracket.get("bouts_by_round", {})
+
+                    if full_bouts:
+                        # 1순위: full_bouts (가장 정확한 형식)
+                        self._parse_full_bouts(full_bouts, comp_name, event_name, comp_date, event_cd)
+                    elif bouts_by_round and isinstance(bouts_by_round, dict) and len(bouts_by_round) > 0:
+                        # 2순위: bouts_by_round (full_bouts 없을 때 대체)
+                        self._parse_bouts_by_round(bouts_by_round, comp_name, event_name, comp_date, event_cd)
 
                 # final_rankings에서도 선수 팀 정보 추출
                 for r in event.get("final_rankings", []):
@@ -245,15 +331,28 @@ class FencingLabAnalyzer:
 
                 # scores 배열에서 상대방과의 경기 추출
                 for j, score_data in enumerate(scores):
-                    if score_data is None or j >= len(players_in_pool):
-                        continue  # 자기 자신과의 경기
+                    if score_data is None or score_data == "" or j >= len(players_in_pool):
+                        continue  # 자기 자신과의 경기 또는 빈 값
 
                     opponent_data = players_in_pool[j]
                     if opponent_data["name"] == player_name and opponent_data["team"] == player_team:
                         continue
 
-                    match_type = score_data.get("type", "")
-                    player_score = score_data.get("score", 0)
+                    # score_data가 dict인 경우 (구 형식)
+                    if isinstance(score_data, dict):
+                        match_type = score_data.get("type", "")
+                        player_score = score_data.get("score", 0)
+                    # score_data가 str인 경우 (익산 등 신규 형식)
+                    else:
+                        score_str = str(score_data).strip()
+                        if score_str.upper() == "V":
+                            match_type = "V"
+                            player_score = 5  # 기본 승리 점수
+                        elif score_str.isdigit():
+                            match_type = "D"
+                            player_score = int(score_str)
+                        else:
+                            continue  # 알 수 없는 형식
 
                     # 상대방 점수 추론
                     opponent_score = self._get_opponent_score(opponent_data["scores"], i)
@@ -277,7 +376,17 @@ class FencingLabAnalyzer:
     def _get_opponent_score(self, opponent_scores: list, player_index: int) -> int:
         """상대방의 점수 배열에서 해당 선수와의 경기 점수 추출"""
         if player_index < len(opponent_scores) and opponent_scores[player_index]:
-            return opponent_scores[player_index].get("score", 0)
+            score_data = opponent_scores[player_index]
+            # dict 형식 (구 형식)
+            if isinstance(score_data, dict):
+                return score_data.get("score", 0)
+            # str 형식 (익산 등 신규 형식)
+            else:
+                score_str = str(score_data).strip()
+                if score_str.upper() == "V":
+                    return 5  # 기본 승리 점수
+                elif score_str.isdigit():
+                    return int(score_str)
         return 0
 
     def _parse_full_bouts(self, full_bouts: list, comp_name: str, event_name: str, comp_date: str, event_cd: str = ""):
@@ -345,6 +454,120 @@ class FencingLabAnalyzer:
                 event_cd=event_cd
             )
             self._add_player_match(loser_name, loser_team, loser_match)
+
+    def _parse_bouts_by_round(self, bouts_by_round: dict, comp_name: str, event_name: str, comp_date: str, event_cd: str = ""):
+        """DE bouts_by_round에서 승자+패자 경기 결과 추출 (full_bouts 없을 때 대체)
+
+        bouts_by_round 형식:
+        {
+            "16강": [
+                {
+                    "player1": {"name": "선수A", "team": "팀A", "score": 15},
+                    "player2": {"name": "선수B", "team": "팀B", "score": 10},
+                    "winnerName": "선수A",
+                    "isBye": false,
+                    "round": "16강"
+                },
+                ...
+            ],
+            "32강": [...],
+            ...
+        }
+        """
+        if not isinstance(bouts_by_round, dict):
+            return
+
+        for round_name, bouts in bouts_by_round.items():
+            if not isinstance(bouts, list):
+                continue
+
+            for bout in bouts:
+                # Bye 경기 건너뛰기
+                if bout.get("isBye", False):
+                    continue
+
+                player1 = bout.get("player1", {})
+                player2 = bout.get("player2", {})
+                winner_name_str = bout.get("winnerName", "")
+
+                if not player1 or not player2:
+                    continue
+
+                p1_name = player1.get("name", "")
+                p1_team = player1.get("team", "")
+                p1_score = player1.get("score", 0)
+
+                p2_name = player2.get("name", "")
+                p2_team = player2.get("team", "")
+                p2_score = player2.get("score", 0)
+
+                if not p1_name or not p2_name:
+                    continue
+
+                # 팀 정보 없으면 이름으로 추측
+                if not p1_team:
+                    teams = self.name_to_teams.get(p1_name, set())
+                    if len(teams) == 1:
+                        p1_team = list(teams)[0]
+                    else:
+                        continue  # 동명이인 구분 불가
+
+                if not p2_team:
+                    teams = self.name_to_teams.get(p2_name, set())
+                    if len(teams) == 1:
+                        p2_team = list(teams)[0]
+                    else:
+                        continue  # 동명이인 구분 불가
+
+                # 승자/패자 판별
+                if winner_name_str == p1_name:
+                    winner_name, winner_team, winner_score = p1_name, p1_team, p1_score
+                    loser_name, loser_team, loser_score = p2_name, p2_team, p2_score
+                elif winner_name_str == p2_name:
+                    winner_name, winner_team, winner_score = p2_name, p2_team, p2_score
+                    loser_name, loser_team, loser_score = p1_name, p1_team, p1_score
+                else:
+                    # winnerName이 없으면 점수로 판별
+                    if p1_score > p2_score:
+                        winner_name, winner_team, winner_score = p1_name, p1_team, p1_score
+                        loser_name, loser_team, loser_score = p2_name, p2_team, p2_score
+                    elif p2_score > p1_score:
+                        winner_name, winner_team, winner_score = p2_name, p2_team, p2_score
+                        loser_name, loser_team, loser_score = p1_name, p1_team, p1_score
+                    else:
+                        continue  # 동점 - 판별 불가
+
+                # 승자 기록
+                winner_match = MatchResult(
+                    competition_name=comp_name,
+                    event_name=event_name,
+                    round_name=round_name,
+                    opponent_name=loser_name,
+                    opponent_team=loser_team,
+                    player_score=winner_score,
+                    opponent_score=loser_score,
+                    is_win=True,
+                    is_pool=False,
+                    date=comp_date,
+                    event_cd=event_cd
+                )
+                self._add_player_match(winner_name, winner_team, winner_match)
+
+                # 패자 기록
+                loser_match = MatchResult(
+                    competition_name=comp_name,
+                    event_name=event_name,
+                    round_name=round_name,
+                    opponent_name=winner_name,
+                    opponent_team=winner_team,
+                    player_score=loser_score,
+                    opponent_score=winner_score,
+                    is_win=False,
+                    is_pool=False,
+                    date=comp_date,
+                    event_cd=event_cd
+                )
+                self._add_player_match(loser_name, loser_team, loser_match)
 
     def _parse_de_matches(self, de_matches: list, comp_name: str, event_name: str, comp_date: str, event_cd: str = ""):
         """DE 대진표에서 경기 결과 추출 (기존 방식 - 승자만)"""
@@ -452,6 +675,7 @@ class FencingLabAnalyzer:
         self._analyze_margin(analytics, matches)
 
         # 최근 경기 기록 (대회명, 날짜, 링크 포함)
+        sorted_matches = sorted(matches, key=lambda x: x.date, reverse=True)
         analytics.recent_matches = [
             {
                 "competition": m.competition_name,
@@ -464,8 +688,11 @@ class FencingLabAnalyzer:
                 "type": "Pool" if m.is_pool else "DE",
                 "date": m.date
             }
-            for m in sorted(matches, key=lambda x: x.date, reverse=True)[:15]
+            for m in sorted_matches[:15]
         ]
+
+        # 최근 6경기 분석
+        self._analyze_recent_6(analytics, sorted_matches)
 
         # 월별 히스토리
         analytics.match_history = self._build_match_history(matches)
@@ -549,6 +776,52 @@ class FencingLabAnalyzer:
             (m.is_pool and m.score_diff >= 3) or (not m.is_pool and m.score_diff >= 5))
         analytics.blowout_losses = sum(1 for m in losses if
             (m.is_pool and abs(m.score_diff) >= 3) or (not m.is_pool and abs(m.score_diff) >= 5))
+
+    def _analyze_recent_6(self, analytics: PlayerAnalytics, sorted_matches: List[MatchResult]):
+        """최근 6경기 분석
+
+        Args:
+            analytics: 분석 결과 객체
+            sorted_matches: 날짜 역순 정렬된 경기 목록
+        """
+        recent_6 = sorted_matches[:6]
+
+        if len(recent_6) == 0:
+            return
+
+        analytics.recent_6_matches = [
+            {
+                "competition": m.competition_name,
+                "event": m.event_name,
+                "round": m.round_name,
+                "opponent": m.opponent_name,
+                "score": f"{m.player_score}:{m.opponent_score}",
+                "result": "승" if m.is_win else "패",
+                "type": "Pool" if m.is_pool else "DE",
+                "date": m.date
+            }
+            for m in recent_6
+        ]
+
+        analytics.recent_6_wins = sum(1 for m in recent_6 if m.is_win)
+        analytics.recent_6_losses = len(recent_6) - analytics.recent_6_wins
+        analytics.recent_6_win_rate = round(analytics.recent_6_wins / len(recent_6) * 100, 1)
+
+        # 트렌드 분석 (최근 6경기 vs 이전 6경기)
+        if len(sorted_matches) >= 12:
+            prev_6 = sorted_matches[6:12]
+            prev_6_wins = sum(1 for m in prev_6 if m.is_win)
+            prev_6_rate = round(prev_6_wins / len(prev_6) * 100, 1)
+
+            diff = analytics.recent_6_win_rate - prev_6_rate
+            if diff >= 10:
+                analytics.recent_6_trend = "상승"
+            elif diff <= -10:
+                analytics.recent_6_trend = "하락"
+            else:
+                analytics.recent_6_trend = "유지"
+        else:
+            analytics.recent_6_trend = "데이터 부족"
 
     def _build_match_history(self, matches: List[MatchResult]) -> List[dict]:
         """월별 경기 히스토리 구축"""

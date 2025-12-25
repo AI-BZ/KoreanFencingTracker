@@ -81,6 +81,7 @@ AGE_GROUP_CODES = {
     "Cadet": "Cadet",     # Cadet (고등부, Under 17)
     "Junior": "Junior",   # Junior (대학부, Under 20)
     "Veteran": "Veteran", # Veteran/Senior (일반부, Open)
+    "NT": "🇰🇷 국가대표",   # National Team (국가대표 선발대회)
 }
 
 # 한국어 표시명 (UI용)
@@ -92,6 +93,7 @@ AGE_GROUP_NAMES_KR = {
     "Cadet": "Cadet (고등)",
     "Junior": "Junior (대학)",
     "Veteran": "Veteran (일반)",
+    "NT": "🇰🇷 국가대표",
 }
 
 # 레거시 코드 매핑 (기존 데이터 호환)
@@ -115,8 +117,9 @@ LEGACY_AGE_GROUP_MAP = {
     "마스터즈": "Veteran",
 }
 
-# 연령대별 가중치 (글로벌 코드)
+# 연령대별 가중치 (글로벌 코드 + 레거시 코드)
 AGE_GROUP_WEIGHTS = {
+    # FIE 글로벌 코드
     "Y8": 0.4,
     "Y10": 0.5,
     "Y12": 0.6,
@@ -124,6 +127,16 @@ AGE_GROUP_WEIGHTS = {
     "Cadet": 0.8,
     "Junior": 0.9,
     "Veteran": 1.0,
+    # 레거시 코드 (동일한 가중치 적용)
+    "E1": 0.4,    # Y8
+    "E2": 0.5,    # Y10
+    "E3": 0.6,    # Y12
+    "MS": 0.7,    # Y14
+    "HS": 0.8,    # Cadet
+    "UNI": 0.9,   # Junior
+    "SR": 1.0,    # Veteran
+    # 특수 코드
+    "U17": 0.75,  # Y14(0.7)와 Cadet(0.8) 사이
 }
 
 # 선수 구분 (Y14 이상부터 적용)
@@ -133,7 +146,9 @@ CATEGORY_CODES = {
 }
 
 # 동호인/전문 분류가 적용되는 연령대 (Y14 이상)
-CATEGORY_APPLICABLE_AGE_GROUPS = ["Y14", "Cadet", "Junior", "Veteran"]
+# U17도 MS/HS 사이이므로 포함
+# NT(국가대표)는 특수 카테고리이지만 PRO만 해당
+CATEGORY_APPLICABLE_AGE_GROUPS = ["Y14", "Cadet", "Junior", "Veteran", "MS", "HS", "UNI", "SR", "U17", "NT"]
 
 
 # =====================================================
@@ -246,30 +261,47 @@ def classify_competition_level(competition_name: str) -> str:
 
 
 def extract_age_group(event_name: str) -> str:
-    """종목명에서 연령대 코드 추출"""
+    """종목명에서 연령대 코드 추출
+
+    익산 국제대회 매핑:
+    - U9 (9세이하) = E1
+    - U11 (11세이하) = E2
+    - U13 (13세이하) = E3
+    - U17 (17세이하) = U17 (특수 코드 - MS와 HS 양쪽 필터)
+    - U20 (20세이하) = UNI
+
+    국내 대회 매핑:
+    - 초등부(1-2학년) = E1
+    - 초등부(3-4학년) = E2
+    - 초등부(5-6학년) = E3
+    """
 
     # 초등 저학년 (1-2학년) - 9세 이하
-    if any(x in event_name for x in ["9세이하", "U9", "9세"]):
+    if any(x in event_name for x in ["9세이하", "U9", "9세", "1-2학년", "1~2학년", "초등1", "초등2"]):
         return "E1"
 
     # 초등 중학년 (3-4학년) - 11세 이하
-    if any(x in event_name for x in ["11세이하", "U11", "11세"]):
+    if any(x in event_name for x in ["11세이하", "U11", "11세", "3-4학년", "3~4학년", "초등3", "초등4"]):
         return "E2"
 
     # 초등 고학년 (5-6학년) - 13세 이하
-    if any(x in event_name for x in ["13세이하", "U13", "13세"]):
+    if any(x in event_name for x in ["13세이하", "U13", "13세", "5-6학년", "5~6학년", "초등5", "초등6"]):
         return "E3"
 
-    # 중등 - U15, U17 일부
-    if any(x in event_name for x in ["중등", "중학", "U15"]):
+    # 17세이하 (U17) - 특수 처리: MS와 HS 양쪽에서 표시
+    if any(x in event_name for x in ["17세이하", "U17"]):
+        return "U17"
+
+    # 중등 - U15, 남중, 여중
+    if any(x in event_name for x in ["중등", "중학", "U15", "남중", "여중"]):
         return "MS"
 
-    # 고등 - U17, U18, U20 일부
-    if any(x in event_name for x in ["고등", "고교", "U17", "U18"]):
+    # 고등 - U18, 남고, 여고
+    if any(x in event_name for x in ["고등", "고교", "U18", "남고", "여고"]):
         return "HS"
 
-    # 대학
-    if any(x in event_name for x in ["대학", "U20", "U23"]) or re.search(r"[남여]대\s", event_name):
+    # 대학 - U20
+    if any(x in event_name for x in ["대학", "U20", "U23", "20세이하"]) or re.search(r"[남여]대\s", event_name):
         return "UNI"
 
     # 일반
@@ -281,6 +313,31 @@ def extract_age_group(event_name: str) -> str:
         return "UNI"
 
     return "SR"  # 기본값
+
+
+def matches_age_group_for_ranking(result_age: str, filter_age: str) -> bool:
+    """랭킹 필터링에서 연령대 매칭 확인
+
+    특수 케이스:
+    - U17: MS(중등)와 HS(고등) 필터 양쪽에서 매칭됨
+
+    Args:
+        result_age: 선수 결과의 연령대 코드
+        filter_age: 필터 연령대 코드
+
+    Returns:
+        True if matches, False otherwise
+    """
+    # 정확히 일치
+    if result_age == filter_age:
+        return True
+
+    # U17 특수 처리: MS 또는 HS 필터에서 U17 결과 포함
+    if result_age == 'U17':
+        if filter_age in ('MS', 'HS'):
+            return True
+
+    return False
 
 
 def extract_weapon(event_name: str) -> str:
@@ -349,6 +406,16 @@ class RankingCalculator:
         self._extract_results()
         logger.info(f"데이터 로드 완료: {len(self.results)}개 결과")
 
+    def load_from_data(self, data: dict):
+        """메모리 데이터에서 로드 (Supabase 캐시용)
+
+        Args:
+            data: {"competitions": [...], "meta": {...}} 형식의 데이터 딕셔너리
+        """
+        self.data = data
+        self._extract_results()
+        logger.info(f"메모리 데이터 로드 완료: {len(self.results)}개 결과")
+
     def _extract_results(self):
         """JSON 데이터에서 선수별 결과 추출"""
         if not self.data:
@@ -376,7 +443,8 @@ class RankingCalculator:
                 event_name = event.get("name", "")
                 weapon = event.get("weapon", "") or extract_weapon(event_name)
                 gender = event.get("gender", "") or extract_gender(event_name)
-                age_group = extract_age_group(event_name)
+                # 데이터베이스의 age_group 필드 우선 사용, 없으면 이벤트명에서 추출
+                age_group = event.get("age_group", "") or extract_age_group(event_name)
                 total_participants = event.get("total_participants", 0)
 
                 # 개인전만 처리 (단체전 제외)
@@ -421,7 +489,8 @@ class RankingCalculator:
         category: str = None,
         year: int = None,
         best_n: int = 4,
-        rolling_months: int = 12
+        rolling_months: int = 12,
+        national_team_only: bool = False
     ) -> List[PlayerRanking]:
         """
         랭킹 계산
@@ -434,6 +503,7 @@ class RankingCalculator:
             year: 시즌 연도 (None이면 롤링)
             best_n: 상위 N개 결과 합산
             rolling_months: 롤링 기간 (월)
+            national_team_only: True면 국가대표 선발대회만 필터링
 
         Returns:
             랭킹 리스트
@@ -441,14 +511,19 @@ class RankingCalculator:
         # 필터링
         filtered = self.results
 
+        # 국가대표 선발대회만 필터링
+        if national_team_only:
+            filtered = [r for r in filtered if '국가대표' in r.competition_name]
+
         if weapon:
             filtered = [r for r in filtered if r.weapon == weapon]
         if gender:
             filtered = [r for r in filtered if r.gender == gender]
         if age_group:
-            filtered = [r for r in filtered if r.age_group == age_group]
-        # 카테고리 필터 (중학교 이상만 적용)
-        if category and age_group in CATEGORY_APPLICABLE_AGE_GROUPS:
+            # U17 특수 처리: MS(중등), HS(고등) 필터에서 U17 결과도 포함
+            filtered = [r for r in filtered if matches_age_group_for_ranking(r.age_group, age_group)]
+        # 카테고리 필터 (중학교 이상만 적용, 단 국가대표는 전체)
+        if category and age_group and age_group in CATEGORY_APPLICABLE_AGE_GROUPS:
             filtered = [r for r in filtered if r.category == category]
 
         # 기간 필터

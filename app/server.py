@@ -43,11 +43,48 @@ from ranking.calculator import (
 # 선수 식별 시스템
 from app.player_identity import PlayerIdentityResolver, PlayerProfile as IdentityProfile
 
+# DE 대진표 정규화 및 순위 계산
+from app.bracket_utils import normalize_bracket_data, NormalizedBracket, compute_full_final_rankings
+
 # Auth 모듈
 from app.auth.router import router as auth_router, get_current_member
 
-# 글로벌 연령 그룹 정렬 순서
+# Club Management 모듈 (SaaS)
+from app.club import club_router
+
+# 글로벌 연령 그룹 정렬 순서 (FIE 표준)
 AGE_GROUP_ORDER = ["Y8", "Y10", "Y12", "Y14", "Cadet", "Junior", "Veteran", "National"]
+
+# 레거시 → FIE 코드 변환 (DB에 E1/E2/E3/MS/HS/UNI/SR로 저장됨)
+LEGACY_TO_FIE_MAP = {
+    "E1": "Y8",    # 초등 1-2학년
+    "E2": "Y10",   # 초등 3-4학년
+    "E3": "Y12",   # 초등 5-6학년
+    "MS": "Y14",   # 중등
+    "HS": "Cadet", # 고등
+    "UNI": "Junior", # 대학
+    "SR": "Veteran", # 일반
+    "U17": "Cadet",  # U17 → Cadet에 매핑 (Y14와 Cadet 양쪽에서 표시됨)
+}
+
+# FIE → 레거시 역방향 변환 (필터링용)
+FIE_TO_LEGACY_MAP = {
+    "Y8": ["E1"],
+    "Y10": ["E2"],
+    "Y12": ["E3"],
+    "Y14": ["MS", "U17"],  # U17은 Y14 필터에서도 표시
+    "Cadet": ["HS", "U17"], # U17은 Cadet 필터에서도 표시
+    "Junior": ["UNI"],
+    "Veteran": ["SR"],
+}
+
+def convert_to_fie_code(legacy_code: str) -> str:
+    """레거시 코드를 FIE 코드로 변환"""
+    return LEGACY_TO_FIE_MAP.get(legacy_code, legacy_code)
+
+def get_matching_legacy_codes(fie_code: str) -> list:
+    """FIE 코드에 매칭되는 레거시 코드 목록 반환"""
+    return FIE_TO_LEGACY_MAP.get(fie_code, [fie_code])
 
 # 환경변수 로드
 load_dotenv()
@@ -72,6 +109,9 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 # Auth 라우터 등록
 app.include_router(auth_router)
 
+# Club Management 라우터 등록 (SaaS)
+app.include_router(club_router, prefix="/api")
+
 # 데이터 저장소 (메모리 캐시)
 _data_cache: Dict[str, Any] = {}
 _player_index: Dict[str, List[Dict]] = {}  # 선수별 전적 인덱스
@@ -80,6 +120,7 @@ _ranking_calculator: Optional[RankingCalculator] = None  # 랭킹 계산기
 _supabase_client: Optional["Client"] = None  # Supabase 클라이언트
 _data_source: str = "none"  # 현재 데이터 소스 ("supabase" or "json")
 _identity_resolver: Optional[PlayerIdentityResolver] = None  # 선수 식별 시스템
+_fencinglab_analyzer = None  # FencingLab 분석기 (지연 로딩)
 
 
 # ==================== Pydantic Models ====================
@@ -139,7 +180,7 @@ class PlayerRecord(BaseModel):
     weapon: str
     gender: str
     age_group: str
-    event_type: str
+    event_type: str = "개인"  # 기본값: 개인
     team: str
     win_rate: str = ""
     year: int
@@ -171,13 +212,21 @@ def extract_age_group(event_name: str) -> str:
     종목명에서 연령대 추출 (FIE/US Fencing 글로벌 표준)
 
     글로벌 연령 구분:
-    - Y8: 초등 1-2학년 (Under 8)
-    - Y10: 초등 3-4학년 (Under 10)
-    - Y12: 초등 5-6학년 (Under 12)
-    - Y14: 중등부 (Under 14)
-    - Cadet: 고등부 (Under 17)
-    - Junior: 대학부 (Under 20)
+    - Y8: 초등 1-2학년 (Under 9, 9세이하)
+    - Y10: 초등 3-4학년 (Under 11, 11세이하)
+    - Y12: 초등 5-6학년 (Under 13, 13세이하)
+    - Y14: 중등부 (Under 15)
+    - U17: 17세이하 (특수: Y14와 Cadet 양쪽에서 필터링됨)
+    - Cadet: 고등부 (Under 17, 17세이하)
+    - Junior: 대학부 (Under 20, 20세이하)
     - Veteran: 일반부 (Open/Senior)
+
+    익산 국제대회 매핑:
+    - U9 (9세이하) = Y8
+    - U11 (11세이하) = Y10
+    - U13 (13세이하) = Y12
+    - U17 (17세이하) = U17 (특수 코드 - Y14 & Cadet 양쪽 필터)
+    - U20 (20세이하) = Junior
     """
     # 초등부 세분화 패턴 (학년 기반)
     elem_patterns = [
@@ -186,13 +235,23 @@ def extract_age_group(event_name: str) -> str:
         (r'초등.*5[-~]?6|초등부.*5[-~]?6|5[-~]?6학년', 'Y12'),
     ]
 
-    # 나이 기반 패턴 ((?<!\d)로 앞에 숫자가 없어야 함 - "18세이하"가 "8세이하"로 매칭되는 것 방지)
+    # 익산 국제대회 U 코드 패턴 (우선 처리 - 더 구체적)
+    # U17 (17세이하)는 특수 코드 'U17' 반환 → Y14와 Cadet 양쪽에서 필터링
+    iksan_u_patterns = [
+        (r'(?<!\d)9세이하|U9\b', 'Y8'),      # U9 = Y8
+        (r'11세이하|U11\b', 'Y10'),           # U11 = Y10
+        (r'13세이하|U13\b', 'Y12'),           # U13 = Y12
+        (r'17세이하|U17\b', 'U17'),           # U17 = 특수 코드 (Y14 + Cadet)
+        (r'20세이하|U20\b', 'Junior'),        # U20 = Junior
+    ]
+
+    # 나이 기반 패턴
     age_patterns = [
-        (r'(?<!\d)8세이하|U8|Y8', 'Y8'),
-        (r'(?<!\d)9세이하|(?<!\d)10세이하|U10|Y10', 'Y10'),
-        (r'11세이하|12세이하|U12|Y12', 'Y12'),
-        (r'13세이하|14세이하|U14|Y14', 'Y14'),
-        (r'15세이하|16세이하|17세이하|18세이하|U17|U18', 'Cadet'),
+        (r'(?<!\d)8세이하|U8\b|Y8\b', 'Y8'),
+        (r'(?<!\d)10세이하|U10\b|Y10\b', 'Y10'),
+        (r'12세이하|U12\b|Y12\b', 'Y12'),
+        (r'14세이하|U14\b|Y14\b', 'Y14'),
+        (r'15세이하|16세이하|18세이하|U15\b|U16\b|U18\b', 'Cadet'),
     ]
 
     # 일반 패턴
@@ -205,6 +264,11 @@ def extract_age_group(event_name: str) -> str:
 
     # 초등부 세분화 먼저 체크
     for pattern, group in elem_patterns:
+        if re.search(pattern, event_name, re.IGNORECASE):
+            return group
+
+    # 익산 U 코드 패턴 체크 (17세이하 특수 처리)
+    for pattern, group in iksan_u_patterns:
         if re.search(pattern, event_name, re.IGNORECASE):
             return group
 
@@ -223,6 +287,74 @@ def extract_age_group(event_name: str) -> str:
         return 'Y12'  # 기본 초등부 → Y12
 
     return 'Veteran'  # 기본값
+
+
+def get_event_age_group_fie(event: dict) -> str:
+    """
+    이벤트의 연령대를 FIE 코드로 반환
+
+    1. 데이터베이스의 age_group 필드 우선 사용
+    2. 없으면 이벤트명에서 추출
+    3. 레거시 코드는 FIE 코드로 변환
+
+    Args:
+        event: 이벤트 딕셔너리 (age_group, name 필드 포함)
+
+    Returns:
+        FIE 연령대 코드 (Y8, Y10, Y12, Y14, Cadet, Junior, Veteran, U17)
+    """
+    # 1. 데이터베이스의 age_group 필드 우선
+    db_age_group = event.get("age_group", "")
+
+    if db_age_group:
+        # 이미 FIE 코드이면 그대로 반환
+        if db_age_group in ("Y8", "Y10", "Y12", "Y14", "Cadet", "Junior", "Veteran"):
+            return db_age_group
+        # U17은 그대로 유지 (특수 케이스)
+        if db_age_group == "U17":
+            return "U17"
+        # 레거시 코드면 FIE 코드로 변환
+        fie_code = convert_to_fie_code(db_age_group)
+        if fie_code != db_age_group:  # 변환 성공
+            return fie_code
+
+    # 2. 이벤트명에서 추출
+    extracted = extract_age_group(event.get("name", ""))
+
+    # 추출된 코드도 FIE로 변환
+    if extracted:
+        if extracted in ("Y8", "Y10", "Y12", "Y14", "Cadet", "Junior", "Veteran", "U17"):
+            return extracted
+        return convert_to_fie_code(extracted)
+
+    return ""
+
+
+def matches_age_group_filter(event_age: str, filter_age: str) -> bool:
+    """
+    이벤트 연령대가 필터 조건과 매칭되는지 확인
+
+    특수 케이스:
+    - U17 (17세이하): Y14 필터와 Cadet 필터 양쪽에서 매칭됨
+    - 선수들은 Y14와 Cadet 카테고리에서 모두 경기 결과 반영
+
+    Args:
+        event_age: 이벤트의 연령대 코드 (FIE 코드)
+        filter_age: 사용자가 선택한 필터 연령대 (FIE 코드)
+
+    Returns:
+        True if matches, False otherwise
+    """
+    # 정확히 일치하면 매칭
+    if event_age == filter_age:
+        return True
+
+    # U17 특수 처리: Y14 또는 Cadet 필터에서 U17 이벤트 표시
+    if event_age == 'U17':
+        if filter_age in ('Y14', 'Cadet'):
+            return True
+
+    return False
 
 
 def build_player_index():
@@ -268,7 +400,7 @@ def build_player_index():
                     "weapon": event.get("weapon", ""),
                     "gender": event.get("gender", ""),
                     "age_group": age_group,
-                    "event_type": event.get("event_type", ""),
+                    "event_type": event.get("event_type") or "개인",  # None 처리
                     "team": final.get("team", ""),
                     "win_rate": "",
                     "year": year,
@@ -298,7 +430,7 @@ def build_player_index():
                             "weapon": event.get("weapon", ""),
                             "gender": event.get("gender", ""),
                             "age_group": age_group,
-                            "event_type": event.get("event_type", ""),
+                            "event_type": event.get("event_type") or "개인",  # None 처리
                             "team": final.get("team", ""),
                             "win_rate": "",
                             "year": year,
@@ -343,8 +475,12 @@ def build_filter_options():
             if event_type:
                 _filter_options["event_types"].add(event_type)
 
-            age_group = extract_age_group(event.get("name", ""))
-            _filter_options["age_groups"].add(age_group)
+            # 데이터베이스 age_group 필드 우선, FIE 코드로 변환
+            age_group = get_event_age_group_fie(event)
+            if age_group:
+                # U17은 드롭다운에 표시하지 않음 (Y14와 Cadet 양쪽 필터에서 표시됨)
+                if age_group != "U17":
+                    _filter_options["age_groups"].add(age_group)
 
     logger.info(f"필터 옵션 구축 완료: {dict((k, len(v)) for k, v in _filter_options.items())}")
 
@@ -521,39 +657,6 @@ def _filter_pool_rounds(pools: List[Dict]) -> List[Dict]:
     return filtered_pools
 
 
-def load_data_from_json() -> bool:
-    """JSON 파일에서 데이터 로드"""
-    global _data_cache, _data_source
-
-    # 우선순위: full_data_v2 > test_full_data > full_data > fencing_data
-    data_files = [
-        DATA_DIR / "fencing_full_data_v2.json",
-        DATA_DIR / "test_full_data.json",
-        DATA_DIR / "fencing_full_data.json",
-        DATA_DIR / "fencing_data.json"
-    ]
-
-    for data_file in data_files:
-        if data_file.exists():
-            try:
-                with open(data_file, "r", encoding="utf-8") as f:
-                    _data_cache = json.load(f)
-
-                # Apply pool filtering to all competitions/events
-                for comp in _data_cache.get("competitions", []):
-                    for event in comp.get("events", []):
-                        raw_pools = event.get("pool_rounds", [])
-                        event["pool_rounds"] = _filter_pool_rounds(raw_pools)
-
-                _data_source = "json"
-                logger.info(f"JSON 데이터 로드 완료: {len(_data_cache.get('competitions', []))}개 대회 ({data_file.name})")
-                return True
-            except Exception as e:
-                logger.error(f"JSON 파일 로드 실패 ({data_file}): {e}")
-
-    return False
-
-
 def build_identity_resolver():
     """선수 식별 시스템 구축 (동명이인/소속변경 처리)"""
     global _identity_resolver
@@ -578,25 +681,25 @@ def build_identity_resolver():
 
 
 def load_data():
-    """데이터 로드 (Supabase 우선, JSON fallback)"""
-    global _data_cache, _ranking_calculator, _data_source
+    """데이터 로드 (Supabase 전용)
 
-    # 환경변수로 강제 JSON 모드 설정 가능
-    force_json = os.getenv("FORCE_JSON_DATA", "").lower() in ("1", "true", "yes")
+    🚨 CRITICAL: JSON 파일 사용 금지!
+    모든 데이터는 Supabase에서 로드합니다.
+    CLAUDE.md의 데이터 소스 규칙을 반드시 확인하세요.
+    """
+    global _data_cache, _ranking_calculator, _data_source, _fencinglab_analyzer
 
-    # 1. Supabase 클라이언트 초기화 (강제 JSON 모드가 아닐 때만)
-    if not force_json:
-        init_supabase_client()
+    # FencingLab 분석기 리셋
+    _fencinglab_analyzer = None
 
-    # 2. JSON 파일 우선 로드 (DE 데이터 포함)
-    # Supabase에 DE 데이터가 없으므로 현재는 JSON 우선 사용
-    if load_data_from_json():
-        logger.info("📁 JSON 데이터 소스 사용 중 (DE 데이터 포함)")
-    # 3. JSON 실패 시 Supabase 시도
-    elif _supabase_client and load_data_from_supabase():
+    # Supabase 클라이언트 초기화
+    init_supabase_client()
+
+    # Supabase에서 데이터 로드 (유일한 데이터 소스)
+    if _supabase_client and load_data_from_supabase():
         logger.info("✅ Supabase 데이터 소스 사용 중")
     else:
-        logger.warning("❌ 데이터 소스 없음")
+        logger.error("❌ Supabase 데이터 로드 실패 - 데이터 소스 없음")
         _data_cache = {"competitions": [], "meta": {}}
         _data_source = "none"
         return
@@ -604,17 +707,16 @@ def load_data():
     # 인덱스 구축
     build_filter_options()
     build_player_index()
-    build_identity_resolver()  # 선수 식별 시스템 구축
+    build_identity_resolver()
 
-    # 랭킹 계산기 초기화 (JSON 파일 필요)
-    data_file = DATA_DIR / "fencing_full_data_v2.json"
-    if data_file.exists():
-        try:
-            _ranking_calculator = RankingCalculator(str(data_file))
-            logger.info(f"랭킹 계산기 초기화 완료: {len(_ranking_calculator.results)}개 결과")
-        except Exception as e:
-            logger.error(f"랭킹 계산기 초기화 실패: {e}")
-            _ranking_calculator = None
+    # 랭킹 계산기 초기화 (Supabase 캐시 데이터 사용)
+    try:
+        _ranking_calculator = RankingCalculator()
+        _ranking_calculator.load_from_data(_data_cache)
+        logger.info(f"✅ 랭킹 계산기 초기화 완료: {len(_ranking_calculator.results)}개 결과")
+    except Exception as e:
+        logger.error(f"랭킹 계산기 초기화 실패: {e}")
+        _ranking_calculator = None
 
 
 def get_competitions() -> List[Dict]:
@@ -634,8 +736,19 @@ def get_competition(event_cd: str) -> Optional[Dict]:
 
 @app.on_event("startup")
 async def startup_event():
-    """서버 시작 시 데이터 로드"""
+    """서버 시작 시 데이터 로드
+
+    🚨 NOTE: 익산 스케줄러 제거됨 (2025-12-22)
+    모든 데이터는 Supabase에 통합 관리됩니다.
+    """
     load_data()
+    logger.info("✅ 서버 시작 완료 - Supabase 데이터 소스 사용 중")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """서버 종료 시 정리"""
+    logger.info("서버 종료됨")
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -735,8 +848,10 @@ async def api_events(
                 continue
 
             # 연령대 필터 (National이 아닌 경우에만 적용)
-            event_age = extract_age_group(event.get("name", ""))
-            if age_group and not is_national_filter and event_age != age_group:
+            # 데이터베이스 age_group 필드 우선, FIE 코드로 변환
+            # U17 (17세이하)는 Y14와 Cadet 양쪽 필터에서 표시됨
+            event_age = get_event_age_group_fie(event)
+            if age_group and not is_national_filter and not matches_age_group_filter(event_age, age_group):
                 continue
 
             # 검색어 필터
@@ -747,15 +862,15 @@ async def api_events(
                     continue
 
             events.append(EventSummary(
-                event_cd=event.get("event_cd", ""),
-                sub_event_cd=event.get("sub_event_cd", ""),
-                name=event.get("name", ""),
-                weapon=event.get("weapon", ""),
-                gender=event.get("gender", ""),
-                age_group=event_age,
-                event_type=event.get("event_type", ""),
-                competition_name=comp_name,
-                competition_date=comp_date,
+                event_cd=event.get("event_cd", "") or "",
+                sub_event_cd=event.get("sub_event_cd", "") or "",
+                name=event.get("name", "") or "",
+                weapon=event.get("weapon", "") or "",
+                gender=event.get("gender", "") or "",
+                age_group=event_age or "",
+                event_type=event.get("event_type", "") or "개인",  # 기본값: 개인
+                competition_name=comp_name or "",
+                competition_date=comp_date or "",
                 year=comp_year
             ))
 
@@ -850,14 +965,24 @@ async def api_player_profile(
 
 
 @app.get("/api/players/search")
-async def api_player_search(q: str = Query(..., min_length=1)):
-    """선수 검색 API (자동완성용) - 동명이인 구분 지원"""
+async def api_player_search(
+    q: str = Query(..., min_length=1),
+    limit: int = Query(30, ge=1, le=500),
+    include_history: bool = Query(False, description="Include players who were previously at the team (alumni)")
+):
+    """선수 검색 API (자동완성용) - 동명이인 구분 지원
+
+    Args:
+        q: 검색어 (선수 이름 또는 소속명)
+        limit: 최대 결과 수 (기본 30, 최대 500)
+        include_history: True면 과거 소속 선수도 포함 (이적 선수 추적용)
+    """
     q_lower = q.lower()
     matches = []
 
     # 선수 식별 시스템 사용
     if _identity_resolver:
-        search_results = _identity_resolver.search_players(q)
+        search_results = _identity_resolver.search_players(q, include_history=include_history)
 
         for profile in search_results:
             matches.append({
@@ -869,6 +994,7 @@ async def api_player_search(q: str = Query(..., min_length=1)):
                 "record_count": len(profile.competition_ids),
                 "weapons": list(profile.weapons),
                 "has_disambiguation": _identity_resolver.has_disambiguation(profile.name),
+                "disambiguation_warning": profile.disambiguation_warning if profile.has_disambiguation_warning else None,
                 "team_history": [
                     {
                         "team": t.team,
@@ -925,7 +1051,7 @@ async def api_player_search(q: str = Query(..., min_length=1)):
     # 기록 많은 순 정렬
     matches.sort(key=lambda x: x["record_count"], reverse=True)
 
-    return {"results": matches[:30], "total": len(matches)}
+    return {"results": matches[:limit], "total": len(matches)}
 
 
 @app.get("/api/players/by-id/{player_id}")
@@ -990,6 +1116,38 @@ async def api_player_disambiguation(name: str):
                 ]
             }
             for p in profiles
+        ]
+    }
+
+
+@app.get("/api/players/debug/{player_id}")
+async def api_player_debug(player_id: str):
+    """선수 디버그용 상세 정보 (records 포함)"""
+    if not _identity_resolver:
+        raise HTTPException(status_code=503, detail="선수 식별 시스템이 초기화되지 않았습니다")
+
+    profile = _identity_resolver.get_player_by_id(player_id)
+    if not profile:
+        raise HTTPException(status_code=404, detail="선수를 찾을 수 없습니다")
+
+    # Check age group warning
+    warning = profile.check_age_group_validity()
+
+    return {
+        "player_id": profile.player_id,
+        "name": profile.name,
+        "age_groups": list(profile.age_groups),
+        "disambiguation_warning": warning,
+        "records": [
+            {
+                "comp_name": r.get("comp_name", ""),
+                "comp_date": r.get("comp_date", ""),
+                "event_name": r.get("event_name", ""),
+                "age_group": r.get("age_group", ""),
+                "team": r.get("team", ""),
+                "weapon": r.get("weapon", "")
+            }
+            for r in profile.records
         ]
     }
 
@@ -1095,7 +1253,7 @@ async def api_stats():
 async def api_rankings(
     weapon: str = Query(..., description="무기 (플러레/에뻬/사브르)"),
     gender: str = Query(..., description="성별 (남/여)"),
-    age_group: str = Query(..., description="연령대 (E1/E2/E3/MS/HS/UNI/SR)"),
+    age_group: str = Query(..., description="연령대 (E1/E2/E3/MS/HS/UNI/SR/NT)"),
     category: Optional[str] = Query(None, description="구분 (PRO/CLUB) - 중학교 이상만"),
     year: Optional[int] = Query(None, description="시즌 연도"),
     page: int = Query(1, ge=1),
@@ -1112,6 +1270,7 @@ async def api_rankings(
     - HS: 고등 (전문/동호인 분리)
     - UNI: 대학 (전문/동호인 분리)
     - SR: 일반 (전문/동호인 분리)
+    - NT: 국가대표 (국가대표 선발대회만 집계)
 
     구분:
     - PRO: 전문 선수
@@ -1120,20 +1279,26 @@ async def api_rankings(
     if not _ranking_calculator:
         raise HTTPException(status_code=503, detail="랭킹 시스템이 초기화되지 않았습니다")
 
-    # 중학교 이상이면서 카테고리 미지정 시 기본값 PRO
-    if age_group in CATEGORY_APPLICABLE_AGE_GROUPS and not category:
-        category = "PRO"
+    # 국가대표(NT) 특수 처리
+    is_national_team = (age_group == "NT")
 
-    # 초등부는 카테고리 무시
-    if age_group not in CATEGORY_APPLICABLE_AGE_GROUPS:
+    # 중학교 이상이면서 카테고리 미지정 시 기본값 PRO
+    # NT는 항상 PRO (국가대표 선발대회는 전문 대회)
+    if is_national_team:
+        category = "PRO"
+    elif age_group in CATEGORY_APPLICABLE_AGE_GROUPS and not category:
+        category = "PRO"
+    elif age_group not in CATEGORY_APPLICABLE_AGE_GROUPS:
+        # 초등부는 카테고리 무시
         category = None
 
     rankings = _ranking_calculator.calculate_rankings(
         weapon=weapon,
         gender=gender,
-        age_group=age_group,
+        age_group=age_group if not is_national_team else None,  # NT는 모든 연령대 포함
         category=category,
-        year=year
+        year=year,
+        national_team_only=is_national_team  # 국가대표 선발대회만 필터
     )
 
     # 페이지네이션
@@ -1142,11 +1307,14 @@ async def api_rankings(
     end = start + per_page
     page_rankings = rankings[start:end]
 
+    # 국가대표 표시명
+    age_group_display = "🇰🇷 국가대표" if is_national_team else AGE_GROUP_CODES.get(age_group, age_group)
+
     return RankingResponse(
         weapon=weapon,
         gender=gender,
         age_group=age_group,
-        age_group_name=AGE_GROUP_CODES.get(age_group, age_group),
+        age_group_name=age_group_display,
         category=category,
         category_name=CATEGORY_CODES.get(category) if category else None,
         total=total,
@@ -1181,6 +1349,7 @@ async def api_ranking_options():
             {"code": "HS", "name": "고등", "has_category": True},
             {"code": "UNI", "name": "대학", "has_category": True},
             {"code": "SR", "name": "일반", "has_category": True},
+            {"code": "NT", "name": "🇰🇷 국가대표", "has_category": True, "is_national": True},
         ],
         "categories": [
             {"code": "PRO", "name": "전문"},
@@ -1337,13 +1506,44 @@ def calculate_head_to_head(player_name: str, records: List[Dict], profile_teams:
             # ===== 2. 엘리미나시옹디렉트 대진표에서 상대 전적 추출 =====
             de_bracket = event.get("de_bracket", {})
             if isinstance(de_bracket, dict):
-                for round_name, matches in de_bracket.items():
-                    if not isinstance(matches, list):
-                        continue
-                    for match in matches:
-                        # match가 딕셔너리가 아니면 스킵
-                        if not isinstance(match, dict):
+                # final_rankings로 검증용 맵 생성 (순위가 높을수록 더 오래 생존 = 더 많이 이김)
+                final_rankings = event.get("final_rankings", [])
+                rankings_map = {}
+                for r in final_rankings:
+                    r_name = r.get("name", "")
+                    r_rank = r.get("rank", 999)
+                    if r_name:
+                        rankings_map[r_name] = r_rank
+
+                # 새로운 full_bouts 구조 처리 (2025년 스크래핑 데이터)
+                full_bouts = de_bracket.get("full_bouts", [])
+                if full_bouts and isinstance(full_bouts, list):
+                    # table_index 높은 순으로 정렬 (최종 결과가 더 정확함)
+                    sorted_bouts = sorted(
+                        [b for b in full_bouts if isinstance(b, dict)],
+                        key=lambda x: x.get("table_index", 0),
+                        reverse=True
+                    )
+
+                    # 먼저 해당 선수가 관련된 경기들만 수집
+                    player_bouts = []
+                    for bout in sorted_bouts:
+                        if not isinstance(bout, dict):
                             continue
+                        winner = bout.get("winner", {})
+                        loser = bout.get("loser", {})
+                        w_name = winner.get("name", "")
+                        l_name = loser.get("name", "")
+
+                        if w_name == player_name or l_name == player_name:
+                            player_bouts.append(bout)
+
+                    # 같은 상대에 대해 여러 결과가 있으면 final_rankings로 검증
+                    seen_de_opponents = set()
+                    for bout in player_bouts:
+                        winner = bout.get("winner", {})
+                        loser = bout.get("loser", {})
+                        round_name = bout.get("round", "DE")
 
                         opponent_name = None
                         my_score = 0
@@ -1351,33 +1551,45 @@ def calculate_head_to_head(player_name: str, records: List[Dict], profile_teams:
                         result = None
                         opponent_team = ""
 
-                        # player1이 해당 선수인 경우
-                        if match.get("player1_name") == player_name:
-                            # 동명이인 구분: profile_teams가 있으면 팀 매칭 확인
-                            if profile_teams and match.get("player1_team") not in profile_teams:
+                        # 선수가 winner인 경우
+                        if winner.get("name") == player_name:
+                            if profile_teams and winner.get("team") not in profile_teams:
                                 continue
-                            opponent_name = match.get("player2_name")
-                            opponent_team = match.get("player2_team", "")
-                            my_score = match.get("player1_score", 0)
-                            opponent_score = match.get("player2_score", 0)
-                            result = "V" if match.get("winner_name") == player_name else "D"
-                        # player2가 해당 선수인 경우
-                        elif match.get("player2_name") == player_name:
-                            # 동명이인 구분: profile_teams가 있으면 팀 매칭 확인
-                            if profile_teams and match.get("player2_team") not in profile_teams:
+                            opponent_name = loser.get("name")
+                            opponent_team = loser.get("team", "")
+                            my_score = winner.get("score") or 0
+                            opponent_score = loser.get("score") or 0
+                            result = "V"
+                        # 선수가 loser인 경우
+                        elif loser.get("name") == player_name:
+                            if profile_teams and loser.get("team") not in profile_teams:
                                 continue
-                            opponent_name = match.get("player1_name")
-                            opponent_team = match.get("player1_team", "")
-                            my_score = match.get("player2_score", 0)
-                            opponent_score = match.get("player1_score", 0)
-                            result = "V" if match.get("winner_name") == player_name else "D"
+                            opponent_name = winner.get("name")
+                            opponent_team = winner.get("team", "")
+                            my_score = loser.get("score") or 0
+                            opponent_score = winner.get("score") or 0
+                            result = "D"
 
                         if opponent_name and opponent_name != player_name:
-                            # 중복 체크용 유니크 키 (대회+종목+라운드+상대+점수)
-                            match_key = f"{comp_name}|{event_name}|{round_name}|{opponent_name}|{my_score}-{opponent_score}"
-                            if match_key in seen_matches:
+                            # final_rankings로 결과 검증 (순위 높은 쪽이 이긴 것)
+                            # 스크래퍼 버그: 점수 위치를 승자로 잘못 해석하는 문제 수정
+                            if rankings_map and opponent_name in rankings_map and player_name in rankings_map:
+                                my_rank = rankings_map.get(player_name, 999)
+                                opp_rank = rankings_map.get(opponent_name, 999)
+                                # 순위가 더 높은(숫자가 작은) 선수가 이긴 것
+                                correct_result = "V" if my_rank < opp_rank else "D"
+                                if result != correct_result:
+                                    # 스크래퍼 데이터가 잘못됨 - 수정
+                                    result = correct_result
+                                    # 점수도 뒤바꿈
+                                    my_score, opponent_score = opponent_score, my_score
+
+                            # DE에서는 같은 대회/종목에서 같은 상대와 한 번만 만남 (single elimination)
+                            de_match_key = f"{comp_name}|{event_name}|{opponent_name}"
+                            if de_match_key in seen_matches:
                                 continue
-                            seen_matches.add(match_key)
+                            seen_matches.add(de_match_key)
+                            seen_de_opponents.add(opponent_name)
 
                             if opponent_name not in opponent_stats:
                                 opponent_stats[opponent_name] = {
@@ -1396,10 +1608,69 @@ def calculate_head_to_head(player_name: str, records: List[Dict], profile_teams:
                             opponent_stats[opponent_name]["matches"].append({
                                 "date": comp_date,
                                 "tournament": comp_name,
-                                "round": round_name,  # 64강, 32강, etc.
+                                "round": round_name,
                                 "score": f"{my_score}-{opponent_score}",
                                 "result": result
                             })
+                else:
+                    # 기존 구조 (round_name: [matches] 형태) 처리
+                    for round_name, matches in de_bracket.items():
+                        if not isinstance(matches, list):
+                            continue
+                        for match in matches:
+                            if not isinstance(match, dict):
+                                continue
+
+                            opponent_name = None
+                            my_score = 0
+                            opponent_score = 0
+                            result = None
+                            opponent_team = ""
+
+                            if match.get("player1_name") == player_name:
+                                if profile_teams and match.get("player1_team") not in profile_teams:
+                                    continue
+                                opponent_name = match.get("player2_name")
+                                opponent_team = match.get("player2_team", "")
+                                my_score = match.get("player1_score", 0)
+                                opponent_score = match.get("player2_score", 0)
+                                result = "V" if match.get("winner_name") == player_name else "D"
+                            elif match.get("player2_name") == player_name:
+                                if profile_teams and match.get("player2_team") not in profile_teams:
+                                    continue
+                                opponent_name = match.get("player1_name")
+                                opponent_team = match.get("player1_team", "")
+                                my_score = match.get("player2_score", 0)
+                                opponent_score = match.get("player1_score", 0)
+                                result = "V" if match.get("winner_name") == player_name else "D"
+
+                            if opponent_name and opponent_name != player_name:
+                                match_key = f"{comp_name}|{event_name}|{round_name}|{opponent_name}|{my_score}-{opponent_score}"
+                                if match_key in seen_matches:
+                                    continue
+                                seen_matches.add(match_key)
+
+                                if opponent_name not in opponent_stats:
+                                    opponent_stats[opponent_name] = {
+                                        "name": opponent_name,
+                                        "team": opponent_team,
+                                        "wins": 0,
+                                        "losses": 0,
+                                        "matches": []
+                                    }
+
+                                if result == "V":
+                                    opponent_stats[opponent_name]["wins"] += 1
+                                else:
+                                    opponent_stats[opponent_name]["losses"] += 1
+
+                                opponent_stats[opponent_name]["matches"].append({
+                                    "date": comp_date,
+                                    "tournament": comp_name,
+                                    "round": round_name,
+                                    "score": f"{my_score}-{opponent_score}",
+                                    "result": result
+                                })
 
     # 승률 계산 및 정렬
     result = []
@@ -1438,15 +1709,43 @@ def get_event_from_competition(event_cd: str, sub_event_cd: str) -> tuple:
 
 # ==================== HTML Pages ====================
 
+@app.get("/player/by-id/{player_id}", response_class=HTMLResponse)
+async def player_page_by_id(request: Request, player_id: str):
+    """선수 ID로 프로필 페이지 접근 (KOP00000 형식)"""
+    if not _identity_resolver:
+        raise HTTPException(status_code=503, detail="선수 식별 시스템이 초기화되지 않았습니다")
+
+    profile = _identity_resolver.get_player_by_id(player_id)
+    if not profile:
+        raise HTTPException(status_code=404, detail="선수를 찾을 수 없습니다")
+
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(
+        url=f"/player/{profile.name}?id={player_id}",
+        status_code=302
+    )
+
+
 @app.get("/player/{player_name}", response_class=HTMLResponse)
 async def player_page(request: Request, player_name: str, id: Optional[str] = None, team: Optional[str] = None):
     """선수 프로필 페이지 (fencingtracker 스타일)
 
     Args:
-        player_name: 선수 이름
+        player_name: 선수 이름 또는 선수 ID (KOP00000 형식)
         id: 선수 ID (동명이인 구분용, Optional)
         team: 소속팀 (동명이인 구분용, Optional)
     """
+    # player_name이 실제로 player_id (KOP00000 형식)인 경우 처리
+    if player_name.startswith("KOP") and _identity_resolver:
+        profile = _identity_resolver.get_player_by_id(player_name)
+        if profile:
+            # 실제 이름으로 리다이렉트
+            from fastapi.responses import RedirectResponse
+            return RedirectResponse(
+                url=f"/player/{profile.name}?id={player_name}",
+                status_code=302
+            )
+
     identity_profile = None
     has_disambiguation = False
     profile_identified_by_team = False
@@ -1638,6 +1937,8 @@ async def player_page(request: Request, player_name: str, id: Optional[str] = No
         "name_en_verified": identity_profile.name_en_verified if identity_profile else False,
         "fie_id": identity_profile.fie_id if identity_profile else None,
         "fencingtracker_id": identity_profile.fencingtracker_id if identity_profile else None,
+        # current_team: 가장 최근 소속팀 (FencingLab API에서 사용)
+        "current_team": identity_profile.current_team if identity_profile else (teams[0] if teams else None),
         "teams": teams,
         "years": years,
         "weapons": weapons,
@@ -1675,77 +1976,61 @@ async def player_page(request: Request, player_name: str, id: Optional[str] = No
 
 
 def transform_de_bracket(event_data: Dict) -> Dict:
-    """DE bracket 데이터를 템플릿 호환 형식으로 변환"""
+    """DE bracket 데이터를 템플릿 호환 형식으로 변환 (bracket_utils 사용)"""
     de_bracket = event_data.get("de_bracket", {})
     if not de_bracket:
         return event_data
 
-    # seeding 데이터로 선수 정보 맵 생성
-    seeding = de_bracket.get("seeding", [])
-    seed_to_player = {}
-    for player in seeding:
-        seed = player.get("seed")
-        if seed and seed not in seed_to_player:  # 첫 번째 등장만
-            seed_to_player[seed] = {
-                "name": player.get("name", ""),
-                "team": player.get("team", "")
-            }
+    # bracket_utils로 정규화
+    normalized = normalize_bracket_data(de_bracket)
 
-    # results_by_round를 템플릿 형식으로 변환
-    results_by_round = de_bracket.get("results_by_round", {})
+    # NormalizedBracket이 None인 경우 원본 반환
+    if normalized is None:
+        return event_data
+
+    # NormalizedBracket 객체를 event_data에 추가
+    event_data["normalized_bracket"] = normalized
+
+    # 기존 템플릿 호환성을 위한 변환 (레거시 지원)
+    # 속성명: bouts_by_round (matches_by_round 아님)
     transformed_rounds = {}
+    if hasattr(normalized, 'bouts_by_round') and normalized.bouts_by_round:
+        for round_name, bouts in normalized.bouts_by_round.items():
+            transformed_rounds[round_name] = [b.to_dict() for b in bouts]
 
-    # 라운드명 매핑 (32강전 -> 32강)
-    round_name_map = {
-        "64강전": "64강", "32강전": "32강", "16강전": "16강",
-        "8강전": "8강", "준결승": "준결승", "결승": "결승",
-        "3-4위전": "3-4위전"
-    }
-
-    for round_name, matches in results_by_round.items():
-        normalized_round = round_name_map.get(round_name, round_name)
-        transformed_matches = []
-
-        for match in matches:
-            winner_seed = match.get("seed", 0)
-            winner_name = match.get("name", "")
-            score = match.get("score", {})
-            winner_score = score.get("winner_score", 0) if score else 0
-            loser_score = score.get("loser_score", 0) if score else 0
-
-            # 승자 정보
-            winner_info = seed_to_player.get(winner_seed, {"name": winner_name, "team": ""})
-
-            # 패자 시드 추론 (토너먼트 대진 규칙: 1 vs 64, 2 vs 63, ...)
-            bracket_size = max(seed_to_player.keys()) if seed_to_player else 64
-            loser_seed = bracket_size - winner_seed + 1 if winner_seed <= bracket_size else 0
-            loser_info = seed_to_player.get(loser_seed, {"name": "Unknown", "team": ""})
-
-            transformed_matches.append({
-                "player1_seed": winner_seed,
-                "player1_name": winner_info.get("name", winner_name),
-                "player1_team": winner_info.get("team", ""),
-                "player1_score": winner_score,
-                "player2_seed": loser_seed,
-                "player2_name": loser_info.get("name", ""),
-                "player2_team": loser_info.get("team", ""),
-                "player2_score": loser_score,
-                "winner_seed": winner_seed,
-                "winner_name": winner_info.get("name", winner_name)
-            })
-
-        if transformed_matches:
-            transformed_rounds[normalized_round] = transformed_matches
-
-    # 원본 데이터 보존하면서 변환된 데이터 추가
     event_data["de_bracket"] = transformed_rounds
-    event_data["de_seeding"] = seeding  # 시딩 데이터 별도 보존
+    event_data["de_seeding"] = getattr(normalized, 'seeding', [])
+    event_data["de_rounds"] = getattr(normalized, 'rounds', [])
+
     return event_data
+
+
+# ==================== 익산 국제대회 리다이렉트 (레거시 URL 호환) ====================
+# NOTE: 익산 대회 데이터는 Supabase에 통합됨 (COMPM00666, COMPM00673)
+# 기존 URL을 위한 리다이렉트만 유지
+
+
+@app.get("/competition/iksan-u17-u20")
+async def iksan_u17_redirect():
+    """익산 U17/U20 → Supabase 표준 대회 페이지로 리다이렉트"""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/competition/COMPM00666", status_code=301)
+
+
+@app.get("/competition/iksan-u13")
+async def iksan_u13_redirect():
+    """익산 U13/U11/U9 → Supabase 표준 대회 페이지로 리다이렉트"""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/competition/COMPM00673", status_code=301)
 
 
 @app.get("/competition/{event_cd}", response_class=HTMLResponse)
 async def competition_detail_page(request: Request, event_cd: str, event: Optional[str] = None):
     """대회 상세 페이지"""
+    from ranking.calculator import (
+        calculate_points, classify_competition_tier, extract_age_group
+    )
+
     comp = get_competition(event_cd)
     if not comp:
         raise HTTPException(status_code=404, detail="대회를 찾을 수 없습니다")
@@ -1754,13 +2039,53 @@ async def competition_detail_page(request: Request, event_cd: str, event: Option
     if event:
         selected_event = None
         for e in comp.get("events", []):
-            if e.get("sub_event_cd") == event:
+            # sub_event_cd 또는 이벤트 이름으로 매칭
+            if e.get("sub_event_cd") == event or e.get("name") == event:
                 selected_event = e.copy()  # 복사본 사용
                 break
 
         if selected_event:
+            # 원본 DE 데이터 저장 (순위 계산에 필요)
+            original_de_bracket = selected_event.get("de_bracket", {})
+            pool_total_ranking = selected_event.get("pool_total_ranking", [])
+            existing_rankings = selected_event.get("final_rankings", [])
+
             # DE 데이터 변환
             selected_event = transform_de_bracket(selected_event)
+
+            # 전체 최종 순위 계산 - 기존 데이터가 불완전할 때만
+            # 불완전 기준: 4등 이하만 있거나 (메달 순위만), 1등이 없는 경우
+            needs_recompute = False
+            if not existing_rankings:
+                needs_recompute = True
+            elif len(existing_rankings) <= 4:
+                # 4명 이하면 불완전할 가능성 높음
+                needs_recompute = True
+            elif existing_rankings and existing_rankings[0].get("rank", 0) != 1:
+                # 1등부터 시작하지 않으면 불완전
+                needs_recompute = True
+
+            if needs_recompute and (original_de_bracket or pool_total_ranking):
+                computed_rankings = compute_full_final_rankings(
+                    original_de_bracket,
+                    pool_total_ranking
+                )
+                if computed_rankings:
+                    selected_event["final_rankings"] = computed_rankings
+
+            # 포인트 계산 및 추가
+            comp_name = comp.get("competition", {}).get("name", "")
+            tier = classify_competition_tier(comp_name)
+            event_name = selected_event.get("name", "")
+            age_group = extract_age_group(event_name)
+            total_participants = selected_event.get("total_participants") or len(selected_event.get("final_rankings", []))
+
+            # final_rankings에 포인트 추가
+            for ranking in selected_event.get("final_rankings", []):
+                rank = ranking.get("rank", 0)
+                if rank > 0:
+                    points = calculate_points(tier, rank, total_participants, age_group)
+                    ranking["points"] = points
 
             return templates.TemplateResponse("event_result.html", {
                 "request": request,
@@ -1794,24 +2119,22 @@ async def chat_page(request: Request):
 
 @app.get("/rankings", response_class=HTMLResponse)
 async def rankings_page(request: Request):
-    """랭킹 페이지"""
+    """FencingLab Ranking 페이지"""
     return templates.TemplateResponse("rankings.html", {
         "request": request,
-        "title": "랭킹"
+        "title": "FencingLab Ranking"
     })
 
 
 # ==================== FencingLab API ====================
 
-# FencingLab 분석기 (지연 로딩)
-_fencinglab_analyzer = None
-
 def get_fencinglab_analyzer():
-    """FencingLab 분석기 싱글톤"""
+    """FencingLab 분석기 싱글톤 (Supabase 캐시 사용)"""
     global _fencinglab_analyzer
     if _fencinglab_analyzer is None:
         from app.player_analytics import FencingLabAnalyzer
-        _fencinglab_analyzer = FencingLabAnalyzer()
+        # Supabase 캐시 데이터 전달 (JSON 파일 사용 안함)
+        _fencinglab_analyzer = FencingLabAnalyzer(data=_data_cache)
     return _fencinglab_analyzer
 
 
@@ -1824,6 +2147,44 @@ async def fencinglab_club_players(club_name: str):
         "club": club_name,
         "players": players,
         "count": len(players)
+    }
+
+
+@app.get("/api/fencinglab/tracked-players")
+async def fencinglab_tracked_players():
+    """모든 추적 대상 선수 목록 (최병철펜싱클럽 + 산하 관리 선수)"""
+    analyzer = get_fencinglab_analyzer()
+    all_players = analyzer.get_all_tracked_players()
+
+    # 각 선수에 대해 기본 통계 추가
+    result = {}
+    for club_name, players in all_players.items():
+        club_data = []
+        for p in players:
+            analytics = analyzer.analyze_player(p["name"], p["team"])
+            if analytics:
+                club_data.append({
+                    "name": p["name"],
+                    "team": p["team"],
+                    "total_matches": analytics.total_matches,
+                    "win_rate": analytics.win_rate,
+                    "recent_6_win_rate": analytics.recent_6_win_rate,
+                    "recent_6_trend": analytics.recent_6_trend
+                })
+            else:
+                club_data.append({
+                    "name": p["name"],
+                    "team": p["team"],
+                    "total_matches": 0,
+                    "win_rate": 0,
+                    "recent_6_win_rate": 0,
+                    "recent_6_trend": "데이터 없음"
+                })
+        result[club_name] = club_data
+
+    return {
+        "tracked_clubs": result,
+        "total_players": sum(len(v) for v in result.values())
     }
 
 
@@ -1910,75 +2271,61 @@ async def fencinglab_player_page(request: Request, player_name: str):
     })
 
 
-# ==================== 익산 국제대회 API ====================
+# ==================== Club Management SaaS HTML 페이지 ====================
 
-@app.get("/api/iksan/data")
-async def get_iksan_data():
-    """익산 국제대회 데이터 조회"""
-    iksan_file = DATA_DIR / "iksan_international_2025.json"
+@app.get("/club", response_class=HTMLResponse)
+@app.get("/club/", response_class=HTMLResponse)
+async def club_dashboard_page(request: Request, test: Optional[str] = None, role: Optional[str] = None):
+    """클럽 대시보드 페이지 - 역할별 뷰 제공
 
-    if not iksan_file.exists():
-        return {"status": "no_data", "message": "익산 대회 데이터가 없습니다"}
+    역할별 대시보드:
+    - student, parent: 내 출결, 레슨, 공지사항 (모바일 최적화)
+    - coach, head_coach: 전체 회원/출결/레슨 관리
+    - owner: 코치 기능 + 회계관리 + 감독 메세지
+    """
+    # 테스트 모드에서는 role 파라미터로 역할 지정 가능
+    # 실제 운영시에는 JWT 토큰에서 역할 확인
+    template_map = {
+        "student": "club/dashboard_student.html",
+        "parent": "club/dashboard_student.html",
+        "coach": "club/dashboard_coach.html",
+        "head_coach": "club/dashboard_coach.html",
+        "owner": "club/dashboard_coach.html",  # owner는 coach와 동일 + 회계관리 버튼
+        "staff": "club/dashboard_coach.html",
+    }
 
-    try:
-        with open(iksan_file, 'r', encoding='utf-8') as f:
-            data = json.load(f)
+    # 테스트 모드: role 파라미터 또는 기본값 (owner)
+    if test:
+        selected_role = role if role in template_map else "owner"
+    else:
+        # 실제 운영: JWT에서 역할 확인 (미구현시 기본 coach)
+        selected_role = "coach"
 
-        return {
-            "status": "ok",
-            "scraped_at": data.get("scraped_at"),
-            "competition_name": data.get("competition_name"),
-            "event_count": len(data.get("events", [])),
-            "result_count": len(data.get("results", [])),
-            "events": data.get("events", []),
-        }
-    except Exception as e:
-        logger.error(f"익산 데이터 로드 오류: {e}")
-        return {"status": "error", "message": str(e)}
+    template_name = template_map.get(selected_role, "club/dashboard_coach.html")
 
-
-@app.get("/api/iksan/event/{event_name}")
-async def get_iksan_event(event_name: str):
-    """익산 대회 특정 종목 결과 조회"""
-    iksan_file = DATA_DIR / "iksan_international_2025.json"
-
-    if not iksan_file.exists():
-        raise HTTPException(status_code=404, detail="익산 대회 데이터가 없습니다")
-
-    try:
-        with open(iksan_file, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-
-        # event_name 검색 (부분 매칭)
-        for result in data.get("results", []):
-            if event_name in result.get("event_name", ""):
-                return {
-                    "status": "ok",
-                    "event_name": result.get("event_name"),
-                    "age_category": result.get("age_category"),
-                    "mapped_age_group": result.get("mapped_age_group"),
-                    "pools": result.get("pools", []),
-                }
-
-        raise HTTPException(status_code=404, detail=f"종목을 찾을 수 없습니다: {event_name}")
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"익산 종목 데이터 로드 오류: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return templates.TemplateResponse(template_name, {
+        "request": request,
+        "title": "클럽 대시보드 - Korean Fencing Tracker",
+        "user_role": selected_role
+    })
 
 
-@app.post("/api/iksan/update")
-async def trigger_iksan_update():
-    """익산 대회 업데이트 트리거 (수동)"""
-    try:
-        from scraper.iksan_international import check_iksan_updates
-        await check_iksan_updates()
-        return {"status": "ok", "message": "익산 대회 업데이트 완료"}
-    except Exception as e:
-        logger.error(f"익산 업데이트 오류: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+@app.get("/club/checkin", response_class=HTMLResponse)
+async def club_checkin_page(request: Request):
+    """출석 체크인 페이지 (학생용 모바일 최적화)"""
+    return templates.TemplateResponse("club/checkin.html", {
+        "request": request,
+        "title": "출석 체크인 - Korean Fencing Tracker"
+    })
+
+
+@app.get("/club/accounting", response_class=HTMLResponse)
+async def club_accounting_page(request: Request):
+    """회계관리 페이지 (owner/사장 전용)"""
+    return templates.TemplateResponse("club/accounting.html", {
+        "request": request,
+        "title": "회계관리 - Korean Fencing Tracker"
+    })
 
 
 # ==================== 서버 실행 ====================

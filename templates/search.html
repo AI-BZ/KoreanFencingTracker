@@ -47,15 +47,17 @@
         top: 100%;
         left: 0;
         right: 0;
-        background: white;
-        border: 1px solid var(--border-color);
+        background: rgba(18, 18, 26, 0.95);
+        border: 1px solid rgba(255, 255, 255, 0.1);
         border-top: none;
         border-radius: 0 0 8px 8px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
         max-height: 400px;
         overflow-y: auto;
         z-index: 1000;
         display: none;
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
     }
 
     .autocomplete-dropdown.show {
@@ -153,13 +155,16 @@
 
     /* Player card styling */
     .player-card {
-        background: white;
-        border: 1px solid var(--border-color);
+        background: rgba(18, 18, 26, 0.85);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 12px;
         padding: 1rem 1.25rem;
         margin-bottom: 0.75rem;
         transition: all 0.2s;
         cursor: pointer;
+        color: #fff;
     }
 
     .player-card:hover {

@@ -1,5 +1,7 @@
 """
 자동 스크래핑 스케줄러
+- 증분 스크래핑: 새 대회만 Supabase에 저장
+- 익산 대회: 실시간 업데이트
 """
 import asyncio
 from typing import Optional, Callable
@@ -10,6 +12,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 from loguru import logger
 
 from scraper.config import scheduler_config, iksan_config
+from scraper.incremental_scraper import run_incremental_update
 
 
 class FencingScheduler:
@@ -67,20 +70,30 @@ class FencingScheduler:
             logger.info(f"익산 국제대회 업데이트 스케줄 등록 ({iksan_config.update_interval_minutes}분 간격)")
 
     async def _run_full_sync(self):
-        """전체 동기화 실행"""
+        """증분 동기화 실행 (새 대회만 Supabase에 저장)"""
         if self._is_running:
             logger.warning("이미 스크래핑이 진행 중입니다")
             return
 
         self._is_running = True
-        logger.info("=== 전체 동기화 시작 ===")
+        logger.info("=== 증분 동기화 시작 (새 대회만) ===")
 
         try:
-            await self.scraper_func()
+            # 증분 스크래핑 사용 (새 대회만 Supabase에 저장)
+            current_year = datetime.now().year
+            stats = await run_incremental_update(current_year, current_year)
+
             self._last_full_sync = datetime.now()
-            logger.info(f"전체 동기화 완료: {self._last_full_sync}")
+            logger.info(f"증분 동기화 완료: {self._last_full_sync}")
+            logger.info(f"  - 새 대회: {stats.get('new_competitions_found', 0)}개")
+            logger.info(f"  - 저장됨: {stats.get('competitions_saved', 0)}개")
+
+            # 기존 scraper_func도 호출 (JSON 파일 업데이트용, 옵션)
+            if self.scraper_func:
+                await self.scraper_func()
+
         except Exception as e:
-            logger.error(f"전체 동기화 오류: {e}")
+            logger.error(f"증분 동기화 오류: {e}")
         finally:
             self._is_running = False
 

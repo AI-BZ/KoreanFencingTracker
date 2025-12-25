@@ -60,7 +60,16 @@ secrets/
 
 # Large data files
 data/*.json
+data/*.png
 data/backup/
+data/backup_json_*/
+
+# Video files
+video/
+*.MOV
+*.mov
+*.mp4
+*.avi
 
 # Playwright MCP temp files
 .playwright-mcp/

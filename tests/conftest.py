@@ -44,17 +44,24 @@ def sample_de_bracket_data():
         ],
         "results_by_round": {
             "8강전": [
-                {"seed": 1, "name": "김철수", "score": {"winner_score": 15, "loser_score": 10}},
-                {"seed": 2, "name": "이영희", "score": {"winner_score": 15, "loser_score": 12}},
-                {"seed": 3, "name": "박민수", "score": {"winner_score": 15, "loser_score": 8}},
-                {"seed": 4, "name": "최지영", "score": {"winner_score": 15, "loser_score": 11}},
+                {"seed": 1, "name": "김철수", "team": "서울중학교", "score": {"winner_score": 15, "loser_score": 10}, "is_match_result": True, "table_index": 0},
+                {"seed": 8, "name": "장서윤", "team": "수원중학교", "score": {"winner_score": 10, "loser_score": 15}, "is_match_result": True, "table_index": 0},
+                {"seed": 2, "name": "이영희", "team": "부산중학교", "score": {"winner_score": 15, "loser_score": 12}, "is_match_result": True, "table_index": 1},
+                {"seed": 7, "name": "오승현", "team": "울산중학교", "score": {"winner_score": 12, "loser_score": 15}, "is_match_result": True, "table_index": 1},
+                {"seed": 3, "name": "박민수", "team": "대전중학교", "score": {"winner_score": 15, "loser_score": 8}, "is_match_result": True, "table_index": 2},
+                {"seed": 6, "name": "한미경", "team": "대구중학교", "score": {"winner_score": 8, "loser_score": 15}, "is_match_result": True, "table_index": 2},
+                {"seed": 4, "name": "최지영", "team": "인천중학교", "score": {"winner_score": 15, "loser_score": 11}, "is_match_result": True, "table_index": 3},
+                {"seed": 5, "name": "정동훈", "team": "광주중학교", "score": {"winner_score": 11, "loser_score": 15}, "is_match_result": True, "table_index": 3},
             ],
             "준결승": [
-                {"seed": 1, "name": "김철수", "score": {"winner_score": 15, "loser_score": 13}},
-                {"seed": 3, "name": "박민수", "score": {"winner_score": 15, "loser_score": 14}},
+                {"seed": 1, "name": "김철수", "team": "서울중학교", "score": {"winner_score": 15, "loser_score": 13}, "is_match_result": True, "table_index": 0},
+                {"seed": 4, "name": "최지영", "team": "인천중학교", "score": {"winner_score": 13, "loser_score": 15}, "is_match_result": True, "table_index": 0},
+                {"seed": 3, "name": "박민수", "team": "대전중학교", "score": {"winner_score": 15, "loser_score": 14}, "is_match_result": True, "table_index": 1},
+                {"seed": 2, "name": "이영희", "team": "부산중학교", "score": {"winner_score": 14, "loser_score": 15}, "is_match_result": True, "table_index": 1},
             ],
             "결승": [
-                {"seed": 1, "name": "김철수", "score": {"winner_score": 15, "loser_score": 12}},
+                {"seed": 1, "name": "김철수", "team": "서울중학교", "score": {"winner_score": 15, "loser_score": 12}, "is_match_result": True, "table_index": 0},
+                {"seed": 3, "name": "박민수", "team": "대전중학교", "score": {"winner_score": 12, "loser_score": 15}, "is_match_result": True, "table_index": 0},
             ],
         }
     }

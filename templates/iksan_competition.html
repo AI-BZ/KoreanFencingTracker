@@ -1,0 +1,348 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .comp-header {
+        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+        color: white;
+        padding: 2rem 0;
+    }
+    .comp-header h1 {
+        font-size: 2rem;
+        margin-bottom: 0.5rem;
+    }
+    .comp-header .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        background: #ff6b6b;
+        padding: 0.3rem 0.8rem;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+    }
+    .comp-header .badge::before {
+        content: '';
+        width: 8px;
+        height: 8px;
+        background: white;
+        border-radius: 50%;
+        animation: blink 1s infinite;
+    }
+    @keyframes blink {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.3; }
+    }
+    .comp-info {
+        display: flex;
+        gap: 2rem;
+        margin-top: 1rem;
+        flex-wrap: wrap;
+    }
+    .comp-info-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        opacity: 0.9;
+    }
+
+    /* 필터 */
+    .event-filters {
+        background: white;
+        padding: 1.5rem;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        margin: 2rem 0;
+    }
+    .filter-row {
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+    .filter-group label {
+        font-weight: 600;
+        margin-right: 0.5rem;
+        color: #333;
+    }
+    .filter-btn {
+        padding: 0.5rem 1rem;
+        border: 2px solid #ddd;
+        border-radius: 20px;
+        background: white;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-size: 0.9rem;
+    }
+    .filter-btn:hover {
+        border-color: #007bff;
+    }
+    .filter-btn.active {
+        background: #007bff;
+        border-color: #007bff;
+        color: white;
+    }
+
+    /* 결과 카드 */
+    .event-results {
+        display: grid;
+        gap: 1.5rem;
+    }
+    .event-card {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        overflow: hidden;
+    }
+    .event-card-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 1rem 1.5rem;
+    }
+    .event-card-header h3 {
+        margin: 0;
+        font-size: 1.1rem;
+    }
+    .event-card-header .meta {
+        opacity: 0.9;
+        font-size: 0.85rem;
+        margin-top: 0.3rem;
+    }
+    .event-card-body {
+        padding: 1rem 1.5rem;
+    }
+
+    /* 결과 테이블 */
+    .result-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    .result-table th, .result-table td {
+        padding: 0.6rem 0.8rem;
+        text-align: left;
+        border-bottom: 1px solid #eee;
+    }
+    .result-table th {
+        font-weight: 600;
+        color: #666;
+        font-size: 0.85rem;
+        background: #f8f9fa;
+    }
+    .result-table tr:hover {
+        background: #f8f9fa;
+    }
+    .rank-badge {
+        display: inline-block;
+        width: 28px;
+        height: 28px;
+        line-height: 28px;
+        text-align: center;
+        border-radius: 50%;
+        font-weight: 700;
+        font-size: 0.85rem;
+    }
+    .rank-1 { background: #ffd700; color: #333; }
+    .rank-2 { background: #c0c0c0; color: #333; }
+    .rank-3 { background: #cd7f32; color: white; }
+    .rank-other { background: #e9ecef; color: #666; }
+
+    .victory-rate {
+        font-weight: 600;
+    }
+    .victory-high { color: #28a745; }
+    .victory-mid { color: #ffc107; }
+    .victory-low { color: #dc3545; }
+
+    /* 로딩/에러 */
+    .loading {
+        text-align: center;
+        padding: 3rem;
+        color: #666;
+    }
+    .loading-spinner {
+        display: inline-block;
+        width: 40px;
+        height: 40px;
+        border: 3px solid #f3f3f3;
+        border-top: 3px solid #007bff;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    .no-data {
+        text-align: center;
+        padding: 3rem;
+        color: #999;
+    }
+
+    @media (max-width: 768px) {
+        .comp-header h1 { font-size: 1.5rem; }
+        .filter-row { flex-direction: column; align-items: stretch; }
+        .result-table { font-size: 0.85rem; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="comp-header">
+    <div class="container">
+        <span class="badge">NOW LIVE</span>
+        <h1>{{ title }}</h1>
+        <div class="comp-info">
+            <div class="comp-info-item">
+                <span>📍</span> 익산실내체육관
+            </div>
+            <div class="comp-info-item">
+                <span>📅</span>
+                {% if comp_type == 'u17-u20' %}
+                2025.12.16 - 12.21
+                {% else %}
+                2025.12.20 - 12.21
+                {% endif %}
+            </div>
+            <div class="comp-info-item">
+                <span>🏅</span> <span id="event-count">-</span>개 종목
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="container">
+    <!-- 필터 -->
+    <div class="event-filters">
+        <div class="filter-row">
+            <div class="filter-group">
+                <label>Age:</label>
+                {% for age in age_categories %}
+                <button class="filter-btn active" data-filter="age" data-value="{{ age }}">{{ age }}</button>
+                {% endfor %}
+            </div>
+            <div class="filter-group">
+                <label>Weapon:</label>
+                <button class="filter-btn active" data-filter="weapon" data-value="Foil">Foil</button>
+                <button class="filter-btn active" data-filter="weapon" data-value="Epee">Epee</button>
+                <button class="filter-btn active" data-filter="weapon" data-value="Sabre">Sabre</button>
+            </div>
+            <div class="filter-group">
+                <label>Gender:</label>
+                <button class="filter-btn active" data-filter="gender" data-value="Men">Men</button>
+                <button class="filter-btn active" data-filter="gender" data-value="Women">Women</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 결과 -->
+    <div id="event-results" class="event-results">
+        <div class="loading">
+            <div class="loading-spinner"></div>
+            <p>데이터 로딩 중...</p>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', async function() {
+    const compType = '{{ comp_type }}';
+    const resultsContainer = document.getElementById('event-results');
+    let allResults = [];
+
+    // 데이터 로드
+    try {
+        const response = await fetch('/api/iksan/data');
+        const data = await response.json();
+
+        if (data.status !== 'ok') {
+            resultsContainer.innerHTML = '<div class="no-data">데이터가 없습니다</div>';
+            return;
+        }
+
+        // 타입에 따라 필터링
+        const targetAges = compType === 'u17-u20' ? ['U17', 'U20'] : ['U13', 'U11', 'U9'];
+
+        // events에서 해당하는 것만 필터
+        const filteredEvents = data.events.filter(e => {
+            const ageMatch = targetAges.some(age => e.includes(age));
+            return ageMatch;
+        });
+
+        document.getElementById('event-count').textContent = filteredEvents.length;
+
+        // 전체 결과 데이터 로드 (API 확장 필요할 수 있음)
+        // 현재는 events 목록만 표시
+        renderEventList(filteredEvents, data);
+
+    } catch (error) {
+        console.error('Data load error:', error);
+        resultsContainer.innerHTML = '<div class="no-data">데이터 로드 중 오류가 발생했습니다</div>';
+    }
+
+    // 필터 버튼 이벤트
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            this.classList.toggle('active');
+            applyFilters();
+        });
+    });
+
+    function renderEventList(events, data) {
+        if (events.length === 0) {
+            resultsContainer.innerHTML = '<div class="no-data">해당하는 종목이 없습니다</div>';
+            return;
+        }
+
+        let html = '';
+        events.forEach(eventName => {
+            // 이벤트 이름 파싱 (예: "U17 Men's Foil")
+            const weapon = eventName.includes('Foil') ? 'Foil' :
+                          eventName.includes('Epee') ? 'Epee' :
+                          eventName.includes('Sabre') ? 'Sabre' : '';
+            const gender = eventName.includes("Men") ? 'Men' :
+                          eventName.includes("Women") ? 'Women' : '';
+            const age = eventName.match(/U\d+/)?.[0] || '';
+
+            html += `
+            <div class="event-card" data-age="${age}" data-weapon="${weapon}" data-gender="${gender}">
+                <div class="event-card-header">
+                    <h3>${eventName}</h3>
+                    <div class="meta">Pool Results</div>
+                </div>
+                <div class="event-card-body">
+                    <p style="color: #666; text-align: center; padding: 1rem;">
+                        🔄 실시간 업데이트 중 - 상세 결과는 준비 중입니다
+                    </p>
+                </div>
+            </div>`;
+        });
+
+        resultsContainer.innerHTML = html;
+    }
+
+    function applyFilters() {
+        const activeAges = [...document.querySelectorAll('.filter-btn[data-filter="age"].active')]
+            .map(b => b.dataset.value);
+        const activeWeapons = [...document.querySelectorAll('.filter-btn[data-filter="weapon"].active')]
+            .map(b => b.dataset.value);
+        const activeGenders = [...document.querySelectorAll('.filter-btn[data-filter="gender"].active')]
+            .map(b => b.dataset.value);
+
+        document.querySelectorAll('.event-card').forEach(card => {
+            const age = card.dataset.age;
+            const weapon = card.dataset.weapon;
+            const gender = card.dataset.gender;
+
+            const show = (activeAges.length === 0 || activeAges.includes(age)) &&
+                        (activeWeapons.length === 0 || activeWeapons.includes(weapon)) &&
+                        (activeGenders.length === 0 || activeGenders.includes(gender));
+
+            card.style.display = show ? 'block' : 'none';
+        });
+    }
+});
+</script>
+{% endblock %}

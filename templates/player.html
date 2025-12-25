@@ -30,11 +30,15 @@
         z-index: 10;
     }
     .stat-card {
-        background: white;
+        background: rgba(18, 18, 26, 0.85);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
         padding: 1.5rem;
         border-radius: 12px;
         text-align: center;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        color: #fff;
     }
     .stat-value {
         font-size: 2rem;
@@ -45,7 +49,7 @@
     .stat-value.bronze { color: #cd7f32; }
     .stat-value.total { color: #007bff; }
     .stat-label {
-        color: #666;
+        color: #b4b4c4;
         font-size: 0.85rem;
         margin-top: 0.3rem;
     }
@@ -59,14 +63,15 @@
     }
     .filter-select {
         padding: 0.5rem 1rem;
-        border: 2px solid #ddd;
+        border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 8px;
         font-size: 0.9rem;
-        background: white;
+        background: rgba(26, 26, 37, 0.9);
+        color: #fff;
         cursor: pointer;
     }
     .filter-select:focus {
-        border-color: #007bff;
+        border-color: var(--primary-color);
         outline: none;
     }
 
@@ -75,14 +80,18 @@
         margin: 2rem 0;
     }
     .record-card {
-        background: white;
+        background: rgba(18, 18, 26, 0.85);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
         border-radius: 12px;
         padding: 1.2rem;
         margin-bottom: 1rem;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        border: 1px solid rgba(255, 255, 255, 0.08);
         display: flex;
         align-items: center;
         gap: 1.5rem;
+        color: #fff;
     }
     .record-rank {
         min-width: 60px;
@@ -101,7 +110,7 @@
     .rank-1 { background: linear-gradient(135deg, #ffd700, #ffed4a); color: #333; }
     .rank-2 { background: linear-gradient(135deg, #c0c0c0, #e8e8e8); color: #333; }
     .rank-3 { background: linear-gradient(135deg, #cd7f32, #daa06d); color: white; }
-    .rank-other { background: #e9ecef; color: #666; }
+    .rank-other { background: #e9ecef; color: #b4b4c4; }
 
     .record-info {
         flex: 1;
@@ -112,7 +121,7 @@
         margin-bottom: 0.3rem;
     }
     .record-competition {
-        color: #666;
+        color: #b4b4c4;
         font-size: 0.9rem;
         margin-bottom: 0.5rem;
     }
@@ -143,7 +152,7 @@
         color: #333;
     }
     .record-date-text {
-        color: #666;
+        color: #b4b4c4;
         font-size: 0.85rem;
     }
 
@@ -168,7 +177,7 @@
         font-weight: 700;
     }
     .weapon-name {
-        color: #666;
+        color: #b4b4c4;
         font-size: 0.85rem;
     }
 
@@ -176,7 +185,7 @@
     .loading {
         text-align: center;
         padding: 3rem;
-        color: #666;
+        color: #b4b4c4;
     }
     .loading::after {
         content: '';
@@ -201,7 +210,7 @@
     .empty {
         text-align: center;
         padding: 3rem;
-        color: #666;
+        color: #b4b4c4;
         background: #f8f9fa;
         border-radius: 12px;
     }
