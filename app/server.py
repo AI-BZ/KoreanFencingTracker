@@ -3,7 +3,8 @@ Korean Fencing Tracker - FastAPI 웹 서버
 선수 중심 검색 + 필터 기반 UI
 포트: 내부 71, 외부 7171
 
-데이터 소스: Supabase (primary) / JSON (fallback)
+데이터 소스: Supabase (전용)
+데이터 파이프라인: 4단계 검증 시스템
 """
 import os
 import json
@@ -27,7 +28,15 @@ try:
     SUPABASE_AVAILABLE = True
 except ImportError:
     SUPABASE_AVAILABLE = False
-    logger.warning("supabase 패키지가 설치되지 않음. JSON 파일만 사용합니다.")
+    logger.error("supabase 패키지가 설치되지 않음. 서버 실행 불가.")
+
+# 데이터 파이프라인 (품질 모니터링)
+try:
+    from data_pipeline import DataQualityMonitor, DataSynchronizer
+    PIPELINE_AVAILABLE = True
+except ImportError:
+    PIPELINE_AVAILABLE = False
+    logger.warning("data_pipeline 패키지를 찾을 수 없음. 품질 모니터링 비활성화.")
 
 # 랭킹 계산기
 from ranking.calculator import (
@@ -118,9 +127,10 @@ _player_index: Dict[str, List[Dict]] = {}  # 선수별 전적 인덱스
 _filter_options: Dict[str, Set] = {}  # 필터 옵션 캐시
 _ranking_calculator: Optional[RankingCalculator] = None  # 랭킹 계산기
 _supabase_client: Optional["Client"] = None  # Supabase 클라이언트
-_data_source: str = "none"  # 현재 데이터 소스 ("supabase" or "json")
+_data_source: str = "supabase"  # 현재 데이터 소스 (Supabase 전용)
 _identity_resolver: Optional[PlayerIdentityResolver] = None  # 선수 식별 시스템
 _fencinglab_analyzer = None  # FencingLab 분석기 (지연 로딩)
+_quality_monitor: Optional["DataQualityMonitor"] = None  # 데이터 품질 모니터
 
 
 # ==================== Pydantic Models ====================
@@ -772,8 +782,59 @@ async def api_status():
         "events": total_events,
         "players": len(_player_index),
         "supabase_available": SUPABASE_AVAILABLE,
+        "pipeline_available": PIPELINE_AVAILABLE,
         "meta": _data_cache.get("meta", {})
     }
+
+
+@app.get("/api/data/quality")
+async def api_data_quality():
+    """데이터 품질 모니터링 API
+
+    데이터 파이프라인의 품질 메트릭 및 알림을 조회합니다.
+    """
+    global _quality_monitor
+
+    if not PIPELINE_AVAILABLE:
+        return {
+            "available": False,
+            "message": "데이터 파이프라인이 설치되지 않았습니다."
+        }
+
+    # 품질 모니터 초기화 (지연 로딩)
+    if _quality_monitor is None and _supabase_client:
+        _quality_monitor = DataQualityMonitor(db_client=_supabase_client)
+
+    if _quality_monitor is None:
+        return {
+            "available": False,
+            "message": "Supabase 연결이 필요합니다."
+        }
+
+    try:
+        # 최근 메트릭 조회
+        recent_metrics = _quality_monitor.get_recent_metrics(hours=24)
+
+        # 활성 알림 조회
+        active_alerts = _quality_monitor.get_active_alerts()
+
+        # 건강 상태 계산
+        health_status = _quality_monitor.get_health_status()
+
+        return {
+            "available": True,
+            "health": health_status,
+            "metrics": recent_metrics,
+            "alerts": active_alerts,
+            "last_updated": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"품질 모니터링 조회 오류: {e}")
+        return {
+            "available": True,
+            "error": str(e),
+            "health": {"status": "unknown", "message": "조회 중 오류 발생"}
+        }
 
 
 @app.get("/api/filters")

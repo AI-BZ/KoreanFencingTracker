@@ -18,12 +18,8 @@ from data_pipeline.normalizer import (
     normalize_event_record,
     get_normalization_changes,
 )
-from data_pipeline.pipeline import (
-    DataChangeEvent,
-    ChangeType,
-    DataPipeline,
-    CacheInvalidationStrategy,
-)
+from data_pipeline.pipeline import DataPipeline
+from data_pipeline.events import DataChangeEvent, EventType
 
 
 # =============================================================================
@@ -267,87 +263,77 @@ class TestGetNormalizationChanges:
 class TestDataPipeline:
     """데이터 파이프라인 테스트"""
 
-    def test_register_handler(self):
-        """핸들러 등록"""
+    def test_pipeline_initialization(self):
+        """파이프라인 초기화 테스트"""
         pipeline = DataPipeline()
-        handler_called = []
+        assert pipeline.stats["total_processed"] == 0
+        assert pipeline.stats["total_passed"] == 0
+        assert pipeline.stats["total_failed"] == 0
 
-        def test_handler(event):
-            handler_called.append(event)
-
-        pipeline.register_handler("events", test_handler)
-        assert "events" in pipeline._handlers
-        assert len(pipeline._handlers["events"]) == 1
-
-    @pytest.mark.asyncio
-    async def test_emit_event(self):
-        """이벤트 발행"""
+    def test_pipeline_stats(self):
+        """파이프라인 통계 테스트"""
         pipeline = DataPipeline()
-        received_events = []
+        stats = pipeline.get_stats()
+        assert "total_processed" in stats
+        assert "total_passed" in stats
+        assert "pass_rate" in stats
 
-        def test_handler(event):
-            received_events.append(event)
-
-        pipeline.register_handler("events", test_handler)
-
-        event = DataChangeEvent(
-            table="events",
-            change_type=ChangeType.UPDATE,
-            record_id=123,
-            old_data={"weapon": "에페"},
-            new_data={"weapon": "에뻬"},
-        )
-
-        await pipeline.emit(event)
-
-        assert len(received_events) == 1
-        assert received_events[0].record_id == 123
-
-    def test_change_log(self):
-        """변경 로그 기록"""
+    def test_pipeline_reset_stats(self):
+        """통계 리셋 테스트"""
         pipeline = DataPipeline()
-        event = DataChangeEvent(
-            table="events",
-            change_type=ChangeType.NORMALIZE,
-            record_id=456,
-        )
-        pipeline._change_log.append(event)
+        pipeline.stats["total_processed"] = 100
+        pipeline.reset_stats()
+        assert pipeline.stats["total_processed"] == 0
 
-        log = pipeline.get_change_log()
-        assert len(log) == 1
-        assert log[0].record_id == 456
+    def test_validate_event_data(self):
+        """이벤트 데이터 검증 테스트"""
+        pipeline = DataPipeline()
+        event_data = {
+            "name": "남자 에뻬 개인전",
+            "weapon": "에뻬",
+            "gender": "남",
+            "age_group": "Senior",
+        }
+        tech_result, biz_result = pipeline.validate_data(event_data, "event")
+        # 기술적 검증 결과 확인
+        assert tech_result is not None
+
+    def test_validate_player_data(self):
+        """선수 데이터 검증 테스트"""
+        pipeline = DataPipeline()
+        player_data = {
+            "name": "홍길동",
+            "team": "서울체육고등학교",
+            "gender": "남",
+            "nationality": "KOR",
+        }
+        tech_result, biz_result = pipeline.validate_data(player_data, "player")
+        assert tech_result is not None
 
 
 # =============================================================================
-# 캐시 무효화 전략 테스트
+# 이벤트 시스템 테스트
 # =============================================================================
 
-class TestCacheInvalidationStrategy:
-    """캐시 무효화 전략 테스트"""
+class TestEventSystem:
+    """이벤트 발행 시스템 테스트"""
 
-    def test_events_cache_affected(self):
-        """events 변경 시 영향받는 캐시"""
+    def test_data_change_event_creation(self):
+        """DataChangeEvent 생성 테스트"""
         event = DataChangeEvent(
-            table="events",
-            change_type=ChangeType.UPDATE,
-            record_id=1,
+            event_type=EventType.PLAYER_CREATED,
+            entity_type="player",
+            entity_id=123,
+            data={"name": "홍길동"},
         )
-        affected = CacheInvalidationStrategy.get_affected_caches(event)
-        assert "_data_cache" in affected
-        assert "_filter_options" in affected
-        assert "_player_index" in affected
+        assert event.event_type == EventType.PLAYER_CREATED
+        assert event.entity_id == 123
 
-    def test_players_cache_affected(self):
-        """players 변경 시 영향받는 캐시"""
-        event = DataChangeEvent(
-            table="players",
-            change_type=ChangeType.UPDATE,
-            record_id=1,
-        )
-        affected = CacheInvalidationStrategy.get_affected_caches(event)
-        assert "_player_index" in affected
-        assert "_identity_resolver" in affected
-        assert "_fencinglab_analyzer" in affected
+    def test_event_type_values(self):
+        """EventType 값 테스트"""
+        assert EventType.PLAYER_CREATED.value == "player.created"
+        assert EventType.PLAYER_UPDATED.value == "player.updated"
+        assert EventType.MATCH_CREATED.value == "match.created"
 
 
 if __name__ == "__main__":
