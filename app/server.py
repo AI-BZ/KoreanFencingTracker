@@ -519,33 +519,51 @@ def init_supabase_client() -> Optional["Client"]:
 
 
 def load_data_from_supabase() -> bool:
-    """Supabase에서 데이터 로드"""
+    """Supabase에서 데이터 로드 (타임아웃 방지 페이지네이션)"""
     global _data_cache, _data_source
+    import time
 
     if not _supabase_client:
         return False
 
     try:
-        # 대회 목록 조회
+        # 대회 목록 조회 (132개로 작음 - 타임아웃 가능성 낮음)
         comp_result = _supabase_client.table("competitions").select("*").execute()
         if not comp_result.data:
             logger.warning("Supabase에 대회 데이터 없음")
             return False
 
         competitions_dict = {c["id"]: c for c in comp_result.data}
+        logger.info(f"대회 {len(comp_result.data)}개 로드됨")
 
-        # 종목 목록 조회 (페이지네이션으로 모든 데이터 로드)
+        # 종목 목록 조회 (페이지네이션 - 배치 크기 축소로 타임아웃 방지)
         all_events = []
-        page_size = 1000
+        page_size = 200  # 1000 → 200 (타임아웃 방지)
         offset = 0
+        max_retries = 3
+
         while True:
-            events_result = _supabase_client.table("events").select("*").range(offset, offset + page_size - 1).execute()
+            # 재시도 로직
+            for attempt in range(max_retries):
+                try:
+                    events_result = _supabase_client.table("events").select("*").range(offset, offset + page_size - 1).execute()
+                    break
+                except Exception as e:
+                    if attempt < max_retries - 1:
+                        wait_time = (attempt + 1) * 2  # 2초, 4초, 6초
+                        logger.warning(f"종목 로드 재시도 {attempt + 1}/{max_retries} ({wait_time}초 대기): {e}")
+                        time.sleep(wait_time)
+                    else:
+                        raise
+
             if not events_result.data:
                 break
             all_events.extend(events_result.data)
+            logger.debug(f"종목 로드 진행: {len(all_events)}개")
             if len(events_result.data) < page_size:
                 break
             offset += page_size
+            time.sleep(0.1)  # API 부하 분산
 
         logger.info(f"종목 {len(all_events)}개 로드됨")
 
