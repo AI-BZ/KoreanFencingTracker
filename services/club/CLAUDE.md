@@ -1,6 +1,6 @@
-# app.fencingmind.ai - SaaS 플랫폼
+# club.fencingmind.ai - 클럽 관리 SaaS
 
-**서브도메인:** app.fencingmind.ai
+**서브도메인:** club.fencingmind.ai
 **포트:** 72
 **상태:** 🔨 개발 중
 
@@ -22,13 +22,12 @@
 
 ## 폴더 구조
 ```
-services/app/
+services/club/
 ├── api/                 # FastAPI API
-├── club/                # 클럽 관리
-│   ├── dashboard/       # 코치용 대시보드
-│   ├── checkin/         # 출석 체크인
-│   ├── members/         # 회원 관리
-│   └── payments/        # 결제
+├── dashboard/           # 코치용 대시보드
+├── checkin/             # 출석 체크인
+├── members/             # 회원 관리
+├── payments/            # 결제
 ├── player/              # 선수용 기능
 ├── parent/              # 학부모용 기능
 ├── templates/           # 템플릿
@@ -38,7 +37,7 @@ services/app/
 
 ## 서버 실행
 ```bash
-cd services/app
+cd services/club
 python -m uvicorn api.server:app --host 0.0.0.0 --port 72
 ```
 
@@ -46,17 +45,17 @@ python -m uvicorn api.server:app --host 0.0.0.0 --port 72
 
 ## DB 테이블 (소유)
 **이 서비스가 주인인 테이블:**
-- `app_subscriptions` - SaaS 구독
-- `app_notifications` - 알림
-- `app_notification_templates` - 알림 템플릿
-- `app_schedules` - 일정
-- `app_announcements` - 공지사항
+- `club_subscriptions` - SaaS 구독
+- `club_notifications` - 알림
+- `club_notification_templates` - 알림 템플릿
+- `club_schedules` - 일정
+- `club_announcements` - 공지사항
 
 **현재 services/data/app/club/에 있는 테이블 (마이그레이션 예정):**
-- `club_settings` → `app_club_settings`
-- `attendance` → `app_attendance`
-- `lessons` → `app_lessons`
-- `fees` → `app_fees`
+- `club_settings` - 클럽 설정
+- `attendance` - 출석
+- `lessons` - 레슨
+- `fees` - 비용
 
 **공유 테이블 (참조만):**
 - `members` - 회원 (공유)
@@ -66,7 +65,7 @@ python -m uvicorn api.server:app --host 0.0.0.0 --port 72
 ---
 
 ## Git 브랜치 규칙
-- 이 서비스의 코드는 `feature/app/*` 브랜치에서만 수정
+- 이 서비스의 코드는 `feature/club/*` 브랜치에서만 수정
 - 다른 서비스 코드 수정 금지
 - 공유 패키지 수정 시 `feature/shared/*` 브랜치 사용
 

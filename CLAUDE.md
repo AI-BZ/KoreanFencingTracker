@@ -12,7 +12,7 @@
 | 서브도메인 | 용도 | 상태 | 포트 |
 |------------|------|------|------|
 | **data.fencingmind.ai** | 펜싱 데이터 (대회, 선수, 랭킹) | ✅ 운영 중 | 71 |
-| **app.fencingmind.ai** | SaaS 플랫폼 (클럽/코치/선수/학부모) | 🔨 개발 중 | 72 |
+| **club.fencingmind.ai** | 클럽 관리 SaaS (클럽/코치/선수/학부모) | 🔨 개발 중 | 72 |
 | **community.fencingmind.ai** | 커뮤니티 (포럼, Q&A) | 📋 계획 | 73 |
 | **shop.fencingmind.ai** | 드롭쉬핑 (용품) | 📋 계획 | 74 |
 | **blog.fencingmind.ai** | 콘텐츠 (기술 가이드, 리뷰) | 📋 계획 | 75 |
@@ -22,7 +22,7 @@
 | 서비스 | 모델 | 예상 수익 |
 |--------|------|----------|
 | Data | API 구독 ($99~999/월) | B2B |
-| App | SaaS 구독 ($9.99~299/월) | B2C/B2B |
+| Club | SaaS 구독 ($9.99~299/월) | B2C/B2B |
 | Community | 광고 + 프리미엄 멤버십 | B2C |
 | Shop | 드롭쉬핑 마진 (15~30%) | B2C |
 | Blog | 광고 + 스폰서 콘텐츠 | B2C |
@@ -50,7 +50,7 @@
 ├─────────────────────────────────────────────────────────────────────┤
 │  (기존 유지)    competitions, events, players, matches, rankings     │
 │  data_*         데이터 파이프라인 (data_events, validation_logs 등)   │
-│  app_*          SaaS 기능 (app_notifications, app_schedules 등)      │
+│  club_*         클럽 SaaS 기능 (club_notifications, club_schedules 등) │
 │  community_*    커뮤니티 (community_posts, community_comments 등)    │
 │  shop_*         쇼핑 (shop_products, shop_orders 등)                 │
 │  blog_*         블로그 (blog_articles, blog_comments 등)             │
@@ -73,7 +73,7 @@ members (핵심)
 
 member_services (서비스별 구독)
 ├── member_id → members
-├── service_id: 'data' | 'app' | 'community' | 'shop' | 'blog' | 'analytics'
+├── service_id: 'data' | 'club' | 'community' | 'shop' | 'blog' | 'analytics'
 ├── tier: 'free' | 'basic' | 'premium'
 └── settings: JSONB (서비스별 설정)
 ```
@@ -81,7 +81,7 @@ member_services (서비스별 구독)
 ### 결제 시스템: 서비스별 분리
 | 서비스 | 결제 특성 | 테이블 |
 |--------|----------|--------|
-| app (SaaS) | 월정액 구독 | app_subscriptions |
+| club (SaaS) | 월정액 구독 | club_subscriptions |
 | shop (쇼핑) | 건별 결제 | shop_payments |
 | analytics (AI) | 크레딧 기반 | analytics_credits |
 
@@ -94,7 +94,7 @@ member_services (서비스별 구독)
 main                           # 프로덕션 (보호됨)
 ├── develop                    # 통합 개발
 │   ├── feature/data/*         # data.fencingmind.ai
-│   ├── feature/app/*          # app.fencingmind.ai
+│   ├── feature/club/*         # club.fencingmind.ai
 │   ├── feature/community/*    # community.fencingmind.ai
 │   ├── feature/shop/*         # shop.fencingmind.ai
 │   ├── feature/blog/*         # blog.fencingmind.ai
@@ -107,7 +107,7 @@ main                           # 프로덕션 (보호됨)
 ```bash
 # 서브도메인별 worktree 생성
 git worktree add ../FencingMind-data   feature/data/main
-git worktree add ../FencingMind-app    feature/app/main
+git worktree add ../FencingMind-club   feature/club/main
 git worktree add ../FencingMind-community feature/community/main
 git worktree add ../FencingMind-shop   feature/shop/main
 git worktree add ../FencingMind-blog   feature/blog/main
@@ -154,9 +154,11 @@ FencingMind/
 │   │   ├── scheduler/           # 스케줄러
 │   │   └── video/               # 영상 (→ analytics로 이동 예정)
 │   │
-│   ├── app/                     # app.fencingmind.ai 🔨 개발 중
+│   ├── club/                    # club.fencingmind.ai 🔨 개발 중
 │   │   ├── api/
-│   │   ├── club/
+│   │   ├── dashboard/
+│   │   ├── checkin/
+│   │   ├── members/
 │   │   ├── player/
 │   │   └── parent/
 │   │
