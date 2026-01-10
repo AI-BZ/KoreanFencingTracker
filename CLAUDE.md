@@ -1,4 +1,212 @@
-# Korean Fencing Tracker - Project Context
+# FencingMind - Project Context
+
+**회사명:** FencingMind LLC
+**도메인:** FencingMind.ai
+**비전:** 세계 최초의 펜싱 전문 AI 데이터 플랫폼, 펜싱의 모든 정보를 연결하는 글로벌 허브
+
+---
+
+## 🏗️ 6대 서브도메인 아키텍처
+
+### 서브도메인 구조
+| 서브도메인 | 용도 | 상태 | 포트 |
+|------------|------|------|------|
+| **data.fencingmind.ai** | 펜싱 데이터 (대회, 선수, 랭킹) | ✅ 운영 중 | 71 |
+| **app.fencingmind.ai** | SaaS 플랫폼 (클럽/코치/선수/학부모) | 🔨 개발 중 | 72 |
+| **community.fencingmind.ai** | 커뮤니티 (포럼, Q&A) | 📋 계획 | 73 |
+| **shop.fencingmind.ai** | 드롭쉬핑 (용품) | 📋 계획 | 74 |
+| **blog.fencingmind.ai** | 콘텐츠 (기술 가이드, 리뷰) | 📋 계획 | 75 |
+| **analytics.fencingmind.ai** | AI 경기 분석 | 📋 계획 | 76 |
+
+### 수익 모델 요약
+| 서비스 | 모델 | 예상 수익 |
+|--------|------|----------|
+| Data | API 구독 ($99~999/월) | B2B |
+| App | SaaS 구독 ($9.99~299/월) | B2C/B2B |
+| Community | 광고 + 프리미엄 멤버십 | B2C |
+| Shop | 드롭쉬핑 마진 (15~30%) | B2C |
+| Blog | 광고 + 스폰서 콘텐츠 | B2C |
+| Analytics | 건별/구독 ($19.99~499/월) | B2C/B2B |
+
+---
+
+## 🗄️ 데이터베이스 아키텍처 (Merge 충돌 방지)
+
+### 테이블 분류
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    SHARED CORE (공유 - 모든 서브도메인 참조)          │
+├─────────────────────────────────────────────────────────────────────┤
+│  members              회원 (통합 인증 - SSO)                         │
+│  oauth_connections    OAuth 연동 (카카오 등)                         │
+│  organizations        조직 (클럽/학교/팀)                            │
+│  players              선수 프로필 (대회 데이터에서 추출)               │
+│  services             서비스 정의                                    │
+│  member_services      회원-서비스 구독 관계                          │
+└─────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────┐
+│               DOMAIN-SPECIFIC (서브도메인별 독립 - 접두사 규칙)        │
+├─────────────────────────────────────────────────────────────────────┤
+│  (기존 유지)    competitions, events, players, matches, rankings     │
+│  data_*         데이터 파이프라인 (data_events, validation_logs 등)   │
+│  app_*          SaaS 기능 (app_notifications, app_schedules 등)      │
+│  community_*    커뮤니티 (community_posts, community_comments 등)    │
+│  shop_*         쇼핑 (shop_products, shop_orders 등)                 │
+│  blog_*         블로그 (blog_articles, blog_comments 등)             │
+│  analytics_*    AI 분석 (analytics_videos, analytics_results 등)     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### 🔴 테이블 네이밍 규칙 (CRITICAL)
+- **공유 테이블**: 접두사 없음 (members, players, organizations)
+- **도메인 전용**: `{domain}_` 접두사 필수 (shop_orders, blog_articles)
+- **마이그레이션**: 새 파일로만 추가, 기존 파일 수정 금지
+
+### 회원 시스템: 통합 인증 (SSO)
+```
+members (핵심)
+├── id (UUID)
+├── supabase_auth_id → Supabase Auth
+├── player_id → players (선수 프로필 연결)
+└── organization_id → organizations
+
+member_services (서비스별 구독)
+├── member_id → members
+├── service_id: 'data' | 'app' | 'community' | 'shop' | 'blog' | 'analytics'
+├── tier: 'free' | 'basic' | 'premium'
+└── settings: JSONB (서비스별 설정)
+```
+
+### 결제 시스템: 서비스별 분리
+| 서비스 | 결제 특성 | 테이블 |
+|--------|----------|--------|
+| app (SaaS) | 월정액 구독 | app_subscriptions |
+| shop (쇼핑) | 건별 결제 | shop_payments |
+| analytics (AI) | 크레딧 기반 | analytics_credits |
+
+---
+
+## 🌲 Git Worktree 개발 전략
+
+### 브랜치 구조
+```
+main                           # 프로덕션 (보호됨)
+├── develop                    # 통합 개발
+│   ├── feature/data/*         # data.fencingmind.ai
+│   ├── feature/app/*          # app.fencingmind.ai
+│   ├── feature/community/*    # community.fencingmind.ai
+│   ├── feature/shop/*         # shop.fencingmind.ai
+│   ├── feature/blog/*         # blog.fencingmind.ai
+│   ├── feature/analytics/*    # analytics.fencingmind.ai
+│   └── feature/shared/*       # 공유 패키지
+└── release/v*                 # 릴리스 브랜치
+```
+
+### Worktree 설정 명령어
+```bash
+# 서브도메인별 worktree 생성
+git worktree add ../FencingMind-data   feature/data/main
+git worktree add ../FencingMind-app    feature/app/main
+git worktree add ../FencingMind-community feature/community/main
+git worktree add ../FencingMind-shop   feature/shop/main
+git worktree add ../FencingMind-blog   feature/blog/main
+git worktree add ../FencingMind-analytics feature/analytics/main
+```
+
+### 🔴 Merge 충돌 방지 규칙 (CRITICAL)
+| 규칙 | 설명 |
+|------|------|
+| **R1** | `services/{domain}/` 내부 파일은 해당 도메인 브랜치에서만 수정 |
+| **R2** | `packages/shared-*` 수정 시 `feature/shared/*` 브랜치 사용 |
+| **R3** | `database/migrations/` 새 파일 추가만 허용 (기존 파일 수정 금지) |
+| **R4** | 공유 패키지 수정 PR은 모든 서비스 테스트 통과 필수 |
+| **R5** | 서브도메인 간 직접 import 금지 (shared-api 통해서만) |
+
+---
+
+## 📁 모노레포 폴더 구조 (현재)
+
+```
+FencingMind/
+├── packages/                    # 공유 패키지 ✅
+│   ├── shared-core/             # 인증, DB, 타입
+│   │   ├── auth/
+│   │   ├── db/
+│   │   ├── types/
+│   │   └── utils/
+│   ├── shared-ui/               # 공유 UI 컴포넌트
+│   │   ├── components/
+│   │   ├── layouts/
+│   │   └── styles/
+│   └── shared-api/              # 공유 API 클라이언트
+│       ├── fencing-data/
+│       └── member/
+│
+├── services/                    # 서브도메인별 서비스 ✅
+│   ├── data/                    # data.fencingmind.ai ✅ 운영 중
+│   │   ├── app/                 # FastAPI 앱
+│   │   ├── scraper/             # 스크래퍼
+│   │   ├── ranking/             # 랭킹 계산
+│   │   ├── data_pipeline/       # 데이터 파이프라인
+│   │   ├── templates/           # 템플릿
+│   │   ├── static/              # 정적 파일
+│   │   ├── scheduler/           # 스케줄러
+│   │   └── video/               # 영상 (→ analytics로 이동 예정)
+│   │
+│   ├── app/                     # app.fencingmind.ai 🔨 개발 중
+│   │   ├── api/
+│   │   ├── club/
+│   │   ├── player/
+│   │   └── parent/
+│   │
+│   ├── community/               # community.fencingmind.ai 📋 계획
+│   │   ├── api/
+│   │   ├── forum/
+│   │   └── qna/
+│   │
+│   ├── shop/                    # shop.fencingmind.ai 📋 계획
+│   │   ├── api/
+│   │   ├── products/
+│   │   ├── orders/
+│   │   └── dropship/
+│   │
+│   ├── blog/                    # blog.fencingmind.ai 📋 계획
+│   │   ├── api/
+│   │   ├── articles/
+│   │   └── cms/
+│   │
+│   └── analytics/               # analytics.fencingmind.ai 📋 계획
+│       ├── api/
+│       ├── video/
+│       ├── ml/
+│       └── reports/
+│
+├── database/migrations/         # 전체 마이그레이션 (공유)
+├── infrastructure/              # Docker, Nginx, K8s ✅
+│   ├── docker/
+│   ├── nginx/
+│   └── kubernetes/
+│
+├── docs/                        # 문서
+├── tests/                       # 통합 테스트
+└── CLAUDE.md                    # 이 파일
+```
+
+### 서버 실행 방법
+```bash
+# 프로젝트 루트에서 실행 (PYTHONPATH 설정 필수!)
+cd /Users/gyejinpark/Documents/GitHub/FencingCommunityDropShipping
+
+# data 서비스 실행
+PYTHONPATH="${PWD}:${PWD}/services/data" python -m uvicorn services.data.app.server:app --host 0.0.0.0 --port 71
+
+# 또는 환경변수 export 후 실행
+export PYTHONPATH="${PWD}:${PWD}/services/data"
+python -m uvicorn services.data.app.server:app --host 0.0.0.0 --port 71
+```
+
+---
 
 ## 🚫🚫🚫 제0원칙: Claude 행동 규칙 (CLAUDE BEHAVIOR RULES) 🚫🚫🚫
 

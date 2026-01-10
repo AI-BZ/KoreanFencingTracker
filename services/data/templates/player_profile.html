@@ -1,0 +1,630 @@
+{% extends "base.html" %}
+
+{# Weapon name translation macro - uses 'lang' from template context #}
+{% macro translate_weapon(weapon) -%}
+{% if lang == 'en' -%}
+{% if weapon == '플러레' or weapon == 'foil' %}Foil{% elif weapon == '에뻬' or weapon == 'epee' %}Epee{% elif weapon == '사브르' or weapon == 'sabre' %}Sabre{% else %}{{ weapon }}{% endif %}
+{%- else -%}
+{{ weapon }}
+{%- endif %}
+{%- endmacro %}
+
+{% block title %}{{ player.name }} - Korean Fencing Tracker{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/components.css">
+<link rel="stylesheet" href="/static/css/fencinglab.css">
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <nav class="breadcrumb">
+        <a href="/">{{ i18n.common.nav.home|default('Home') }}</a> &gt;
+        <a href="/search">{{ i18n.common.home.player_search|default('Player Search') }}</a> &gt;
+        <span>{{ player.name }}</span>
+    </nav>
+
+    <!-- Player Header -->
+    <div class="player-header">
+        <div class="player-name">
+            {{ player.name }}
+            {% if player.name_en %}
+            <span class="name-en">{{ player.name_en }}</span>
+            {% endif %}
+            {% if player.has_disambiguation %}
+            <span class="disambiguation-badge">{{ i18n.common.player.same_name_notice|default('Multiple athletes with this name') }}</span>
+            {% endif %}
+        </div>
+
+        <!-- International Links -->
+        {% if player.fie_id or player.fencingtracker_id %}
+        <div class="international-links">
+            {% if player.fie_id %}
+            <a href="https://fie.org/athletes/{{ player.fie_id }}" target="_blank" class="external-link fie-link">
+                <span class="link-icon">🌍</span> FIE Profile
+                {% if player.name_en_verified %}<span class="verified-badge">✓</span>{% endif %}
+            </a>
+            {% endif %}
+            {% if player.fencingtracker_id %}
+            <a href="https://fencingtracker.com/p/{{ player.fencingtracker_id }}" target="_blank" class="external-link ft-link">
+                <span class="link-icon">📊</span> FencingTracker
+                {% if player.name_en_verified %}<span class="verified-badge">✓</span>{% endif %}
+            </a>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <div class="player-team">{{ player.current_team if player.current_team else '-' }}</div>
+
+        <!-- Team History (소속 변경 이력) -->
+        {% if player.team_history and player.team_history|length > 1 %}
+        <div class="team-history-section">
+            <div class="team-history-title">{{ i18n.common.player.team_history|default('Team History') }}</div>
+            <div class="team-history-list">
+                {% for t in player.team_history %}
+                <span class="team-history-item">
+                    {{ t.team }}
+                    <span class="dates">({{ t.first_seen[:7] }}~{{ t.last_seen[:7] }})</span>
+                </span>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Other Profiles with Same Name (동명이인) - 접고 펼칠 수 있는 아코디언 -->
+        {% if player.other_profiles %}
+        <div class="disambiguation-section accordion">
+            <div class="disambiguation-header" onclick="toggleDisambiguation(this)">
+                <div class="disambiguation-title">
+                    <span class="disambiguation-icon">👥</span>
+                    {{ i18n.common.player.other_profiles|default('Other Athletes with Same Name') }}
+                    <span class="disambiguation-count">({{ player.other_profiles|length }})</span>
+                </div>
+                <span class="disambiguation-toggle">▼</span>
+            </div>
+            <div class="disambiguation-content">
+                <div class="other-profiles-list">
+                    {% for p in player.other_profiles %}
+                    <a href="/player/{{ player.name }}?id={{ p.player_id }}" class="other-profile-link">
+                        {{ p.current_team or p.teams|join(', ') }}
+                        <span class="profile-count">({{ p.competition_count }} {{ i18n.common.player.entries|default('entries') }})</span>
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Rating Display -->
+        <div class="rating-display">
+            {% for weapon, rating in player.ratings.items() %}
+            <div class="rating-badge {% if loop.first %}active{% endif %}">
+                <div class="rating-value">{{ rating.current or 'U' }}</div>
+                <div class="rating-weapon">{{ translate_weapon(weapon) }}</div>
+            </div>
+            {% else %}
+            <div class="rating-badge active">
+                <div class="rating-value">U</div>
+                <div class="rating-weapon">Unrated</div>
+            </div>
+            {% endfor %}
+        </div>
+        <div class="rating-date">as of {{ today }}</div>
+    </div>
+
+    <!-- Tab Navigation -->
+    <div class="tabs">
+        <button class="tab-btn active" data-tab="summary">
+            <span>Summary</span>
+        </button>
+        <button class="tab-btn" data-tab="history">
+            <span>History</span>
+        </button>
+        <button class="tab-btn" data-tab="strength">
+            <span>Strength</span>
+        </button>
+        <button class="tab-btn" data-tab="analysis">
+            <span>Analysis</span>
+        </button>
+    </div>
+
+    <!-- Summary Tab -->
+    <div id="tab-summary" class="tab-content active">
+        <!-- Rating History -->
+        <div class="stat-card-large">
+            <h4>{{ i18n.common.player.rating_history|default('Rating History') }}</h4>
+            <table class="podium-table">
+                <thead>
+                    <tr>
+                        <th>Rating</th>
+                        <th>Weapon</th>
+                        <th>Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for history in player.rating_history %}
+                    <tr>
+                        <td><strong>{{ history.rating }}</strong></td>
+                        <td>{{ translate_weapon(history.weapon) }}</td>
+                        <td>{{ history.date }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="3" style="text-align: center; color: var(--text-light);">{{ i18n.common.player.no_rating_history|default('No rating history') }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Podium Finishes -->
+        <div class="stat-card-large">
+            <h4>{{ i18n.common.player.podium_finishes|default('Podium Finishes') }}</h4>
+            <table class="podium-table">
+                <thead>
+                    <tr>
+                        <th class="season-cell">{{ i18n.common.filters.season|default('Season') }}</th>
+                        <th>🥇</th>
+                        <th>🥈</th>
+                        <th>🥉</th>
+                        <th>{{ i18n.common.player.top8|default('Top 8') }}</th>
+                        <th>Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for season, stats in player.podium_by_season.items() %}
+                    <tr>
+                        <td class="season-cell">{{ season }}</td>
+                        <td>{{ stats.gold }}</td>
+                        <td>{{ stats.silver }}</td>
+                        <td>{{ stats.bronze }}</td>
+                        <td>{{ stats.top8 }}</td>
+                        <td>{{ stats.total }}</td>
+                    </tr>
+                    {% endfor %}
+                    <tr class="total-row">
+                        <td class="season-cell">{{ i18n.common.player.all_time|default('All Time') }}</td>
+                        <td>{{ player.stats.medals.gold }}</td>
+                        <td>{{ player.stats.medals.silver }}</td>
+                        <td>{{ player.stats.medals.bronze }}</td>
+                        <td>{{ player.stats.medals.top8 or 0 }}</td>
+                        <td>{{ player.total_records }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Upcoming/Recent Registrations -->
+        {% if player.upcoming_events %}
+        <div class="stat-card-large">
+            <h4>{{ i18n.common.player.upcoming_events|default('Upcoming Events') }}</h4>
+            <table class="podium-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Tournament</th>
+                        <th>Event Strength</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for event in player.upcoming_events %}
+                    <tr>
+                        <td>{{ event.date }}</td>
+                        <td>{{ event.tournament }}</td>
+                        <td>{{ event.strength }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- History Tab -->
+    <div id="tab-history" class="tab-content">
+        <!-- Filters -->
+        <div class="history-filters">
+            <select id="filter-season">
+                <option value="">{{ i18n.common.filters.all_seasons|default('All Seasons') }}</option>
+                {% for year in player.years|sort(reverse=true) %}
+                <option value="{{ year }}">{{ year }}</option>
+                {% endfor %}
+            </select>
+            <select id="filter-weapon">
+                <option value="">{{ i18n.common.filters.all_weapons|default('All Weapons') }}</option>
+                {% for weapon in player.weapons %}
+                <option value="{{ weapon }}">{{ translate_weapon(weapon) }}</option>
+                {% endfor %}
+            </select>
+            <select id="filter-result">
+                <option value="">{{ i18n.common.filters.all_results|default('All Results') }}</option>
+                <option value="medal">{{ i18n.common.filters.medals_only|default('Medals Only') }}</option>
+                <option value="top8">Top 8</option>
+            </select>
+            <button class="btn btn-primary" onclick="filterHistory()">{{ i18n.common.search.button|default('Search') }}</button>
+            <button class="btn btn-secondary print-btn" onclick="printCertificate()">
+                <span class="print-icon">🖨️</span> Print Certificate
+            </button>
+        </div>
+
+        <!-- Results List -->
+        <div class="history-section">
+            <h4>{{ i18n.common.player.match_results|default('Match Results') }}</h4>
+
+            {% for record in player.records %}
+            <div class="result-card" data-year="{{ record.year }}" data-weapon="{{ record.weapon }}" data-rank="{{ record.rank }}">
+                <div class="result-card-header" onclick="toggleResultDetail(this)">
+                    <div class="result-info">
+                        <div class="result-date">{{ record.competition_date }}</div>
+                        <div class="result-tournament">{{ record.competition_name }}</div>
+                        <div class="result-event">{{ record.event_name }}</div>
+                    </div>
+                    <div class="result-stats">
+                        <div class="result-place {% if record.rank == 1 %}gold{% elif record.rank == 2 %}silver{% elif record.rank == 3 %}bronze{% endif %}">
+                            {% if record.rank == 1 %}🥇{% elif record.rank == 2 %}🥈{% elif record.rank == 3 %}🥉{% else %}{{ record.rank or '-' }}{% endif %}
+                            {% if record.total_participants %}/{{ record.total_participants }}{% endif %}
+                        </div>
+                        {% if record.rating_earned %}
+                        <div class="result-rating">{{ record.rating_earned }}</div>
+                        {% endif %}
+                        <span class="result-expand-icon">▼</span>
+                    </div>
+                </div>
+                <div class="result-card-detail">
+                    <!-- Pool Results -->
+                    {% if record.pool_results %}
+                    <div class="detail-section">
+                        <h5><span class="section-icon">📋</span> Pool {{ record.pool_number or '' }}</h5>
+                        <div class="pool-summary">
+                            <span class="pool-summary-item">{{ i18n.common.player.pool_rank|default('Rank') }}: <strong>{{ record.pool_rank or '-' }}</strong></span>
+                            <span class="pool-summary-item">{{ i18n.common.player.pool_record|default('Record') }}: <strong>{{ record.pool_wins or 0 }}{{ i18n.common.table.wins|default('W') }} {{ record.pool_losses or 0 }}{{ i18n.common.table.losses|default('L') }}</strong></span>
+                            <span class="pool-summary-item">{{ i18n.common.player.win_rate|default('Win Rate') }}: <strong>{{ record.win_rate or '-' }}</strong></span>
+                            <span class="pool-summary-item">{{ i18n.common.player.pool_indicator|default('Indicator') }}: <strong>{% if record.indicator > 0 %}+{% endif %}{{ record.indicator or 0 }}</strong></span>
+                        </div>
+                        <div class="bout-detail-list">
+                            {% for bout in record.pool_bouts %}
+                            <div class="bout-detail-item">
+                                <div class="bout-opponent">
+                                    <div class="bout-opponent-name">vs {{ bout.opponent_name }}</div>
+                                    <div class="bout-opponent-team">{{ bout.opponent_team }}</div>
+                                </div>
+                                <div class="bout-detail-score">{{ bout.my_score }} - {{ bout.opponent_score }}</div>
+                                <div class="bout-detail-result {% if bout.result == 'V' %}v{% else %}d{% endif %}">
+                                    {% if bout.result == 'V' %}✅ V{% else %}❌ D{% endif %}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Tournament Results -->
+                    {% if record.tournament_results %}
+                    <div class="detail-section">
+                        <h5><span class="section-icon">🏆</span> Direct Elimination</h5>
+                        <div class="tournament-progress">
+                            {% for round in record.tournament_path %}
+                            <span class="progress-step {% if round.completed %}completed{% endif %} {% if round.current %}current{% endif %}">
+                                {{ round.name }}
+                            </span>
+                            {% if not loop.last %}<span class="progress-arrow">→</span>{% endif %}
+                            {% endfor %}
+                        </div>
+                        <div class="bout-detail-list">
+                            {% for bout in record.tournament_bouts %}
+                            <div class="bout-detail-item">
+                                <span style="min-width: 60px; color: var(--primary-color); font-weight: 500;">{{ bout.round_name }}</span>
+                                <div class="bout-opponent">
+                                    <div class="bout-opponent-name">vs {{ bout.opponent_name }}</div>
+                                    <div class="bout-opponent-team">{{ bout.opponent_team }}</div>
+                                </div>
+                                <div class="bout-detail-score">{{ bout.my_score }} - {{ bout.opponent_score }}</div>
+                                <div class="bout-detail-result {% if bout.result == 'V' %}v{% else %}d{% endif %}">
+                                    {% if bout.result == 'V' %}✅ V{% else %}❌ D{% endif %}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% else %}
+            <div class="empty">{{ i18n.common.player.no_records|default('No match records') }}</div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Strength Tab -->
+    <div id="tab-strength" class="tab-content">
+        <!-- Overview Stats -->
+        <div class="strength-overview">
+            <div class="strength-card">
+                <div class="strength-value">{{ player.bout_stats.total }}</div>
+                <div class="strength-label">{{ i18n.common.player.total_bouts|default('Total Bouts') }}</div>
+            </div>
+            <div class="strength-card">
+                <div class="strength-value">{{ player.bout_stats.wins }}</div>
+                <div class="strength-label">{{ i18n.common.player.wins|default('Wins') }}</div>
+            </div>
+            <div class="strength-card">
+                <div class="strength-value">{{ player.bout_stats.losses }}</div>
+                <div class="strength-label">{{ i18n.common.player.losses|default('Losses') }}</div>
+            </div>
+            <div class="strength-card">
+                <div class="strength-value">{{ player.bout_stats.win_rate }}%</div>
+                <div class="strength-label">{{ i18n.common.player.win_rate|default('Win Rate') }}</div>
+            </div>
+        </div>
+
+        <!-- Win Rate by Stage -->
+        <div class="stat-card-large">
+            <h4>{{ i18n.common.player.win_rate_by_stage|default('Win Rate by Stage') }}</h4>
+            <div class="strength-overview" style="margin-bottom: 0">
+                <div class="strength-card">
+                    <div class="strength-value">{{ player.stage_stats.pool_rate }}%</div>
+                    <div class="strength-label">Pool</div>
+                    <small style="color: var(--text-light)">{{ player.stage_stats.pool_wins }}{{ i18n.common.table.wins|default('W') }} {{ player.stage_stats.pool_losses }}{{ i18n.common.table.losses|default('L') }}</small>
+                </div>
+                <div class="strength-card">
+                    <div class="strength-value">{{ player.stage_stats.de_rate }}%</div>
+                    <div class="strength-label">{{ i18n.common.player.de_stage|default('DE (Main)') }}</div>
+                    <small style="color: var(--text-light)">{{ player.stage_stats.de_wins }}{{ i18n.common.table.wins|default('W') }} {{ player.stage_stats.de_losses }}{{ i18n.common.table.losses|default('L') }}</small>
+                </div>
+                <div class="strength-card">
+                    <div class="strength-value">{{ player.stage_stats.final_rate }}%</div>
+                    <div class="strength-label">{{ i18n.common.player.finals|default('Finals') }}</div>
+                    <small style="color: var(--text-light)">{{ player.stage_stats.final_wins }}{{ i18n.common.table.wins|default('W') }} {{ player.stage_stats.final_losses }}{{ i18n.common.table.losses|default('L') }}</small>
+                </div>
+            </div>
+        </div>
+
+        <!-- Head to Head Records -->
+        <div class="stat-card-large">
+            <h4>{{ i18n.common.player.head_to_head|default('Head-to-Head Records') }}</h4>
+            <table class="opponent-table">
+                <thead>
+                    <tr>
+                        <th>{{ i18n.common.player.opponent|default('Opponent') }}</th>
+                        <th>{{ i18n.common.table.team|default('Team') }}</th>
+                        <th>{{ i18n.common.player.record|default('Record') }}</th>
+                        <th>{{ i18n.common.player.win_rate|default('Win Rate') }}</th>
+                        <th>{{ i18n.common.player.recent|default('Recent') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for opponent in player.head_to_head %}
+                    <tr class="opponent-row" onclick="toggleOpponentDetail(this)">
+                        <td><strong>{{ opponent.name }}</strong></td>
+                        <td>{{ opponent.team }}</td>
+                        <td class="record-cell">{{ opponent.wins }}-{{ opponent.losses }}</td>
+                        <td class="winrate-cell">
+                            {{ opponent.win_rate }}%
+                            <div class="winrate-bar">
+                                <div class="winrate-fill" style="width: {{ opponent.win_rate }}%"></div>
+                            </div>
+                        </td>
+                        <td>
+                            {% if opponent.last_result == 'V' %}
+                            <span style="color: var(--success-color)">✅ {{ opponent.last_score }}</span>
+                            {% else %}
+                            <span style="color: var(--danger-color)">❌ {{ opponent.last_score }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr class="opponent-detail">
+                        <td colspan="5">
+                            <div class="opponent-matches">
+                                {% for match in opponent.matches %}
+                                <div class="opponent-match-item">
+                                    <span style="min-width: 100px">{{ match.date }}</span>
+                                    <span style="min-width: 60px; color: var(--primary-color)">{{ match.round }}</span>
+                                    <span style="flex: 1">{{ match.tournament }}</span>
+                                    <span style="min-width: 60px; font-weight: bold">{{ match.score }}</span>
+                                    <span style="min-width: 40px">
+                                        {% if match.result == 'V' %}✅{% else %}❌{% endif %}
+                                    </span>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" style="text-align: center; color: var(--text-light);">{{ i18n.common.player.no_head_to_head|default('No head-to-head data available') }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Analysis Tab (FencingLab) -->
+    <div id="tab-analysis" class="tab-content">
+        <div class="analysis-container" id="analysis-content">
+            <div class="analysis-loading">
+                <p>{{ i18n.common.player.loading_analysis|default('Loading analysis data...') }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+// i18n translations for JavaScript - MUST be defined BEFORE fencinglab.js loads
+window.i18n = {
+    player: {
+        analysis_not_ready: '{{ i18n.common.player.analysis_not_ready|default("Analysis data is not yet available for this player.") }}',
+        analysis_club_only: '{{ i18n.common.player.analysis_club_only|default("Analysis service is currently available for Choibyungchul Fencing Club members only.") }}',
+        analysis_error: '{{ i18n.common.player.analysis_error|default("Unable to load analysis data.") }}',
+        try_again_later: '{{ i18n.common.player.try_again_later|default("Please try again later.") }}'
+    },
+    fencinglab: {
+        overall_stats: '{{ i18n.common.fencinglab.overall_stats|default("Overall Statistics") }}',
+        total_bouts: '{{ i18n.common.fencinglab.total_bouts|default("Total Bouts") }}',
+        wins: '{{ i18n.common.fencinglab.wins|default("Wins") }}',
+        losses: '{{ i18n.common.fencinglab.losses|default("Losses") }}',
+        win_rate: '{{ i18n.common.fencinglab.win_rate|default("Win Rate") }}',
+        performance_by_type: '{{ i18n.common.fencinglab.performance_by_type|default("Performance by Match Type") }}',
+        pool_5pt: '{{ i18n.common.fencinglab.pool_5pt|default("Pool (5-point)") }}',
+        de_15pt: '{{ i18n.common.fencinglab.de_15pt|default("DE (15-point)") }}',
+        wins_only: '{{ i18n.common.fencinglab.wins_only|default("(wins only)") }}',
+        close_match_analysis: '{{ i18n.common.fencinglab.close_match_analysis|default("Close Match Analysis (1-point games)") }}',
+        score_diff_analysis: '{{ i18n.common.fencinglab.score_diff_analysis|default("Score Difference Analysis") }}',
+        avg_win_margin: '{{ i18n.common.fencinglab.avg_win_margin|default("Avg Win Margin") }}',
+        avg_loss_margin: '{{ i18n.common.fencinglab.avg_loss_margin|default("Avg Loss Margin") }}',
+        dominant_wins: '{{ i18n.common.fencinglab.dominant_wins|default("Dominant Wins") }}',
+        heavy_losses: '{{ i18n.common.fencinglab.heavy_losses|default("Heavy Losses") }}',
+        match_ending_type: '{{ i18n.common.fencinglab.match_ending_type|default("Match Ending Type") }}',
+        full_score: '{{ i18n.common.fencinglab.full_score|default("Full Score (Target Reached)") }}',
+        timeout: '{{ i18n.common.fencinglab.timeout|default("Time Out (Target Not Reached)") }}',
+        recent_matches: '{{ i18n.common.fencinglab.recent_matches|default("Recent Match History") }}',
+        match_history: '{{ i18n.common.fencinglab.match_history|default("Match History (Win Rate Trend)") }}'
+    }
+};
+</script>
+<script src="/static/js/fencinglab.js?v=20250108b"></script>
+<script>
+// Tab switching
+document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+    });
+});
+
+// Toggle result detail
+function toggleResultDetail(header) {
+    const card = header.parentElement;
+    card.classList.toggle('expanded');
+}
+
+// Toggle disambiguation accordion (동명이인 섹션 접기/펼치기)
+function toggleDisambiguation(header) {
+    const section = header.parentElement;
+    section.classList.toggle('expanded');
+}
+
+// Toggle opponent detail
+function toggleOpponentDetail(row) {
+    const detail = row.nextElementSibling;
+    detail.classList.toggle('expanded');
+}
+
+// Filter history
+function filterHistory() {
+    const season = document.getElementById('filter-season').value;
+    const weapon = document.getElementById('filter-weapon').value;
+    const result = document.getElementById('filter-result').value;
+
+    document.querySelectorAll('.result-card').forEach(card => {
+        let show = true;
+
+        if (season && card.dataset.year !== season) {
+            show = false;
+        }
+
+        if (weapon && card.dataset.weapon !== weapon) {
+            show = false;
+        }
+
+        if (result === 'medal') {
+            const rank = parseInt(card.dataset.rank);
+            if (rank > 3) show = false;
+        } else if (result === 'top8') {
+            const rank = parseInt(card.dataset.rank);
+            if (rank > 8) show = false;
+        }
+
+        card.style.display = show ? 'block' : 'none';
+    });
+}
+
+// Print certificate
+function printCertificate() {
+    // Get player info from the page
+    const name = playerName;
+    const team = playerTeam;
+    const playerId = new URLSearchParams(window.location.search).get('id') || 'KOP00000';
+
+    // Get filtered weapon (if selected)
+    const weaponFilter = document.getElementById('filter-weapon').value;
+
+    // Build URL with parameters
+    const params = new URLSearchParams({
+        name: name,
+        team: team,
+        id: playerId
+    });
+    if (weaponFilter) {
+        params.set('weapon', weaponFilter);
+    }
+
+    // Open print page in new window
+    window.open(`/player/${encodeURIComponent(name)}/certificate?${params.toString()}`, '_blank');
+}
+
+// Analysis tab - FencingLab integration
+let analysisLoaded = false;
+const playerName = "{{ player.name }}";
+const playerTeam = "{{ player.current_team or (player.teams[0] if player.teams else '') }}";
+
+document.querySelector('[data-tab="analysis"]').addEventListener('click', async () => {
+    if (analysisLoaded) return;
+
+    const container = document.getElementById('analysis-content');
+
+    try {
+        const analytics = await FencingLab.loadPlayerAnalytics(playerName, playerTeam);
+
+        if (analytics && analytics.total_matches > 0) {
+            container.innerHTML = `
+                <div class="fl-player-card" id="player-analysis-card"></div>
+                <div class="fl-history-container" id="analysis-history" style="margin-top: 1.5rem;">
+                    <h4 class="fl-history-title">${i18n.fencinglab.match_history}</h4>
+                    <div class="fl-history-chart">
+                        <canvas id="analysisHistoryChart"></canvas>
+                    </div>
+                </div>
+                <div class="fl-history-container" id="analysis-recent" style="margin-top: 1.5rem;"></div>
+            `;
+
+            // Render player card
+            FencingLab.renderPlayerCard(analytics, 'player-analysis-card');
+
+            // Render match history chart
+            if (analytics.match_history && analytics.match_history.length > 0) {
+                FencingLab.createHistoryChart('analysisHistoryChart', analytics.match_history);
+            }
+
+            // Render recent matches
+            if (analytics.recent_matches && analytics.recent_matches.length > 0) {
+                FencingLab.renderRecentMatches(analytics.recent_matches, 'analysis-recent');
+            }
+
+            analysisLoaded = true;
+        } else {
+            container.innerHTML = `
+                <div class="analysis-notice">
+                    <p>${i18n.player.analysis_not_ready}</p>
+                    <p style="font-size: 0.875rem; color: var(--text-light); margin-top: 0.5rem;">
+                        ${i18n.player.analysis_club_only}
+                    </p>
+                </div>
+            `;
+        }
+    } catch (error) {
+        container.innerHTML = `
+            <div class="analysis-notice error">
+                <p>${i18n.player.analysis_error}</p>
+                <p style="font-size: 0.875rem; color: var(--text-light); margin-top: 0.5rem;">
+                    ${error.message || i18n.player.try_again_later}
+                </p>
+            </div>
+        `;
+    }
+});
+</script>
+{% endblock %}
