@@ -8,17 +8,26 @@ DE Bracket Scraper v4 - 엘리미나시옹디렉트 대진표 스크래퍼
 4. 다음 라운드에서 점수 추출
 5. BYE 처리 (빈 user_box = 자동 진출)
 6. 멀티 탭 병합 (32강전 + 8강전 등)
+7. Dual DE 지원 (국가대표 선발전 등 - First DE + Second DE)
 
 기준: 제26회 전국남녀대학펜싱선수권대회 여대 플러레(개)
+
+Dual DE 형식 (국가대표 선발전):
+- 대진표 > 엘리미나시옹디렉트 탭의 schEtc01 selector로 감지
+  - Option A: "32명의 면제자가 있는 예선엘리미나시옹디렉트" (First DE)
+  - Option B: "본선 64강" (Second DE)
+- First DE: 비시드 선수들의 예선
+  - 128강(64경기) → 64강(32경기) = 2라운드
+  - 32명 진출자 선발
+- Second DE: 시드 32명 + First DE 진출자 32명 = 64명
+  - 64강 → 32강 → 16강 → 8강 → 준결승 → 결승
 """
 
 import asyncio
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Any
 from playwright.async_api import Page
-import logging
-
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 
 @dataclass
@@ -78,6 +87,7 @@ class DEBracket:
     seeding: List[DEPlayer] = field(default_factory=list)
     matches: List[DEMatch] = field(default_factory=list)
     champion: Optional[DEPlayer] = None
+    is_in_progress: bool = False  # 대회가 진행 중인지 (DE 데이터 없음 상태)
 
     def to_dict(self) -> Dict[str, Any]:
         # 라운드별 경기 그룹화
@@ -95,6 +105,7 @@ class DEBracket:
         )
 
         return {
+            'format': 'single_de',  # 일반 DE (Dual DE와 구분)
             'starting_round': self.starting_round,
             'bracket_size': self.bracket_size,
             'participant_count': self.participant_count,
@@ -102,7 +113,42 @@ class DEBracket:
             'seeding': [p.to_dict() for p in self.seeding],
             'bouts': [m.to_dict() for m in self.matches],
             'bouts_by_round': bouts_by_round,
-            'champion': self.champion.to_dict() if self.champion else None
+            'champion': self.champion.to_dict() if self.champion else None,
+            'is_in_progress': self.is_in_progress
+        }
+
+
+@dataclass
+class DualDEBracket:
+    """Dual DE 대진표 (국가대표 선발전 등)
+
+    First DE + Second DE로 구성된 특수 형식
+    """
+    format: str = "dual_de"  # 형식 식별자
+
+    # First DE (예선 DE)
+    first_de: Optional[DEBracket] = None
+
+    # Second DE (본선 DE)
+    second_de: Optional[DEBracket] = None
+
+    # 시드 선수들 (First DE 면제, Second DE 직행)
+    seeded_players: List[DEPlayer] = field(default_factory=list)
+
+    # First DE 진출자 (Second DE 참가)
+    first_de_qualifiers: List[DEPlayer] = field(default_factory=list)
+
+    # 전체 상태
+    status: str = "pending"  # pending, first_de_in_progress, second_de_in_progress, completed
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            'format': self.format,
+            'status': self.status,
+            'seeded_players': [p.to_dict() for p in self.seeded_players],
+            'first_de_qualifiers': [p.to_dict() for p in self.first_de_qualifiers],
+            'first_de': self.first_de.to_dict() if self.first_de else None,
+            'second_de': self.second_de.to_dict() if self.second_de else None,
         }
 
 
@@ -135,6 +181,43 @@ class DEScraper:
 
     def __init__(self, page: Page):
         self.page = page
+        self.is_tournament_in_progress = False  # 대회 진행 중 상태
+
+    async def _check_tournament_in_progress(self) -> bool:
+        """대회가 진행 중인지 확인 (DE 데이터 없음 상태)
+
+        협회 사이트는 DE 진행 전에 "토너먼트가 진행중인 상태 입니다." 메시지를 표시합니다.
+        이 경우 DE 데이터를 스크래핑하면 안 됩니다.
+        """
+        in_progress = await self.page.evaluate("""
+            () => {
+                // 방법 1: "토너먼트가 진행중인 상태 입니다" 텍스트 확인
+                const pageText = document.body?.innerText || '';
+                if (pageText.includes('토너먼트가 진행중인 상태')) {
+                    return true;
+                }
+
+                // 방법 2: DE 테이블이 비어있는지 확인
+                const aTable = document.querySelector('#A_table');
+                if (!aTable) {
+                    return true;  // 테이블 자체가 없으면 진행 중
+                }
+
+                // 방법 3: row01에 user_box가 없으면 데이터 없음
+                const row01 = aTable.querySelector('td.row_table.row01');
+                if (!row01) {
+                    return true;
+                }
+
+                const userBoxes = row01.querySelectorAll('tr.user_box');
+                if (userBoxes.length === 0) {
+                    return true;
+                }
+
+                return false;
+            }
+        """)
+        return in_progress or False
 
     async def _detect_starting_round_from_tab(self) -> Optional[int]:
         """첫 번째 활성화된 탭 이름에서 시작 라운드 크기 감지
@@ -178,11 +261,31 @@ class DEScraper:
 
         return None
 
-    async def parse_de_bracket(self) -> DEBracket:
-        """DE 대진표 파싱 메인 함수"""
+    async def parse_de_bracket(self, skip_in_progress_check: bool = False) -> DEBracket:
+        """DE 대진표 파싱 메인 함수
+
+        Args:
+            skip_in_progress_check: True면 진행중 체크 스킵 (Dual DE 컨텍스트에서 사용)
+        """
         bracket = DEBracket()
 
         try:
+            # 0. 대회 진행 중 상태 확인 (DE 데이터 없음)
+            # Dual DE 컨텍스트에서는 이미 페이지가 로드되어 있으므로 스킵
+            if not skip_in_progress_check:
+                self.is_tournament_in_progress = await self._check_tournament_in_progress()
+                if self.is_tournament_in_progress:
+                    logger.warning("⚠️ 토너먼트가 진행 중입니다 - DE 데이터 스크래핑 스킵")
+                    bracket.is_in_progress = True  # 진행 중 플래그 설정
+                    return bracket  # 빈 브래킷 반환
+
+            # 0.5. tournament_table 구조 확인 (국가대표 선발전 등)
+            has_tt = await self._has_tournament_table()
+            if has_tt:
+                logger.info("🏆 tournament_table 구조 감지 - 새 파서 사용")
+                result = await self._parse_tournament_table_bracket()
+                return result
+
             # 1. 시작 라운드 감지 - 활성화된 탭 이름으로 먼저 확인 (가장 신뢰할 수 있는 방법)
             starting_size = await self._detect_starting_round_from_tab()
 
@@ -244,10 +347,13 @@ class DEScraper:
                 logger.debug(f"  탭 {tab_size}강전: {len(tab_matches)}경기 수집")
 
             # 4. 중복 제거 및 병합
-            bracket.matches = self._deduplicate_matches(all_matches)
-            logger.info(f"총 경기 수: {len(bracket.matches)}")
+            deduplicated = self._deduplicate_matches(all_matches)
 
-            # 5. 우승자 확인
+            # 5. 유효성 검증으로 무효 경기 필터링
+            bracket.matches = self._filter_valid_matches(deduplicated)
+            logger.info(f"총 경기 수: {len(bracket.matches)} (중복제거 후 {len(deduplicated)}개에서 필터링)")
+
+            # 6. 우승자 확인
             bracket.champion = await self._get_champion()
             if bracket.champion:
                 logger.info(f"우승자: {bracket.champion.name}")
@@ -608,6 +714,57 @@ class DEScraper:
         )
         return result
 
+    def _is_valid_match(self, match: DEMatch) -> bool:
+        """경기 유효성 검증
+
+        무효 판정 기준:
+        1. player1 == player2 (같은 사람이 양쪽에 있음) → 템플릿 데이터
+        2. 둘 다 이름이 없고 BYE도 아님 → 아직 대진 미정
+        3. 점수 없이 승자 없고 BYE도 아님 → 아직 경기 안 함
+        """
+        p1_name = match.player1.name if match.player1 else None
+        p2_name = match.player2.name if match.player2 else None
+
+        # 케이스 1: player1 == player2 (같은 사람) → 무효
+        if p1_name and p2_name and p1_name == p2_name:
+            logger.warning(f"⚠️ 무효 경기 감지 (동일 선수): {match.round_name} #{match.match_number}: {p1_name} vs {p2_name}")
+            return False
+
+        # 케이스 2: BYE 경기는 유효
+        if match.is_bye_match:
+            return True
+
+        # 케이스 3: 둘 다 이름 없음 → 무효 (대진 미정)
+        if not p1_name and not p2_name:
+            logger.warning(f"⚠️ 무효 경기 감지 (대진 미정): {match.round_name} #{match.match_number}")
+            return False
+
+        # 케이스 4: 점수와 승자 모두 없음 → 아직 경기 안 함
+        # (단, 한 명만 있는 경우는 BYE일 수 있으므로 유효)
+        if p1_name and p2_name:
+            # 두 선수 모두 있는데 점수가 없고 승자도 없으면 경기 안 함
+            if match.player1_score is None and match.player2_score is None and match.winner is None:
+                logger.warning(f"⚠️ 무효 경기 감지 (미완료): {match.round_name} #{match.match_number}: {p1_name} vs {p2_name}")
+                return False
+
+        return True
+
+    def _filter_valid_matches(self, matches: List[DEMatch]) -> List[DEMatch]:
+        """유효한 경기만 필터링"""
+        valid_matches = []
+        invalid_count = 0
+
+        for match in matches:
+            if self._is_valid_match(match):
+                valid_matches.append(match)
+            else:
+                invalid_count += 1
+
+        if invalid_count > 0:
+            logger.info(f"📊 경기 유효성 검증: {len(matches)}개 중 {invalid_count}개 무효 → {len(valid_matches)}개 유효")
+
+        return valid_matches
+
     async def _get_champion(self) -> Optional[DEPlayer]:
         """우승자 정보 추출"""
         champion = await self.page.evaluate("""
@@ -646,6 +803,527 @@ class DEScraper:
             team=None,  # 우승자 칸의 aff는 결승 점수
             is_bye=False
         )
+
+    # ========================================
+    # .tournament_table 구조 파싱 (국가대표 선발전 등)
+    # ========================================
+
+    async def _has_tournament_table(self) -> bool:
+        """페이지에 .tournament_table 구조가 있는지 확인"""
+        return await self.page.evaluate("""
+            () => !!document.querySelector('.tournament_table .user_box')
+        """)
+
+    async def _parse_tournament_table_bracket(self) -> DEBracket:
+        """국가대표 선발전 스타일의 .tournament_table 구조 파싱
+
+        이 구조는 .user_box 요소에 다음 속성들이 있음:
+        - compmatsym: 경기 ID (같은 값의 두 box가 한 경기)
+        - xposition: 라운드 크기 (64=64강)
+        - score: 점수
+        - wingbn: 승자 여부 (1=승)
+        - dir: UP/DOWN (대진표 위치)
+        """
+        bracket = DEBracket()
+
+        try:
+            # 디버깅: .user_box 요소 수 확인
+            box_count = await self.page.evaluate("document.querySelectorAll('.user_box').length")
+            logger.info(f"_parse_tournament_table_bracket: .user_box 요소 수 = {box_count}")
+
+            if box_count == 0:
+                logger.warning("  → .user_box 요소가 없음! 페이지 로드 대기 중...")
+                await asyncio.sleep(2)
+                box_count = await self.page.evaluate("document.querySelectorAll('.user_box').length")
+                logger.info(f"  → 대기 후 .user_box 요소 수 = {box_count}")
+
+            data = await self.page.evaluate("""
+                () => {
+                    const boxes = document.querySelectorAll('.user_box');
+                    if (!boxes.length) return { matches: [], seeding: [] };
+
+                    const matchMap = new Map();
+                    const seedingMap = new Map();
+
+                    boxes.forEach(box => {
+                        const sym = box.getAttribute('compmatsym');
+                        const dir = box.getAttribute('dir');
+                        const xpos = parseInt(box.getAttribute('xposition')) || 0;
+                        const score = parseInt(box.getAttribute('score')) || 0;
+                        const wingbn = box.getAttribute('wingbn');
+                        const matchcd = box.getAttribute('matchcd');
+                        const seedNum = parseInt(box.querySelector('.num')?.textContent.trim()) || 0;
+                        const name = box.querySelector('.user_name span')?.textContent.trim() || '';
+                        const team = box.querySelector('.user_aff span')?.textContent.trim() || '';
+
+                        const player = {
+                            seed: seedNum,
+                            name,
+                            team,
+                            score,
+                            isWinner: wingbn === '1',
+                            isBye: name.toLowerCase().includes('bye') || name === ''
+                        };
+
+                        // 시드 목록 구축 (64강 데이터에서)
+                        if (xpos === 64 && name && !seedingMap.has(seedNum)) {
+                            seedingMap.set(seedNum, player);
+                        }
+
+                        if (!matchMap.has(sym)) {
+                            matchMap.set(sym, { matchcd, xposition: xpos, red: null, green: null });
+                        }
+
+                        if (dir === 'UP') {
+                            matchMap.get(sym).red = player;
+                        } else {
+                            matchMap.get(sym).green = player;
+                        }
+                    });
+
+                    // 경기 배열 생성
+                    const matches = [];
+                    let matchNum = 0;
+                    matchMap.forEach((match, sym) => {
+                        if (match.red && match.green) {
+                            matchNum++;
+                            const roundName = match.xposition + '강';
+                            const winner = match.red.isWinner ? match.red :
+                                          match.green.isWinner ? match.green : null;
+
+                            matches.push({
+                                match_id: sym,
+                                match_number: matchNum,
+                                round_size: match.xposition,
+                                round_name: roundName,
+                                red_seed: match.red.seed,
+                                red_name: match.red.name,
+                                red_team: match.red.team,
+                                red_score: match.red.score,
+                                red_is_bye: match.red.isBye,
+                                green_seed: match.green.seed,
+                                green_name: match.green.name,
+                                green_team: match.green.team,
+                                green_score: match.green.score,
+                                green_is_bye: match.green.isBye,
+                                winner_name: winner ? winner.name : null,
+                                winner_seed: winner ? winner.seed : null
+                            });
+                        }
+                    });
+
+                    // 시드 배열 생성
+                    const seeding = [];
+                    seedingMap.forEach((p, seed) => {
+                        seeding.push({ seed: p.seed, name: p.name, team: p.team });
+                    });
+                    seeding.sort((a, b) => a.seed - b.seed);
+
+                    return { matches, seeding };
+                }
+            """)
+
+            # DEBracket 객체 구성
+            matches_data = data.get('matches', [])
+            seeding_data = data.get('seeding', [])
+
+            logger.info(f"tournament_table 파싱: {len(matches_data)}경기, {len(seeding_data)}명 시드")
+
+            # 라운드 정보 추출
+            round_sizes = set(m['round_size'] for m in matches_data if m.get('round_size'))
+            if round_sizes:
+                max_round = max(round_sizes)
+                bracket.bracket_size = max_round
+                bracket.starting_round = f'{max_round}강'
+
+            # 경기 데이터 변환
+            for m in matches_data:
+                red_player = DEPlayer(
+                    seed=m['red_seed'],
+                    name=m['red_name'],
+                    team=m['red_team'],
+                    is_bye=m['red_is_bye']
+                )
+                green_player = DEPlayer(
+                    seed=m['green_seed'],
+                    name=m['green_name'],
+                    team=m['green_team'],
+                    is_bye=m['green_is_bye']
+                )
+
+                winner = None
+                if m['winner_name']:
+                    if m['winner_name'] == m['red_name']:
+                        winner = red_player
+                    elif m['winner_name'] == m['green_name']:
+                        winner = green_player
+
+                match = DEMatch(
+                    match_number=m['match_number'],
+                    round_name=m['round_name'],
+                    player1=red_player,
+                    player2=green_player,
+                    player1_score=m['red_score'],
+                    player2_score=m['green_score'],
+                    winner=winner,
+                    is_bye_match=m['red_is_bye'] or m['green_is_bye']
+                )
+                bracket.matches.append(match)
+
+            # 시드 데이터 변환
+            for s in seeding_data:
+                bracket.seeding.append(DEPlayer(
+                    seed=s['seed'],
+                    name=s['name'],
+                    team=s['team'],
+                    is_bye=False
+                ))
+
+            # 라운드 목록 구성
+            rounds_found = sorted(set(m.round_name for m in bracket.matches),
+                                 key=lambda r: int(r.replace('강', '')) if '강' in r else 0,
+                                 reverse=True)
+            bracket.rounds = rounds_found
+
+            logger.info(f"tournament_table 파싱 완료: 라운드 {bracket.rounds}, {len(bracket.matches)}경기")
+
+        except Exception as e:
+            logger.error(f"tournament_table 파싱 오류: {e}")
+            import traceback
+            traceback.print_exc()
+
+        return bracket
+
+    # ========================================
+    # Dual DE 지원 메서드 (국가대표 선발전 등)
+    # ========================================
+
+    async def detect_dual_de_format(self, wait_for_selector: bool = True) -> bool:
+        """Dual DE 형식인지 감지 (대진표 > 엘리미나시옹디렉트 탭에서)
+
+        schEtc01 selector가 있으면 Dual DE 형식
+        - Option A: "32명의 면제자가 있는 예선엘리미나시옹디렉트"
+        - Option B: "본선 64강"
+
+        Args:
+            wait_for_selector: True면 selector 로딩을 기다림 (기본 True)
+        """
+        # 1. 먼저 selector가 로드될 때까지 대기
+        if wait_for_selector:
+            try:
+                await self.page.wait_for_selector('select#schEtc01', timeout=3000)
+                logger.debug("✅ #schEtc01 selector 발견")
+            except TimeoutError:
+                logger.debug("❌ #schEtc01 selector 없음 (일반 DE 형식)")
+                return False
+
+        # 2. Selector 내용 확인
+        result = await self.page.evaluate("""
+            () => {
+                const selector = document.querySelector('select#schEtc01');
+                if (!selector) return { found: false, options: [] };
+
+                // 옵션들 확인
+                const options = Array.from(selector.options || []);
+                const optionTexts = options.map(opt => opt.text.trim());
+
+                const hasFirstDE = options.some(opt =>
+                    opt.text.includes('면제자') || opt.text.includes('예선엘리미나시옹')
+                );
+                const hasSecondDE = options.some(opt =>
+                    opt.text.includes('본선') && opt.text.includes('64강')
+                );
+
+                return {
+                    found: true,
+                    options: optionTexts,
+                    hasFirstDE: hasFirstDE,
+                    hasSecondDE: hasSecondDE,
+                    isDualDE: hasFirstDE && hasSecondDE
+                };
+            }
+        """)
+
+        if result.get('found'):
+            logger.debug(f"Dual DE 감지 결과: options={result.get('options')}, "
+                        f"hasFirstDE={result.get('hasFirstDE')}, hasSecondDE={result.get('hasSecondDE')}")
+
+            if result.get('isDualDE'):
+                logger.info("🎯 Dual DE 형식 감지됨")
+                return True
+            else:
+                logger.debug(f"Dual DE 조건 미충족: First={result.get('hasFirstDE')}, Second={result.get('hasSecondDE')}")
+
+        return False
+
+    async def get_dual_de_options(self) -> Dict[str, str]:
+        """Dual DE 옵션 값 가져오기
+
+        Returns:
+            {"first_de": "A", "second_de": "B"} - option value
+        """
+        # 먼저 selector가 로드될 때까지 대기
+        try:
+            logger.info("    get_dual_de_options: selector 대기 중...")
+            await self.page.wait_for_selector('select#schEtc01', timeout=3000)
+            logger.info("    get_dual_de_options: selector 발견!")
+        except Exception as e:
+            logger.warning(f"schEtc01 selector를 찾을 수 없습니다 (timeout): {e}")
+            return {}
+
+        options = await self.page.evaluate("""
+            () => {
+                const selector = document.querySelector('select#schEtc01');
+                if (!selector) return { error: 'selector_not_found' };
+
+                const allOptions = Array.from(selector.options || []);
+                const optionTexts = allOptions.map(opt => opt.text);
+
+                const result = { debug_options: optionTexts };
+                allOptions.forEach(opt => {
+                    if (opt.text.includes('면제자') || opt.text.includes('예선엘리미나시옹')) {
+                        result.first_de = opt.value;
+                    }
+                    if (opt.text.includes('본선') && opt.text.includes('64강')) {
+                        result.second_de = opt.value;
+                    }
+                });
+
+                return result;
+            }
+        """)
+        if options and 'error' in options:
+            logger.warning("schEtc01 selector를 찾을 수 없습니다 (evaluate)")
+            return {}
+        if options and 'debug_options' in options:
+            logger.debug(f"Dual DE 옵션: {options.get('debug_options', [])}")
+        return options or {}
+
+    async def select_dual_de_phase(self, phase: str, cached_options: Dict[str, str] = None) -> bool:
+        """Dual DE phase 선택 (first_de 또는 second_de)
+
+        Args:
+            phase: "first_de" 또는 "second_de"
+            cached_options: 미리 가져온 옵션 (없으면 새로 가져옴)
+
+        Returns:
+            성공 여부
+        """
+        logger.debug(f"select_dual_de_phase 시작: phase={phase}")
+        options = cached_options if cached_options else await self.get_dual_de_options()
+        logger.debug(f"  옵션: {options}")
+
+        if not options or 'first_de' not in options:
+            logger.warning(f"Dual DE 옵션을 찾을 수 없습니다. 옵션: {options}")
+            return False
+
+        value = options.get(phase)
+        if not value:
+            logger.warning(f"'{phase}' 옵션 값을 찾을 수 없습니다. 사용 가능: {list(options.keys())}")
+            return False
+
+        try:
+            # selector 존재 여부 먼저 확인
+            selector_exists = await self.page.evaluate("""
+                () => !!document.querySelector('select#schEtc01')
+            """)
+            logger.debug(f"  selector 존재 (JS): {selector_exists}")
+
+            if not selector_exists:
+                logger.warning("schEtc01 selector가 DOM에 없습니다")
+                return False
+
+            # 현재 선택된 인덱스 확인
+            current_index = await self.page.evaluate("""
+                () => document.querySelector('select#schEtc01')?.selectedIndex
+            """)
+            target_index = 0 if phase == "first_de" else 1
+
+            # First DE (index 0)가 이미 선택된 상태면 페이지 갱신 없이 바로 사용
+            if phase == "first_de" and current_index == 0:
+                # 이미 First DE가 로드되어 있는지 확인
+                has_data = await self.page.evaluate("""
+                    () => document.querySelectorAll('.tournament_table .user_box').length > 0
+                """)
+                if has_data:
+                    logger.debug(f"  First DE 이미 로드됨 (index={current_index}), 페이지 갱신 스킵")
+                    return True
+
+            # 선택 변경이 필요한 경우만 fnChangeRuls() 호출
+            logger.debug(f"  selectedIndex={target_index}로 선택 후 fnChangeRuls() 호출 (현재={current_index})")
+            await self.page.evaluate(f"""
+                () => {{
+                    const selector = document.querySelector('select#schEtc01');
+                    if (selector) {{
+                        selector.selectedIndex = {target_index};
+                        // onchange 핸들러 호출 (fnChangeRuls)
+                        if (typeof fnChangeRuls === 'function') {{
+                            fnChangeRuls();
+                        }} else {{
+                            selector.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                        }}
+                    }}
+                }}
+            """)
+
+            # .tournament_table .user_box 데이터가 로드될 때까지 대기 (최대 10초)
+            for i in range(20):
+                await asyncio.sleep(0.5)
+                has_data = await self.page.evaluate("""
+                    () => document.querySelectorAll('.tournament_table .user_box').length > 0
+                """)
+                if has_data:
+                    logger.debug(f"  {phase} 데이터 로드 완료 ({(i+1)*0.5}초)")
+                    break
+            else:
+                logger.warning(f"  {phase} 데이터 로드 타임아웃 (10초)")
+
+            logger.debug(f"  {phase} 선택 완료")
+            return True
+        except Exception as e:
+            logger.error(f"Dual DE phase 선택 실패: {e}")
+            return False
+
+    async def parse_dual_de_bracket(self, skip_detection: bool = True) -> Optional[DualDEBracket]:
+        """Dual DE 대진표 파싱 (국가대표 선발전 등)
+
+        1. First DE 선택 및 파싱 (128강 → 64강, 32명 진출)
+        2. Second DE 선택 및 파싱 (64강 → 결승)
+        3. 시드 선수 추출 (First DE 면제자)
+        4. First DE 진출자 추출
+
+        Args:
+            skip_detection: True면 Dual DE 재감지 스킵 (이미 감지된 경우)
+        """
+        # Dual DE 형식 재확인 (선택적)
+        if not skip_detection:
+            is_dual_de = await self.detect_dual_de_format(wait_for_selector=True)
+            if not is_dual_de:
+                logger.info("Dual DE 형식이 아닙니다 - 일반 DE로 파싱")
+                return None
+
+        dual_bracket = DualDEBracket()
+
+        try:
+            # ===== 옵션 미리 가져오기 (한 번만) =====
+            logger.info("  옵션 가져오기 시작...")
+            cached_options = await self.get_dual_de_options()
+            logger.info(f"  옵션 결과: {cached_options}")
+            if not cached_options or 'first_de' not in cached_options:
+                logger.warning("Dual DE 옵션을 가져올 수 없습니다")
+                return None
+            logger.info(f"  Dual DE 옵션 캐시됨: first_de={cached_options.get('first_de')}, second_de={cached_options.get('second_de')}")
+
+            # ===== First DE 파싱 =====
+            logger.info("📍 First DE (예선 DE) 파싱 시작...")
+            select_result = await self.select_dual_de_phase("first_de", cached_options)
+            if select_result:
+                # Dual DE 컨텍스트에서는 진행중 체크 스킵
+                first_de = await self.parse_de_bracket(skip_in_progress_check=True)
+                if first_de and first_de.matches:
+                    dual_bracket.first_de = first_de
+                    logger.info(f"  First DE 파싱 완료: {len(first_de.matches)}경기, "
+                               f"라운드: {first_de.starting_round} ~ 64강")
+
+                    # First DE 진출자 추출 (64강에서 이긴 32명)
+                    qualifiers = self._extract_first_de_qualifiers(first_de)
+                    dual_bracket.first_de_qualifiers = qualifiers
+                    logger.info(f"  First DE 진출자: {len(qualifiers)}명")
+
+            # ===== Second DE 파싱 =====
+            logger.info("📍 Second DE (본선 DE) 파싱 시작...")
+            if await self.select_dual_de_phase("second_de", cached_options):
+                # Dual DE 컨텍스트에서는 진행중 체크 스킵
+                second_de = await self.parse_de_bracket(skip_in_progress_check=True)
+                if second_de and second_de.matches:
+                    dual_bracket.second_de = second_de
+                    logger.info(f"  Second DE 파싱 완료: {len(second_de.matches)}경기, "
+                               f"라운드: 64강 ~ 결승")
+
+                    # 시드 선수 추출 (Second DE seeding에서 First DE 진출자가 아닌 선수)
+                    seeded = self._extract_seeded_players(second_de, dual_bracket.first_de_qualifiers)
+                    dual_bracket.seeded_players = seeded
+                    logger.info(f"  시드 선수 (First DE 면제): {len(seeded)}명")
+
+            # ===== 상태 결정 =====
+            dual_bracket.status = self._determine_dual_de_status(dual_bracket)
+            logger.info(f"📊 Dual DE 상태: {dual_bracket.status}")
+
+            return dual_bracket
+
+        except Exception as e:
+            logger.error(f"Dual DE 파싱 오류: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+
+    def _extract_first_de_qualifiers(self, first_de: DEBracket) -> List[DEPlayer]:
+        """First DE 진출자 추출 (64강 승자들 = Second DE 진출)
+
+        First DE는 128강 → 64강까지 진행, 64강 승자 32명이 Second DE로 진출
+        """
+        qualifiers = []
+
+        # 64강 라운드의 승자들 추출
+        for match in first_de.matches:
+            if match.round_name == '64강' and match.winner:
+                qualifiers.append(match.winner)
+
+        # 시드 순서로 정렬
+        qualifiers.sort(key=lambda p: p.seed)
+        return qualifiers
+
+    def _extract_seeded_players(
+        self,
+        second_de: DEBracket,
+        first_de_qualifiers: List[DEPlayer]
+    ) -> List[DEPlayer]:
+        """시드 선수 추출 (First DE 면제자 = Second DE seeding 중 First DE 진출자가 아닌 선수)
+
+        Second DE seeding에 있는 선수 중 First DE 진출자 명단에 없는 선수가 시드 선수
+        """
+        qualifier_names = {q.name for q in first_de_qualifiers if q.name}
+        seeded = []
+
+        for player in second_de.seeding:
+            if player.name and player.name not in qualifier_names:
+                seeded.append(player)
+
+        # 시드 순서로 정렬
+        seeded.sort(key=lambda p: p.seed)
+        return seeded
+
+    def _determine_dual_de_status(self, dual_bracket: DualDEBracket) -> str:
+        """Dual DE 전체 상태 결정"""
+        first_de = dual_bracket.first_de
+        second_de = dual_bracket.second_de
+
+        # First DE 없음 → pending
+        if not first_de:
+            return "pending"
+
+        # First DE 진행 중 (champion 없음)
+        if first_de.is_in_progress or not first_de.champion:
+            # 64강까지 완료되었는지 확인
+            has_64_matches = any(m.round_name == '64강' for m in first_de.matches)
+            has_all_64_winners = all(
+                m.winner is not None
+                for m in first_de.matches
+                if m.round_name == '64강'
+            )
+            if not has_64_matches or not has_all_64_winners:
+                return "first_de_in_progress"
+
+        # Second DE 없음 → first_de_in_progress (아직 시작 안 함)
+        if not second_de:
+            return "first_de_in_progress"
+
+        # Second DE 진행 중
+        if second_de.is_in_progress or not second_de.champion:
+            return "second_de_in_progress"
+
+        # 모두 완료
+        return "completed"
 
 
 # 테스트 함수

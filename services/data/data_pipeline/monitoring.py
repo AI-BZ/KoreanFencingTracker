@@ -345,7 +345,7 @@ class DataQualityMonitor:
                 try:
                     # 간소화된 검사 (실제로는 LEFT JOIN으로 orphan 찾기)
                     passed_checks += 1  # 실제 구현 시 RPC 함수 사용
-                except Exception:
+                except (KeyError, TypeError, AttributeError):
                     issues.append(f"{source_table}.{source_col} → {target_table}.{target_col}")
             
             integrity_rate = passed_checks / total_checks if total_checks > 0 else 1.0

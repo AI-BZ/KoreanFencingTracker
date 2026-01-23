@@ -586,7 +586,7 @@ class KFFFullScraper:
                     await page_obj.wait_for_timeout(1500)
                     await throttle_request()  # 스로틀링 적용
                     page_num += 1
-                except:
+                except (TimeoutError, Exception):
                     break
 
         finally:
@@ -845,7 +845,7 @@ class KFFFullScraper:
                         next_btn = page.locator("a:has-text('다음페이지')")
                         await next_btn.click(timeout=3000)
                         await page.wait_for_timeout(1000)
-                    except:
+                    except (TimeoutError, Exception):
                         break
 
             # 대회 클릭
@@ -981,7 +981,7 @@ class KFFFullScraper:
                         next_btn = page.locator("a:has-text('다음페이지')")
                         await next_btn.click(timeout=3000)
                         await page.wait_for_timeout(1000)
-                    except:
+                    except (TimeoutError, Exception):
                         break
 
             # 대회 클릭
@@ -1355,14 +1355,14 @@ class KFFFullScraper:
                 close_btn = page.locator("#layer_final_ranking a:has-text('닫기')")
                 await close_btn.click(timeout=2000)
                 await page.wait_for_timeout(300)
-            except:
+            except (TimeoutError, Exception):
                 try:
                     await page.evaluate("document.querySelector('#layer_final_ranking').style.display = 'none'")
-                except:
+                except (TimeoutError, Exception):
                     try:
                         await page.keyboard.press("Escape")
                         await page.wait_for_timeout(300)
-                    except:
+                    except (TimeoutError, Exception):
                         pass
 
             # 최종 확인: 팝업 강제 숨기기
@@ -1371,7 +1371,7 @@ class KFFFullScraper:
                     const popup = document.querySelector('#layer_final_ranking');
                     if (popup) popup.style.display = 'none';
                 """)
-            except:
+            except (TimeoutError, Exception):
                 pass
 
             logger.info(f"뿔 최종 랭킹 총 {len(all_rankings)}명 (진출: {len(qualified_rankings)}, 탈락: {len([r for r in all_rankings if r.get('status') == '탈락'])})")

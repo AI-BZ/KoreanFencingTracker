@@ -43,7 +43,7 @@ from .models import (
     ParticipantAttendance
 )
 from .players import players_router, player_service
-from database.supabase_client import get_supabase_client
+from .players.service import get_supabase_client
 
 router = APIRouter(prefix="/club", tags=["Club Management"])
 
@@ -128,8 +128,8 @@ async def get_dashboard(
                 paid_at = fee.get("paid_at", "")
                 if paid_at and paid_at.startswith(today[:7]):  # 이번 달
                     this_month_collection += fee.get("amount", 0)
-    except Exception:
-        pass  # fees 테이블이 없을 수 있음
+    except (KeyError, TypeError, AttributeError):
+        pass  # fees 테이블이 없거나 데이터 형식 오류
 
     # 알림 생성
     alerts = []
@@ -307,7 +307,7 @@ async def _check_auto_checkin_eligibility(
 
         return False
 
-    except Exception:
+    except (KeyError, TypeError, AttributeError):
         return False
 
 
@@ -596,7 +596,7 @@ async def create_lesson(
                     "attendance_status": ParticipantStatus.registered.value
                 }).execute()
                 participant_count += 1
-            except Exception:
+            except (KeyError, TypeError):
                 pass  # 중복이거나 없는 회원은 무시
 
     # 코치 이름 조회

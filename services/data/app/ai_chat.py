@@ -295,7 +295,7 @@ class FencingAIChat:
         for r in ranks:
             try:
                 int_ranks.append(int(r))
-            except:
+            except (ValueError, TypeError):
                 pass
 
         best_rank = min(int_ranks) if int_ranks else "-"

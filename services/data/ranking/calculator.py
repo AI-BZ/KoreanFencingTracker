@@ -555,7 +555,7 @@ class RankingCalculator:
                     comp_date = datetime.strptime(comp_date_str, "%Y-%m-%d").date()
                 else:
                     comp_date = comp_date_str
-            except:
+            except (ValueError, TypeError, AttributeError):
                 comp_date = date.today()
 
             # 대회 등급 및 구분 분류

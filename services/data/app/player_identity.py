@@ -252,30 +252,72 @@ class PlayerProfile:
         return list(dict.fromkeys([t.team for t in self.team_history]))
 
     def add_team(self, team: str, date_str: str) -> None:
-        """Add or update team affiliation"""
+        """팀 기록 추가 (단순화됨 - rebuild_team_history()로 그룹화)
+
+        모든 기록을 개별적으로 추가합니다.
+        프로필 구축 완료 후 rebuild_team_history()를 호출하여
+        연속된 같은 팀을 그룹화하고 원복 케이스를 처리합니다.
+        """
         if not team:
             return
 
-        # Check if this is a continuation of an existing team
-        for record in self.team_history:
-            if record.team == team:
-                # Update last_seen if this date is later
-                if date_str > record.last_seen:
-                    record.last_seen = date_str
-                elif date_str < record.first_seen:
-                    record.first_seen = date_str
-                record.competition_count += 1
-                return
-
-        # New team - add to history
+        # 무조건 새 기록 추가 (나중에 rebuild_team_history()로 그룹화)
         self.team_history.append(TeamRecord(
             team=team,
             first_seen=date_str,
             last_seen=date_str
         ))
 
-        # Sort by first_seen date
-        self.team_history.sort(key=lambda x: x.first_seen)
+    def rebuild_team_history(self) -> None:
+        """프로필 구축 완료 후 team_history 재구축
+
+        - 날짜순 정렬
+        - 연속된 같은 팀을 하나의 기간으로 그룹화
+        - 원복 케이스(A→B→A)는 별도 기간으로 유지
+
+        예: 최병철(2022-03~2025-07) → 올즈윈(2025-08) → 최병철(2025-10~2026-01)
+        """
+        if not self.team_history:
+            return
+
+        # 날짜순 정렬
+        sorted_records = sorted(self.team_history, key=lambda x: x.first_seen)
+
+        # 연속된 같은 팀 그룹화 (원복 케이스 분리 유지)
+        new_history = []
+        current_period = None
+
+        for record in sorted_records:
+            if current_period is None:
+                # 첫 번째 기록
+                current_period = TeamRecord(
+                    team=record.team,
+                    team_id=record.team_id,
+                    team_en=record.team_en,
+                    first_seen=record.first_seen,
+                    last_seen=record.last_seen,
+                    competition_count=record.competition_count
+                )
+            elif current_period.team == record.team:
+                # 연속된 같은 팀 - 기간 연장
+                current_period.last_seen = record.last_seen
+                current_period.competition_count += record.competition_count
+            else:
+                # 다른 팀 - 현재 기간 저장, 새 기간 시작
+                new_history.append(current_period)
+                current_period = TeamRecord(
+                    team=record.team,
+                    team_id=record.team_id,
+                    team_en=record.team_en,
+                    first_seen=record.first_seen,
+                    last_seen=record.last_seen,
+                    competition_count=record.competition_count
+                )
+
+        if current_period:
+            new_history.append(current_period)
+
+        self.team_history = new_history
 
     def check_data_integrity(self) -> Optional[str]:
         """
@@ -580,7 +622,12 @@ class PlayerIdentityResolver:
                         else:
                             self._create_single_profile(name, gender_records)
 
-        # Post-resolution: Assign special IDs for reference players
+        # Post-resolution: Rebuild team_history for all profiles
+        # This groups consecutive same-team records and preserves 원복 케이스
+        for profile in self.profiles.values():
+            profile.rebuild_team_history()
+
+        # Assign special IDs for reference players
         return self._assign_special_ids()
 
     def _find_age_regression_split(self, records: List[Dict]) -> Optional[str]:
@@ -1075,7 +1122,7 @@ class PlayerIdentityResolver:
                 def parse_year(d):
                     try:
                         return int(d[:4])
-                    except:
+                    except (ValueError, TypeError, IndexError):
                         return 0
 
                 year1_end = parse_year(range1_end)
