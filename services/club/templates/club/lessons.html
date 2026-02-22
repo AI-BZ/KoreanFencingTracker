@@ -1,0 +1,710 @@
+{% extends "base.html" %}
+
+{% block title %}레슨 관리 - Korean Fencing Tracker{% endblock %}
+
+{% block extra_css %}
+<style>
+.lessons-page {
+    padding: 2rem 0;
+}
+
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.page-header h1 {
+    font-size: 1.8rem;
+    color: #1a1a2e;
+}
+
+.header-actions {
+    display: flex;
+    gap: 0.75rem;
+}
+
+.btn {
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: none;
+    font-size: 0.95rem;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: white;
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.btn-secondary {
+    background: #f0f0f0;
+    color: #333;
+}
+
+.btn-secondary:hover {
+    background: #e0e0e0;
+}
+
+/* Filter Section */
+.filters-section {
+    background: white;
+    border-radius: 12px;
+    padding: 1.25rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.filters-row {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.filter-group label {
+    font-size: 0.8rem;
+    color: #666;
+    font-weight: 500;
+}
+
+.filter-group select,
+.filter-group input {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    min-width: 140px;
+}
+
+/* Lessons Grid */
+.lessons-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 1.25rem;
+}
+
+.lesson-card {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    overflow: hidden;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.lesson-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+}
+
+.lesson-card-header {
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid #f0f0f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.lesson-type-badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.type-individual { background: #e3f2fd; color: #1976d2; }
+.type-group { background: #f3e5f5; color: #7b1fa2; }
+.type-team { background: #e8f5e9; color: #388e3c; }
+.type-special { background: #fff3e0; color: #f57c00; }
+
+.lesson-status {
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.status-scheduled { background: #e8f5e9; color: #2e7d32; }
+.status-in_progress { background: #fff3e0; color: #ef6c00; }
+.status-completed { background: #f5f5f5; color: #757575; }
+.status-cancelled { background: #ffebee; color: #c62828; }
+
+.lesson-card-body {
+    padding: 1.25rem;
+}
+
+.lesson-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #1a1a2e;
+    margin-bottom: 0.75rem;
+}
+
+.lesson-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+    color: #666;
+}
+
+.lesson-info-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.lesson-info-row .icon {
+    width: 18px;
+    text-align: center;
+}
+
+.lesson-card-footer {
+    padding: 1rem 1.25rem;
+    background: #fafafa;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.participants-info {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: #666;
+}
+
+.lesson-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.btn-sm {
+    padding: 0.4rem 0.75rem;
+    font-size: 0.8rem;
+    border-radius: 6px;
+}
+
+.btn-icon {
+    padding: 0.4rem 0.5rem;
+    background: transparent;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.btn-icon:hover {
+    background: #f0f0f0;
+}
+
+/* Modal */
+.modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-overlay.active {
+    display: flex;
+}
+
+.modal {
+    background: white;
+    border-radius: 16px;
+    max-width: 500px;
+    width: 90%;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.modal-header {
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-header h2 {
+    font-size: 1.3rem;
+    color: #1a1a2e;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: #666;
+}
+
+.modal-body {
+    padding: 1.5rem;
+}
+
+.form-group {
+    margin-bottom: 1.25rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+    color: #333;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 0.95rem;
+}
+
+.form-group textarea {
+    resize: vertical;
+    min-height: 80px;
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+.modal-footer {
+    padding: 1rem 1.5rem;
+    border-top: 1px solid #eee;
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+}
+
+/* Loading */
+.loading {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 3rem;
+}
+
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid #f0f0f0;
+    border-top-color: #667eea;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Empty State */
+.empty-state {
+    text-align: center;
+    padding: 3rem;
+    color: #888;
+}
+
+.empty-state .icon {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .page-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .filters-row {
+        flex-direction: column;
+    }
+
+    .filter-group {
+        width: 100%;
+    }
+
+    .filter-group select,
+    .filter-group input {
+        width: 100%;
+    }
+
+    .lessons-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .form-row {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container lessons-page">
+    <div class="page-header">
+        <h1>레슨 관리</h1>
+        <div class="header-actions">
+            <button class="btn btn-secondary" onclick="location.href='/api/club/'">
+                대시보드
+            </button>
+            <button class="btn btn-primary" onclick="openCreateModal()">
+                + 새 레슨
+            </button>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="filters-section">
+        <div class="filters-row">
+            <div class="filter-group">
+                <label>상태</label>
+                <select id="filter-status" onchange="loadLessons()">
+                    <option value="">전체</option>
+                    <option value="scheduled">예정</option>
+                    <option value="in_progress">진행중</option>
+                    <option value="completed">완료</option>
+                    <option value="cancelled">취소</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>유형</label>
+                <select id="filter-type" onchange="loadLessons()">
+                    <option value="">전체</option>
+                    <option value="individual">개인 레슨</option>
+                    <option value="group">그룹 레슨</option>
+                    <option value="team">팀 훈련</option>
+                    <option value="special">특별 레슨</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>시작일</label>
+                <input type="date" id="filter-from" onchange="loadLessons()">
+            </div>
+            <div class="filter-group">
+                <label>종료일</label>
+                <input type="date" id="filter-to" onchange="loadLessons()">
+            </div>
+        </div>
+    </div>
+
+    <!-- Lessons Grid -->
+    <div id="lessons-container">
+        <div class="loading">
+            <div class="spinner"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Create/Edit Modal -->
+<div class="modal-overlay" id="lesson-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <h2 id="modal-title">새 레슨</h2>
+            <button class="modal-close" onclick="closeModal()">&times;</button>
+        </div>
+        <form id="lesson-form" onsubmit="submitLesson(event)">
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>레슨 제목 *</label>
+                    <input type="text" id="lesson-title" required placeholder="예: 월요일 개인레슨">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>유형 *</label>
+                        <select id="lesson-type" required>
+                            <option value="individual">개인 레슨</option>
+                            <option value="group">그룹 레슨</option>
+                            <option value="team">팀 훈련</option>
+                            <option value="special">특별 레슨</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>정원</label>
+                        <input type="number" id="lesson-max" value="1" min="1" max="20">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>일시 *</label>
+                        <input type="datetime-local" id="lesson-datetime" required>
+                    </div>
+                    <div class="form-group">
+                        <label>시간(분)</label>
+                        <input type="number" id="lesson-duration" value="60" min="15" max="480">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>레슨비 (원)</label>
+                    <input type="number" id="lesson-fee" value="0" min="0" step="1000">
+                </div>
+                <div class="form-group">
+                    <label>설명</label>
+                    <textarea id="lesson-description" placeholder="레슨 설명 (선택)"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal()">취소</button>
+                <button type="submit" class="btn btn-primary">저장</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const API_BASE = '/api/club';
+let currentLessonId = null;
+
+// Load lessons on page load
+document.addEventListener('DOMContentLoaded', loadLessons);
+
+async function loadLessons() {
+    const container = document.getElementById('lessons-container');
+    container.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+    const params = new URLSearchParams();
+    const status = document.getElementById('filter-status').value;
+    const type = document.getElementById('filter-type').value;
+    const fromDate = document.getElementById('filter-from').value;
+    const toDate = document.getElementById('filter-to').value;
+
+    if (status) params.append('status', status);
+    if (type) params.append('lesson_type', type);
+    if (fromDate) params.append('from_date', fromDate);
+    if (toDate) params.append('to_date', toDate);
+
+    try {
+        const response = await fetch(`${API_BASE}/lessons?${params}`);
+        if (!response.ok) {
+            if (response.status === 401) {
+                container.innerHTML = '<div class="empty-state"><div class="icon">🔒</div><p>로그인이 필요합니다</p></div>';
+                return;
+            }
+            throw new Error('Failed to load lessons');
+        }
+
+        const data = await response.json();
+        renderLessons(data.lessons);
+    } catch (error) {
+        console.error('Error loading lessons:', error);
+        container.innerHTML = '<div class="empty-state"><div class="icon">❌</div><p>레슨 목록을 불러올 수 없습니다</p></div>';
+    }
+}
+
+function renderLessons(lessons) {
+    const container = document.getElementById('lessons-container');
+
+    if (!lessons || lessons.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="icon">📅</div>
+                <p>등록된 레슨이 없습니다</p>
+                <button class="btn btn-primary" onclick="openCreateModal()" style="margin-top: 1rem;">
+                    + 첫 레슨 등록하기
+                </button>
+            </div>
+        `;
+        return;
+    }
+
+    const typeLabels = {
+        individual: '개인',
+        group: '그룹',
+        team: '팀',
+        special: '특별'
+    };
+
+    const statusLabels = {
+        scheduled: '예정',
+        in_progress: '진행중',
+        completed: '완료',
+        cancelled: '취소'
+    };
+
+    container.innerHTML = `
+        <div class="lessons-grid">
+            ${lessons.map(lesson => {
+                const scheduledAt = new Date(lesson.scheduled_at);
+                const dateStr = scheduledAt.toLocaleDateString('ko-KR', {
+                    month: 'short', day: 'numeric', weekday: 'short'
+                });
+                const timeStr = scheduledAt.toLocaleTimeString('ko-KR', {
+                    hour: '2-digit', minute: '2-digit'
+                });
+
+                return `
+                    <div class="lesson-card">
+                        <div class="lesson-card-header">
+                            <span class="lesson-type-badge type-${lesson.lesson_type}">
+                                ${typeLabels[lesson.lesson_type] || lesson.lesson_type}
+                            </span>
+                            <span class="lesson-status status-${lesson.status}">
+                                ${statusLabels[lesson.status] || lesson.status}
+                            </span>
+                        </div>
+                        <div class="lesson-card-body">
+                            <div class="lesson-title">${lesson.title}</div>
+                            <div class="lesson-info">
+                                <div class="lesson-info-row">
+                                    <span class="icon">📅</span>
+                                    <span>${dateStr} ${timeStr}</span>
+                                </div>
+                                <div class="lesson-info-row">
+                                    <span class="icon">⏱️</span>
+                                    <span>${lesson.duration_minutes}분</span>
+                                </div>
+                                ${lesson.coach_name ? `
+                                <div class="lesson-info-row">
+                                    <span class="icon">👤</span>
+                                    <span>${lesson.coach_name}</span>
+                                </div>
+                                ` : ''}
+                                ${lesson.fee_per_session > 0 ? `
+                                <div class="lesson-info-row">
+                                    <span class="icon">💰</span>
+                                    <span>${lesson.fee_per_session.toLocaleString()}원</span>
+                                </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                        <div class="lesson-card-footer">
+                            <div class="participants-info">
+                                <span>👥</span>
+                                <span>${lesson.participant_count || 0} / ${lesson.max_students}명</span>
+                            </div>
+                            <div class="lesson-actions">
+                                <button class="btn-icon" onclick="viewLesson('${lesson.id}')" title="상세보기">
+                                    👁️
+                                </button>
+                                ${lesson.status === 'scheduled' ? `
+                                <button class="btn-icon" onclick="editLesson('${lesson.id}')" title="수정">
+                                    ✏️
+                                </button>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+    `;
+}
+
+function openCreateModal() {
+    currentLessonId = null;
+    document.getElementById('modal-title').textContent = '새 레슨';
+    document.getElementById('lesson-form').reset();
+    document.getElementById('lesson-modal').classList.add('active');
+}
+
+function closeModal() {
+    document.getElementById('lesson-modal').classList.remove('active');
+    currentLessonId = null;
+}
+
+async function editLesson(lessonId) {
+    try {
+        const response = await fetch(`${API_BASE}/lessons/${lessonId}`);
+        if (!response.ok) throw new Error('Failed to fetch lesson');
+
+        const lesson = await response.json();
+        currentLessonId = lessonId;
+
+        document.getElementById('modal-title').textContent = '레슨 수정';
+        document.getElementById('lesson-title').value = lesson.title;
+        document.getElementById('lesson-type').value = lesson.lesson_type;
+        document.getElementById('lesson-max').value = lesson.max_students;
+        document.getElementById('lesson-duration').value = lesson.duration_minutes;
+        document.getElementById('lesson-fee').value = lesson.fee_per_session;
+        document.getElementById('lesson-description').value = lesson.description || '';
+
+        // Format datetime for input
+        const dt = new Date(lesson.scheduled_at);
+        const localDt = new Date(dt.getTime() - dt.getTimezoneOffset() * 60000);
+        document.getElementById('lesson-datetime').value = localDt.toISOString().slice(0, 16);
+
+        document.getElementById('lesson-modal').classList.add('active');
+    } catch (error) {
+        console.error('Error loading lesson:', error);
+        alert('레슨 정보를 불러올 수 없습니다');
+    }
+}
+
+async function viewLesson(lessonId) {
+    // TODO: Implement lesson detail view/modal
+    alert(`레슨 상세 보기: ${lessonId}\n(상세 모달 구현 예정)`);
+}
+
+async function submitLesson(event) {
+    event.preventDefault();
+
+    const data = {
+        title: document.getElementById('lesson-title').value,
+        lesson_type: document.getElementById('lesson-type').value,
+        max_students: parseInt(document.getElementById('lesson-max').value),
+        scheduled_at: new Date(document.getElementById('lesson-datetime').value).toISOString(),
+        duration_minutes: parseInt(document.getElementById('lesson-duration').value),
+        fee_per_session: parseInt(document.getElementById('lesson-fee').value) || 0,
+        description: document.getElementById('lesson-description').value || null
+    };
+
+    try {
+        const url = currentLessonId
+            ? `${API_BASE}/lessons/${currentLessonId}`
+            : `${API_BASE}/lessons`;
+        const method = currentLessonId ? 'PUT' : 'POST';
+
+        const response = await fetch(url, {
+            method: method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to save lesson');
+        }
+
+        closeModal();
+        loadLessons();
+    } catch (error) {
+        console.error('Error saving lesson:', error);
+        alert(`저장 실패: ${error.message}`);
+    }
+}
+</script>
+{% endblock %}

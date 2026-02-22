@@ -1,0 +1,434 @@
+{% extends "base.html" %}
+
+{% block title %}출석 체크인 - Korean Fencing Tracker{% endblock %}
+
+{% block extra_css %}
+<style>
+.checkin-page {
+    min-height: calc(100vh - 200px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    text-align: center;
+}
+
+.checkin-card {
+    background: white;
+    border-radius: 20px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    padding: 2.5rem;
+    max-width: 400px;
+    width: 100%;
+}
+
+.checkin-icon {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+}
+
+.checkin-title {
+    font-size: 1.5rem;
+    color: #1a1a2e;
+    margin-bottom: 0.5rem;
+}
+
+.checkin-subtitle {
+    color: #666;
+    margin-bottom: 2rem;
+}
+
+.checkin-status {
+    padding: 1rem;
+    border-radius: 12px;
+    margin-bottom: 1.5rem;
+}
+
+.checkin-status.available {
+    background: #e8f5e9;
+    border: 2px solid #4caf50;
+}
+
+.checkin-status.auto {
+    background: #e3f2fd;
+    border: 2px solid #2196f3;
+}
+
+.checkin-status.done {
+    background: #f5f5f5;
+    border: 2px solid #bdbdbd;
+}
+
+.status-icon {
+    font-size: 2.5rem;
+    display: block;
+    margin-bottom: 0.5rem;
+}
+
+.status-text {
+    font-weight: 600;
+    font-size: 1.1rem;
+}
+
+.status-time {
+    color: #666;
+    font-size: 0.9rem;
+    margin-top: 0.3rem;
+}
+
+.checkin-btn {
+    width: 100%;
+    padding: 1.2rem;
+    font-size: 1.2rem;
+    font-weight: 600;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.3s;
+    margin-bottom: 1rem;
+}
+
+.checkin-btn.primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+.checkin-btn.primary:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+.checkin-btn.auto {
+    background: linear-gradient(135deg, #4caf50 0%, #66bb6a 100%);
+    color: white;
+}
+
+.checkin-btn:disabled {
+    background: #e0e0e0;
+    color: #999;
+    cursor: not-allowed;
+}
+
+.checkin-type-select {
+    margin-bottom: 1.5rem;
+}
+
+.checkin-type-select label {
+    display: block;
+    text-align: left;
+    margin-bottom: 0.5rem;
+    color: #666;
+    font-size: 0.9rem;
+}
+
+.checkin-type-select select {
+    width: 100%;
+    padding: 0.8rem;
+    border: 2px solid #eee;
+    border-radius: 8px;
+    font-size: 1rem;
+    background: white;
+}
+
+.checkin-type-select select:focus {
+    border-color: #667eea;
+    outline: none;
+}
+
+.info-box {
+    background: #f8f9ff;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-top: 1.5rem;
+    font-size: 0.85rem;
+    color: #666;
+}
+
+.info-box .ip {
+    font-family: monospace;
+    background: #eee;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+}
+
+/* Loading state */
+.loading-spinner {
+    display: inline-block;
+    width: 24px;
+    height: 24px;
+    border: 3px solid rgba(255,255,255,0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Success animation */
+.success-animation {
+    animation: scaleIn 0.3s ease-out;
+}
+
+@keyframes scaleIn {
+    from {
+        transform: scale(0.8);
+        opacity: 0;
+    }
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+/* Mobile optimization */
+@media (max-width: 480px) {
+    .checkin-card {
+        padding: 1.5rem;
+        border-radius: 16px;
+    }
+
+    .checkin-icon {
+        font-size: 3rem;
+    }
+
+    .checkin-title {
+        font-size: 1.3rem;
+    }
+
+    .checkin-btn {
+        padding: 1rem;
+        font-size: 1.1rem;
+    }
+}
+
+/* User info */
+.user-info {
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+    background: #f8f9ff;
+    border-radius: 10px;
+}
+
+.user-name {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #1a1a2e;
+}
+
+.user-club {
+    color: #667eea;
+    font-size: 0.9rem;
+}
+
+/* Error state */
+.error-message {
+    background: #ffebee;
+    color: #c62828;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="checkin-page">
+    <div class="checkin-card">
+        <div class="checkin-icon">⚔️</div>
+        <h1 class="checkin-title">출석 체크인</h1>
+        <p class="checkin-subtitle">오늘 훈련 출석을 기록하세요</p>
+
+        <div id="checkinContent">
+            <div class="loading-spinner" style="margin: 2rem auto;"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// 테스트 모드: 기본 활성화 (로그인 시스템 완성 전까지)
+// TODO: 로그인 시스템 완성 후 false로 변경
+const TEST_MODE = true;
+const API_BASE = '/api/club';
+const API_SUFFIX = TEST_MODE ? '?test=1' : '';
+let currentStatus = null;
+
+async function loadCheckinStatus() {
+    const container = document.getElementById('checkinContent');
+
+    try {
+        const headers = TEST_MODE ? {} : {
+            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+        };
+        const response = await fetch(`${API_BASE}/check-in/status${API_SUFFIX}`, { headers });
+
+        if (!response.ok) {
+            if (response.status === 401) {
+                window.location.href = '/auth/login?redirect=/club/checkin';
+                return;
+            }
+            throw new Error('상태 확인 실패');
+        }
+
+        currentStatus = await response.json();
+
+        // 사용자 정보 로드
+        let userInfo = null;
+        if (TEST_MODE) {
+            userInfo = { full_name: '테스트코치', organization_name: '최병철펜싱클럽' };
+        } else {
+            const userResponse = await fetch('/auth/me');
+            if (userResponse.ok) {
+                userInfo = await userResponse.json();
+            }
+        }
+
+        renderCheckinUI(currentStatus, userInfo);
+
+    } catch (error) {
+        console.error('Status check error:', error);
+        container.innerHTML = `
+            <div class="error-message">
+                체크인 상태를 확인할 수 없습니다.
+                <br><a href="/auth/login?redirect=/club/checkin">로그인</a>이 필요합니다.
+            </div>
+        `;
+    }
+}
+
+function renderCheckinUI(status, userInfo) {
+    const container = document.getElementById('checkinContent');
+
+    let userInfoHTML = '';
+    if (userInfo) {
+        userInfoHTML = `
+            <div class="user-info">
+                <div class="user-name">${userInfo.full_name || userInfo.display_name}</div>
+                <div class="user-club">${userInfo.organization_name || '소속 클럽'}</div>
+            </div>
+        `;
+    }
+
+    if (status.already_checked_in) {
+        // 이미 체크인 완료
+        const checkinTime = new Date(status.checkin_record.check_in_at);
+        container.innerHTML = `
+            ${userInfoHTML}
+            <div class="checkin-status done success-animation">
+                <span class="status-icon">✅</span>
+                <div class="status-text">오늘 출석 완료!</div>
+                <div class="status-time">${checkinTime.toLocaleTimeString('ko-KR', {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                })} 체크인</div>
+            </div>
+            <button class="checkin-btn" disabled>이미 체크인했습니다</button>
+            <a href="/club/" class="checkin-btn primary" style="display:block; text-decoration:none; text-align:center;">
+                대시보드로 이동
+            </a>
+        `;
+        return;
+    }
+
+    // 체크인 가능
+    const autoAvailable = status.auto_checkin_available;
+
+    container.innerHTML = `
+        ${userInfoHTML}
+        <div class="checkin-status ${autoAvailable ? 'auto' : 'available'}">
+            <span class="status-icon">${autoAvailable ? '📍' : '👋'}</span>
+            <div class="status-text">
+                ${autoAvailable ? '클럽 내 위치 확인됨' : '출석 체크인 가능'}
+            </div>
+            ${autoAvailable ? '<div class="status-time">IP 기반 자동 인식</div>' : ''}
+        </div>
+
+        <div class="checkin-type-select">
+            <label for="attendanceType">출석 유형</label>
+            <select id="attendanceType">
+                <option value="regular">정규 훈련</option>
+                <option value="lesson">개인/그룹 레슨</option>
+                <option value="competition">대회 참가</option>
+                <option value="makeup">보강</option>
+                <option value="trial">체험</option>
+            </select>
+        </div>
+
+        <button
+            class="checkin-btn ${autoAvailable ? 'auto' : 'primary'}"
+            id="checkinBtn"
+            onclick="doCheckin()"
+        >
+            ${autoAvailable ? '🎯 자동 체크인' : '✓ 체크인하기'}
+        </button>
+
+        <div class="info-box">
+            현재 IP: <span class="ip">${status.client_ip}</span>
+            <br>
+            ${autoAvailable
+                ? '클럽 IP 범위 내에서 접속 중입니다.'
+                : '클럽 외부에서 접속 중입니다.'}
+        </div>
+    `;
+}
+
+async function doCheckin() {
+    const btn = document.getElementById('checkinBtn');
+    const attendanceType = document.getElementById('attendanceType').value;
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="loading-spinner"></span> 체크인 중...';
+
+    try {
+        const headers = {
+            'Content-Type': 'application/json',
+            ...(TEST_MODE ? {} : {'Authorization': `Bearer ${localStorage.getItem('access_token')}`})
+        };
+        const response = await fetch(`${API_BASE}/check-in${API_SUFFIX}`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+                attendance_type: attendanceType
+            })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || '체크인 실패');
+        }
+
+        const result = await response.json();
+
+        // 성공 - UI 업데이트
+        document.getElementById('checkinContent').innerHTML = `
+            <div class="checkin-status done success-animation">
+                <span class="status-icon">🎉</span>
+                <div class="status-text">체크인 완료!</div>
+                <div class="status-time">${new Date().toLocaleTimeString('ko-KR', {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                })}</div>
+            </div>
+            <button class="checkin-btn" disabled>오늘 출석이 기록되었습니다</button>
+            <a href="/club/" class="checkin-btn primary" style="display:block; text-decoration:none; text-align:center;">
+                대시보드로 이동
+            </a>
+        `;
+
+    } catch (error) {
+        console.error('Checkin error:', error);
+        btn.disabled = false;
+        btn.innerHTML = '✓ 체크인하기';
+
+        alert(error.message || '체크인에 실패했습니다. 다시 시도해주세요.');
+    }
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', loadCheckinStatus);
+</script>
+{% endblock %}

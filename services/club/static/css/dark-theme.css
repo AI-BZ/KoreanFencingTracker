@@ -1,0 +1,1508 @@
+/* Korean Fencing Tracker - Dark Theme with Parallax Background */
+/* Fonts: Pretendard (Korean) + Inter (English) */
+
+:root {
+    /* Dark Theme Colors */
+    --bg-primary: #0a0a0f;
+    --bg-secondary: #12121a;
+    --bg-tertiary: #1a1a25;
+    --bg-card: rgba(18, 18, 26, 0.85);
+    --bg-card-hover: rgba(26, 26, 37, 0.9);
+
+    /* Accent Colors - Korean Flag inspired */
+    --accent-primary: #c9302c;    /* 태극 빨강 */
+    --accent-secondary: #1e3a8a;  /* 태극 파랑 */
+    --accent-gold: #d4a574;       /* 금메달 */
+    --accent-silver: #9ca3af;     /* 은메달 */
+    --accent-bronze: #cd7f32;     /* 동메달 */
+
+    /* Text Colors */
+    --text-primary: #ffffff;
+    --text-secondary: #b4b4c4;
+    --text-muted: #6b6b7b;
+    --text-accent: #c9302c;
+
+    /* Border & Effects */
+    --border-color: rgba(255, 255, 255, 0.08);
+    --border-light: rgba(255, 255, 255, 0.15);
+    --glow-primary: rgba(201, 48, 44, 0.3);
+    --glow-secondary: rgba(30, 58, 138, 0.3);
+
+    /* Shadows */
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.5);
+
+    /* Status Colors */
+    --success-color: #10b981;
+    --warning-color: #f59e0b;
+    --danger-color: #ef4444;
+    --info-color: #3b82f6;
+}
+
+/* Reset & Base */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html {
+    scroll-behavior: smooth;
+}
+
+body {
+    font-family: 'Pretendard Variable', 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    line-height: 1.6;
+    font-weight: 400;
+    letter-spacing: -0.01em;
+    overflow-x: hidden;
+}
+
+/* Parallax Background */
+.parallax-bg {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -2;
+    background-image: url('/static/images/fencer-bg.png');
+    background-size: cover;
+    background-position: center top;
+    background-repeat: no-repeat;
+    will-change: background-position-y;
+}
+
+.parallax-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+        180deg,
+        rgba(10, 10, 15, 0.75) 0%,
+        rgba(10, 10, 15, 0.85) 30%,
+        rgba(10, 10, 15, 0.92) 60%,
+        rgba(10, 10, 15, 0.98) 100%
+    );
+}
+
+/* Container */
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 20px;
+}
+
+/* =====================================================
+   NAVBAR
+   ===================================================== */
+.navbar {
+    background: rgba(10, 10, 15, 0.95);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border-color);
+    padding: 12px 0;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+}
+
+.navbar .container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 15px;
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+    text-decoration: none;
+    color: var(--text-primary);
+    font-size: 1.3rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
+
+.logo-icon {
+    margin-right: 10px;
+    font-size: 1.5rem;
+    filter: drop-shadow(0 0 8px var(--glow-primary));
+}
+
+.logo-text {
+    background: linear-gradient(135deg, var(--text-primary), var(--accent-gold));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.nav-links {
+    display: flex;
+    gap: 8px;
+}
+
+.nav-links a {
+    color: var(--text-secondary);
+    text-decoration: none;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    border: 1px solid transparent;
+}
+
+.nav-links a:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.05);
+    border-color: var(--border-light);
+}
+
+.search-box input {
+    padding: 10px 18px;
+    border: 1px solid var(--border-color);
+    border-radius: 25px;
+    width: 220px;
+    font-size: 0.9rem;
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-primary);
+    font-family: inherit;
+    transition: all 0.3s ease;
+}
+
+.search-box input::placeholder {
+    color: var(--text-muted);
+}
+
+.search-box input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    background: rgba(255, 255, 255, 0.08);
+    box-shadow: 0 0 20px var(--glow-primary);
+}
+
+/* Auth Navigation */
+.auth-nav {
+    margin-left: auto;
+}
+
+.auth-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 20px;
+    border-radius: 25px;
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.login-btn {
+    background: linear-gradient(135deg, var(--accent-primary), #a02320);
+    color: white;
+    border: none;
+    box-shadow: 0 4px 15px var(--glow-primary);
+}
+
+.login-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 25px var(--glow-primary);
+}
+
+.profile-btn {
+    background: var(--accent-gold);
+    color: var(--bg-primary);
+    min-width: 42px;
+    height: 42px;
+    padding: 0;
+    border-radius: 50%;
+    font-weight: 700;
+}
+
+/* =====================================================
+   MAIN CONTENT
+   ===================================================== */
+.main-content {
+    min-height: calc(100vh - 200px);
+    padding: 30px 0;
+    padding-top: 80px; /* Account for fixed navbar */
+    position: relative;
+    z-index: 1;
+}
+
+/* Hero Section */
+.hero {
+    text-align: center;
+    padding: 60px 30px;
+    background: var(--bg-card);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    margin-bottom: 30px;
+}
+
+.hero h1 {
+    font-size: 2.8rem;
+    font-weight: 800;
+    margin-bottom: 15px;
+    background: linear-gradient(135deg, var(--text-primary), var(--accent-gold));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: -0.03em;
+}
+
+.hero p {
+    font-size: 1.15rem;
+    color: var(--text-secondary);
+    font-weight: 400;
+}
+
+/* Stats Summary */
+.stats-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.stat-card {
+    background: var(--bg-card);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    padding: 28px;
+    border-radius: 16px;
+    text-align: center;
+    border: 1px solid var(--border-color);
+    transition: all 0.3s ease;
+}
+
+.stat-card:hover {
+    transform: translateY(-4px);
+    border-color: var(--border-light);
+    box-shadow: var(--shadow-md);
+}
+
+.stat-value {
+    font-size: 2.2rem;
+    font-weight: 800;
+    color: var(--accent-gold);
+    font-family: 'Inter', sans-serif;
+}
+
+.stat-label {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    margin-top: 8px;
+    font-weight: 500;
+}
+
+/* =====================================================
+   FILTERS
+   ===================================================== */
+.filters {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 25px;
+    flex-wrap: wrap;
+    background: var(--bg-card);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    padding: 24px;
+    border-radius: 16px;
+    border: 1px solid var(--border-color);
+}
+
+.filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.filter-group label {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.filter-group select,
+.filter-group input {
+    padding: 12px 16px;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    font-size: 0.95rem;
+    min-width: 150px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-family: inherit;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.filter-group select:focus,
+.filter-group input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 15px var(--glow-primary);
+}
+
+.filter-group select option {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+.search-filter input {
+    min-width: 280px;
+}
+
+/* =====================================================
+   DATA TABLE
+   ===================================================== */
+.data-table {
+    width: 100%;
+    background: var(--bg-card);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-radius: 16px;
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+.data-table th,
+.data-table td {
+    padding: 16px 20px;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.data-table th {
+    background: rgba(201, 48, 44, 0.15);
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.data-table tbody tr {
+    transition: all 0.2s ease;
+}
+
+.data-table tbody tr:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.data-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.data-table .clickable {
+    cursor: pointer;
+}
+
+.comp-name {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.comp-name:hover {
+    color: var(--accent-gold);
+}
+
+.comp-date {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.comp-events {
+    text-align: center;
+    font-weight: 600;
+    color: var(--accent-gold);
+}
+
+/* Status Badge */
+.status-badge {
+    display: inline-block;
+    padding: 5px 14px;
+    border-radius: 20px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.status-finished {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--success-color);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.status-ongoing {
+    background: rgba(245, 158, 11, 0.15);
+    color: var(--warning-color);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.status-upcoming {
+    background: rgba(59, 130, 246, 0.15);
+    color: var(--info-color);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.status-unknown {
+    background: rgba(107, 107, 123, 0.15);
+    color: var(--text-muted);
+    border: 1px solid rgba(107, 107, 123, 0.3);
+}
+
+/* =====================================================
+   PAGINATION
+   ===================================================== */
+.pagination {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 25px;
+}
+
+.pagination button {
+    padding: 10px 18px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-card);
+    color: var(--text-secondary);
+    border-radius: 10px;
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.pagination button:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: var(--border-light);
+    color: var(--text-primary);
+}
+
+.pagination button.active {
+    background: var(--accent-primary);
+    color: white;
+    border-color: var(--accent-primary);
+    box-shadow: 0 4px 15px var(--glow-primary);
+}
+
+/* =====================================================
+   BREADCRUMB
+   ===================================================== */
+.breadcrumb {
+    padding: 15px 0;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
+
+.breadcrumb a {
+    color: var(--accent-gold);
+    text-decoration: none;
+    transition: color 0.2s ease;
+}
+
+.breadcrumb a:hover {
+    color: var(--text-primary);
+    text-decoration: underline;
+}
+
+/* =====================================================
+   COMPETITION HEADER
+   ===================================================== */
+.competition-header {
+    background: var(--bg-card);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    padding: 35px;
+    border-radius: 20px;
+    margin-bottom: 30px;
+    border: 1px solid var(--border-color);
+}
+
+.competition-header h1 {
+    color: var(--text-primary);
+    margin-bottom: 18px;
+    font-size: 1.8rem;
+    font-weight: 700;
+}
+
+.competition-meta {
+    display: flex;
+    gap: 35px;
+    flex-wrap: wrap;
+}
+
+.meta-item {
+    color: var(--text-muted);
+    font-size: 0.95rem;
+}
+
+.meta-item strong {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+/* =====================================================
+   EVENTS GRID
+   ===================================================== */
+.events-section {
+    margin-bottom: 30px;
+}
+
+.events-section h2 {
+    margin-bottom: 20px;
+    color: var(--text-primary);
+    font-size: 1.4rem;
+    font-weight: 700;
+}
+
+.events-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 18px;
+}
+
+.event-card {
+    background: var(--bg-card);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    padding: 22px;
+    border-radius: 14px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: 1px solid var(--border-color);
+}
+
+.event-card:hover {
+    transform: translateY(-4px);
+    border-color: var(--accent-primary);
+    box-shadow: 0 8px 30px rgba(201, 48, 44, 0.2);
+}
+
+.event-name {
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: var(--text-primary);
+}
+
+.event-details {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.weapon-tag, .gender-tag, .type-tag {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+
+.weapon-tag {
+    background: rgba(30, 58, 138, 0.2);
+    color: #60a5fa;
+    border: 1px solid rgba(30, 58, 138, 0.4);
+}
+
+.gender-tag {
+    background: rgba(219, 39, 119, 0.15);
+    color: #f472b6;
+    border: 1px solid rgba(219, 39, 119, 0.3);
+}
+
+.type-tag {
+    background: rgba(139, 92, 246, 0.15);
+    color: #a78bfa;
+    border: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+/* =====================================================
+   RESULTS SECTION
+   ===================================================== */
+.results-section h2 {
+    margin-bottom: 20px;
+    color: var(--text-primary);
+    font-size: 1.4rem;
+    font-weight: 700;
+}
+
+.event-results {
+    background: var(--bg-card);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    padding: 28px;
+    border-radius: 16px;
+    margin-bottom: 25px;
+    border: 1px solid var(--border-color);
+}
+
+.event-results h3 {
+    color: var(--accent-gold);
+    margin-bottom: 22px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--accent-primary);
+    font-weight: 700;
+}
+
+.pool-results h4,
+.final-rankings h4 {
+    margin: 22px 0 16px;
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.pool-table {
+    margin-bottom: 28px;
+}
+
+.pool-header {
+    background: linear-gradient(135deg, var(--accent-primary), #a02320);
+    color: white;
+    padding: 12px 18px;
+    border-radius: 10px 10px 0 0;
+    font-weight: 600;
+}
+
+.result-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.result-table th,
+.result-table td {
+    padding: 12px;
+    border: 1px solid var(--border-color);
+    text-align: center;
+}
+
+.result-table th {
+    background: var(--bg-tertiary);
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.result-table td {
+    background: var(--bg-secondary);
+}
+
+.result-table .player-name {
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.result-table .rank {
+    font-weight: 800;
+    color: var(--accent-gold);
+    font-family: 'Inter', sans-serif;
+}
+
+/* =====================================================
+   SEARCH SECTION
+   ===================================================== */
+.search-section {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.search-section h1 {
+    text-align: center;
+    margin-bottom: 35px;
+    color: var(--text-primary);
+    font-size: 2rem;
+    font-weight: 700;
+}
+
+.search-form {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 35px;
+}
+
+.search-form input {
+    flex: 1;
+    padding: 16px 24px;
+    border: 2px solid var(--border-color);
+    border-radius: 14px;
+    font-size: 1rem;
+    background: var(--bg-card);
+    color: var(--text-primary);
+    font-family: inherit;
+    transition: all 0.3s ease;
+}
+
+.search-form input::placeholder {
+    color: var(--text-muted);
+}
+
+.search-form input:focus {
+    border-color: var(--accent-primary);
+    outline: none;
+    box-shadow: 0 0 25px var(--glow-primary);
+}
+
+.btn {
+    padding: 16px 32px;
+    border: none;
+    border-radius: 14px;
+    font-size: 1rem;
+    font-family: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, var(--accent-primary), #a02320);
+    color: white;
+    box-shadow: 0 4px 20px var(--glow-primary);
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 30px var(--glow-primary);
+}
+
+.search-results {
+    background: var(--bg-card);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    padding: 28px;
+    border-radius: 16px;
+    border: 1px solid var(--border-color);
+}
+
+.searching, .search-hint, .no-results, .result-count {
+    text-align: center;
+    color: var(--text-muted);
+    padding: 25px;
+}
+
+.result-count {
+    color: var(--text-secondary);
+    font-weight: 600;
+    margin-bottom: 18px;
+}
+
+/* =====================================================
+   FOOTER
+   ===================================================== */
+.footer {
+    background: rgba(10, 10, 15, 0.95);
+    border-top: 1px solid var(--border-color);
+    color: var(--text-muted);
+    padding: 35px 0;
+    text-align: center;
+    position: relative;
+    z-index: 1;
+}
+
+.footer p {
+    margin-bottom: 8px;
+}
+
+.footer a {
+    color: var(--accent-gold);
+    text-decoration: none;
+    transition: color 0.2s ease;
+}
+
+.footer a:hover {
+    color: var(--text-primary);
+}
+
+/* =====================================================
+   LOADING & ERROR STATES
+   ===================================================== */
+.loading, .error, .empty, .no-data {
+    text-align: center;
+    padding: 50px;
+    color: var(--text-muted);
+}
+
+.error {
+    color: var(--danger-color);
+}
+
+.loading::after {
+    content: '';
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--accent-primary);
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-left: 10px;
+    vertical-align: middle;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* =====================================================
+   RESPONSIVE
+   ===================================================== */
+@media (max-width: 768px) {
+    .parallax-bg {
+        background-attachment: scroll;
+    }
+
+    /* Mobile navbar - fixed at top, not sticky */
+    .navbar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        padding: 10px 0;
+    }
+
+    .navbar .container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+    }
+
+    /* First row: Logo + Login button */
+    .navbar .logo {
+        font-size: 1rem;
+        flex-shrink: 0;
+        order: 0;
+    }
+
+    .logo-text {
+        display: none; /* Hide text, show only icon on mobile */
+    }
+
+    /* Login button - next to logo, not full width */
+    .auth-nav {
+        margin-left: auto;
+        order: 1;
+        flex-shrink: 0;
+    }
+
+    .login-btn {
+        padding: 6px 14px;
+        font-size: 0.8rem;
+        white-space: nowrap;
+    }
+
+    .profile-btn {
+        min-width: 36px;
+        height: 36px;
+        font-size: 0.85rem;
+    }
+
+    /* Second row: Nav links */
+    .nav-links {
+        width: 100%;
+        justify-content: center;
+        order: 2;
+        gap: 4px;
+    }
+
+    .nav-links a {
+        padding: 6px 12px;
+        font-size: 0.85rem;
+    }
+
+    /* Third row: Search box */
+    .search-box {
+        width: 100%;
+        order: 3;
+    }
+
+    .search-box input {
+        width: 100%;
+        padding: 8px 14px;
+        font-size: 0.85rem;
+    }
+
+    /* Add padding to main content for fixed navbar */
+    .main-content {
+        padding-top: 120px;
+    }
+
+    .hero h1 {
+        font-size: 1.8rem;
+    }
+
+    .hero p {
+        font-size: 1rem;
+    }
+
+    .filters {
+        flex-direction: column;
+        padding: 18px;
+    }
+
+    .filter-group select,
+    .filter-group input,
+    .search-filter input {
+        width: 100%;
+        min-width: unset;
+    }
+
+    .data-table {
+        font-size: 0.85rem;
+    }
+
+    .data-table th,
+    .data-table td {
+        padding: 12px 10px;
+    }
+
+    .competition-header {
+        padding: 22px;
+    }
+
+    .competition-meta {
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .events-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .search-form {
+        flex-direction: column;
+    }
+
+    .search-form input,
+    .btn {
+        width: 100%;
+    }
+}
+
+/* =====================================================
+   SCROLLBAR STYLING
+   ===================================================== */
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bg-primary);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--bg-tertiary);
+    border-radius: 5px;
+    border: 2px solid var(--bg-primary);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
+}
+
+/* =====================================================
+   SELECTION STYLING
+   ===================================================== */
+::selection {
+    background: var(--accent-primary);
+    color: white;
+}
+
+::-moz-selection {
+    background: var(--accent-primary);
+    color: white;
+}
+
+/* =====================================================
+   GLOBAL DARK CARD STYLES - Semi-transparent with blur
+   ===================================================== */
+
+/* Ensure all card-like elements use dark semi-transparent backgrounds */
+.stat-card,
+.event-card,
+.filters,
+.competition-header,
+.event-results,
+.search-results,
+.tabs,
+.pool-container,
+.tournament-container,
+.de-match-card,
+.podium-section,
+.podium-box,
+.final-table,
+.stat-card-large,
+.history-section,
+.result-card,
+.strength-card {
+    background: var(--bg-card) !important;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--border-color);
+}
+
+/* Override any remaining white backgrounds */
+.tabs {
+    background: rgba(18, 18, 26, 0.9) !important;
+}
+
+.pool-container,
+.tournament-container {
+    background: rgba(18, 18, 26, 0.85) !important;
+}
+
+.de-match-card {
+    background: rgba(26, 26, 37, 0.9) !important;
+}
+
+.podium-section {
+    background: rgba(18, 18, 26, 0.8) !important;
+}
+
+.podium-box {
+    background: rgba(26, 26, 37, 0.9) !important;
+    color: var(--text-primary);
+}
+
+/* Gold/Silver/Bronze podium boxes keep their gradients */
+.podium-place.first .podium-box {
+    background: linear-gradient(135deg, rgba(255, 215, 0, 0.8), rgba(255, 165, 0, 0.8)) !important;
+    color: #1a1a25;
+}
+
+.podium-place.second .podium-box {
+    background: linear-gradient(135deg, rgba(192, 192, 192, 0.8), rgba(160, 160, 160, 0.8)) !important;
+    color: #1a1a25;
+}
+
+.podium-place.third .podium-box {
+    background: linear-gradient(135deg, rgba(205, 127, 50, 0.8), rgba(139, 69, 19, 0.8)) !important;
+    color: white;
+}
+
+.final-table {
+    background: rgba(18, 18, 26, 0.85) !important;
+}
+
+.final-table th {
+    background: var(--accent-primary) !important;
+    color: white !important;
+}
+
+.final-table td {
+    background: transparent !important;
+    border-bottom: 1px solid var(--border-color) !important;
+}
+
+.history-section {
+    background: rgba(18, 18, 26, 0.85) !important;
+}
+
+.result-card-header {
+    background: rgba(26, 26, 37, 0.9) !important;
+}
+
+.result-card-header:hover {
+    background: rgba(35, 35, 50, 0.95) !important;
+}
+
+.result-card-detail {
+    background: rgba(18, 18, 26, 0.9) !important;
+}
+
+/* Pool selector and buttons */
+.pool-selector,
+.de-round-tabs {
+    background: rgba(26, 26, 37, 0.85) !important;
+}
+
+.pool-btn,
+.de-round-tab {
+    background: rgba(18, 18, 26, 0.9) !important;
+    color: var(--text-secondary) !important;
+    border: 1px solid var(--border-color) !important;
+}
+
+.pool-btn:hover,
+.de-round-tab:hover {
+    border-color: var(--accent-primary) !important;
+    color: var(--accent-primary) !important;
+}
+
+.pool-btn.active,
+.de-round-tab.active {
+    background: var(--accent-primary) !important;
+    color: white !important;
+    border-color: var(--accent-primary) !important;
+}
+
+/* Seeding content */
+.seeding-content {
+    background: rgba(26, 26, 37, 0.85) !important;
+}
+
+.seeding-item {
+    background: rgba(18, 18, 26, 0.9) !important;
+    border-color: var(--border-color) !important;
+}
+
+/* Stats summary box */
+.stats-summary-box {
+    background: rgba(26, 26, 37, 0.85) !important;
+}
+
+/* Matrix table cells */
+.matrix-table .player-col,
+.matrix-table .team-col,
+.matrix-table .stats-col {
+    background: rgba(26, 26, 37, 0.9) !important;
+}
+
+.matrix-table .self {
+    background: rgba(50, 50, 60, 0.9) !important;
+}
+
+/* Result table cells */
+.result-table th {
+    background: rgba(26, 26, 37, 0.95) !important;
+    color: var(--text-secondary) !important;
+}
+
+.result-table td {
+    background: rgba(18, 18, 26, 0.8) !important;
+}
+
+/* Bout and detail items */
+.bout-list-header,
+.bout-detail-item,
+.pool-summary,
+.tournament-progress {
+    background: rgba(26, 26, 37, 0.85) !important;
+}
+
+.bout-score {
+    background: rgba(35, 35, 50, 0.9) !important;
+}
+
+/* Opponent table */
+.opponent-table {
+    background: rgba(18, 18, 26, 0.85) !important;
+}
+
+.opponent-table th {
+    background: rgba(26, 26, 37, 0.95) !important;
+}
+
+.opponent-detail {
+    background: rgba(26, 26, 37, 0.85) !important;
+}
+
+.opponent-match-item {
+    background: rgba(18, 18, 26, 0.9) !important;
+}
+
+/* =====================================================
+   UNIVERSAL DARK CARD OVERRIDE
+   Forces all pages to use consistent dark theme cards
+   ===================================================== */
+
+/* Global card background override - targets all common card patterns */
+.card,
+.stat-card,
+.player-card,
+.event-card,
+.lesson-card,
+.member-card,
+.competition-card,
+.result-card,
+.info-card,
+.data-card,
+.summary-card,
+.stats-card,
+[class*="-card"],
+[class*="card-"] {
+    background: rgba(18, 18, 26, 0.85) !important;
+    backdrop-filter: blur(10px) !important;
+    -webkit-backdrop-filter: blur(10px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    color: var(--text-primary) !important;
+}
+
+/* Card headers */
+.card-header,
+[class*="-card-header"],
+[class*="card-header"] {
+    background: rgba(26, 26, 37, 0.95) !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+    color: var(--text-primary) !important;
+}
+
+/* Card bodies */
+.card-body,
+[class*="-card-body"],
+[class*="card-body"] {
+    background: transparent !important;
+    color: var(--text-primary) !important;
+}
+
+/* Section containers with white backgrounds */
+.section,
+.content-section,
+.main-section,
+.info-section,
+.stats-section,
+.filter-section,
+.search-section,
+.results-section {
+    background: rgba(18, 18, 26, 0.85) !important;
+    backdrop-filter: blur(10px) !important;
+    -webkit-backdrop-filter: blur(10px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Tables */
+table,
+.data-table,
+.stats-table,
+.result-table,
+.ranking-table {
+    background: transparent !important;
+    border-collapse: collapse !important;
+}
+
+table th,
+.data-table th,
+.stats-table th {
+    background: rgba(26, 26, 37, 0.95) !important;
+    color: var(--text-secondary) !important;
+    border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+table td,
+.data-table td,
+.stats-table td {
+    background: rgba(18, 18, 26, 0.5) !important;
+    color: var(--text-primary) !important;
+    border-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+table tr:hover td {
+    background: rgba(26, 26, 37, 0.7) !important;
+}
+
+/* Remove table borders for cleaner look */
+table,
+table th,
+table td,
+.data-table,
+.data-table th,
+.data-table td {
+    border: none !important;
+}
+
+/* FencingLab Demo Section - transparent background */
+.fl-demo-section,
+#fencinglab-demo,
+#fencinglab-demo > div {
+    background: transparent !important;
+    border: none !important;
+}
+
+/* FencingLab player cards */
+.fl-player-card,
+.fl-player-preview {
+    background: rgba(18, 18, 26, 0.85) !important;
+    backdrop-filter: blur(10px) !important;
+    -webkit-backdrop-filter: blur(10px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Autocomplete and dropdown */
+.autocomplete-dropdown,
+.autocomplete-results,
+.dropdown-menu,
+.search-results {
+    background: rgba(18, 18, 26, 0.95) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.autocomplete-item,
+.autocomplete-item:hover,
+.dropdown-item,
+.dropdown-item:hover {
+    background: rgba(26, 26, 37, 0.9) !important;
+    color: var(--text-primary) !important;
+}
+
+.autocomplete-item:hover,
+.dropdown-item:hover {
+    background: rgba(201, 48, 44, 0.2) !important;
+}
+
+/* Forms and inputs */
+input,
+textarea,
+select {
+    background: rgba(26, 26, 37, 0.9) !important;
+    color: var(--text-primary) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+    border-color: var(--accent-primary) !important;
+    outline: none !important;
+    box-shadow: 0 0 0 2px rgba(201, 48, 44, 0.2) !important;
+}
+
+input::placeholder,
+textarea::placeholder {
+    color: var(--text-muted) !important;
+}
+
+/* Buttons - preserve accent colors but ensure dark backgrounds */
+.btn,
+button:not(.filter-btn):not(.active) {
+    background: rgba(26, 26, 37, 0.9) !important;
+    color: var(--text-primary) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Primary/accent buttons */
+.btn-primary,
+.btn-accent,
+button.primary,
+button[type="submit"] {
+    background: linear-gradient(135deg, var(--accent-primary) 0%, #a02622 100%) !important;
+    color: white !important;
+    border: none !important;
+}
+
+/* Modal and popup backgrounds */
+.modal,
+.modal-content,
+.popup,
+.popup-content,
+.dialog,
+.dialog-content {
+    background: rgba(18, 18, 26, 0.98) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Tags and badges - ensure visibility */
+.tag,
+.badge,
+.label,
+.chip {
+    background: rgba(26, 26, 37, 0.9) !important;
+    color: var(--text-primary) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Weapon tags with specific colors */
+.tag-weapon,
+.weapon-tag {
+    background: rgba(212, 165, 116, 0.2) !important;
+    color: var(--accent-gold) !important;
+    border: 1px solid rgba(212, 165, 116, 0.3) !important;
+}
+
+/* Text colors override */
+h1, h2, h3, h4, h5, h6,
+.title,
+.heading {
+    color: var(--text-primary) !important;
+}
+
+p,
+.text,
+.description,
+.content {
+    color: var(--text-secondary) !important;
+}
+
+.muted,
+.subtitle,
+.meta {
+    color: var(--text-muted) !important;
+}
+
+/* Rankings page specific */
+.rankings-container,
+.rankings-section,
+.ranking-card,
+.ranking-list {
+    background: rgba(18, 18, 26, 0.85) !important;
+    backdrop-filter: blur(10px) !important;
+    -webkit-backdrop-filter: blur(10px) !important;
+}
+
+/* Club pages specific */
+.club-card,
+.member-list,
+.attendance-card,
+.lesson-list,
+.fee-card {
+    background: rgba(18, 18, 26, 0.85) !important;
+    backdrop-filter: blur(10px) !important;
+    -webkit-backdrop-filter: blur(10px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Auth pages specific */
+.auth-card,
+.login-card,
+.register-card,
+.auth-form {
+    background: rgba(18, 18, 26, 0.9) !important;
+    backdrop-filter: blur(15px) !important;
+    -webkit-backdrop-filter: blur(15px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Chat page specific */
+.chat-container,
+.chat-messages,
+.chat-input-area,
+.message-item {
+    background: rgba(18, 18, 26, 0.85) !important;
+}
+
+.message-user {
+    background: rgba(201, 48, 44, 0.2) !important;
+    border: 1px solid rgba(201, 48, 44, 0.3) !important;
+}
+
+.message-assistant {
+    background: rgba(26, 26, 37, 0.9) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Search page specific */
+.search-container,
+.search-results-container,
+.player-search-card {
+    background: rgba(18, 18, 26, 0.85) !important;
+    backdrop-filter: blur(10px) !important;
+    -webkit-backdrop-filter: blur(10px) !important;
+}

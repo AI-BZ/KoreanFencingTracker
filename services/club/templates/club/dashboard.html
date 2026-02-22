@@ -1,0 +1,1115 @@
+{% extends "base.html" %}
+
+{% block title %}클럽 대시보드 - Korean Fencing Tracker{% endblock %}
+
+{% block extra_css %}
+<style>
+.club-dashboard {
+    padding: 2rem 0;
+}
+
+.dashboard-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.dashboard-header h1 {
+    font-size: 1.8rem;
+    color: #1a1a2e;
+}
+
+.dashboard-header .club-name {
+    color: #667eea;
+}
+
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.dashboard-card {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    padding: 1.5rem;
+}
+
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.card-header h3 {
+    font-size: 1rem;
+    color: #666;
+    font-weight: 500;
+}
+
+.card-header .icon {
+    font-size: 1.5rem;
+}
+
+.card-value {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: #1a1a2e;
+}
+
+.card-value.highlight {
+    color: #667eea;
+}
+
+.card-value.warning {
+    color: #f5a623;
+}
+
+.card-value.success {
+    color: #4caf50;
+}
+
+.card-subtitle {
+    font-size: 0.9rem;
+    color: #888;
+    margin-top: 0.5rem;
+}
+
+/* Roster Section */
+.roster-section {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.roster-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.roster-header h2 {
+    font-size: 1.3rem;
+    color: #1a1a2e;
+    margin: 0;
+}
+
+.roster-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.roster-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.roster-table th,
+.roster-table td {
+    padding: 0.8rem;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+}
+
+.roster-table th {
+    font-weight: 600;
+    color: #666;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+}
+
+.roster-table tr:hover {
+    background: #f8f9ff;
+}
+
+.roster-table tr.dragging {
+    opacity: 0.5;
+    background: #e3f2fd;
+}
+
+.roster-table tr.drag-over {
+    border-top: 2px solid #667eea;
+}
+
+.roster-table tr[draggable="true"] {
+    cursor: grab;
+}
+
+.roster-table tr[draggable="true"]:active {
+    cursor: grabbing;
+}
+
+.player-name {
+    font-weight: 600;
+    color: #1a1a2e;
+}
+
+.player-name a {
+    color: inherit;
+    text-decoration: none;
+}
+
+.player-name a:hover {
+    color: #667eea;
+}
+
+.drag-handle {
+    color: #ccc;
+    margin-right: 0.5rem;
+    cursor: grab;
+}
+
+/* Badges */
+.badge {
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.badge.transfer {
+    background: #ffebee;
+    color: #c62828;
+}
+
+.badge.current-team {
+    background: #e8f5e9;
+    color: #2e7d32;
+}
+
+.weapon-badge {
+    display: inline-block;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    background: #f5f5f5;
+    color: #666;
+}
+
+.stat-value {
+    font-weight: 600;
+    color: #667eea;
+}
+
+/* Inactive Section */
+.inactive-section {
+    margin-top: 1.5rem;
+    border-top: 1px solid #eee;
+    padding-top: 1rem;
+}
+
+.inactive-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    padding: 0.5rem 0;
+    user-select: none;
+}
+
+.inactive-header:hover {
+    background: #f9f9f9;
+    margin: 0 -1rem;
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+}
+
+.inactive-header h3 {
+    font-size: 1.1rem;
+    color: #666;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.toggle-icon {
+    transition: transform 0.2s;
+    font-size: 0.8rem;
+}
+
+.toggle-icon.expanded {
+    transform: rotate(90deg);
+}
+
+.inactive-content {
+    display: none;
+    margin-top: 1rem;
+}
+
+.inactive-content.show {
+    display: block;
+}
+
+/* Attendance Section */
+.attendance-section {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    padding: 1.5rem;
+}
+
+.attendance-section h2 {
+    font-size: 1.3rem;
+    margin-bottom: 1rem;
+    color: #1a1a2e;
+}
+
+.checkin-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.checkin-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.8rem 0;
+    border-bottom: 1px solid #eee;
+}
+
+.checkin-item:last-child {
+    border-bottom: none;
+}
+
+.checkin-name {
+    font-weight: 600;
+}
+
+.checkin-time {
+    color: #888;
+    font-size: 0.9rem;
+}
+
+.checkin-type {
+    font-size: 0.8rem;
+    color: #667eea;
+}
+
+/* Alerts */
+.alerts-section {
+    margin-bottom: 2rem;
+}
+
+.alert {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 0.5rem;
+}
+
+.alert.warning {
+    background: #fff8e1;
+    border: 1px solid #ffcc02;
+}
+
+.alert.info {
+    background: #e3f2fd;
+    border: 1px solid #90caf9;
+}
+
+.alert.success {
+    background: #e8f5e9;
+    border: 1px solid #a5d6a7;
+}
+
+.alert.error {
+    background: #ffebee;
+    border: 1px solid #ef9a9a;
+}
+
+.alert-icon {
+    font-size: 1.2rem;
+}
+
+/* Loading */
+.loading {
+    text-align: center;
+    padding: 3rem;
+    color: #888;
+}
+
+.loading::after {
+    content: '...';
+    animation: dots 1.5s infinite;
+}
+
+@keyframes dots {
+    0%, 20% { content: '.'; }
+    40% { content: '..'; }
+    60%, 100% { content: '...'; }
+}
+
+/* Empty state */
+.empty-state {
+    text-align: center;
+    padding: 2rem;
+    color: #888;
+}
+
+/* Buttons */
+.action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: #667eea;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background 0.2s;
+}
+
+.action-btn:hover {
+    background: #5a6fd6;
+}
+
+.action-btn.secondary {
+    background: #f5f5f5;
+    color: #333;
+}
+
+.action-btn.secondary:hover {
+    background: #eee;
+}
+
+.action-btn.small {
+    padding: 0.3rem 0.6rem;
+    font-size: 0.8rem;
+}
+
+.action-btn.success {
+    background: #4caf50;
+}
+
+.action-btn.success:hover {
+    background: #43a047;
+}
+
+/* Modal */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.5);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal-overlay.show {
+    display: flex;
+}
+
+.modal-content {
+    background: white;
+    border-radius: 12px;
+    padding: 2rem;
+    max-width: 500px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 1.3rem;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: #666;
+}
+
+.form-group {
+    margin-bottom: 1rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+    color: #333;
+}
+
+.form-group input,
+.form-group select {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 1rem;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+.search-results {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid #eee;
+    border-radius: 8px;
+    margin-top: 0.5rem;
+}
+
+.search-result-item {
+    padding: 0.75rem;
+    border-bottom: 1px solid #eee;
+    cursor: pointer;
+}
+
+.search-result-item:hover {
+    background: #f5f5f5;
+}
+
+.search-result-item:last-child {
+    border-bottom: none;
+}
+
+.search-result-name {
+    font-weight: 600;
+}
+
+.search-result-team {
+    font-size: 0.85rem;
+    color: #666;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container club-dashboard">
+    <div class="dashboard-header">
+        <h1>
+            <span class="club-name" id="clubName">Loading...</span> 대시보드
+        </h1>
+        <div class="actions" id="headerActions">
+            <button class="action-btn" onclick="location.href='/club/checkin'">
+                ✓ 출석 체크인
+            </button>
+        </div>
+    </div>
+
+    <!-- Alerts -->
+    <div class="alerts-section" id="alertsSection"></div>
+
+    <!-- Stats Grid -->
+    <div class="dashboard-grid">
+        <div class="dashboard-card">
+            <div class="card-header">
+                <h3>오늘 출석</h3>
+                <span class="icon">📋</span>
+            </div>
+            <div class="card-value highlight" id="todayAttendance">-</div>
+            <div class="card-subtitle">명 체크인</div>
+        </div>
+
+        <div class="dashboard-card">
+            <div class="card-header">
+                <h3>소속 선수</h3>
+                <span class="icon">👥</span>
+            </div>
+            <div class="card-value" id="totalMembers">-</div>
+            <div class="card-subtitle">활동 <span id="activeCount">-</span>명 / 미활동 <span id="inactiveCount">-</span>명</div>
+        </div>
+
+        <div class="dashboard-card">
+            <div class="card-header">
+                <h3>이번 주 훈련</h3>
+                <span class="icon">🗓️</span>
+            </div>
+            <div class="card-value" id="weeklyTraining">-</div>
+            <div class="card-subtitle">회 예정</div>
+        </div>
+
+        <div class="dashboard-card">
+            <div class="card-header">
+                <h3>예정 대회</h3>
+                <span class="icon">🏆</span>
+            </div>
+            <div class="card-value" id="upcomingComps">-</div>
+            <div class="card-subtitle">건</div>
+        </div>
+    </div>
+
+    <!-- Team Roster -->
+    <div class="roster-section">
+        <div class="roster-header">
+            <h2>🏆 소속 선수 현황</h2>
+            <div class="roster-actions">
+                <button class="action-btn small secondary" onclick="syncPlayers()" id="syncBtn">
+                    🔄 대회 데이터 동기화
+                </button>
+                <button class="action-btn small secondary" onclick="openAddPlayerModal()">
+                    ➕ 선수 추가
+                </button>
+            </div>
+        </div>
+        <div id="rosterContent">
+            <div class="loading">선수 데이터 로딩 중</div>
+        </div>
+
+        <!-- Inactive Players Section -->
+        <div class="inactive-section" id="inactiveSection" style="display: none;">
+            <div class="inactive-header" onclick="toggleInactive()">
+                <h3>
+                    <span class="toggle-icon" id="toggleIcon">▶</span>
+                    미활동 리스트 (<span id="inactiveListCount">0</span>명)
+                </h3>
+                <span style="font-size: 0.85rem; color: #888;">최근 3개월 내 대회 미출전</span>
+            </div>
+            <div class="inactive-content" id="inactiveContent"></div>
+        </div>
+    </div>
+
+    <!-- Today's Attendance -->
+    <div class="attendance-section">
+        <h2>📋 오늘 출석 현황</h2>
+        <div id="attendanceContent">
+            <div class="loading">출석 데이터 로딩 중</div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Player Modal -->
+<div class="modal-overlay" id="addPlayerModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>선수 추가</h3>
+            <button class="modal-close" onclick="closeAddPlayerModal()">&times;</button>
+        </div>
+
+        <div class="form-group">
+            <label>기존 선수 검색</label>
+            <input type="text" id="playerSearchInput" placeholder="선수 이름 검색..." oninput="searchPlayers(this.value)">
+            <div class="search-results" id="searchResults" style="display: none;"></div>
+        </div>
+
+        <div style="text-align: center; margin: 1rem 0; color: #888;">또는</div>
+
+        <div class="form-group">
+            <label>신규 선수 수동 등록</label>
+            <input type="text" id="manualPlayerName" placeholder="선수 이름">
+        </div>
+
+        <div class="form-group">
+            <label>무기</label>
+            <select id="manualPlayerWeapon">
+                <option value="">선택...</option>
+                <option value="플러레">플러레</option>
+                <option value="에페">에페</option>
+                <option value="사브르">사브르</option>
+            </select>
+        </div>
+
+        <button class="action-btn" onclick="addManualPlayer()" style="width: 100%;">
+            등록하기
+        </button>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const TEST_MODE = true;
+const API_BASE = '/api/club';
+const API_SUFFIX = TEST_MODE ? '?test=1' : '';
+
+let rosterData = null;
+
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+    loadDashboard();
+    loadRosterWithStatus();
+});
+
+// Dashboard
+async function loadDashboard() {
+    try {
+        const headers = TEST_MODE ? {} : {
+            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+        };
+        const response = await fetch(`${API_BASE}/dashboard${API_SUFFIX}`, { headers });
+
+        if (!response.ok) {
+            if (response.status === 401) {
+                window.location.href = '/auth/login?redirect=/club/';
+                return;
+            }
+            throw new Error('대시보드 로드 실패');
+        }
+
+        const data = await response.json();
+        renderDashboard(data);
+
+    } catch (error) {
+        console.error('Dashboard error:', error);
+    }
+}
+
+function renderDashboard(data) {
+    document.getElementById('clubName').textContent = data.organization_name;
+    document.getElementById('todayAttendance').textContent = data.today_attendance;
+    document.getElementById('weeklyTraining').textContent = data.weekly_training || 5;
+    document.getElementById('upcomingComps').textContent = data.upcoming_competitions?.length || 0;
+
+    const filteredAlerts = (data.alerts || []).filter(a => a.alert_type !== 'overdue_fee');
+    renderAlerts(filteredAlerts);
+    renderAttendance(data.today_checkins);
+
+    if (TEST_MODE) {
+        addAdminButtons();
+    }
+}
+
+function addAdminButtons() {
+    const actionsDiv = document.getElementById('headerActions');
+    if (!actionsDiv.querySelector('.accounting-btn')) {
+        const btn = document.createElement('button');
+        btn.className = 'action-btn secondary accounting-btn';
+        btn.innerHTML = '💰 회계관리';
+        btn.onclick = () => location.href = '/club/accounting';
+        actionsDiv.appendChild(btn);
+    }
+}
+
+// Roster with Activity Status
+async function loadRosterWithStatus() {
+    try {
+        const headers = TEST_MODE ? {} : {
+            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+        };
+        const response = await fetch(`${API_BASE}/players/team/roster-status${API_SUFFIX}`, { headers });
+
+        if (!response.ok) throw new Error('로스터 로드 실패');
+
+        rosterData = await response.json();
+        renderRosterWithStatus(rosterData);
+
+    } catch (error) {
+        console.error('Roster error:', error);
+        document.getElementById('rosterContent').innerHTML =
+            '<div class="empty-state">선수 데이터를 불러올 수 없습니다</div>';
+    }
+}
+
+function renderRosterWithStatus(data) {
+    // Update stats
+    document.getElementById('totalMembers').textContent = data.active_count;
+    document.getElementById('activeCount').textContent = data.active_count;
+    document.getElementById('inactiveCount').textContent = data.inactive_count;
+
+    // Active players table
+    const container = document.getElementById('rosterContent');
+
+    if (!data.active_players || data.active_players.length === 0) {
+        container.innerHTML = '<div class="empty-state">활동 중인 선수가 없습니다. 대회 데이터를 동기화해주세요.</div>';
+    } else {
+        container.innerHTML = renderPlayerTable(data.active_players, 'active');
+    }
+
+    // Inactive players section
+    const inactiveSection = document.getElementById('inactiveSection');
+    if (data.inactive_players && data.inactive_players.length > 0) {
+        inactiveSection.style.display = 'block';
+        document.getElementById('inactiveListCount').textContent = data.inactive_count;
+        document.getElementById('inactiveContent').innerHTML = renderPlayerTable(data.inactive_players, 'inactive');
+    } else {
+        inactiveSection.style.display = 'none';
+    }
+
+    // Setup drag and drop
+    setupDragAndDrop();
+}
+
+function renderPlayerTable(players, listType) {
+    return `
+        <table class="roster-table" data-list-type="${listType}">
+            <thead>
+                <tr>
+                    <th></th>
+                    <th>이름</th>
+                    <th>무기</th>
+                    <th>대회 수</th>
+                    <th>최근 대회</th>
+                    ${listType === 'inactive' ? '<th>현재 소속</th>' : '<th>최근 결과</th>'}
+                    <th>상세</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${players.map(player => `
+                    <tr draggable="true" data-member-id="${player.member_id}" data-list-type="${listType}">
+                        <td><span class="drag-handle">⋮⋮</span></td>
+                        <td class="player-name">
+                            ${player.player_id
+                                ? `<a href="/player/${player.player_id}">${player.name}</a>`
+                                : player.name}
+                        </td>
+                        <td>
+                            ${player.weapon
+                                ? `<span class="weapon-badge">${player.weapon}</span>`
+                                : '-'}
+                        </td>
+                        <td class="stat-value">${player.competition_count || 0}</td>
+                        <td>${player.last_competition_date || '-'}</td>
+                        ${listType === 'inactive'
+                            ? `<td>${renderCurrentTeam(player)}</td>`
+                            : `<td>${player.recent_result || '-'}</td>`
+                        }
+                        <td>
+                            ${player.player_id
+                                ? `<a href="/club/players/${player.player_id}/profile" class="action-btn small secondary">상세</a>`
+                                : '<span style="color:#999">미연결</span>'}
+                        </td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `;
+}
+
+function renderCurrentTeam(player) {
+    if (player.transfer_status === '이적') {
+        return `<span class="badge transfer">이적: ${player.transferred_to || '알 수 없음'}</span>`;
+    }
+    if (player.current_team) {
+        return `<span class="badge current-team">${player.current_team}</span>`;
+    }
+    return '-';
+}
+
+// Toggle Inactive Section
+function toggleInactive() {
+    const content = document.getElementById('inactiveContent');
+    const icon = document.getElementById('toggleIcon');
+
+    if (content.classList.contains('show')) {
+        content.classList.remove('show');
+        icon.classList.remove('expanded');
+    } else {
+        content.classList.add('show');
+        icon.classList.add('expanded');
+    }
+}
+
+// Drag and Drop
+function setupDragAndDrop() {
+    const rows = document.querySelectorAll('.roster-table tbody tr[draggable="true"]');
+
+    rows.forEach(row => {
+        row.addEventListener('dragstart', handleDragStart);
+        row.addEventListener('dragend', handleDragEnd);
+        row.addEventListener('dragover', handleDragOver);
+        row.addEventListener('drop', handleDrop);
+    });
+}
+
+let draggedRow = null;
+
+function handleDragStart(e) {
+    draggedRow = this;
+    this.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', this.dataset.memberId);
+}
+
+function handleDragEnd(e) {
+    this.classList.remove('dragging');
+    document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+}
+
+function handleDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+
+    const targetListType = this.closest('table').dataset.listType;
+    const sourceListType = draggedRow.dataset.listType;
+
+    if (targetListType !== sourceListType) {
+        this.classList.add('drag-over');
+    }
+}
+
+async function handleDrop(e) {
+    e.preventDefault();
+    this.classList.remove('drag-over');
+
+    const targetListType = this.closest('table').dataset.listType;
+    const sourceListType = draggedRow.dataset.listType;
+
+    if (targetListType === sourceListType) return;
+
+    const memberId = draggedRow.dataset.memberId;
+    const newStatus = targetListType; // 'active' or 'inactive'
+
+    try {
+        const headers = TEST_MODE ? {'Content-Type': 'application/json'} : {
+            'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+            'Content-Type': 'application/json'
+        };
+
+        const response = await fetch(
+            `${API_BASE}/players/team/move-player?member_id=${memberId}&status=${newStatus}${TEST_MODE ? '&test=1' : ''}`,
+            { method: 'POST', headers }
+        );
+
+        if (response.ok) {
+            showAlert('success', `선수가 ${newStatus === 'active' ? '소속 선수' : '미활동'} 리스트로 이동되었습니다.`);
+            loadRosterWithStatus(); // Reload
+        } else {
+            throw new Error('이동 실패');
+        }
+    } catch (error) {
+        showAlert('error', '선수 이동에 실패했습니다.');
+        console.error(error);
+    }
+}
+
+// Sync Players
+async function syncPlayers() {
+    const btn = document.getElementById('syncBtn');
+    btn.disabled = true;
+    btn.innerHTML = '🔄 동기화 중...';
+
+    try {
+        const headers = TEST_MODE ? {'Content-Type': 'application/json'} : {
+            'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+            'Content-Type': 'application/json'
+        };
+
+        const response = await fetch(`${API_BASE}/players/team/sync${API_SUFFIX}`, {
+            method: 'POST',
+            headers
+        });
+
+        if (!response.ok) throw new Error('동기화 실패');
+
+        const result = await response.json();
+
+        showAlert('success', `동기화 완료: ${result.newly_registered}명 새로 등록, 총 ${result.total_found}명`);
+        loadRosterWithStatus(); // Reload
+
+    } catch (error) {
+        showAlert('error', '대회 데이터 동기화에 실패했습니다.');
+        console.error(error);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '🔄 대회 데이터 동기화';
+    }
+}
+
+// Add Player Modal
+function openAddPlayerModal() {
+    document.getElementById('addPlayerModal').classList.add('show');
+}
+
+function closeAddPlayerModal() {
+    document.getElementById('addPlayerModal').classList.remove('show');
+    document.getElementById('playerSearchInput').value = '';
+    document.getElementById('manualPlayerName').value = '';
+    document.getElementById('manualPlayerWeapon').value = '';
+    document.getElementById('searchResults').style.display = 'none';
+}
+
+let searchTimeout;
+async function searchPlayers(query) {
+    clearTimeout(searchTimeout);
+
+    if (query.length < 2) {
+        document.getElementById('searchResults').style.display = 'none';
+        return;
+    }
+
+    searchTimeout = setTimeout(async () => {
+        try {
+            const response = await fetch(`/api/players/search?q=${encodeURIComponent(query)}`);
+            if (!response.ok) throw new Error('검색 실패');
+
+            const data = await response.json();
+            renderSearchResults(data.results || []);
+
+        } catch (error) {
+            console.error('Search error:', error);
+        }
+    }, 300);
+}
+
+function renderSearchResults(results) {
+    const container = document.getElementById('searchResults');
+
+    if (results.length === 0) {
+        container.innerHTML = '<div class="empty-state">검색 결과가 없습니다</div>';
+        container.style.display = 'block';
+        return;
+    }
+
+    container.innerHTML = results.slice(0, 10).map(player => `
+        <div class="search-result-item" onclick="addPlayerFromSearch('${player.player_id}', '${player.name}')">
+            <div class="search-result-name">${player.name}</div>
+            <div class="search-result-team">${player.current_team || '소속 없음'} | ${player.weapons?.join(', ') || '무기 미상'}</div>
+        </div>
+    `).join('');
+
+    container.style.display = 'block';
+}
+
+async function addPlayerFromSearch(playerId, playerName) {
+    try {
+        const headers = TEST_MODE ? {'Content-Type': 'application/json'} : {
+            'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+            'Content-Type': 'application/json'
+        };
+
+        const response = await fetch(
+            `${API_BASE}/players/team/add-player?player_id=${playerId}${TEST_MODE ? '&test=1' : ''}`,
+            { method: 'POST', headers }
+        );
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || '등록 실패');
+        }
+
+        showAlert('success', `${playerName} 선수가 추가되었습니다.`);
+        closeAddPlayerModal();
+        loadRosterWithStatus();
+
+    } catch (error) {
+        showAlert('error', error.message);
+    }
+}
+
+async function addManualPlayer() {
+    const name = document.getElementById('manualPlayerName').value.trim();
+    const weapon = document.getElementById('manualPlayerWeapon').value;
+
+    if (!name) {
+        showAlert('error', '선수 이름을 입력해주세요.');
+        return;
+    }
+
+    try {
+        const headers = TEST_MODE ? {'Content-Type': 'application/json'} : {
+            'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+            'Content-Type': 'application/json'
+        };
+
+        let url = `${API_BASE}/players/team/add-player?player_name=${encodeURIComponent(name)}`;
+        if (weapon) url += `&weapon=${encodeURIComponent(weapon)}`;
+        if (TEST_MODE) url += '&test=1';
+
+        const response = await fetch(url, { method: 'POST', headers });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || '등록 실패');
+        }
+
+        showAlert('success', `${name} 선수가 추가되었습니다.`);
+        closeAddPlayerModal();
+        loadRosterWithStatus();
+
+    } catch (error) {
+        showAlert('error', error.message);
+    }
+}
+
+// Alerts & Attendance
+function renderAlerts(alerts) {
+    const container = document.getElementById('alertsSection');
+    if (!alerts || alerts.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+
+    const icons = { 'warning': '⚠️', 'info': 'ℹ️', 'error': '🚨', 'success': '✅' };
+
+    container.innerHTML = alerts.map(alert => `
+        <div class="alert ${alert.severity}">
+            <span class="alert-icon">${icons[alert.severity] || 'ℹ️'}</span>
+            <span>${alert.message}</span>
+        </div>
+    `).join('');
+}
+
+function showAlert(type, message) {
+    const container = document.getElementById('alertsSection');
+    const alert = document.createElement('div');
+    alert.className = `alert ${type}`;
+    alert.innerHTML = `
+        <span class="alert-icon">${type === 'success' ? '✅' : type === 'error' ? '🚨' : 'ℹ️'}</span>
+        <span>${message}</span>
+    `;
+    container.insertBefore(alert, container.firstChild);
+
+    setTimeout(() => alert.remove(), 5000);
+}
+
+function renderAttendance(checkins) {
+    const container = document.getElementById('attendanceContent');
+
+    if (!checkins || checkins.length === 0) {
+        container.innerHTML = '<div class="empty-state">오늘 출석한 회원이 없습니다</div>';
+        return;
+    }
+
+    const typeLabels = {
+        'regular': '정규 훈련', 'lesson': '레슨', 'competition': '대회',
+        'makeup': '보강', 'trial': '체험'
+    };
+
+    container.innerHTML = `
+        <ul class="checkin-list">
+            ${checkins.map(c => `
+                <li class="checkin-item">
+                    <div>
+                        <span class="checkin-name">${c.member_name}</span>
+                        <span class="checkin-type">${typeLabels[c.attendance_type] || c.attendance_type}</span>
+                    </div>
+                    <span class="checkin-time">${new Date(c.check_in_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}</span>
+                </li>
+            `).join('')}
+        </ul>
+    `;
+}
+
+// Close modal on outside click
+document.getElementById('addPlayerModal').addEventListener('click', function(e) {
+    if (e.target === this) closeAddPlayerModal();
+});
+</script>
+{% endblock %}

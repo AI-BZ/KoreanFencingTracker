@@ -1,0 +1,658 @@
+{% extends "base.html" %}
+
+{% block title %}내 클럽 - Korean Fencing Tracker{% endblock %}
+
+{% block extra_css %}
+<style>
+.student-dashboard {
+    padding: 2rem 0;
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.welcome-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 16px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+}
+
+.welcome-card h1 {
+    font-size: 1.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.welcome-card .club-name {
+    font-size: 1rem;
+    opacity: 0.9;
+}
+
+.checkin-section {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    text-align: center;
+}
+
+.checkin-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 1rem 2rem;
+    background: #4caf50;
+    color: white;
+    border: none;
+    border-radius: 12px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.checkin-btn:hover {
+    background: #43a047;
+    transform: translateY(-2px);
+}
+
+.checkin-btn.checked {
+    background: #9e9e9e;
+    cursor: default;
+}
+
+.checkin-btn.checked:hover {
+    transform: none;
+}
+
+.checkin-status {
+    margin-top: 1rem;
+    font-size: 0.9rem;
+    color: #666;
+}
+
+.checkin-status.success {
+    color: #4caf50;
+}
+
+/* Stats Cards */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.stat-card {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    padding: 1.2rem;
+    text-align: center;
+}
+
+.stat-card .icon {
+    font-size: 1.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.stat-card .value {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: #1a1a2e;
+}
+
+.stat-card .label {
+    font-size: 0.8rem;
+    color: #666;
+    margin-top: 0.3rem;
+}
+
+/* Section Cards */
+.section-card {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    margin-bottom: 1.5rem;
+    overflow: hidden;
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid #eee;
+}
+
+.section-header h2 {
+    font-size: 1.1rem;
+    color: #1a1a2e;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.section-content {
+    padding: 1rem 1.5rem;
+}
+
+/* Attendance List */
+.attendance-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.attendance-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.8rem 0;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.attendance-item:last-child {
+    border-bottom: none;
+}
+
+.attendance-date {
+    font-weight: 500;
+}
+
+.attendance-time {
+    color: #666;
+    font-size: 0.85rem;
+}
+
+.attendance-type {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    background: #e3f2fd;
+    color: #1976d2;
+}
+
+/* Lesson Schedule */
+.lesson-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.8rem 0;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.lesson-item:last-child {
+    border-bottom: none;
+}
+
+.lesson-time {
+    background: #667eea;
+    color: white;
+    padding: 0.5rem 0.8rem;
+    border-radius: 8px;
+    font-weight: 600;
+    min-width: 60px;
+    text-align: center;
+}
+
+.lesson-info h4 {
+    font-size: 0.95rem;
+    margin-bottom: 0.2rem;
+}
+
+.lesson-info p {
+    font-size: 0.8rem;
+    color: #666;
+}
+
+/* Announcements */
+.announcement-item {
+    padding: 1rem 0;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.announcement-item:last-child {
+    border-bottom: none;
+}
+
+.announcement-title {
+    font-weight: 600;
+    margin-bottom: 0.3rem;
+}
+
+.announcement-meta {
+    font-size: 0.8rem;
+    color: #888;
+}
+
+.announcement-preview {
+    font-size: 0.9rem;
+    color: #555;
+    margin-top: 0.5rem;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* Empty State */
+.empty-state {
+    text-align: center;
+    padding: 2rem;
+    color: #888;
+}
+
+.empty-state .icon {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+}
+
+/* My Profile Link */
+.profile-link {
+    display: block;
+    text-align: center;
+    padding: 1rem;
+    color: #667eea;
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.profile-link:hover {
+    text-decoration: underline;
+}
+
+@media (max-width: 600px) {
+    .student-dashboard {
+        padding: 1rem;
+    }
+
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.8rem;
+    }
+
+    .stat-card .value {
+        font-size: 1.5rem;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container student-dashboard">
+    <!-- Welcome Card -->
+    <div class="welcome-card">
+        <h1 id="welcomeName">안녕하세요!</h1>
+        <p class="club-name" id="clubName">클럽 로딩 중...</p>
+    </div>
+
+    <!-- Check-in Section -->
+    <div class="checkin-section">
+        <button class="checkin-btn" id="checkinBtn" onclick="doCheckIn()">
+            <span>✓</span> 출석 체크인
+        </button>
+        <div class="checkin-status" id="checkinStatus"></div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="icon">📅</div>
+            <div class="value" id="monthlyAttendance">-</div>
+            <div class="label">이번 달 출석</div>
+        </div>
+        <div class="stat-card">
+            <div class="icon">🎯</div>
+            <div class="value" id="upcomingLessons">-</div>
+            <div class="label">예정 레슨</div>
+        </div>
+    </div>
+
+    <!-- My Attendance -->
+    <div class="section-card">
+        <div class="section-header">
+            <h2>📋 내 출석 현황</h2>
+            <a href="/club/my-attendance" style="color: #667eea; font-size: 0.9rem;">전체보기</a>
+        </div>
+        <div class="section-content" id="attendanceContent">
+            <div class="empty-state">
+                <div class="icon">📋</div>
+                <p>출석 기록 로딩 중...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- My Lessons -->
+    <div class="section-card">
+        <div class="section-header">
+            <h2>📚 내 레슨 일정</h2>
+            <a href="/club/my-lessons" style="color: #667eea; font-size: 0.9rem;">전체보기</a>
+        </div>
+        <div class="section-content" id="lessonsContent">
+            <div class="empty-state">
+                <div class="icon">📚</div>
+                <p>레슨 일정 로딩 중...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Announcements -->
+    <div class="section-card">
+        <div class="section-header">
+            <h2>📢 클럽 공지사항</h2>
+            <a href="/club/announcements" style="color: #667eea; font-size: 0.9rem;">전체보기</a>
+        </div>
+        <div class="section-content" id="announcementsContent">
+            <div class="empty-state">
+                <div class="icon">📢</div>
+                <p>공지사항 로딩 중...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Profile Link -->
+    <a href="/club/my-profile" class="profile-link">내 프로필 보기 →</a>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const TEST_MODE = true;
+const API_BASE = '/api/club';
+const API_SUFFIX = TEST_MODE ? '?test=1' : '';
+
+let memberData = null;
+
+async function loadDashboard() {
+    try {
+        const headers = TEST_MODE ? {} : {
+            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+        };
+
+        // 내 정보 로드
+        const meResponse = await fetch(`${API_BASE}/me${API_SUFFIX}`, { headers });
+        if (meResponse.ok) {
+            memberData = await meResponse.json();
+            document.getElementById('welcomeName').textContent =
+                `안녕하세요, ${memberData.full_name}님!`;
+            document.getElementById('clubName').textContent =
+                memberData.organization_name || '클럽 정보 없음';
+        }
+
+        // 출석 현황 로드
+        loadAttendance();
+
+        // 레슨 일정 로드
+        loadLessons();
+
+        // 공지사항 로드
+        loadAnnouncements();
+
+        // 체크인 상태 확인
+        checkCheckinStatus();
+
+    } catch (error) {
+        console.error('Dashboard load error:', error);
+    }
+}
+
+async function checkCheckinStatus() {
+    try {
+        const headers = TEST_MODE ? {} : {
+            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+        };
+
+        const response = await fetch(`${API_BASE}/check-in/status${API_SUFFIX}`, { headers });
+        if (response.ok) {
+            const data = await response.json();
+            const btn = document.getElementById('checkinBtn');
+            const status = document.getElementById('checkinStatus');
+
+            if (data.already_checked_in) {
+                btn.classList.add('checked');
+                btn.innerHTML = '<span>✓</span> 출석 완료';
+                btn.disabled = true;
+                status.className = 'checkin-status success';
+                status.textContent = `오늘 ${data.check_in_time || ''} 출석 완료`;
+            }
+        }
+    } catch (error) {
+        console.error('Checkin status error:', error);
+    }
+}
+
+async function doCheckIn() {
+    const btn = document.getElementById('checkinBtn');
+    if (btn.classList.contains('checked')) return;
+
+    try {
+        const headers = {
+            'Content-Type': 'application/json',
+            ...(TEST_MODE ? {} : {'Authorization': `Bearer ${localStorage.getItem('access_token')}`})
+        };
+
+        const response = await fetch(`${API_BASE}/check-in${API_SUFFIX}`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ attendance_type: 'regular' })
+        });
+
+        if (response.ok) {
+            btn.classList.add('checked');
+            btn.innerHTML = '<span>✓</span> 출석 완료';
+            btn.disabled = true;
+
+            const status = document.getElementById('checkinStatus');
+            status.className = 'checkin-status success';
+            status.textContent = '출석 체크인 완료!';
+
+            // 출석 목록 새로고침
+            loadAttendance();
+        } else {
+            const error = await response.json();
+            alert(error.detail || '체크인 실패');
+        }
+    } catch (error) {
+        console.error('Check-in error:', error);
+        alert('체크인 중 오류가 발생했습니다.');
+    }
+}
+
+async function loadAttendance() {
+    const container = document.getElementById('attendanceContent');
+
+    try {
+        const headers = TEST_MODE ? {} : {
+            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+        };
+
+        const response = await fetch(`${API_BASE}/my/attendance${API_SUFFIX}`, { headers });
+
+        if (!response.ok) {
+            // API 미구현시 테스트 데이터
+            renderTestAttendance();
+            return;
+        }
+
+        const data = await response.json();
+        renderAttendance(data.attendance || []);
+        document.getElementById('monthlyAttendance').textContent = data.monthly_count || 0;
+
+    } catch (error) {
+        console.error('Attendance error:', error);
+        renderTestAttendance();
+    }
+}
+
+function renderTestAttendance() {
+    const today = new Date().toISOString().split('T')[0];
+    const testData = [
+        { date: today, check_in_at: '16:30', type: 'regular' },
+        { date: '2024-12-20', check_in_at: '16:45', type: 'regular' },
+        { date: '2024-12-18', check_in_at: '17:00', type: 'lesson' },
+    ];
+    renderAttendance(testData);
+    document.getElementById('monthlyAttendance').textContent = '12';
+}
+
+function renderAttendance(attendance) {
+    const container = document.getElementById('attendanceContent');
+
+    if (!attendance || attendance.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="icon">📋</div>
+                <p>출석 기록이 없습니다</p>
+            </div>
+        `;
+        return;
+    }
+
+    const typeLabels = {
+        regular: '정규 훈련',
+        lesson: '개인 레슨',
+        competition: '대회',
+        other: '기타'
+    };
+
+    container.innerHTML = `
+        <ul class="attendance-list">
+            ${attendance.slice(0, 5).map(a => `
+                <li class="attendance-item">
+                    <div>
+                        <div class="attendance-date">${formatDate(a.date || a.check_in_at)}</div>
+                        <div class="attendance-time">${a.check_in_at?.split('T')[1]?.slice(0,5) || a.check_in_at || ''}</div>
+                    </div>
+                    <span class="attendance-type">${typeLabels[a.type] || a.type || '훈련'}</span>
+                </li>
+            `).join('')}
+        </ul>
+    `;
+}
+
+async function loadLessons() {
+    const container = document.getElementById('lessonsContent');
+
+    try {
+        const headers = TEST_MODE ? {} : {
+            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+        };
+
+        const response = await fetch(`${API_BASE}/my/lessons${API_SUFFIX}`, { headers });
+
+        if (!response.ok) {
+            renderTestLessons();
+            return;
+        }
+
+        const data = await response.json();
+        renderLessons(data.lessons || []);
+        document.getElementById('upcomingLessons').textContent = data.upcoming_count || 0;
+
+    } catch (error) {
+        console.error('Lessons error:', error);
+        renderTestLessons();
+    }
+}
+
+function renderTestLessons() {
+    const testData = [
+        { day: '월', time: '17:00', coach: '김코치', type: '개인 레슨' },
+        { day: '수', time: '17:00', coach: '김코치', type: '개인 레슨' },
+        { day: '금', time: '16:00', coach: '이코치', type: '그룹 레슨' },
+    ];
+    renderLessons(testData);
+    document.getElementById('upcomingLessons').textContent = '3';
+}
+
+function renderLessons(lessons) {
+    const container = document.getElementById('lessonsContent');
+
+    if (!lessons || lessons.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="icon">📚</div>
+                <p>예정된 레슨이 없습니다</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = lessons.map(l => `
+        <div class="lesson-item">
+            <div class="lesson-time">${l.day || ''}<br>${l.time || ''}</div>
+            <div class="lesson-info">
+                <h4>${l.type || '레슨'}</h4>
+                <p>${l.coach || '담당 코치'} 코치</p>
+            </div>
+        </div>
+    `).join('');
+}
+
+async function loadAnnouncements() {
+    const container = document.getElementById('announcementsContent');
+
+    try {
+        const headers = TEST_MODE ? {} : {
+            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+        };
+
+        const response = await fetch(`${API_BASE}/announcements${API_SUFFIX}`, { headers });
+
+        if (!response.ok) {
+            renderTestAnnouncements();
+            return;
+        }
+
+        const data = await response.json();
+        renderAnnouncements(data.announcements || []);
+
+    } catch (error) {
+        console.error('Announcements error:', error);
+        renderTestAnnouncements();
+    }
+}
+
+function renderTestAnnouncements() {
+    const testData = [
+        { title: '12월 대회 참가 안내', date: '2024-12-15', preview: '이번 12월 회장배 대회 참가 신청을 받습니다...' },
+        { title: '연말 휴관 안내', date: '2024-12-10', preview: '12월 30일 ~ 1월 2일까지 휴관합니다...' },
+    ];
+    renderAnnouncements(testData);
+}
+
+function renderAnnouncements(announcements) {
+    const container = document.getElementById('announcementsContent');
+
+    if (!announcements || announcements.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="icon">📢</div>
+                <p>공지사항이 없습니다</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = announcements.slice(0, 3).map(a => `
+        <div class="announcement-item">
+            <div class="announcement-title">${a.title}</div>
+            <div class="announcement-meta">${formatDate(a.date)}</div>
+            <div class="announcement-preview">${a.preview || a.content?.slice(0, 100) || ''}</div>
+        </div>
+    `).join('');
+}
+
+function formatDate(dateStr) {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' });
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', loadDashboard);
+</script>
+{% endblock %}

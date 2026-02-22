@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}FencingMind Club{% endblock %}</title>
+
+    <link rel="preconnect" href="https://cdn.jsdelivr.net">
+    <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" rel="stylesheet">
+
+    <link rel="stylesheet" href="/static/css/dark-theme.css?v=20250222">
+    <link rel="stylesheet" href="/static/css/components.css?v=20250222">
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <a href="/" class="logo">
+                <span class="logo-icon">&#9876;&#65039;</span>
+                <span class="logo-text">FencingMind Club</span>
+            </a>
+            <div class="nav-links">
+                <a href="/api/club/">Dashboard</a>
+                <a href="/api/club/checkin">Check-in</a>
+                <a href="/api/club/lessons-page">Lessons</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>FencingMind Club Management &copy; 2024-2026</p>
+        </div>
+    </footer>
+
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
