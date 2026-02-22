@@ -1,0 +1,38 @@
+{
+  "name": "FencingMind Club - 펜싱 클럽 관리",
+  "short_name": "FM Club",
+  "description": "펜싱 클럽 관리 SaaS - 출석, 레슨, 회원 관리",
+  "start_url": "/api/club/checkin",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#0a0a0f",
+  "background_color": "#0a0a0f",
+  "lang": "ko",
+  "dir": "ltr",
+  "categories": ["sports", "education", "business"],
+  "icons": [
+    { "src": "/static/icons/icon-72x72.png", "sizes": "72x72", "type": "image/png" },
+    { "src": "/static/icons/icon-96x96.png", "sizes": "96x96", "type": "image/png" },
+    { "src": "/static/icons/icon-128x128.png", "sizes": "128x128", "type": "image/png" },
+    { "src": "/static/icons/icon-144x144.png", "sizes": "144x144", "type": "image/png" },
+    { "src": "/static/icons/icon-152x152.png", "sizes": "152x152", "type": "image/png" },
+    { "src": "/static/icons/icon-192x192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/static/icons/icon-384x384.png", "sizes": "384x384", "type": "image/png" },
+    { "src": "/static/icons/icon-512x512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "체크인",
+      "short_name": "체크인",
+      "url": "/api/club/checkin",
+      "icons": [{ "src": "/static/icons/icon-96x96.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "대시보드",
+      "short_name": "대시보드",
+      "url": "/api/club/",
+      "icons": [{ "src": "/static/icons/icon-96x96.png", "sizes": "96x96" }]
+    }
+  ]
+}

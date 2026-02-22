@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
@@ -79,6 +79,28 @@ async def health():
         "org_id": config.DEFAULT_ORG_ID,
         "data_service_url": config.DATA_SERVICE_URL,
     }
+
+
+# ─────────────────────────────────────────────────────────────
+# PWA Support
+# ─────────────────────────────────────────────────────────────
+
+@app.get("/sw.js")
+async def service_worker():
+    sw_path = config.STATIC_DIR / "sw.js"
+    return FileResponse(
+        sw_path,
+        media_type="application/javascript",
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Service-Worker-Allowed": "/",
+        },
+    )
+
+
+@app.get("/offline.html")
+async def offline_page():
+    return FileResponse(config.STATIC_DIR / "offline.html", media_type="text/html")
 
 
 # ─────────────────────────────────────────────────────────────
