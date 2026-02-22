@@ -1,5 +1,8 @@
 """
 Auth Router - FastAPI 인증 라우터
+
+JWT/OAuth 핵심 로직은 shared_core에서 import.
+이 파일은 라우트 정의 + 템플릿 렌더링 담당.
 """
 import os
 import secrets
@@ -10,15 +13,27 @@ import httpx
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form, Query
 from fastapi.responses import RedirectResponse, HTMLResponse
-from jose import jwt, JWTError
 from loguru import logger
 
-from .config import (
-    get_auth_settings,
+# === shared_core에서 import ===
+from shared_core.auth.jwt import (
+    create_access_token,
+    get_current_member,
+    require_auth,
+)
+from shared_core.auth.oauth.providers import (
     OAUTH_PROVIDERS,
     get_available_providers,
     get_promotional_providers,
 )
+from shared_core.auth.oauth.handler import OAuthHandler
+from shared_core.auth.oauth.user_info import get_oauth_user_info
+from shared_core.db.client import get_supabase_client
+from shared_core.privacy.masking import mask_korean_name
+from shared_core.privacy.anonymize import is_minor
+
+# === data 서비스 전용 import ===
+from .config import get_auth_settings
 from .models import (
     MemberType,
     VerificationType,
@@ -32,84 +47,16 @@ from .models import (
     GuardianLink,
     TokenResponse,
 )
-from .privacy import mask_korean_name, anonymize_team, is_minor
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-# 세션 저장소 (프로덕션에서는 Redis 사용 권장)
-_oauth_states = {}
-_pending_registrations = {}
+# OAuth 핸들러 인스턴스 (shared_core)
+_oauth_handler = OAuthHandler()
 
 
 def get_supabase():
-    """Supabase 클라이언트 가져오기"""
-    from supabase import create_client
-    settings = get_auth_settings()
-    return create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
-
-
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-    """JWT 토큰 생성"""
-    settings = get_auth_settings()
-    to_encode = data.copy()
-
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
-
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(
-        to_encode,
-        settings.JWT_SECRET_KEY,
-        algorithm=settings.JWT_ALGORITHM
-    )
-    return encoded_jwt
-
-
-async def get_current_member(request: Request) -> Optional[dict]:
-    """현재 로그인한 회원 정보 가져오기"""
-    settings = get_auth_settings()
-
-    # Authorization 헤더 또는 쿠키에서 토큰 가져오기
-    token = None
-    auth_header = request.headers.get("Authorization")
-    if auth_header and auth_header.startswith("Bearer "):
-        token = auth_header.split(" ")[1]
-    else:
-        token = request.cookies.get("access_token")
-
-    if not token:
-        return None
-
-    try:
-        payload = jwt.decode(
-            token,
-            settings.JWT_SECRET_KEY,
-            algorithms=[settings.JWT_ALGORITHM]
-        )
-        member_id = payload.get("member_id")
-        if not member_id:
-            return None
-
-        # DB에서 회원 정보 조회
-        supabase = get_supabase()
-        result = supabase.table("members").select("*").eq("id", member_id).single().execute()
-        return result.data
-
-    except JWTError:
-        return None
-    except Exception as e:
-        logger.error(f"회원 조회 오류: {e}")
-        return None
-
-
-def require_auth(request: Request):
-    """인증 필수 의존성"""
-    member = request.state.member if hasattr(request.state, 'member') else None
-    if not member:
-        raise HTTPException(status_code=401, detail="로그인이 필요합니다")
-    return member
+    """Supabase 클라이언트 가져오기 (shared_core 싱글톤 사용)"""
+    return get_supabase_client()
 
 
 # =============================================
@@ -152,99 +99,26 @@ async def login_page(request: Request):
 @router.get("/login/{provider}")
 async def oauth_login(provider: str, request: Request, promotional: bool = False):
     """
-    OAuth 로그인 시작
+    OAuth 로그인 시작 (OAuthHandler 사용)
     """
-    if provider not in OAUTH_PROVIDERS:
-        raise HTTPException(status_code=400, detail=f"지원하지 않는 제공자: {provider}")
-
-    config = OAUTH_PROVIDERS[provider]
-    if not config.get("enabled", False):
-        raise HTTPException(status_code=400, detail=f"{provider}는 현재 사용할 수 없습니다")
-
-    settings = get_auth_settings()
-
-    # 상태 토큰 생성 (CSRF 방지)
-    state = secrets.token_urlsafe(32)
-    _oauth_states[state] = {
-        "provider": provider,
-        "promotional": promotional,
-        "created_at": datetime.utcnow(),
-    }
-
-    # OAuth URL 생성
-    if provider == "kakao":
-        redirect_uri = settings.KAKAO_REDIRECT_URI
-        client_id = settings.KAKAO_CLIENT_ID
-        scope = " ".join(config["scopes"])
-        auth_url = (
-            f"{config['authorize_url']}?"
-            f"client_id={client_id}&"
-            f"redirect_uri={redirect_uri}&"
-            f"response_type=code&"
-            f"scope={scope}&"
-            f"state={state}"
-        )
-
-    elif provider == "google":
-        redirect_uri = settings.GOOGLE_REDIRECT_URI
-        client_id = settings.GOOGLE_CLIENT_ID
-        scope = " ".join(config["scopes"])
-        auth_url = (
-            f"{config['authorize_url']}?"
-            f"client_id={client_id}&"
-            f"redirect_uri={redirect_uri}&"
-            f"response_type=code&"
-            f"scope={scope}&"
-            f"state={state}&"
-            f"access_type=offline"
-        )
-
-    elif provider == "x":
-        redirect_uri = settings.X_REDIRECT_URI
-        client_id = settings.X_CLIENT_ID
-        scope = " ".join(config["scopes"])
-        # X는 PKCE 필요
-        code_verifier = secrets.token_urlsafe(64)
-        _oauth_states[state]["code_verifier"] = code_verifier
-        auth_url = (
-            f"{config['authorize_url']}?"
-            f"client_id={client_id}&"
-            f"redirect_uri={redirect_uri}&"
-            f"response_type=code&"
-            f"scope={scope}&"
-            f"state={state}&"
-            f"code_challenge={code_verifier}&"
-            f"code_challenge_method=plain"
-        )
-    else:
-        raise HTTPException(status_code=400, detail=f"지원하지 않는 제공자: {provider}")
-
+    auth_url = _oauth_handler.build_auth_url(provider, promotional)
     return RedirectResponse(url=auth_url)
 
 
 @router.get("/callback/{provider}")
 async def oauth_callback(provider: str, code: str, state: str, request: Request):
     """
-    OAuth 콜백 처리
+    OAuth 콜백 처리 (OAuthHandler 사용)
     """
     # 상태 검증
-    state_data = _oauth_states.pop(state, None)
-    if not state_data or state_data["provider"] != provider:
-        raise HTTPException(status_code=400, detail="잘못된 상태 토큰")
-
-    # 상태 만료 확인 (10분)
-    if datetime.utcnow() - state_data["created_at"] > timedelta(minutes=10):
-        raise HTTPException(status_code=400, detail="상태 토큰이 만료되었습니다")
-
-    settings = get_auth_settings()
-    config = OAUTH_PROVIDERS[provider]
+    state_data = _oauth_handler.validate_state(state, provider)
 
     try:
         # 토큰 교환
-        token_data = await _exchange_oauth_token(provider, code, state_data)
+        token_data = await _oauth_handler.exchange_token(provider, code, state_data)
 
         # 사용자 정보 가져오기
-        user_info = await _get_oauth_user_info(provider, token_data["access_token"])
+        user_info = await get_oauth_user_info(provider, token_data["access_token"])
 
         # 기존 회원 확인
         supabase = get_supabase()
@@ -277,17 +151,10 @@ async def oauth_callback(provider: str, code: str, state: str, request: Request)
                 return response
 
         # 신규 회원 - 회원가입 페이지로
-        registration_token = secrets.token_urlsafe(32)
-        _pending_registrations[registration_token] = {
-            "provider": provider,
-            "provider_user_id": user_info["id"],
-            "email": user_info.get("email"),
-            "name": user_info.get("name"),
-            "access_token": token_data["access_token"],
-            "refresh_token": token_data.get("refresh_token"),
-            "promotional": state_data.get("promotional", False),
-            "created_at": datetime.utcnow(),
-        }
+        registration_token = _oauth_handler.store_pending_registration(
+            provider, user_info, token_data,
+            promotional=state_data.get("promotional", False),
+        )
 
         return RedirectResponse(
             url=f"/auth/register?token={registration_token}",
@@ -297,96 +164,6 @@ async def oauth_callback(provider: str, code: str, state: str, request: Request)
     except Exception as e:
         logger.exception(f"OAuth 콜백 처리 오류: {e}")
         raise HTTPException(status_code=500, detail=f"인증 처리 중 오류 발생: {str(e)}")
-
-
-async def _exchange_oauth_token(provider: str, code: str, state_data: dict) -> dict:
-    """OAuth 토큰 교환"""
-    settings = get_auth_settings()
-    config = OAUTH_PROVIDERS[provider]
-
-    if provider == "kakao":
-        data = {
-            "grant_type": "authorization_code",
-            "client_id": settings.KAKAO_CLIENT_ID,
-            "client_secret": settings.KAKAO_CLIENT_SECRET,
-            "redirect_uri": settings.KAKAO_REDIRECT_URI,
-            "code": code,
-        }
-
-    elif provider == "google":
-        data = {
-            "grant_type": "authorization_code",
-            "client_id": settings.GOOGLE_CLIENT_ID,
-            "client_secret": settings.GOOGLE_CLIENT_SECRET,
-            "redirect_uri": settings.GOOGLE_REDIRECT_URI,
-            "code": code,
-        }
-
-    elif provider == "x":
-        data = {
-            "grant_type": "authorization_code",
-            "client_id": settings.X_CLIENT_ID,
-            "redirect_uri": settings.X_REDIRECT_URI,
-            "code": code,
-            "code_verifier": state_data.get("code_verifier"),
-        }
-
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            config["token_url"],
-            data=data,
-            headers={"Content-Type": "application/x-www-form-urlencoded"}
-        )
-
-        if response.status_code != 200:
-            logger.error(f"토큰 교환 실패: {response.status_code} - {response.text}")
-            raise HTTPException(status_code=400, detail="토큰 교환 실패")
-
-        return response.json()
-
-
-async def _get_oauth_user_info(provider: str, access_token: str) -> dict:
-    """OAuth 사용자 정보 가져오기"""
-    config = OAUTH_PROVIDERS[provider]
-
-    async with httpx.AsyncClient() as client:
-        if provider == "kakao":
-            response = await client.get(
-                config["userinfo_url"],
-                headers={"Authorization": f"Bearer {access_token}"}
-            )
-            data = response.json()
-            return {
-                "id": str(data["id"]),
-                "email": data.get("kakao_account", {}).get("email"),
-                "name": data.get("properties", {}).get("nickname"),
-            }
-
-        elif provider == "google":
-            response = await client.get(
-                config["userinfo_url"],
-                headers={"Authorization": f"Bearer {access_token}"}
-            )
-            data = response.json()
-            return {
-                "id": data["id"],
-                "email": data.get("email"),
-                "name": data.get("name"),
-            }
-
-        elif provider == "x":
-            response = await client.get(
-                config["userinfo_url"],
-                headers={"Authorization": f"Bearer {access_token}"},
-                params={"user.fields": "id,name,username"}
-            )
-            data = response.json()
-            user_data = data.get("data", {})
-            return {
-                "id": user_data.get("id"),
-                "email": None,  # X는 이메일 미제공
-                "name": user_data.get("name"),
-            }
 
 
 # =============================================
@@ -401,7 +178,7 @@ async def register_page(request: Request, token: Optional[str] = None):
 
     pending = None
     if token:
-        pending = _pending_registrations.get(token)
+        pending = _oauth_handler.get_pending_registration(token)
         if not pending:
             raise HTTPException(status_code=400, detail="유효하지 않은 등록 토큰입니다")
 
@@ -435,7 +212,7 @@ async def register_member(
 ):
     """회원가입 처리"""
     # 등록 토큰 확인
-    pending = _pending_registrations.pop(token, None)
+    pending = _oauth_handler.pop_pending_registration(token)
     if not pending:
         raise HTTPException(status_code=400, detail="유효하지 않은 등록 토큰입니다")
 

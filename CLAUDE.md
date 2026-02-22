@@ -130,10 +130,12 @@ git worktree add ../FencingMind-analytics feature/analytics/main
 ```
 FencingMind/
 ├── packages/                    # 공유 패키지 ✅
-│   ├── shared-core/             # 인증, DB, 타입
-│   │   ├── auth/
-│   │   ├── db/
-│   │   ├── types/
+│   ├── shared_core/             # 인증, DB, 타입, 개인정보 ✅ 구현 완료
+│   │   ├── auth/                # JWT, OAuth, Dependencies
+│   │   │   └── oauth/           # OAuthHandler, providers
+│   │   ├── db/                  # Supabase 싱글톤 클라이언트
+│   │   ├── types/               # 공유 Enum (MemberType, ClubRole 등)
+│   │   ├── privacy/             # 마스킹, 익명화
 │   │   └── utils/
 │   ├── shared-ui/               # 공유 UI 컴포넌트
 │   │   ├── components/
@@ -200,12 +202,26 @@ FencingMind/
 # 프로젝트 루트에서 실행 (PYTHONPATH 설정 필수!)
 cd /Users/gyejinpark/Documents/GitHub/FencingCommunityDropShipping
 
-# data 서비스 실행
-PYTHONPATH="${PWD}:${PWD}/services/data" python -m uvicorn services.data.app.server:app --host 0.0.0.0 --port 71
+# data 서비스 실행 (packages 경로 포함 필수!)
+PYTHONPATH="${PWD}:${PWD}/packages:${PWD}/services/data" python -m uvicorn services.data.app.server:app --host 0.0.0.0 --port 71
 
 # 또는 환경변수 export 후 실행
-export PYTHONPATH="${PWD}:${PWD}/services/data"
+export PYTHONPATH="${PWD}:${PWD}/packages:${PWD}/services/data"
 python -m uvicorn services.data.app.server:app --host 0.0.0.0 --port 71
+```
+
+### Import 규칙 (shared_core)
+```python
+# ✅ 새 코드 (권장) - shared_core에서 직접 import
+from shared_core.auth.jwt import create_access_token, get_current_member
+from shared_core.types.member import MemberType, ClubRole
+from shared_core.privacy.masking import mask_korean_name
+from shared_core.db.client import get_supabase_client
+from shared_core.auth.dependencies import ServiceMemberContext, require_coach
+
+# ✅ 기존 호환성 (shim) - data 서비스 내에서만 동작
+from app.auth.models import MemberType  # → shared_core.types.member에서 가져옴
+from app.auth.privacy import mask_korean_name  # → shared_core.privacy.masking에서 가져옴
 ```
 
 ---
