@@ -1,18 +1,18 @@
 {% extends "base.html" %}
 
-{% block title %}로그인 - Korean Fencing Tracker{% endblock %}
+{% block title %}로그인 - FencingMind{% endblock %}
 
 {% block content %}
 <div class="auth-container">
     <div class="auth-card">
         <div class="auth-header">
-            <h1>Korean Fencing Tracker</h1>
+            <h1>FencingMind</h1>
             <p>로그인하여 더 많은 기능을 이용하세요</p>
         </div>
 
         <div class="auth-buttons">
             <!-- 카카오 로그인 (한국 IP) -->
-            <a href="/auth/login/kakao" class="auth-btn kakao-btn">
+            <a href="/auth/login/kakao{% if redirect_url %}?redirect={{ redirect_url }}{% endif %}" class="auth-btn kakao-btn">
                 <svg class="auth-icon" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M12 3c-5.5 0-10 3.58-10 8 0 2.81 1.87 5.28 4.7 6.7-.15.58-.52 2.1-.6 2.43-.1.4.14.4.31.29.13-.08 2.05-1.4 2.88-1.97.84.13 1.73.2 2.64.2 5.5 0 10-3.58 10-8s-4.5-8-10-8z"/>
                 </svg>
@@ -20,7 +20,7 @@
             </a>
 
             <!-- 구글 로그인 -->
-            <a href="/auth/login/google" class="auth-btn google-btn">
+            <a href="/auth/login/google{% if redirect_url %}?redirect={{ redirect_url }}{% endif %}" class="auth-btn google-btn">
                 <svg class="auth-icon" viewBox="0 0 24 24">
                     <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
                     <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>

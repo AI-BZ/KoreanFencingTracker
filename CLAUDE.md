@@ -6,11 +6,12 @@
 
 ---
 
-## 🏗️ 6대 서브도메인 아키텍처
+## 🏗️ 7대 서브도메인 아키텍처
 
 ### 서브도메인 구조
 | 서브도메인 | 용도 | 상태 | 포트 |
 |------------|------|------|------|
+| **account.fencingmind.ai** | 인증/프로필/구독 관리 | 🔨 개발 중 | 70 |
 | **data.fencingmind.ai** | 펜싱 데이터 (대회, 선수, 랭킹) | ✅ 운영 중 | 71 |
 | **club.fencingmind.ai** | 클럽 관리 SaaS (클럽/코치/선수/학부모) | 🔨 개발 중 | 72 |
 | **community.fencingmind.ai** | 커뮤니티 (포럼, Q&A) | 📋 계획 | 73 |
@@ -21,6 +22,7 @@
 ### 수익 모델 요약
 | 서비스 | 모델 | 예상 수익 |
 |--------|------|----------|
+| Account | 직접 수익 없음 (인프라) | - |
 | Data | API 구독 ($99~999/월) | B2B |
 | Club | SaaS 구독 ($9.99~299/월) | B2C/B2B |
 | Community | 광고 + 프리미엄 멤버십 | B2C |
@@ -93,6 +95,7 @@ member_services (서비스별 구독)
 ```
 main                           # 프로덕션 (보호됨)
 ├── develop                    # 통합 개발
+│   ├── feature/account/*       # account.fencingmind.ai
 │   ├── feature/data/*         # data.fencingmind.ai
 │   ├── feature/club/*         # club.fencingmind.ai
 │   ├── feature/community/*    # community.fencingmind.ai
@@ -106,6 +109,7 @@ main                           # 프로덕션 (보호됨)
 ### Worktree 설정 명령어
 ```bash
 # 서브도메인별 worktree 생성
+git worktree add ../FencingMind-account feature/account/main
 git worktree add ../FencingMind-data   feature/data/main
 git worktree add ../FencingMind-club   feature/club/main
 git worktree add ../FencingMind-community feature/community/main
@@ -146,6 +150,11 @@ FencingMind/
 │       └── member/
 │
 ├── services/                    # 서브도메인별 서비스 ✅
+│   ├── account/                # account.fencingmind.ai 🔨 개발 중
+│   │   ├── app/
+│   │   ├── templates/
+│   │   └── tests/
+│   │
 │   ├── data/                    # data.fencingmind.ai ✅ 운영 중
 │   │   ├── app/                 # FastAPI 앱
 │   │   ├── scraper/             # 스크래퍼
@@ -204,6 +213,9 @@ cd /Users/gyejinpark/Documents/GitHub/FencingCommunityDropShipping
 
 # data 서비스 실행 (packages 경로 포함 필수!)
 PYTHONPATH="${PWD}:${PWD}/packages:${PWD}/services/data" python -m uvicorn services.data.app.server:app --host 0.0.0.0 --port 71
+
+# account 서비스 실행
+PYTHONPATH="${PWD}:${PWD}/packages:${PWD}/services/account" python -m uvicorn services.account.app.server:app --host 0.0.0.0 --port 70
 
 # 또는 환경변수 export 후 실행
 export PYTHONPATH="${PWD}:${PWD}/packages:${PWD}/services/data"

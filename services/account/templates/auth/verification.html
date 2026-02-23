@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}본인 인증 - Korean Fencing Tracker{% endblock %}
+{% block title %}본인 인증 - FencingMind{% endblock %}
 
 {% block content %}
 <div class="verification-container">
@@ -493,7 +493,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const formData = new FormData(uploadForm);
 
         try {
-            const response = await fetch('/auth/verification/upload', {
+            const response = await fetch('/account/verification/upload', {
                 method: 'POST',
                 body: formData
             });

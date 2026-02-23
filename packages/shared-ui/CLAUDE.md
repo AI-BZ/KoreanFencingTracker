@@ -1,33 +1,65 @@
 # shared-ui - 공유 UI 패키지
 
 **경로:** packages/shared-ui/
-**상태:** 📋 구현 예정
+**상태:** ✅ 구현 완료
 
 ---
 
 ## 패키지 개요
-모든 서브도메인이 공유하는 UI 컴포넌트
+모든 서브도메인이 공유하는 UI 컴포넌트와 디자인 시스템
+
+## 🔴🔴🔴 모든 서브도메인 필수 참조 🔴🔴🔴
+
+**모든 UI 개발 시 반드시 이 패키지의 디자인 시스템을 따라야 합니다.**
+
+```
+📖 필수 문서: packages/shared-ui/DESIGN_SYSTEM.md
+```
 
 ## 폴더 구조
 ```
 packages/shared-ui/
-├── components/          # UI 컴포넌트
-│   ├── buttons/         # 버튼
-│   ├── forms/           # 폼
-│   ├── modals/          # 모달
-│   ├── tables/          # 테이블
-│   └── cards/           # 카드
-├── layouts/             # 공통 레이아웃
-│   ├── header/          # 헤더
-│   ├── footer/          # 푸터
-│   └── sidebar/         # 사이드바
-└── styles/              # 공통 스타일
-    ├── variables.css    # CSS 변수
-    ├── reset.css        # CSS 리셋
-    └── utilities.css    # 유틸리티 클래스
+├── styles/
+│   ├── variables.css    # CSS 변수 (디자인 토큰) ⭐ 핵심
+│   ├── base.css         # 기본 스타일, 리셋
+│   └── components.css   # 공통 컴포넌트 스타일
+├── DESIGN_SYSTEM.md     # 디자인 시스템 문서 ⭐ 필독
+└── CLAUDE.md            # 이 파일
+```
+
+## 핵심 디자인 토큰
+
+### 색상 (Colors)
+```css
+/* 배경 */
+--fm-bg-primary: #0a0a0f;
+--fm-bg-card: rgba(18, 18, 26, 0.85);
+
+/* 강조 - 태극기 컬러 */
+--fm-accent-primary: #c9302c;    /* 빨강 */
+--fm-accent-secondary: #1e3a8a;  /* 파랑 */
+
+/* 메달 */
+--fm-medal-gold: #d4a574;
+--fm-medal-silver: #9ca3af;
+--fm-medal-bronze: #cd7f32;
+```
+
+### 컴포넌트 클래스
+```html
+<button class="fm-btn fm-btn-primary">버튼</button>
+<div class="fm-card">카드</div>
+<input class="fm-input">
+<table class="fm-table">테이블</table>
+<span class="fm-badge fm-badge-gold">1위</span>
 ```
 
 ---
 
 ## Git 브랜치 규칙
 🔴 **CRITICAL**: 이 패키지 수정 시 `feature/shared/*` 브랜치 사용
+
+## 중요 규칙
+- 하드코딩 색상 금지 → CSS 변수 사용
+- 라이트 모드 금지 → 다크 모드만
+- 인라인 스타일 금지 → 클래스 사용

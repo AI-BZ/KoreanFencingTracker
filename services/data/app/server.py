@@ -16,6 +16,7 @@ from pathlib import Path
 from collections import defaultdict
 
 from fastapi import FastAPI, Query, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
@@ -104,8 +105,9 @@ def _normalize_de_bracket_for_api(de_bracket: Dict) -> Dict:
 
     return result
 
-# Auth 모듈
-from app.auth.router import router as auth_router, get_current_member
+# Auth - account 서비스로의 리다이렉트 shim + 로컬 JWT 검증
+from shared_core.auth.jwt import get_current_member
+from app.auth.router import router as auth_router
 
 # Club Management 모듈 (SaaS)
 from app.club import club_router
@@ -183,6 +185,28 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# CORS 미들웨어 (서브도메인 간 API 호출 허용)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://account.fencingmind.ai",
+        "https://club.fencingmind.ai",
+        "https://community.fencingmind.ai",
+        "https://shop.fencingmind.ai",
+        "https://blog.fencingmind.ai",
+        "https://analytics.fencingmind.ai",
+        "http://localhost:70",  # account dev
+        "http://localhost:72",  # club dev
+        "http://localhost:73",  # community dev
+        "http://localhost:74",  # shop dev
+        "http://localhost:75",  # blog dev
+        "http://localhost:76",  # analytics dev
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # 정적 파일 및 템플릿
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
@@ -190,7 +214,7 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 # i18n 미들웨어 추가
 app.add_middleware(LanguageMiddleware)
 
-# Auth 라우터 등록
+# Auth 리다이렉트 shim (기존 템플릿 호환성)
 app.include_router(auth_router)
 
 # Club Management 라우터 등록 (SaaS)
