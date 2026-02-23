@@ -56,62 +56,18 @@ SAMPLE_PARENT_MEMBER = {
 
 @pytest.fixture
 def sample_member():
-    """테스트용 회원 데이터"""
     return SAMPLE_MEMBER.copy()
 
 
 @pytest.fixture
 def sample_parent_member():
-    """테스트용 부모 회원 데이터"""
     return SAMPLE_PARENT_MEMBER.copy()
 
 
 @pytest.fixture
-def access_token():
-    """테스트용 JWT 토큰"""
+def app_client():
+    """TestClient with mocked JWT settings."""
     with patch("shared_core.auth.jwt.get_shared_auth_settings") as mock_settings:
-        mock_settings.return_value = MagicMock(
-            JWT_SECRET_KEY="test-secret-key-for-unit-tests",
-            JWT_ALGORITHM="HS256",
-            JWT_ACCESS_TOKEN_EXPIRE_MINUTES=60,
-        )
-        token = create_access_token({
-            "member_id": SAMPLE_MEMBER_ID,
-            "email": "test@fencingmind.ai",
-            "member_type": "player",
-        })
-    return token
-
-
-@pytest.fixture
-def auth_headers(access_token):
-    """인증된 요청 헤더"""
-    return {"Authorization": f"Bearer {access_token}"}
-
-
-@pytest.fixture
-def mock_supabase():
-    """Mock Supabase client - chainable query builder"""
-    mock_client = MagicMock()
-    mock_table = MagicMock()
-    mock_client.table.return_value = mock_table
-    mock_table.select.return_value = mock_table
-    mock_table.insert.return_value = mock_table
-    mock_table.update.return_value = mock_table
-    mock_table.delete.return_value = mock_table
-    mock_table.eq.return_value = mock_table
-    mock_table.single.return_value = mock_table
-    mock_table.order.return_value = mock_table
-    return mock_client
-
-
-@pytest.fixture
-def app_client(mock_supabase):
-    """TestClient with mocked Supabase client + JWT settings."""
-    with (
-        patch("shared_core.db.client.get_supabase_client", return_value=mock_supabase),
-        patch("shared_core.auth.jwt.get_shared_auth_settings") as mock_settings,
-    ):
         mock_settings.return_value = MagicMock(
             JWT_SECRET_KEY="test-secret-key-for-unit-tests",
             JWT_ALGORITHM="HS256",

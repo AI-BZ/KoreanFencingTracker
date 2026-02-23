@@ -1,11 +1,42 @@
 """
 Profile Router tests
 """
+import uuid
+from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock, AsyncMock
 
 import pytest
 
-from tests.conftest import SAMPLE_MEMBER, SAMPLE_PARENT_MEMBER
+# Define sample data locally (avoid broken cross-package import)
+_MEMBER_ID = str(uuid.uuid4())
+_NOW = datetime.now(timezone.utc).isoformat()
+
+SAMPLE_MEMBER = {
+    "id": _MEMBER_ID,
+    "full_name": "박소윤",
+    "display_name": "B.S.",
+    "email": "test@fencingmind.ai",
+    "phone": "010-1234-5678",
+    "birth_date": "2005-03-15",
+    "member_type": "player",
+    "player_id": None,
+    "organization_id": None,
+    "verification_status": "pending",
+    "verified_at": None,
+    "privacy_public": True,
+    "marketing_consent": False,
+    "promotional_consent": False,
+    "created_at": _NOW,
+    "updated_at": _NOW,
+}
+
+SAMPLE_PARENT_MEMBER = {
+    **SAMPLE_MEMBER,
+    "id": str(uuid.uuid4()),
+    "member_type": "player_parent",
+    "full_name": "김부모",
+    "email": "parent@fencingmind.ai",
+}
 
 # Patch targets in profile router module
 _GCM = "services.account.app.profile.router.get_current_member"

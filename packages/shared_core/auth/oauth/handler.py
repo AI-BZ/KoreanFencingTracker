@@ -3,6 +3,8 @@ OAuth 핸들러
 
 OAuth 로그인 URL 생성, 토큰 교환 처리
 """
+import base64
+import hashlib
 import secrets
 from datetime import datetime, timedelta
 from typing import Optional
@@ -74,6 +76,9 @@ class OAuthHandler:
             scope = " ".join(config["scopes"])
             code_verifier = secrets.token_urlsafe(64)
             self._oauth_states[state]["code_verifier"] = code_verifier
+            code_challenge = base64.urlsafe_b64encode(
+                hashlib.sha256(code_verifier.encode("ascii")).digest()
+            ).rstrip(b"=").decode("ascii")
             auth_url = (
                 f"{config['authorize_url']}?"
                 f"client_id={client_id}&"
@@ -81,8 +86,8 @@ class OAuthHandler:
                 f"response_type=code&"
                 f"scope={scope}&"
                 f"state={state}&"
-                f"code_challenge={code_verifier}&"
-                f"code_challenge_method=plain"
+                f"code_challenge={code_challenge}&"
+                f"code_challenge_method=S256"
             )
         else:
             raise HTTPException(status_code=400, detail=f"지원하지 않는 제공자: {provider}")

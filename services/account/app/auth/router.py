@@ -121,7 +121,12 @@ async def oauth_callback(provider: str, code: str, state: str, request: Request)
         ).eq("provider_user_id", user_info["id"]).execute()
 
         if existing_oauth.data:
-            # 기존 회원 - 로그인
+            # 기존 회원 - 로그인: OAuth 토큰 갱신
+            supabase.table("oauth_connections").update({
+                "access_token": token_data["access_token"],
+                "refresh_token": token_data.get("refresh_token"),
+            }).eq("provider", provider).eq("provider_user_id", user_info["id"]).execute()
+
             member_id = existing_oauth.data[0]["member_id"]
             member = supabase.table("members").select("*").eq("id", member_id).single().execute()
 
@@ -140,6 +145,7 @@ async def oauth_callback(provider: str, code: str, state: str, request: Request)
                     key="access_token",
                     value=access_token,
                     httponly=True,
+                    secure=True,
                     max_age=60 * 60 * 24,  # 24시간
                     samesite="lax",
                     domain=os.getenv("COOKIE_DOMAIN", ".fencingmind.ai"),
@@ -262,6 +268,8 @@ async def register_member(
         "provider_name": pending.get("name"),
         "is_primary": True,
         "for_promotional": pending.get("promotional", False),
+        "access_token": pending.get("access_token"),
+        "refresh_token": pending.get("refresh_token"),
     }
 
     supabase.table("oauth_connections").insert(oauth_data).execute()
@@ -279,6 +287,7 @@ async def register_member(
         key="access_token",
         value=access_token,
         httponly=True,
+        secure=True,
         max_age=60 * 60 * 24,
         samesite="lax",
         domain=os.getenv("COOKIE_DOMAIN", ".fencingmind.ai"),
@@ -295,7 +304,7 @@ async def register_member(
 async def logout():
     """로그아웃"""
     response = RedirectResponse(url="/", status_code=303)
-    response.delete_cookie("access_token", domain=os.getenv("COOKIE_DOMAIN", ".fencingmind.ai"))
+    response.delete_cookie("access_token", domain=os.getenv("COOKIE_DOMAIN", ".fencingmind.ai"), secure=True)
     return response
 
 
@@ -303,5 +312,5 @@ async def logout():
 async def logout_get():
     """로그아웃 (GET)"""
     response = RedirectResponse(url="/", status_code=303)
-    response.delete_cookie("access_token", domain=os.getenv("COOKIE_DOMAIN", ".fencingmind.ai"))
+    response.delete_cookie("access_token", domain=os.getenv("COOKIE_DOMAIN", ".fencingmind.ai"), secure=True)
     return response
