@@ -107,8 +107,6 @@ def _normalize_de_bracket_for_api(de_bracket: Dict) -> Dict:
 # Auth 모듈
 from app.auth.router import router as auth_router, get_current_member
 
-# Club Management 모듈 (SaaS)
-from app.club import club_router
 
 # 글로벌 연령 그룹 정렬 순서 (FIE 표준)
 AGE_GROUP_ORDER = ["Y8", "Y10", "Y12", "Y14", "Cadet", "Junior", "Veteran", "National"]
@@ -193,8 +191,6 @@ app.add_middleware(LanguageMiddleware)
 # Auth 라우터 등록
 app.include_router(auth_router)
 
-# Club Management 라우터 등록 (SaaS)
-app.include_router(club_router, prefix="/api")
 
 # 데이터 저장소 (메모리 캐시)
 _data_cache: Dict[str, Any] = {}
