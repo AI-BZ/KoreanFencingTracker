@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>오류 - FencingMind</title>
+    <link rel="stylesheet" href="/packages/shared-ui/styles/variables.css">
+    <link rel="stylesheet" href="/packages/shared-ui/styles/base.css">
+    <link rel="stylesheet" href="/packages/shared-ui/styles/components.css">
+    <style>
+        .error-page {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: var(--fm-space-6);
+        }
+
+        .error-card {
+            max-width: 420px;
+            width: 100%;
+            text-align: center;
+        }
+
+        .error-card .fm-card-header {
+            justify-content: center;
+            border-bottom: none;
+            margin-bottom: var(--fm-space-2);
+        }
+
+        .error-icon {
+            font-size: 3rem;
+            margin-bottom: var(--fm-space-4);
+            display: block;
+        }
+
+        .error-title {
+            font-size: var(--fm-text-2xl);
+            margin-bottom: var(--fm-space-2);
+        }
+
+        .error-subtitle {
+            color: var(--fm-text-secondary);
+            font-size: var(--fm-text-sm);
+            margin-bottom: var(--fm-space-6);
+        }
+
+        .error-message-box {
+            margin-bottom: var(--fm-space-8);
+        }
+
+        .error-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: var(--fm-space-3);
+        }
+
+        .error-buttons .fm-btn {
+            width: 100%;
+            padding: var(--fm-space-4) var(--fm-space-6);
+            font-size: var(--fm-text-base);
+        }
+    </style>
+</head>
+<body>
+    <div class="error-page">
+        <div class="fm-card error-card">
+            <span class="error-icon">&#9888;&#65039;</span>
+            <h1 class="error-title">FencingMind</h1>
+            <p class="error-subtitle">인증 처리 중 문제가 발생했습니다</p>
+
+            <div class="fm-alert fm-alert-danger error-message-box">
+                {{ error_message }}
+            </div>
+
+            <div class="error-buttons">
+                <a href="/auth/login" class="fm-btn fm-btn-primary">다시 시도</a>
+                <a href="/" class="fm-btn fm-btn-ghost">홈으로</a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

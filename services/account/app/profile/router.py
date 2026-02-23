@@ -9,10 +9,12 @@ from loguru import logger
 from shared_core.auth.jwt import get_current_member
 from shared_core.auth.models import (
     MemberResponse,
+    MemberUpdate,
     PrivacySettings,
     GuardianLink,
 )
 from shared_core.db.client import get_supabase_client
+from shared_core.privacy.masking import mask_korean_name
 
 router = APIRouter(tags=["profile"])
 
@@ -29,6 +31,29 @@ async def get_my_profile(request: Request):
         raise HTTPException(status_code=401, detail="로그인이 필요합니다")
 
     return MemberResponse(**member)
+
+
+@router.patch("/me")
+async def update_my_profile(request: Request, data: MemberUpdate):
+    """내 프로필 수정"""
+    member = await get_current_member(request)
+    if not member:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다")
+
+    update_data = data.model_dump(exclude_none=True)
+    if not update_data:
+        raise HTTPException(status_code=400, detail="수정할 항목이 없습니다")
+
+    if "full_name" in update_data:
+        update_data["display_name"] = mask_korean_name(update_data["full_name"])
+
+    supabase = get_supabase()
+    result = supabase.table("members").update(update_data).eq("id", member["id"]).execute()
+
+    if not result.data:
+        raise HTTPException(status_code=500, detail="프로필 수정 중 오류")
+
+    return MemberResponse(**result.data[0])
 
 
 @router.patch("/me/privacy")

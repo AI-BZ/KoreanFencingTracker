@@ -64,6 +64,7 @@ PYTHONPATH="${PWD}:${PWD}/packages:${PWD}/services/account" \
 | Method | Path | 기능 |
 |--------|------|------|
 | GET | /account/me | 내 프로필 |
+| PATCH | /account/me | 프로필 수정 |
 | PATCH | /account/me/privacy | 개인정보 설정 |
 | POST | /account/guardian/link | 보호자 연결 |
 

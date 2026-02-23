@@ -21,6 +21,7 @@ class OAuthHandler:
     def __init__(self):
         self._oauth_states = {}
         self._pending_registrations = {}
+        self._pending_redirects = {}
 
     def build_auth_url(self, provider: str, promotional: bool = False) -> str:
         """OAuth 인증 URL 생성"""

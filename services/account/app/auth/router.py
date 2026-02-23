@@ -98,8 +98,6 @@ async def oauth_login(provider: str, request: Request, promotional: bool = False
     if redirect and _is_safe_redirect(redirect):
         state = auth_url.split("state=")[1].split("&")[0] if "state=" in auth_url else None
         if state:
-            if not hasattr(_oauth_handler, '_pending_redirects'):
-                _oauth_handler._pending_redirects = {}
             _oauth_handler._pending_redirects[state] = redirect
     return RedirectResponse(url=auth_url)
 
@@ -134,7 +132,7 @@ async def oauth_callback(provider: str, code: str, state: str, request: Request)
                     "member_type": member.data["member_type"],
                 })
 
-                redirect_url = getattr(_oauth_handler, '_pending_redirects', {}).pop(state, None)
+                redirect_url = _oauth_handler._pending_redirects.pop(state, None)
                 if redirect_url and not _is_safe_redirect(redirect_url):
                     redirect_url = None
                 response = RedirectResponse(url=redirect_url or "/", status_code=303)
@@ -161,7 +159,10 @@ async def oauth_callback(provider: str, code: str, state: str, request: Request)
 
     except Exception as e:
         logger.exception(f"OAuth 콜백 처리 오류: {e}")
-        raise HTTPException(status_code=500, detail=f"인증 처리 중 오류 발생: {str(e)}")
+        return _templates.TemplateResponse("auth/error.html", {
+            "request": request,
+            "error_message": "인증 처리 중 오류가 발생했습니다. 다시 시도해주세요.",
+        }, status_code=500)
 
 
 # =============================================
