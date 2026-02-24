@@ -1,0 +1,734 @@
+{% extends "base.html" %}
+
+{% block title %}학부모 대시보드 - FencingMind Club{% endblock %}
+
+{% block extra_css %}
+<style>
+.parent-dashboard {
+    padding: 1.5rem 0;
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+/* Welcome Card */
+.welcome-card {
+    background: linear-gradient(135deg, var(--accent-secondary) 0%, #1e506a 100%);
+    border: 1px solid var(--border-light);
+    border-radius: 16px;
+    padding: 1.5rem 2rem;
+    margin-bottom: 1.5rem;
+}
+
+.welcome-card h1 {
+    font-size: 1.4rem;
+    color: var(--text-primary);
+    margin-bottom: 0.25rem;
+}
+
+.welcome-card .club-name {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+/* Quick Actions */
+.quick-actions {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+}
+
+@media (max-width: 400px) {
+    .quick-actions { grid-template-columns: 1fr; }
+}
+
+.quick-action-btn {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1rem;
+    text-align: center;
+    text-decoration: none;
+    color: var(--text-primary);
+    transition: all 0.2s;
+    backdrop-filter: blur(10px);
+}
+
+.quick-action-btn:hover {
+    border-color: var(--border-light);
+    background: var(--bg-card-hover);
+}
+
+.quick-action-btn .icon {
+    font-size: 1.4rem;
+    margin-bottom: 0.4rem;
+}
+
+.quick-action-btn .label {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+/* Section Title */
+.section-title {
+    font-size: 1.1rem;
+    color: var(--text-primary);
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Child Cards */
+.child-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+    backdrop-filter: blur(10px);
+}
+
+.child-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.child-avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: var(--accent-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-primary);
+    font-weight: 700;
+    font-size: 1.1rem;
+    flex-shrink: 0;
+}
+
+.child-meta h3 {
+    color: var(--text-primary);
+    font-size: 1rem;
+    margin-bottom: 0.15rem;
+}
+
+.child-meta p {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
+/* Attendance Summary in Child Card */
+.attendance-summary {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+}
+
+.att-stat {
+    flex: 1;
+    background: var(--bg-tertiary);
+    border-radius: 8px;
+    padding: 0.6rem 0.75rem;
+    text-align: center;
+}
+
+.att-stat .value {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.att-stat .value.good { color: var(--success-color); }
+.att-stat .value.warning { color: var(--warning-color); }
+
+.att-stat .label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-top: 0.1rem;
+}
+
+/* Attendance Detail List */
+.att-detail-toggle {
+    background: none;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 0.5rem 0.75rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 0.8rem;
+    width: 100%;
+    text-align: center;
+    transition: all 0.2s;
+}
+
+.att-detail-toggle:hover {
+    border-color: var(--border-light);
+    color: var(--text-primary);
+}
+
+.att-detail-content {
+    display: none;
+    margin-top: 0.75rem;
+}
+
+.att-detail-content.show { display: block; }
+
+.att-record {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.4rem 0;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 0.85rem;
+}
+
+.att-record:last-child { border-bottom: none; }
+
+.att-date { color: var(--text-secondary); }
+.att-time { color: var(--text-muted); font-size: 0.8rem; }
+
+.att-type-badge {
+    display: inline-block;
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 500;
+}
+
+.att-type-badge.regular {
+    background: rgba(59, 130, 246, 0.15);
+    color: var(--info-color);
+}
+
+.att-type-badge.lesson {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--success-color);
+}
+
+/* Lessons Section */
+.lesson-list { margin-top: 0.75rem; }
+
+.lesson-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.6rem 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.lesson-item:last-child { border-bottom: none; }
+
+.lesson-title {
+    color: var(--text-primary);
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+
+.lesson-coach {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
+.lesson-schedule {
+    text-align: right;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.lesson-status {
+    display: inline-block;
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.65rem;
+    font-weight: 500;
+}
+
+.lesson-status.active {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--success-color);
+}
+
+.lesson-status.scheduled {
+    background: rgba(59, 130, 246, 0.15);
+    color: var(--info-color);
+}
+
+/* Info Panel */
+.info-panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+    backdrop-filter: blur(10px);
+}
+
+.info-panel p {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+/* Lesson Package Card */
+.pkg-summary {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.pkg-stat {
+    flex: 1;
+    background: var(--bg-tertiary);
+    border-radius: 8px;
+    padding: 0.6rem 0.75rem;
+    text-align: center;
+}
+
+.pkg-stat .value {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--accent-gold, #d4a574);
+}
+
+.pkg-stat .value.low {
+    color: var(--warning-color);
+}
+
+.pkg-stat .label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-top: 0.1rem;
+}
+
+.pkg-detail {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.4rem 0;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 0.85rem;
+}
+
+.pkg-detail:last-child {
+    border-bottom: none;
+}
+
+.pkg-detail .coach {
+    color: var(--text-secondary);
+}
+
+.pkg-detail .sessions {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+/* States */
+.loading {
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-muted);
+}
+
+.empty-state {
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-muted);
+}
+
+.empty-state p {
+    margin-top: 0.5rem;
+    font-size: 0.9rem;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="parent-dashboard container">
+    <div class="welcome-card">
+        <h1 id="welcomeText">학부모 대시보드</h1>
+        <p class="club-name" id="clubName">로딩 중...</p>
+    </div>
+
+    <div class="quick-actions">
+        <a href="/api/club/checkin" class="quick-action-btn">
+            <div class="icon">&#128205;</div>
+            <div class="label">출석 현황</div>
+        </a>
+        <a href="/api/schedule/page" class="quick-action-btn">
+            <div class="icon">&#128197;</div>
+            <div class="label">수업 일정</div>
+        </a>
+        <a href="#fees" class="quick-action-btn">
+            <div class="icon">&#128176;</div>
+            <div class="label">비용 내역</div>
+        </a>
+        <a href="#lessons" class="quick-action-btn">
+            <div class="icon">&#128218;</div>
+            <div class="label">레슨 현황</div>
+        </a>
+    </div>
+
+    <!-- Children Attendance -->
+    <h2 class="section-title">&#128102; 자녀 출석 현황</h2>
+    <div id="childrenSection">
+        <div class="loading">자녀 정보 로딩 중</div>
+    </div>
+
+    <!-- Children Lessons -->
+    <h2 class="section-title" id="lessons">&#128218; 자녀 레슨 현황</h2>
+    <div id="lessonsSection">
+        <div class="loading">레슨 정보 로딩 중</div>
+    </div>
+
+    <!-- Children Lesson Packages -->
+    <h2 class="section-title">&#127915; 자녀 레슨 패키지</h2>
+    <div id="childPackagesSection">
+        <div class="loading">패키지 정보 로딩 중</div>
+    </div>
+
+    <!-- Fees -->
+    <h2 class="section-title" id="fees">&#128176; 이번 달 비용</h2>
+    <div id="feeSection">
+        <div class="info-panel">
+            <p>비용 관리 기능이 곧 제공됩니다.</p>
+        </div>
+    </div>
+
+    <!-- Notifications -->
+    <h2 class="section-title">&#128276; 최근 알림</h2>
+    <div id="notificationSection">
+        <div class="info-panel">
+            <p>알림이 없습니다.</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const API_BASE = '/api/club';
+
+function getAuthHeaders() {
+    return { 'Authorization': `Bearer ${localStorage.getItem('access_token')}` };
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+    loadParentDashboard();
+});
+
+async function loadParentDashboard() {
+    try {
+        // Load basic dashboard info for welcome card
+        const response = await fetch(`${API_BASE}/dashboard`, { headers: getAuthHeaders() });
+        if (!response.ok) {
+            if (response.status === 401) {
+                window.location.href = '/auth/login?redirect=/api/club/';
+                return;
+            }
+            throw new Error('대시보드 로드 실패');
+        }
+
+        const data = await response.json();
+        document.getElementById('welcomeText').textContent =
+            `${data.member_name || '학부모'}님, 안녕하세요`;
+        document.getElementById('clubName').textContent =
+            data.organization_name || '';
+
+    } catch (error) {
+        console.error('대시보드 로드 오류:', error);
+    }
+
+    // Load children data (independent calls)
+    loadChildren();
+}
+
+async function loadChildren() {
+    const childrenSection = document.getElementById('childrenSection');
+    const lessonsSection = document.getElementById('lessonsSection');
+
+    try {
+        const response = await fetch(`${API_BASE}/parent/children`, { headers: getAuthHeaders() });
+
+        if (!response.ok) {
+            throw new Error('자녀 정보 로드 실패');
+        }
+
+        const children = await response.json();
+
+        if (!children || children.length === 0) {
+            childrenSection.innerHTML = `
+                <div class="empty-state">
+                    <p>연결된 자녀가 없습니다.</p>
+                    <p>코치에게 학부모-자녀 연결을 요청해주세요.</p>
+                </div>
+            `;
+            lessonsSection.innerHTML = `
+                <div class="empty-state">
+                    <p>자녀 연결 후 레슨 정보가 표시됩니다.</p>
+                </div>
+            `;
+            return;
+        }
+
+        // Render children attendance cards
+        renderChildrenCards(children);
+
+        // Load lessons and packages for each child
+        loadChildrenLessons(children);
+        loadChildrenPackages(children);
+
+    } catch (error) {
+        console.error('자녀 정보 오류:', error);
+        childrenSection.innerHTML = `
+            <div class="empty-state">
+                <p>자녀 정보를 불러올 수 없습니다.</p>
+            </div>
+        `;
+        lessonsSection.innerHTML = `
+            <div class="empty-state">
+                <p>레슨 정보를 불러올 수 없습니다.</p>
+            </div>
+        `;
+    }
+}
+
+function renderChildrenCards(children) {
+    const section = document.getElementById('childrenSection');
+
+    section.innerHTML = children.map(child => {
+        const initial = (child.full_name || '?')[0];
+        const attRate = child.total_days_this_month > 0
+            ? Math.round((child.attendance_this_month / child.total_days_this_month) * 100)
+            : 0;
+        const rateClass = attRate >= 80 ? 'good' : attRate >= 50 ? 'warning' : '';
+
+        return `
+            <div class="child-card" data-child-id="${child.member_id}">
+                <div class="child-header">
+                    <div class="child-avatar">${initial}</div>
+                    <div class="child-meta">
+                        <h3>${child.full_name}</h3>
+                        <p>${child.member_type || '수강생'}</p>
+                    </div>
+                </div>
+                <div class="attendance-summary">
+                    <div class="att-stat">
+                        <div class="value ${rateClass}">${child.attendance_this_month}</div>
+                        <div class="label">이번달 출석</div>
+                    </div>
+                    <div class="att-stat">
+                        <div class="value">${child.total_days_this_month}</div>
+                        <div class="label">경과일</div>
+                    </div>
+                    <div class="att-stat">
+                        <div class="value ${rateClass}">${attRate}%</div>
+                        <div class="label">출석률</div>
+                    </div>
+                </div>
+                <button class="att-detail-toggle" onclick="toggleAttendanceDetail('${child.member_id}')">
+                    출석 상세 보기 &#9660;
+                </button>
+                <div class="att-detail-content" id="att-detail-${child.member_id}">
+                    <div class="loading">출석 기록 로딩 중</div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function toggleAttendanceDetail(childId) {
+    const content = document.getElementById(`att-detail-${childId}`);
+    const isVisible = content.classList.contains('show');
+
+    if (isVisible) {
+        content.classList.remove('show');
+        return;
+    }
+
+    content.classList.add('show');
+
+    // Load attendance if not loaded yet
+    if (content.querySelector('.loading')) {
+        try {
+            const response = await fetch(
+                `${API_BASE}/parent/children/${childId}/attendance`,
+                { headers: getAuthHeaders() }
+            );
+
+            if (!response.ok) throw new Error('출석 로드 실패');
+
+            const records = await response.json();
+            renderAttendanceDetail(content, records);
+
+        } catch (error) {
+            console.error('출석 상세 오류:', error);
+            content.innerHTML = '<div class="empty-state"><p>출석 기록을 불러올 수 없습니다.</p></div>';
+        }
+    }
+}
+
+function renderAttendanceDetail(container, records) {
+    if (!records || records.length === 0) {
+        container.innerHTML = '<div class="empty-state"><p>이번 달 출석 기록이 없습니다.</p></div>';
+        return;
+    }
+
+    const typeLabels = {
+        'regular': '정규', 'lesson': '레슨', 'competition': '대회',
+        'makeup': '보강', 'trial': '체험'
+    };
+
+    container.innerHTML = records.map(r => {
+        const type = r.attendance_type || 'regular';
+        const typeClass = type === 'lesson' ? 'lesson' : 'regular';
+        const checkIn = r.check_in_time
+            ? new Date(r.check_in_time).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+            : '';
+        const checkOut = r.check_out_time
+            ? new Date(r.check_out_time).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+            : '';
+
+        return `
+            <div class="att-record">
+                <div>
+                    <span class="att-date">${r.date}</span>
+                    <span class="att-type-badge ${typeClass}">${typeLabels[type] || type}</span>
+                </div>
+                <span class="att-time">${checkIn}${checkOut ? ' ~ ' + checkOut : ''}</span>
+            </div>
+        `;
+    }).join('');
+}
+
+async function loadChildrenLessons(children) {
+    const section = document.getElementById('lessonsSection');
+    let allHtml = '';
+
+    for (const child of children) {
+        try {
+            const response = await fetch(
+                `${API_BASE}/parent/children/${child.member_id}/lessons`,
+                { headers: getAuthHeaders() }
+            );
+
+            if (!response.ok) continue;
+
+            const lessons = await response.json();
+
+            if (lessons.length > 0) {
+                allHtml += `
+                    <div class="info-panel">
+                        <h3 style="color:var(--text-primary); margin-bottom:0.5rem; font-size:0.95rem;">
+                            ${child.full_name}의 레슨
+                        </h3>
+                        <div class="lesson-list">
+                            ${lessons.map(l => {
+                                const statusClass = l.status === 'active' ? 'active' : 'scheduled';
+                                const statusText = l.status === 'active' ? '진행중' :
+                                                   l.status === 'completed' ? '완료' : '예정';
+                                return `
+                                    <div class="lesson-item">
+                                        <div>
+                                            <div class="lesson-title">${l.title}</div>
+                                            <div class="lesson-coach">${l.coach_name || ''}</div>
+                                        </div>
+                                        <div class="lesson-schedule">
+                                            <div>${l.scheduled_date || ''}</div>
+                                            <span class="lesson-status ${statusClass}">${statusText}</span>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+
+        } catch (error) {
+            console.error(`${child.full_name} 레슨 로드 오류:`, error);
+        }
+    }
+
+    if (!allHtml) {
+        section.innerHTML = '<div class="empty-state"><p>등록된 레슨이 없습니다.</p></div>';
+    } else {
+        section.innerHTML = allHtml;
+    }
+}
+
+async function loadChildrenPackages(children) {
+    const section = document.getElementById('childPackagesSection');
+    let allHtml = '';
+
+    const typeLabels = {
+        '10_pack': '10회', '20_pack': '20회',
+        'single': '1회', 'custom': '커스텀'
+    };
+
+    for (const child of children) {
+        try {
+            // Use the packages API - parent can view child's packages
+            const response = await fetch(
+                `/api/lessons/packages?member_id=${child.member_id}`,
+                { headers: getAuthHeaders() }
+            );
+
+            if (!response.ok) continue;
+
+            const data = await response.json();
+            const packages = (data.items || []).filter(p => p.member_id === child.member_id);
+
+            if (packages.length > 0) {
+                const totalRemaining = packages.reduce((s, p) => s + (p.remaining_sessions || 0), 0);
+                const totalSessions = packages.reduce((s, p) => s + (p.total_sessions || 0), 0);
+
+                allHtml += `
+                    <div class="info-panel">
+                        <h3 style="color:var(--text-primary); margin-bottom:0.75rem; font-size:0.95rem;">
+                            ${child.full_name}의 레슨 패키지
+                        </h3>
+                        <div class="pkg-summary">
+                            <div class="pkg-stat">
+                                <div class="value ${totalRemaining <= 2 ? 'low' : ''}">${totalRemaining}</div>
+                                <div class="label">잔여 횟수</div>
+                            </div>
+                            <div class="pkg-stat">
+                                <div class="value">${totalSessions}</div>
+                                <div class="label">전체 횟수</div>
+                            </div>
+                            <div class="pkg-stat">
+                                <div class="value">${packages.length}</div>
+                                <div class="label">패키지 수</div>
+                            </div>
+                        </div>
+                        ${packages.map(p => `
+                            <div class="pkg-detail">
+                                <div>
+                                    <span class="coach">${p.coach_name || '코치'}</span>
+                                    <span style="color:var(--text-muted); font-size:0.75rem; margin-left:0.5rem;">${typeLabels[p.package_type] || p.package_type}</span>
+                                </div>
+                                <span class="sessions">${p.remaining_sessions} / ${p.total_sessions}회</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+        } catch (error) {
+            console.error(`${child.full_name} 패키지 로드 오류:`, error);
+        }
+    }
+
+    if (!allHtml) {
+        section.innerHTML = '<div class="empty-state"><p>등록된 레슨 패키지가 없습니다.</p></div>';
+    } else {
+        section.innerHTML = allHtml;
+    }
+}
+</script>
+{% endblock %}

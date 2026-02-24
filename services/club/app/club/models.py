@@ -9,21 +9,12 @@ from typing import Optional, List, Union
 from enum import Enum
 from pydantic import BaseModel, Field
 
+from shared_core.types.member import ClubRole
+
 
 # =============================================
 # Enums
 # =============================================
-
-class ClubRole(str, Enum):
-    """클럽 내 역할"""
-    owner = "owner"           # 클럽 소유자/대표
-    head_coach = "head_coach" # 수석 코치
-    coach = "coach"           # 코치
-    assistant = "assistant"   # 보조 코치
-    student = "student"       # 수강생
-    parent = "parent"         # 학부모
-    staff = "staff"           # 행정 스태프
-
 
 class MemberStatus(str, Enum):
     """회원 상태"""

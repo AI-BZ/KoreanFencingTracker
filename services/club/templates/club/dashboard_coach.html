@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}클럽 대시보드 - Korean Fencing Tracker{% endblock %}
+{% block title %}클럽 대시보드 - FencingMind Club{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -13,15 +13,17 @@
     justify-content: space-between;
     align-items: center;
     margin-bottom: 2rem;
+    flex-wrap: wrap;
+    gap: 1rem;
 }
 
 .dashboard-header h1 {
     font-size: 1.8rem;
-    color: #1a1a2e;
+    color: var(--text-primary);
 }
 
 .dashboard-header .club-name {
-    color: #667eea;
+    color: var(--info-color);
 }
 
 .dashboard-grid {
@@ -32,10 +34,19 @@
 }
 
 .dashboard-card {
-    background: white;
+    background: var(--bg-card);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border-radius: 12px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-sm);
     padding: 1.5rem;
+    transition: all 0.3s ease;
+}
+
+.dashboard-card:hover {
+    border-color: var(--border-light);
+    box-shadow: var(--shadow-md);
 }
 
 .card-header {
@@ -43,11 +54,13 @@
     justify-content: space-between;
     align-items: center;
     margin-bottom: 1rem;
+    background: transparent !important;
+    border-bottom: none !important;
 }
 
 .card-header h3 {
     font-size: 1rem;
-    color: #666;
+    color: var(--text-secondary) !important;
     font-weight: 500;
 }
 
@@ -58,32 +71,36 @@
 .card-value {
     font-size: 2.5rem;
     font-weight: 700;
-    color: #1a1a2e;
+    color: var(--text-primary);
+    font-family: 'Inter', sans-serif;
 }
 
 .card-value.highlight {
-    color: #667eea;
+    color: var(--info-color);
 }
 
 .card-value.warning {
-    color: #f5a623;
+    color: var(--warning-color);
 }
 
 .card-value.success {
-    color: #4caf50;
+    color: var(--success-color);
 }
 
 .card-subtitle {
     font-size: 0.9rem;
-    color: #888;
+    color: var(--text-muted);
     margin-top: 0.5rem;
 }
 
 /* Team Roster */
 .roster-section {
-    background: white;
+    background: var(--bg-card);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border-radius: 12px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-sm);
     padding: 1.5rem;
     margin-bottom: 2rem;
 }
@@ -91,7 +108,7 @@
 .roster-section h2 {
     font-size: 1.3rem;
     margin-bottom: 1rem;
-    color: #1a1a2e;
+    color: var(--text-primary);
 }
 
 .roster-table {
@@ -103,27 +120,28 @@
 .roster-table td {
     padding: 0.8rem;
     text-align: left;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid var(--border-color);
 }
 
 .roster-table th {
     font-weight: 600;
-    color: #666;
+    color: var(--text-secondary);
     font-size: 0.85rem;
     text-transform: uppercase;
+    letter-spacing: 0.03em;
 }
 
 .roster-table tr:hover {
-    background: #f8f9ff;
+    background: var(--bg-card-hover);
 }
 
 .roster-table tr.dragging {
     opacity: 0.5;
-    background: #e3f2fd;
+    background: rgba(59, 130, 246, 0.1);
 }
 
 .roster-table tr.drag-over {
-    border-top: 2px solid #667eea;
+    border-top: 2px solid var(--info-color);
 }
 
 .roster-table tr[draggable="true"] {
@@ -135,7 +153,7 @@
 }
 
 .drag-handle {
-    color: #ccc;
+    color: var(--text-muted);
     margin-right: 0.5rem;
     cursor: grab;
 }
@@ -166,7 +184,7 @@
     gap: 0.25rem;
     margin-bottom: 1rem;
     padding: 0.25rem;
-    background: #f5f5f5;
+    background: var(--bg-tertiary);
     border-radius: 8px;
     overflow-x: auto;
 }
@@ -178,8 +196,8 @@
     padding: 0.5rem 1rem;
     border: none;
     border-radius: 6px;
-    background: transparent;
-    color: #666;
+    background: transparent !important;
+    color: var(--text-secondary) !important;
     font-size: 0.9rem;
     font-weight: 500;
     cursor: pointer;
@@ -188,12 +206,13 @@
 }
 
 .age-tab:hover {
-    background: #e8e8e8;
+    background: var(--bg-card-hover) !important;
+    color: var(--text-primary) !important;
 }
 
 .age-tab.active {
-    background: #667eea;
-    color: white;
+    background: var(--info-color) !important;
+    color: var(--text-primary) !important;
 }
 
 .tab-count {
@@ -209,13 +228,13 @@
 }
 
 .age-tab:not(.active) .tab-count {
-    background: #ddd;
-    color: #666;
+    background: rgba(255, 255, 255, 0.1) !important;
+    color: var(--text-secondary) !important;
 }
 
 .age-tab.active .tab-count {
-    background: rgba(255,255,255,0.3);
-    color: white;
+    background: rgba(255, 255, 255, 0.25) !important;
+    color: var(--text-primary) !important;
 }
 
 /* Age group badge */
@@ -228,34 +247,39 @@
 }
 
 .age-group-badge.elementary {
-    background: #e8f5e9;
-    color: #2e7d32;
+    background: rgba(16, 185, 129, 0.15) !important;
+    color: var(--success-color) !important;
+    border: 1px solid rgba(16, 185, 129, 0.3) !important;
 }
 
 .age-group-badge.middle {
-    background: #e3f2fd;
-    color: #1565c0;
+    background: rgba(59, 130, 246, 0.15) !important;
+    color: var(--info-color) !important;
+    border: 1px solid rgba(59, 130, 246, 0.3) !important;
 }
 
 .age-group-badge.high {
-    background: #fff3e0;
-    color: #e65100;
+    background: rgba(245, 158, 11, 0.15) !important;
+    color: var(--warning-color) !important;
+    border: 1px solid rgba(245, 158, 11, 0.3) !important;
 }
 
 .age-group-badge.university {
-    background: #f3e5f5;
-    color: #7b1fa2;
+    background: rgba(139, 92, 246, 0.15) !important;
+    color: #a78bfa !important;
+    border: 1px solid rgba(139, 92, 246, 0.3) !important;
 }
 
 .age-group-badge.adult {
-    background: #fce4ec;
-    color: #c2185b;
+    background: rgba(236, 72, 153, 0.15) !important;
+    color: #f472b6 !important;
+    border: 1px solid rgba(236, 72, 153, 0.3) !important;
 }
 
 /* Inactive Section */
 .inactive-section {
     margin-top: 1.5rem;
-    border-top: 1px solid #eee;
+    border-top: 1px solid var(--border-color);
     padding-top: 1rem;
 }
 
@@ -269,7 +293,7 @@
 }
 
 .inactive-header:hover {
-    background: #f9f9f9;
+    background: var(--bg-card-hover);
     margin: 0 -1rem;
     padding: 0.5rem 1rem;
     border-radius: 8px;
@@ -277,7 +301,7 @@
 
 .inactive-header h3 {
     font-size: 1.1rem;
-    color: #666;
+    color: var(--text-secondary);
     margin: 0;
     display: flex;
     align-items: center;
@@ -312,32 +336,36 @@
 }
 
 .badge.transfer {
-    background: #ffebee;
-    color: #c62828;
+    background: rgba(239, 68, 68, 0.15) !important;
+    color: var(--danger-color) !important;
+    border: 1px solid rgba(239, 68, 68, 0.3) !important;
 }
 
 .badge.current-team {
-    background: #e8f5e9;
-    color: #2e7d32;
+    background: rgba(16, 185, 129, 0.15) !important;
+    color: var(--success-color) !important;
+    border: 1px solid rgba(16, 185, 129, 0.3) !important;
 }
 
 /* Search Results */
 .search-results {
     max-height: 200px;
     overflow-y: auto;
-    border: 1px solid #eee;
+    border: 1px solid var(--border-color) !important;
     border-radius: 8px;
     margin-top: 0.5rem;
+    background: var(--bg-secondary) !important;
 }
 
 .search-result-item {
     padding: 0.75rem;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid var(--border-color);
     cursor: pointer;
+    color: var(--text-primary);
 }
 
 .search-result-item:hover {
-    background: #f5f5f5;
+    background: var(--bg-card-hover);
 }
 
 .search-result-item:last-child {
@@ -346,16 +374,17 @@
 
 .search-result-name {
     font-weight: 600;
+    color: var(--text-primary);
 }
 
 .search-result-team {
     font-size: 0.85rem;
-    color: #666;
+    color: var(--text-secondary);
 }
 
 .player-name {
     font-weight: 600;
-    color: #1a1a2e;
+    color: var(--text-primary);
 }
 
 .player-name a {
@@ -364,7 +393,7 @@
 }
 
 .player-name a:hover {
-    color: #667eea;
+    color: var(--accent-gold);
 }
 
 .role-badge {
@@ -376,18 +405,21 @@
 }
 
 .role-badge.coach {
-    background: #e3f2fd;
-    color: #1976d2;
+    background: rgba(59, 130, 246, 0.15) !important;
+    color: var(--info-color) !important;
+    border: 1px solid rgba(59, 130, 246, 0.3) !important;
 }
 
 .role-badge.student {
-    background: #f3e5f5;
-    color: #7b1fa2;
+    background: rgba(139, 92, 246, 0.15) !important;
+    color: #a78bfa !important;
+    border: 1px solid rgba(139, 92, 246, 0.3) !important;
 }
 
 .role-badge.owner {
-    background: #fff3e0;
-    color: #e65100;
+    background: rgba(245, 158, 11, 0.15) !important;
+    color: var(--warning-color) !important;
+    border: 1px solid rgba(245, 158, 11, 0.3) !important;
 }
 
 .weapon-badge {
@@ -395,27 +427,31 @@
     padding: 0.2rem 0.5rem;
     border-radius: 4px;
     font-size: 0.75rem;
-    background: #f5f5f5;
-    color: #666;
+    background: rgba(212, 165, 116, 0.2) !important;
+    color: var(--accent-gold) !important;
+    border: 1px solid rgba(212, 165, 116, 0.3) !important;
 }
 
 .stat-value {
     font-weight: 600;
-    color: #667eea;
+    color: var(--accent-gold);
 }
 
 /* Today's Attendance */
 .attendance-section {
-    background: white;
+    background: var(--bg-card);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border-radius: 12px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-sm);
     padding: 1.5rem;
 }
 
 .attendance-section h2 {
     font-size: 1.3rem;
     margin-bottom: 1rem;
-    color: #1a1a2e;
+    color: var(--text-primary);
 }
 
 .checkin-list {
@@ -429,7 +465,7 @@
     justify-content: space-between;
     align-items: center;
     padding: 0.8rem 0;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid var(--border-color);
 }
 
 .checkin-item:last-child {
@@ -438,16 +474,17 @@
 
 .checkin-name {
     font-weight: 600;
+    color: var(--text-primary);
 }
 
 .checkin-time {
-    color: #888;
+    color: var(--text-muted);
     font-size: 0.9rem;
 }
 
 .checkin-type {
     font-size: 0.8rem;
-    color: #667eea;
+    color: var(--info-color);
 }
 
 /* Alerts */
@@ -465,18 +502,21 @@
 }
 
 .alert.warning {
-    background: #fff8e1;
-    border: 1px solid #ffcc02;
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    color: var(--warning-color);
 }
 
 .alert.info {
-    background: #e3f2fd;
-    border: 1px solid #90caf9;
+    background: rgba(59, 130, 246, 0.1);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    color: var(--info-color);
 }
 
 .alert.error {
-    background: #ffebee;
-    border: 1px solid #ef9a9a;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: var(--danger-color);
 }
 
 .alert-icon {
@@ -487,25 +527,23 @@
 .loading {
     text-align: center;
     padding: 3rem;
-    color: #888;
-}
-
-.loading::after {
-    content: '...';
-    animation: dots 1.5s infinite;
-}
-
-@keyframes dots {
-    0%, 20% { content: '.'; }
-    40% { content: '..'; }
-    60%, 100% { content: '...'; }
+    color: var(--text-muted);
 }
 
 /* Empty state */
 .empty-state {
     text-align: center;
     padding: 2rem;
-    color: #888;
+    color: var(--text-muted);
+}
+
+.empty-state a {
+    color: var(--accent-gold);
+    text-decoration: none;
+}
+
+.empty-state a:hover {
+    text-decoration: underline;
 }
 
 /* Actions */
@@ -514,26 +552,36 @@
     align-items: center;
     gap: 0.5rem;
     padding: 0.5rem 1rem;
-    background: #667eea;
-    color: white;
-    border: none;
+    background: linear-gradient(135deg, var(--accent-primary), #a02320) !important;
+    color: var(--text-primary) !important;
+    border: none !important;
     border-radius: 8px;
     cursor: pointer;
     font-size: 0.9rem;
-    transition: background 0.2s;
+    font-weight: 500;
+    transition: all 0.3s ease;
 }
 
 .action-btn:hover {
-    background: #5a6fd6;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 15px var(--glow-primary);
 }
 
 .action-btn.secondary {
-    background: #f5f5f5;
-    color: #333;
+    background: var(--bg-tertiary) !important;
+    color: var(--text-secondary) !important;
+    border: 1px solid var(--border-color) !important;
 }
 
 .action-btn.secondary:hover {
-    background: #eee;
+    background: var(--bg-card-hover) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-light) !important;
+}
+
+.action-btn.small {
+    padding: 0.35rem 0.75rem;
+    font-size: 0.8rem;
 }
 
 /* Role Label */
@@ -541,8 +589,8 @@
     display: inline-block;
     margin-left: 0.5rem;
     padding: 0.2rem 0.6rem;
-    background: #667eea;
-    color: white;
+    background: var(--info-color) !important;
+    color: var(--text-primary) !important;
     border-radius: 4px;
     font-size: 0.75rem;
     font-weight: 500;
@@ -551,7 +599,7 @@
 
 /* Owner Sections */
 .owner-section {
-    border-left: 4px solid #667eea;
+    border-left: 4px solid var(--accent-primary);
 }
 
 /* Report Grid */
@@ -564,23 +612,25 @@
 .report-item {
     text-align: center;
     padding: 1rem;
-    background: #f8f9ff;
+    background: var(--bg-tertiary);
     border-radius: 8px;
+    border: 1px solid var(--border-color);
 }
 
 .report-value {
     font-size: 1.5rem;
     font-weight: 700;
-    color: #1a1a2e;
+    color: var(--text-primary);
+    font-family: 'Inter', sans-serif;
 }
 
 .report-value.warning {
-    color: #f5a623;
+    color: var(--warning-color);
 }
 
 .report-label {
     font-size: 0.8rem;
-    color: #666;
+    color: var(--text-muted);
     margin-top: 0.3rem;
 }
 
@@ -592,7 +642,8 @@
 
 .message-item {
     padding: 1rem;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid var(--border-color);
+    background: transparent !important;
 }
 
 .message-item:last-child {
@@ -608,17 +659,17 @@
 
 .message-title {
     font-weight: 600;
-    color: #1a1a2e;
+    color: var(--text-primary);
 }
 
 .message-meta {
     font-size: 0.8rem;
-    color: #888;
+    color: var(--text-muted);
 }
 
 .message-content {
     font-size: 0.9rem;
-    color: #555;
+    color: var(--text-secondary);
 }
 
 .message-target {
@@ -626,8 +677,9 @@
     padding: 0.15rem 0.4rem;
     border-radius: 3px;
     font-size: 0.7rem;
-    background: #e3f2fd;
-    color: #1976d2;
+    background: rgba(59, 130, 246, 0.15) !important;
+    color: var(--info-color) !important;
+    border: 1px solid rgba(59, 130, 246, 0.3) !important;
 }
 
 /* Modal */
@@ -637,7 +689,7 @@
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0,0,0,0.5);
+    background: rgba(0, 0, 0, 0.7);
     z-index: 1000;
     display: flex;
     align-items: center;
@@ -645,7 +697,8 @@
 }
 
 .modal-content {
-    background: white;
+    background: var(--bg-secondary) !important;
+    border: 1px solid var(--border-light) !important;
     border-radius: 12px;
     width: 90%;
     max-width: 500px;
@@ -658,20 +711,26 @@
     justify-content: space-between;
     align-items: center;
     padding: 1rem 1.5rem;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid var(--border-color) !important;
 }
 
 .modal-header h3 {
     margin: 0;
     font-size: 1.1rem;
+    color: var(--text-primary);
 }
 
 .close-btn {
-    background: none;
-    border: none;
+    background: none !important;
+    border: none !important;
     font-size: 1.5rem;
     cursor: pointer;
-    color: #888;
+    color: var(--text-muted) !important;
+    transition: color 0.2s;
+}
+
+.close-btn:hover {
+    color: var(--text-primary) !important;
 }
 
 .modal-body {
@@ -686,17 +745,30 @@
     display: block;
     margin-bottom: 0.5rem;
     font-weight: 500;
-    color: #333;
+    color: var(--text-secondary);
 }
 
 .form-group input[type="text"],
+.form-group input[type="email"],
 .form-group textarea,
 .form-group select {
     width: 100%;
     padding: 0.75rem;
-    border: 1px solid #ddd;
+    border: 1px solid var(--border-color) !important;
     border-radius: 8px;
     font-size: 1rem;
+    background: var(--bg-tertiary) !important;
+    color: var(--text-primary) !important;
+    font-family: inherit;
+    transition: border-color 0.3s ease;
+}
+
+.form-group input:focus,
+.form-group textarea:focus,
+.form-group select:focus {
+    outline: none;
+    border-color: var(--accent-primary) !important;
+    box-shadow: 0 0 0 2px rgba(201, 48, 44, 0.2);
 }
 
 .form-group input[type="checkbox"] {
@@ -708,7 +780,7 @@
     justify-content: flex-end;
     gap: 0.5rem;
     padding: 1rem 1.5rem;
-    border-top: 1px solid #eee;
+    border-top: 1px solid var(--border-color);
 }
 
 /* Announcements List */
@@ -719,7 +791,7 @@
 
 .announcement-item {
     padding: 1rem;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid var(--border-color);
     transition: background 0.2s;
 }
 
@@ -728,12 +800,12 @@
 }
 
 .announcement-item:hover {
-    background: #f8f9ff;
+    background: var(--bg-card-hover);
 }
 
 .announcement-item.pinned {
-    background: #fff8e1;
-    border-left: 3px solid #ffc107;
+    background: rgba(245, 158, 11, 0.08);
+    border-left: 3px solid var(--warning-color);
 }
 
 .announcement-header {
@@ -745,24 +817,70 @@
 
 .announcement-title {
     font-weight: 600;
-    color: #1a1a2e;
+    color: var(--text-primary);
 }
 
 .pin-badge {
     font-size: 0.75rem;
-    color: #f5a623;
+    color: var(--warning-color);
 }
 
 .announcement-content {
     font-size: 0.9rem;
-    color: #555;
+    color: var(--text-secondary) !important;
     line-height: 1.5;
     margin-bottom: 0.5rem;
 }
 
 .announcement-meta {
     font-size: 0.8rem;
-    color: #888;
+    color: var(--text-muted);
+}
+
+/* Divider for modal */
+.modal-divider {
+    margin: 1.5rem 0;
+    border-top: 1px solid var(--border-color);
+    text-align: center;
+    position: relative;
+}
+
+.modal-divider span {
+    background: var(--bg-secondary);
+    padding: 0 1rem;
+    color: var(--text-muted);
+    position: relative;
+    top: -0.7rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .dashboard-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .dashboard-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .roster-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .age-group-tabs {
+        flex-wrap: nowrap;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .report-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .modal-content {
+        width: 95%;
+    }
 }
 </style>
 {% endblock %}
@@ -775,9 +893,8 @@
         </h1>
         <div class="actions" id="headerActions">
             <button class="action-btn" onclick="openAnnouncementModal()">
-                📢 공지 작성
+                공지 작성
             </button>
-            <!-- 회계관리 버튼은 owner에게만 동적으로 표시 -->
         </div>
     </div>
 
@@ -826,10 +943,10 @@
     <!-- Team Roster -->
     <div class="roster-section">
         <div class="roster-header">
-            <h2>🏆 소속 선수 현황</h2>
+            <h2>소속 선수 현황</h2>
             <div class="roster-actions">
-                <button class="action-btn small secondary" onclick="syncPlayers()" id="syncBtn">🔄 대회 데이터 동기화</button>
-                <button class="action-btn small secondary" onclick="openAddPlayerModal()">➕ 선수 추가</button>
+                <button class="action-btn small secondary" onclick="syncPlayers()" id="syncBtn">대회 데이터 동기화</button>
+                <button class="action-btn small secondary" onclick="openAddPlayerModal()">선수 추가</button>
             </div>
         </div>
 
@@ -861,7 +978,7 @@
         <!-- Inactive Players Section -->
         <div id="inactiveSection" class="inactive-section" style="display: none;">
             <div class="inactive-header" onclick="toggleInactiveSection()">
-                <span>🔻 미활동 선수 리스트 (3개월 이상 대회 미출전)</span>
+                <span>미활동 선수 리스트 (3개월 이상 대회 미출전)</span>
                 <span id="inactiveCount" class="badge">0</span>
             </div>
             <div id="inactiveContent" class="inactive-content" style="display: none;">
@@ -870,9 +987,9 @@
         </div>
     </div>
 
-    <!-- Announcements Section (공지사항) -->
+    <!-- Announcements Section -->
     <div class="roster-section">
-        <h2>📢 클럽 공지사항</h2>
+        <h2>클럽 공지사항</h2>
         <div id="announcementsContent">
             <div class="loading">공지사항 로딩 중</div>
         </div>
@@ -880,18 +997,92 @@
 
     <!-- Today's Attendance -->
     <div class="attendance-section">
-        <h2>📋 오늘 출석 현황</h2>
+        <h2>오늘 출석 현황</h2>
         <div id="attendanceContent">
             <div class="loading">출석 데이터 로딩 중</div>
         </div>
     </div>
 
-    <!-- Owner-only Sections (감독 전용) -->
+    <!-- Lesson Packages Section -->
+    <div class="roster-section" id="lessonPackagesSection">
+        <div class="roster-header">
+            <h2>레슨 패키지 현황</h2>
+            <div class="roster-actions">
+                <button class="action-btn small" onclick="openPackageModal()">+ 패키지 등록</button>
+                <button class="action-btn small secondary" onclick="location.href='/api/club/lessons-page'">레슨 관리</button>
+            </div>
+        </div>
+        <div id="lessonPackagesContent">
+            <div class="loading">패키지 데이터 로딩 중</div>
+        </div>
+
+        <!-- Pending Lesson Requests -->
+        <div style="margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+            <h3 style="font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 0.75rem;">대기 중인 레슨 신청</h3>
+            <div id="pendingRequestsContent">
+                <div class="loading">신청 데이터 로딩 중</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Package Create Modal -->
+    <div id="packageModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>레슨 패키지 등록</h3>
+                <button class="close-btn" onclick="closePackageModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>수강생</label>
+                    <select id="pkgMemberId" required style="width:100%; padding:0.5rem; border:1px solid var(--border-color); border-radius:6px; background:var(--bg-secondary); color:var(--text-primary);">
+                        <option value="">선택</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>담당 코치</label>
+                    <select id="pkgCoachId" required style="width:100%; padding:0.5rem; border:1px solid var(--border-color); border-radius:6px; background:var(--bg-secondary); color:var(--text-primary);">
+                        <option value="">선택</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>패키지 유형</label>
+                    <select id="pkgType" required style="width:100%; padding:0.5rem; border:1px solid var(--border-color); border-radius:6px; background:var(--bg-secondary); color:var(--text-primary);">
+                        <option value="10_pack">10회 패키지</option>
+                        <option value="20_pack">20회 패키지</option>
+                        <option value="single">1회</option>
+                        <option value="custom">커스텀</option>
+                    </select>
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+                    <div class="form-group">
+                        <label>총 회수</label>
+                        <input type="number" id="pkgSessions" value="10" min="1" style="width:100%; padding:0.5rem; border:1px solid var(--border-color); border-radius:6px; background:var(--bg-secondary); color:var(--text-primary);">
+                    </div>
+                    <div class="form-group">
+                        <label>총 금액 (원)</label>
+                        <input type="number" id="pkgPrice" value="0" min="0" step="10000" style="width:100%; padding:0.5rem; border:1px solid var(--border-color); border-radius:6px; background:var(--bg-secondary); color:var(--text-primary);">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>만료일 (선택)</label>
+                    <input type="date" id="pkgExpires" style="width:100%; padding:0.5rem; border:1px solid var(--border-color); border-radius:6px; background:var(--bg-secondary); color:var(--text-primary);">
+                </div>
+                <div class="form-group">
+                    <label>메모</label>
+                    <textarea id="pkgNotes" rows="2" placeholder="메모 (선택)" style="width:100%; padding:0.5rem; border:1px solid var(--border-color); border-radius:6px; background:var(--bg-secondary); color:var(--text-primary);"></textarea>
+                </div>
+                <button class="action-btn" style="width:100%;" onclick="submitPackage()">패키지 등록</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Owner-only Sections -->
     <div id="ownerSections" style="display: none;">
         <!-- Director Messages -->
         <div class="dashboard-card owner-section" style="margin-top: 2rem;">
             <div class="card-header">
-                <h3>📣 감독 메세지</h3>
+                <h3>감독 메세지</h3>
                 <button class="action-btn secondary" onclick="openMessageModal()">+ 새 메세지</button>
             </div>
             <div id="directorMessages" class="messages-list">
@@ -902,7 +1093,7 @@
         <!-- Monthly Report -->
         <div class="dashboard-card owner-section" style="margin-top: 1.5rem;">
             <div class="card-header">
-                <h3>📊 월간 리포트</h3>
+                <h3>월간 리포트</h3>
                 <span class="icon">📈</span>
             </div>
             <div id="monthlyReport" class="report-content">
@@ -929,11 +1120,11 @@
     </div>
 </div>
 
-<!-- Announcement Modal (공지사항 작성) -->
+<!-- Announcement Modal -->
 <div id="announcementModal" class="modal" style="display: none;">
     <div class="modal-content">
         <div class="modal-header">
-            <h3>📢 공지사항 작성</h3>
+            <h3>공지사항 작성</h3>
             <button class="close-btn" onclick="closeAnnouncementModal()">&times;</button>
         </div>
         <div class="modal-body">
@@ -950,6 +1141,14 @@
                     <input type="checkbox" id="announcementPinned"> 상단 고정
                 </label>
             </div>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="announcementShareKakao"> 카카오톡으로도 공유
+                </label>
+                <small style="color: var(--text-muted); display: block; margin-top: 0.25rem;">
+                    체크 시 저장 후 카카오톡 공유 화면이 열립니다
+                </small>
+            </div>
         </div>
         <div class="modal-footer">
             <button class="action-btn secondary" onclick="closeAnnouncementModal()">취소</button>
@@ -958,11 +1157,11 @@
     </div>
 </div>
 
-<!-- Message Modal (감독 메세지) -->
+<!-- Message Modal -->
 <div id="messageModal" class="modal" style="display: none;">
     <div class="modal-content">
         <div class="modal-header">
-            <h3>📣 감독 메세지 작성</h3>
+            <h3>감독 메세지 작성</h3>
             <button class="close-btn" onclick="closeMessageModal()">&times;</button>
         </div>
         <div class="modal-body">
@@ -984,8 +1183,11 @@
             </div>
             <div class="form-group">
                 <label>
-                    <input type="checkbox" id="sendKakao"> 카카오톡으로도 발송
+                    <input type="checkbox" id="sendKakao"> 카카오톡으로도 공유
                 </label>
+                <small style="color: var(--text-muted); display: block; margin-top: 0.25rem;">
+                    체크 시 발송 후 카카오톡 공유 화면이 열립니다
+                </small>
             </div>
         </div>
         <div class="modal-footer">
@@ -995,35 +1197,34 @@
     </div>
 </div>
 
-<!-- Add Player Modal (선수 추가) -->
+<!-- Add Player Modal -->
 <div id="addPlayerModal" class="modal" style="display: none;">
     <div class="modal-content" style="max-width: 600px;">
         <div class="modal-header">
-            <h3>➕ 선수 추가</h3>
+            <h3>선수 추가</h3>
             <button class="close-btn" onclick="closeAddPlayerModal()">&times;</button>
         </div>
         <div class="modal-body">
-            <!-- 선수 검색 -->
-            <div class="search-section">
-                <label>선수 검색 (대회 출전 기록 보유자)</label>
-                <div class="search-box" style="display: flex; gap: 0.5rem;">
+            <!-- Player Search -->
+            <div class="search-section" style="background: transparent !important; border: none !important;">
+                <label style="color: var(--text-secondary);">선수 검색 (대회 출전 기록 보유자)</label>
+                <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
                     <input type="text" id="playerSearchInput" placeholder="선수 이름 입력..."
                            onkeyup="debouncePlayerSearch()" style="flex: 1;">
-                    <button class="action-btn secondary" onclick="searchPlayers()">🔍 검색</button>
+                    <button class="action-btn secondary" onclick="searchPlayers()">검색</button>
                 </div>
                 <div id="playerSearchResults" class="search-results" style="display: none;">
-                    <!-- 검색 결과가 여기에 표시됩니다 -->
                 </div>
             </div>
 
-            <div class="divider" style="margin: 1.5rem 0; border-top: 1px solid #eee; text-align: center;">
-                <span style="background: white; padding: 0 1rem; color: #999;">또는</span>
+            <div class="modal-divider">
+                <span>또는</span>
             </div>
 
-            <!-- 수동 등록 -->
+            <!-- Manual Registration -->
             <div class="manual-section">
-                <label>신규 선수 수동 등록 (대회 기록 없는 선수)</label>
-                <div class="form-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 0.5rem;">
+                <label style="color: var(--text-secondary);">신규 선수 수동 등록 (대회 기록 없는 선수)</label>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 0.5rem;">
                     <input type="text" id="newPlayerName" placeholder="이름 *" required>
                     <select id="newPlayerWeapon">
                         <option value="">무기 선택</option>
@@ -1035,7 +1236,7 @@
                     <input type="email" id="newPlayerEmail" placeholder="이메일">
                 </div>
                 <button class="action-btn" onclick="addNewPlayer()" style="margin-top: 1rem; width: 100%;">
-                    ➕ 신규 선수 등록
+                    신규 선수 등록
                 </button>
             </div>
         </div>
@@ -1045,26 +1246,36 @@
 
 {% block extra_js %}
 <script>
-// 테스트 모드: 기본 활성화 (로그인 시스템 완성 전까지)
-// TODO: 로그인 시스템 완성 후 false로 변경
-const TEST_MODE = true;
 const API_BASE = '/api/club';
-const API_SUFFIX = TEST_MODE ? '?test=1' : '';
 
-// 현재 사용자 역할 (서버에서 전달)
+// Current user role (from server)
 const USER_ROLE = '{{ user_role | default("coach") }}';
 
-// 대시보드 데이터 로드
+// ==================== Auth Helper Functions ====================
+
+function getAuthHeaders() {
+    return { 'Authorization': `Bearer ${localStorage.getItem('access_token')}` };
+}
+
+function getAuthHeadersJson() {
+    return { ...getAuthHeaders(), 'Content-Type': 'application/json' };
+}
+
+function handle401() {
+    window.location.href = '/auth/login?redirect=/api/club/';
+}
+
+// ==================== Dashboard Loading ====================
+
 async function loadDashboard() {
     try {
-        const headers = TEST_MODE ? {} : {
-            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-        };
-        const response = await fetch(`${API_BASE}/dashboard${API_SUFFIX}`, { headers });
+        const response = await fetch(`${API_BASE}/dashboard`, {
+            headers: getAuthHeaders()
+        });
 
         if (!response.ok) {
             if (response.status === 401) {
-                window.location.href = '/auth/login?redirect=/club/';
+                handle401();
                 return;
             }
             throw new Error('대시보드 로드 실패');
@@ -1078,7 +1289,7 @@ async function loadDashboard() {
         document.querySelector('.club-dashboard').innerHTML = `
             <div class="empty-state">
                 <p>대시보드를 불러올 수 없습니다.</p>
-                <p><a href="/auth/login?redirect=/club/">로그인</a>이 필요합니다.</p>
+                <p><a href="/auth/login?redirect=/api/club/">로그인</a>이 필요합니다.</p>
             </div>
         `;
     }
@@ -1093,10 +1304,10 @@ function renderDashboard(data) {
     document.getElementById('totalMembers').textContent = data.total_members;
     document.getElementById('studentCount').textContent = data.active_students;
     document.getElementById('coachCount').textContent = data.active_coaches;
-    document.getElementById('weeklyTraining').textContent = data.weekly_training || 5;  // 기본값
+    document.getElementById('weeklyTraining').textContent = data.weekly_training || 5;
     document.getElementById('upcomingComps').textContent = data.upcoming_competitions?.length || 0;
 
-    // Alerts - owner는 모든 알림, 코치는 비용 관련 필터링
+    // Alerts - owner sees all, coach filters out fee alerts
     const filteredAlerts = (USER_ROLE === 'owner')
         ? (data.alerts || [])
         : (data.alerts || []).filter(a => a.alert_type !== 'overdue_fee');
@@ -1105,27 +1316,25 @@ function renderDashboard(data) {
     // Attendance
     renderAttendance(data.today_checkins);
 
-    // Load team roster with activity status (활동/미활동 구분)
+    // Load team roster with activity status
     loadRosterWithStatus();
 
-    // Load age group data for tabs (나이그룹별 탭)
+    // Load age group data for tabs
     loadAgeGroupData();
 
-    // Load announcements (공지사항)
+    // Load announcements
     loadAnnouncements();
 
-    // 역할별 UI 조정
+    // Role-based UI
     setupRoleBasedUI();
 }
 
 function setupRoleBasedUI() {
-    // 회계관리 버튼 (owner만)
     if (USER_ROLE === 'owner') {
         addAccountingButton();
         loadOwnerSections();
     }
 
-    // 역할 표시
     const roleLabel = document.createElement('span');
     roleLabel.className = 'role-label';
     roleLabel.textContent = getRoleLabel(USER_ROLE);
@@ -1137,7 +1346,7 @@ function addAccountingButton() {
     if (!actionsDiv.querySelector('.accounting-btn')) {
         const btn = document.createElement('button');
         btn.className = 'action-btn secondary accounting-btn';
-        btn.innerHTML = '💰 회계관리';
+        btn.textContent = '회계관리';
         btn.onclick = () => location.href = '/club/accounting';
         actionsDiv.appendChild(btn);
     }
@@ -1187,17 +1396,20 @@ function renderAttendance(checkins) {
     `;
 }
 
-// 로스터 데이터 저장 (드래그 드롭용)
+// ==================== Roster Functions ====================
+
 let rosterData = { active: [], inactive: [] };
 
 async function loadRosterWithStatus() {
     try {
-        const headers = TEST_MODE ? {} : {
-            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-        };
-        const response = await fetch(`${API_BASE}/players/team/roster-status${API_SUFFIX}`, { headers });
+        const response = await fetch(`${API_BASE}/players/team/roster-status`, {
+            headers: getAuthHeaders()
+        });
 
-        if (!response.ok) throw new Error('로스터 로드 실패');
+        if (!response.ok) {
+            if (response.status === 401) { handle401(); return; }
+            throw new Error('로스터 로드 실패');
+        }
 
         const data = await response.json();
         rosterData = data;
@@ -1219,12 +1431,11 @@ function renderRosterWithStatus(data) {
     const active = data.active_players || data.active || [];
     const inactive = data.inactive_players || data.inactive || [];
 
-    // 활동 선수 테이블
     if (active.length === 0) {
         container.innerHTML = '<div class="empty-state">등록된 활동 선수가 없습니다. 대회 데이터 동기화 버튼을 클릭해보세요.</div>';
     } else {
         container.innerHTML = `
-            <div style="margin-bottom: 1rem; color: #666; font-size: 0.9rem;">
+            <div style="margin-bottom: 1rem; color: var(--text-secondary); font-size: 0.9rem;">
                 활동 선수 ${active.length}명 (최근 3개월 내 대회 출전)
             </div>
             <table class="roster-table" id="activeRosterTable">
@@ -1245,7 +1456,6 @@ function renderRosterWithStatus(data) {
         `;
     }
 
-    // 미활동 선수 섹션
     if (inactive.length > 0) {
         inactiveSection.style.display = 'block';
         inactiveCount.textContent = inactive.length;
@@ -1270,7 +1480,6 @@ function renderRosterWithStatus(data) {
         inactiveSection.style.display = 'none';
     }
 
-    // 드래그 앤 드롭 이벤트 설정
     setupDragAndDrop();
 }
 
@@ -1295,7 +1504,7 @@ function renderPlayerRow(player, status) {
                 <td>
                     ${player.player_id
                         ? `<a href="/player/${encodeURIComponent(player.name)}?id=${player.player_id}" class="action-btn secondary small">상세</a>`
-                        : '<span style="color:#999">미연결</span>'}
+                        : '<span style="color: var(--text-muted)">미연결</span>'}
                 </td>
             </tr>
         `;
@@ -1326,20 +1535,19 @@ function formatDate(dateStr) {
     return `${date.getFullYear()}.${String(date.getMonth()+1).padStart(2,'0')}.${String(date.getDate()).padStart(2,'0')}`;
 }
 
-// 미활동 섹션 토글
 function toggleInactiveSection() {
     const content = document.getElementById('inactiveContent');
     const header = document.querySelector('.inactive-header span:first-child');
     if (content.style.display === 'none') {
         content.style.display = 'block';
-        header.textContent = '🔺 미활동 선수 리스트 (3개월 이상 대회 미출전)';
+        header.textContent = '미활동 선수 리스트 (3개월 이상 대회 미출전)';
     } else {
         content.style.display = 'none';
-        header.textContent = '🔻 미활동 선수 리스트 (3개월 이상 대회 미출전)';
+        header.textContent = '미활동 선수 리스트 (3개월 이상 대회 미출전)';
     }
 }
 
-// ==================== 나이그룹 탭 Functions ====================
+// ==================== Age Group Tab Functions ====================
 
 let ageGroupData = {
     counts: {},
@@ -1349,12 +1557,12 @@ let currentAgeGroup = '전체';
 
 async function loadAgeGroupData() {
     try {
-        const headers = TEST_MODE ? {} : {
-            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-        };
-        const response = await fetch(`${API_BASE}/players/team/roster-by-age-group${API_SUFFIX}`, { headers });
+        const response = await fetch(`${API_BASE}/players/team/roster-by-age-group`, {
+            headers: getAuthHeaders()
+        });
 
         if (!response.ok) {
+            if (response.status === 401) { handle401(); return; }
             console.warn('나이그룹 데이터 로드 실패, 기본 모드 사용');
             return;
         }
@@ -1370,7 +1578,6 @@ async function loadAgeGroupData() {
 function updateAgeGroupTabs() {
     const counts = ageGroupData.counts || {};
 
-    // Update tab counts
     ['전체', '초등', '중등', '고등', '대학', '일반'].forEach(group => {
         const countEl = document.getElementById(`count-${group}`);
         if (countEl) {
@@ -1382,12 +1589,10 @@ function updateAgeGroupTabs() {
 function switchAgeGroup(group) {
     currentAgeGroup = group;
 
-    // Update active tab
     document.querySelectorAll('.age-tab').forEach(tab => {
         tab.classList.toggle('active', tab.dataset.group === group);
     });
 
-    // Render players for selected group
     renderAgeGroupPlayers(group);
 }
 
@@ -1409,7 +1614,7 @@ function renderAgeGroupPlayers(group) {
     };
 
     container.innerHTML = `
-        <div style="margin-bottom: 1rem; color: #666; font-size: 0.9rem;">
+        <div style="margin-bottom: 1rem; color: var(--text-secondary); font-size: 0.9rem;">
             ${group} 선수 ${players.length}명
         </div>
         <table class="roster-table" id="activeRosterTable">
@@ -1443,7 +1648,7 @@ function renderAgeGroupPlayers(group) {
                             <td>
                                 ${player.player_id
                                     ? `<a href="/player/${encodeURIComponent(player.name)}?id=${player.player_id}" class="action-btn secondary small">상세</a>`
-                                    : '<span style="color:#999">미연결</span>'}
+                                    : '<span style="color: var(--text-muted)">미연결</span>'}
                             </td>
                         </tr>
                     `;
@@ -1453,7 +1658,8 @@ function renderAgeGroupPlayers(group) {
     `;
 }
 
-// 드래그 앤 드롭 설정
+// ==================== Drag and Drop ====================
+
 function setupDragAndDrop() {
     const rows = document.querySelectorAll('.roster-table tbody tr[draggable="true"]');
     const activeBody = document.getElementById('activeRosterBody');
@@ -1505,20 +1711,15 @@ async function handleDrop(e) {
     const currentStatus = draggedRow.dataset.status;
     const targetStatus = this.id === 'activeRosterBody' ? 'active' : 'inactive';
 
-    if (currentStatus === targetStatus) return; // 같은 리스트면 무시
+    if (currentStatus === targetStatus) return;
 
     const memberId = draggedRow.dataset.memberId;
     const playerId = draggedRow.dataset.playerId;
 
     try {
-        const headers = TEST_MODE ? { 'Content-Type': 'application/json' } : {
-            'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
-            'Content-Type': 'application/json'
-        };
-
-        const response = await fetch(`${API_BASE}/players/team/move-player${API_SUFFIX}`, {
+        const response = await fetch(`${API_BASE}/players/team/move-player`, {
             method: 'POST',
-            headers,
+            headers: getAuthHeadersJson(),
             body: JSON.stringify({
                 member_id: parseInt(memberId) || null,
                 player_id: playerId || null,
@@ -1526,9 +1727,11 @@ async function handleDrop(e) {
             })
         });
 
-        if (!response.ok) throw new Error('이동 실패');
+        if (!response.ok) {
+            if (response.status === 401) { handle401(); return; }
+            throw new Error('이동 실패');
+        }
 
-        // 성공하면 리스트 새로고침
         loadRosterWithStatus();
 
     } catch (error) {
@@ -1537,7 +1740,8 @@ async function handleDrop(e) {
     }
 }
 
-// 대회 데이터 동기화
+// ==================== Sync Players ====================
+
 async function syncPlayers() {
     const btn = document.getElementById('syncBtn');
     const originalText = btn.textContent;
@@ -1545,22 +1749,19 @@ async function syncPlayers() {
     btn.disabled = true;
 
     try {
-        const headers = TEST_MODE ? { 'Content-Type': 'application/json' } : {
-            'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
-            'Content-Type': 'application/json'
-        };
-
-        const response = await fetch(`${API_BASE}/players/team/sync${API_SUFFIX}`, {
+        const response = await fetch(`${API_BASE}/players/team/sync`, {
             method: 'POST',
-            headers
+            headers: getAuthHeadersJson()
         });
 
-        if (!response.ok) throw new Error('동기화 실패');
+        if (!response.ok) {
+            if (response.status === 401) { handle401(); return; }
+            throw new Error('동기화 실패');
+        }
 
         const result = await response.json();
         alert(`동기화 완료!\n발견: ${result.found}명\n신규 등록: ${result.registered}명\n이미 등록: ${result.already_registered}명`);
 
-        // 리스트 새로고침
         loadRosterWithStatus();
 
     } catch (error) {
@@ -1572,7 +1773,8 @@ async function syncPlayers() {
     }
 }
 
-// 선수 추가 모달
+// ==================== Add Player Modal ====================
+
 function openAddPlayerModal() {
     document.getElementById('addPlayerModal').style.display = 'flex';
     document.getElementById('playerSearchInput').value = '';
@@ -1587,7 +1789,6 @@ function closeAddPlayerModal() {
     document.getElementById('addPlayerModal').style.display = 'none';
 }
 
-// 선수 검색
 let searchTimeout = null;
 function debouncePlayerSearch() {
     clearTimeout(searchTimeout);
@@ -1616,7 +1817,7 @@ async function searchPlayers() {
             resultsDiv.innerHTML = players.slice(0, 10).map(p => `
                 <div class="search-result-item" onclick="addPlayerToRoster('${p.player_id}', '${p.name}', '${(p.weapons && p.weapons[0]) || ''}')">
                     <div class="search-result-name">${p.name}</div>
-                    <div class="search-result-info">
+                    <div class="search-result-info" style="color: var(--text-secondary); font-size: 0.85rem;">
                         ${p.weapons && p.weapons[0] ? `<span class="weapon-badge">${p.weapons[0]}</span>` : ''}
                         ${p.current_team || '소속 없음'} · 대회 ${p.record_count || 0}회
                     </div>
@@ -1633,19 +1834,13 @@ async function searchPlayers() {
     }
 }
 
-// 검색 결과에서 선수 추가
 async function addPlayerToRoster(playerId, name, weapon) {
     if (!confirm(`${name} 선수를 로스터에 추가하시겠습니까?`)) return;
 
     try {
-        const headers = TEST_MODE ? { 'Content-Type': 'application/json' } : {
-            'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
-            'Content-Type': 'application/json'
-        };
-
-        const response = await fetch(`${API_BASE}/players/team/add-player${API_SUFFIX}`, {
+        const response = await fetch(`${API_BASE}/players/team/add-player`, {
             method: 'POST',
-            headers,
+            headers: getAuthHeadersJson(),
             body: JSON.stringify({
                 player_id: playerId,
                 name: name,
@@ -1654,6 +1849,7 @@ async function addPlayerToRoster(playerId, name, weapon) {
         });
 
         if (!response.ok) {
+            if (response.status === 401) { handle401(); return; }
             const error = await response.json();
             throw new Error(error.detail || '추가 실패');
         }
@@ -1668,7 +1864,6 @@ async function addPlayerToRoster(playerId, name, weapon) {
     }
 }
 
-// 신규 선수 수동 등록
 async function addNewPlayer() {
     const name = document.getElementById('newPlayerName').value.trim();
     const weapon = document.getElementById('newPlayerWeapon').value;
@@ -1681,14 +1876,9 @@ async function addNewPlayer() {
     }
 
     try {
-        const headers = TEST_MODE ? { 'Content-Type': 'application/json' } : {
-            'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
-            'Content-Type': 'application/json'
-        };
-
-        const response = await fetch(`${API_BASE}/players/team/add-player${API_SUFFIX}`, {
+        const response = await fetch(`${API_BASE}/players/team/add-player`, {
             method: 'POST',
-            headers,
+            headers: getAuthHeadersJson(),
             body: JSON.stringify({
                 name: name,
                 weapon: weapon || null,
@@ -1698,6 +1888,7 @@ async function addNewPlayer() {
         });
 
         if (!response.ok) {
+            if (response.status === 401) { handle401(); return; }
             const error = await response.json();
             throw new Error(error.detail || '등록 실패');
         }
@@ -1712,7 +1903,8 @@ async function addNewPlayer() {
     }
 }
 
-// Helpers
+// ==================== Helper Functions ====================
+
 function formatCurrency(amount) {
     return new Intl.NumberFormat('ko-KR').format(amount || 0);
 }
@@ -1753,15 +1945,11 @@ function getRoleClass(role) {
     return '';
 }
 
-// Owner-only functions
+// ==================== Owner-only Functions ====================
+
 function loadOwnerSections() {
-    // Show owner sections
     document.getElementById('ownerSections').style.display = 'block';
-
-    // Load director messages
     loadDirectorMessages();
-
-    // Load monthly report
     loadMonthlyReport();
 }
 
@@ -1769,15 +1957,13 @@ async function loadDirectorMessages() {
     const container = document.getElementById('directorMessages');
 
     try {
-        const headers = TEST_MODE ? {} : {
-            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-        };
-
-        const response = await fetch(`${API_BASE}/messages${API_SUFFIX}`, { headers });
+        const response = await fetch(`${API_BASE}/messages`, {
+            headers: getAuthHeaders()
+        });
 
         if (!response.ok) {
-            // API 미구현시 테스트 데이터
-            renderTestMessages();
+            if (response.status === 401) { handle401(); return; }
+            renderMessages([]);
             return;
         }
 
@@ -1786,35 +1972,8 @@ async function loadDirectorMessages() {
 
     } catch (error) {
         console.error('Messages error:', error);
-        renderTestMessages();
+        renderMessages([]);
     }
-}
-
-function renderTestMessages() {
-    const testData = [
-        {
-            id: 1,
-            title: '12월 대회 참가 안내',
-            content: '이번 12월 회장배 대회에 참가할 선수들은 12월 20일까지 신청해주세요.',
-            target: 'all',
-            created_at: '2024-12-15 10:00'
-        },
-        {
-            id: 2,
-            title: '연말 휴관 안내',
-            content: '12월 30일 ~ 1월 2일까지 휴관합니다. 훈련 일정 참고 바랍니다.',
-            target: 'all',
-            created_at: '2024-12-10 14:00'
-        },
-        {
-            id: 3,
-            title: '코치 회의 공지',
-            content: '이번 주 금요일 오후 7시에 코치 회의가 있습니다.',
-            target: 'coaches',
-            created_at: '2024-12-08 09:00'
-        }
-    ];
-    renderMessages(testData);
 }
 
 function renderMessages(messages) {
@@ -1838,22 +1997,25 @@ function renderMessages(messages) {
                 <span class="message-target">${targetLabels[m.target] || m.target}</span>
             </div>
             <div class="message-content">${m.content}</div>
-            <div class="message-meta">${formatDateTime(m.created_at)}</div>
+            <div class="message-meta" style="display: flex; justify-content: space-between; align-items: center;">
+                <span>${formatDateTime(m.created_at)}</span>
+                <button class="action-btn secondary" style="padding: 0.25rem 0.6rem; font-size: 0.75rem;"
+                        onclick="shareMessageKakao('${escapeHtml(m.title)}', '${escapeHtml(m.content)}')">
+                    카톡 공유
+                </button>
+            </div>
         </div>
     `).join('');
 }
 
 async function loadMonthlyReport() {
     try {
-        const headers = TEST_MODE ? {} : {
-            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-        };
-
-        const response = await fetch(`${API_BASE}/report/monthly${API_SUFFIX}`, { headers });
+        const response = await fetch(`${API_BASE}/report/monthly`, {
+            headers: getAuthHeaders()
+        });
 
         if (!response.ok) {
-            // 테스트 데이터
-            renderTestReport();
+            if (response.status === 401) { handle401(); return; }
             return;
         }
 
@@ -1862,15 +2024,7 @@ async function loadMonthlyReport() {
 
     } catch (error) {
         console.error('Report error:', error);
-        renderTestReport();
     }
-}
-
-function renderTestReport() {
-    document.getElementById('monthlyRevenue').textContent = '₩3,200,000';
-    document.getElementById('monthlyAttendance').textContent = '85%';
-    document.getElementById('monthlyNewMembers').textContent = '2';
-    document.getElementById('monthlyOverdue').textContent = '3';
 }
 
 function renderReport(data) {
@@ -1880,14 +2034,14 @@ function renderReport(data) {
     document.getElementById('monthlyOverdue').textContent = data.overdue_count || 0;
 }
 
-// Modal functions
+// ==================== Modal Functions ====================
+
 function openMessageModal() {
     document.getElementById('messageModal').style.display = 'flex';
 }
 
 function closeMessageModal() {
     document.getElementById('messageModal').style.display = 'none';
-    // Clear form
     document.getElementById('messageTarget').value = 'all';
     document.getElementById('messageTitle').value = '';
     document.getElementById('messageContent').value = '';
@@ -1906,14 +2060,9 @@ async function sendDirectorMessage() {
     }
 
     try {
-        const headers = {
-            'Content-Type': 'application/json',
-            ...(TEST_MODE ? {} : {'Authorization': `Bearer ${localStorage.getItem('access_token')}`})
-        };
-
-        const response = await fetch(`${API_BASE}/messages${API_SUFFIX}`, {
+        const response = await fetch(`${API_BASE}/messages`, {
             method: 'POST',
-            headers,
+            headers: getAuthHeadersJson(),
             body: JSON.stringify({ target, title, content, send_kakao: sendKakao })
         });
 
@@ -1921,10 +2070,13 @@ async function sendDirectorMessage() {
             alert('메세지가 발송되었습니다.');
             closeMessageModal();
             loadDirectorMessages();
+
+            if (sendKakao) {
+                shareMessageKakao(title, content);
+            }
         } else {
-            // 테스트 모드에서는 성공 처리
-            alert('메세지가 발송되었습니다. (테스트)');
-            closeMessageModal();
+            if (response.status === 401) { handle401(); return; }
+            alert('메세지 발송에 실패했습니다.');
         }
     } catch (error) {
         console.error('Message send error:', error);
@@ -1943,20 +2095,19 @@ function formatDateTime(isoString) {
     });
 }
 
-// ==================== 공지사항 Functions ====================
+// ==================== Announcements Functions ====================
 
 async function loadAnnouncements() {
     const container = document.getElementById('announcementsContent');
 
     try {
-        const headers = TEST_MODE ? {} : {
-            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-        };
-
-        const response = await fetch(`${API_BASE}/announcements${API_SUFFIX}`, { headers });
+        const response = await fetch(`${API_BASE}/announcements`, {
+            headers: getAuthHeaders()
+        });
 
         if (!response.ok) {
-            renderTestAnnouncements();
+            if (response.status === 401) { handle401(); return; }
+            renderAnnouncements([]);
             return;
         }
 
@@ -1965,38 +2116,8 @@ async function loadAnnouncements() {
 
     } catch (error) {
         console.error('Announcements error:', error);
-        renderTestAnnouncements();
+        renderAnnouncements([]);
     }
-}
-
-function renderTestAnnouncements() {
-    const testData = [
-        {
-            id: 1,
-            title: '12월 대회 참가 안내',
-            content: '이번 12월 회장배 대회에 참가할 선수들은 12월 20일까지 신청해주세요. 참가비는 30,000원이며, 출장비는 별도입니다.',
-            is_pinned: true,
-            created_at: '2024-12-15 10:00',
-            author: '최병철'
-        },
-        {
-            id: 2,
-            title: '연말 휴관 안내',
-            content: '12월 30일 ~ 1월 2일까지 휴관합니다. 훈련 일정 참고 바랍니다.',
-            is_pinned: false,
-            created_at: '2024-12-10 14:00',
-            author: '최병철'
-        },
-        {
-            id: 3,
-            title: '레슨 시간 변경 안내',
-            content: '12월 20일부터 금요일 레슨 시간이 17:00에서 18:00으로 변경됩니다.',
-            is_pinned: false,
-            created_at: '2024-12-08 09:00',
-            author: '김코치'
-        }
-    ];
-    renderAnnouncements(testData);
 }
 
 function renderAnnouncements(announcements) {
@@ -2016,8 +2137,14 @@ function renderAnnouncements(announcements) {
                         <span class="announcement-title">${a.title}</span>
                     </div>
                     <div class="announcement-content">${a.content}</div>
-                    <div class="announcement-meta">
-                        <span>${a.author || '관리자'}</span> · <span>${formatDateTime(a.created_at)}</span>
+                    <div class="announcement-meta" style="display: flex; justify-content: space-between; align-items: center;">
+                        <span>
+                            <span>${a.author || '관리자'}</span> · <span>${formatDateTime(a.created_at)}</span>
+                        </span>
+                        <button class="action-btn secondary" style="padding: 0.25rem 0.6rem; font-size: 0.75rem;"
+                                onclick="shareAnnouncementKakao('${escapeHtml(a.title)}', '${escapeHtml(a.content)}')">
+                            카톡 공유
+                        </button>
                     </div>
                 </div>
             `).join('')}
@@ -2025,7 +2152,6 @@ function renderAnnouncements(announcements) {
     `;
 }
 
-// Announcement Modal Functions
 function openAnnouncementModal() {
     document.getElementById('announcementModal').style.display = 'flex';
 }
@@ -2035,12 +2161,14 @@ function closeAnnouncementModal() {
     document.getElementById('announcementTitle').value = '';
     document.getElementById('announcementContent').value = '';
     document.getElementById('announcementPinned').checked = false;
+    document.getElementById('announcementShareKakao').checked = false;
 }
 
 async function saveAnnouncement() {
     const title = document.getElementById('announcementTitle').value;
     const content = document.getElementById('announcementContent').value;
     const isPinned = document.getElementById('announcementPinned').checked;
+    const shareKakao = document.getElementById('announcementShareKakao').checked;
 
     if (!title || !content) {
         alert('제목과 내용을 입력해주세요.');
@@ -2048,14 +2176,9 @@ async function saveAnnouncement() {
     }
 
     try {
-        const headers = {
-            'Content-Type': 'application/json',
-            ...(TEST_MODE ? {} : {'Authorization': `Bearer ${localStorage.getItem('access_token')}`})
-        };
-
-        const response = await fetch(`${API_BASE}/announcements${API_SUFFIX}`, {
+        const response = await fetch(`${API_BASE}/announcements`, {
             method: 'POST',
-            headers,
+            headers: getAuthHeadersJson(),
             body: JSON.stringify({ title, content, is_pinned: isPinned })
         });
 
@@ -2063,10 +2186,13 @@ async function saveAnnouncement() {
             alert('공지사항이 등록되었습니다.');
             closeAnnouncementModal();
             loadAnnouncements();
+
+            if (shareKakao) {
+                shareAnnouncementKakao(title, content);
+            }
         } else {
-            // 테스트 모드
-            alert('공지사항이 등록되었습니다. (테스트)');
-            closeAnnouncementModal();
+            if (response.status === 401) { handle401(); return; }
+            alert('공지사항 등록에 실패했습니다.');
         }
     } catch (error) {
         console.error('Announcement save error:', error);
@@ -2074,7 +2200,243 @@ async function saveAnnouncement() {
     }
 }
 
-// Initialize
-document.addEventListener('DOMContentLoaded', loadDashboard);
+// ==================== Kakao Share Functions ====================
+
+async function initKakaoShare() {
+    try {
+        const response = await fetch('/api/kakao-key');
+        if (!response.ok) return;
+        const data = await response.json();
+        if (data.kakao_app_key) {
+            KakaoShare.init(data.kakao_app_key);
+        }
+    } catch (error) {
+        console.warn('Kakao SDK init failed:', error);
+    }
+}
+
+function shareAnnouncementKakao(title, content) {
+    if (!KakaoShare.isReady()) {
+        alert('카카오톡 공유 기능을 사용하려면 KAKAO_CLIENT_ID를 설정해주세요.');
+        return;
+    }
+    KakaoShare.shareMessage({
+        title: title,
+        content: content,
+        buttonText: '클럽 공지 보기',
+    });
+}
+
+function shareMessageKakao(title, content) {
+    if (!KakaoShare.isReady()) {
+        alert('카카오톡 공유 기능을 사용하려면 KAKAO_CLIENT_ID를 설정해주세요.');
+        return;
+    }
+    KakaoShare.shareMessage({
+        title: title,
+        content: content,
+        buttonText: '메시지 확인',
+    });
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/'/g, "\\'").replace(/"/g, '\\"').replace(/\n/g, ' ');
+}
+
+// ==================== Lesson Packages ====================
+
+async function loadLessonPackages() {
+    const container = document.getElementById('lessonPackagesContent');
+    try {
+        const res = await fetch('/api/lessons/packages?limit=10');
+        if (!res.ok) { container.innerHTML = '<p style="color:var(--text-muted);">패키지 데이터를 불러올 수 없습니다</p>'; return; }
+        const data = await res.json();
+        const packages = data.items || [];
+
+        if (packages.length === 0) {
+            container.innerHTML = '<p style="color:var(--text-muted); text-align:center; padding:1rem;">등록된 패키지가 없습니다</p>';
+            return;
+        }
+
+        const statusLabels = { active: '진행중', exhausted: '소진', expired: '만료', cancelled: '취소' };
+        const statusColors = { active: 'var(--success-color)', exhausted: 'var(--text-muted)', expired: 'var(--warning-color)', cancelled: 'var(--danger-color)' };
+
+        container.innerHTML = `
+            <table class="roster-table">
+                <thead>
+                    <tr>
+                        <th>수강생</th>
+                        <th>코치</th>
+                        <th>유형</th>
+                        <th>잔여/전체</th>
+                        <th>상태</th>
+                        <th>차감</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${packages.map(p => `
+                        <tr>
+                            <td>${p.member_name || p.member_id}</td>
+                            <td>${p.coach_name || p.coach_id}</td>
+                            <td>${p.package_type}</td>
+                            <td><strong>${p.remaining_sessions}</strong> / ${p.total_sessions}</td>
+                            <td><span style="color:${statusColors[p.status] || 'inherit'}">${statusLabels[p.status] || p.status}</span></td>
+                            <td>${p.status === 'active' ? `<button class="action-btn small" onclick="deductPackage('${p.id}','${p.member_id}')">-1</button>` : '-'}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+    } catch (e) {
+        console.error('loadLessonPackages error:', e);
+        container.innerHTML = '<p style="color:var(--text-muted);">패키지 로딩 실패</p>';
+    }
+}
+
+async function deductPackage(packageId, studentId) {
+    if (!confirm('레슨 1회를 차감하시겠습니까?')) return;
+    try {
+        const res = await fetch(`/api/lessons/packages/${packageId}/deduct?student_id=${studentId}`, { method: 'POST' });
+        if (!res.ok) {
+            const err = await res.json();
+            alert(err.detail || '차감 실패');
+            return;
+        }
+        alert('차감 완료');
+        loadLessonPackages();
+    } catch (e) {
+        alert('차감 중 오류 발생');
+    }
+}
+
+async function loadPendingRequests() {
+    const container = document.getElementById('pendingRequestsContent');
+    try {
+        const res = await fetch('/api/lessons/requests?status=pending');
+        if (!res.ok) { container.innerHTML = '<p style="color:var(--text-muted);">신청 데이터를 불러올 수 없습니다</p>'; return; }
+        const data = await res.json();
+        const requests = data.items || [];
+
+        if (requests.length === 0) {
+            container.innerHTML = '<p style="color:var(--text-muted); text-align:center; padding:0.5rem;">대기 중인 신청이 없습니다</p>';
+            return;
+        }
+
+        container.innerHTML = requests.map(r => `
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:0.75rem; border:1px solid var(--border-color); border-radius:8px; margin-bottom:0.5rem;">
+                <div>
+                    <strong>${r.student_name || r.student_id}</strong>
+                    <span style="color:var(--text-muted); margin-left:0.5rem;">${r.requested_date} ${r.requested_start_time} (${r.duration_minutes}분)</span>
+                </div>
+                <div style="display:flex; gap:0.5rem;">
+                    <button class="action-btn small" onclick="respondRequest('${r.id}','approve')">승인</button>
+                    <button class="action-btn small secondary" onclick="respondRequest('${r.id}','reject')">거절</button>
+                </div>
+            </div>
+        `).join('');
+    } catch (e) {
+        console.error('loadPendingRequests error:', e);
+        container.innerHTML = '<p style="color:var(--text-muted);">신청 로딩 실패</p>';
+    }
+}
+
+async function respondRequest(requestId, action) {
+    try {
+        const res = await fetch(`/api/lessons/requests/${requestId}/${action}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            alert(err.detail || '처리 실패');
+            return;
+        }
+        alert(action === 'approve' ? '승인 완료' : '거절 완료');
+        loadPendingRequests();
+    } catch (e) {
+        alert('처리 중 오류 발생');
+    }
+}
+
+function openPackageModal() {
+    document.getElementById('packageModal').style.display = 'flex';
+    populatePackageDropdowns();
+}
+
+function closePackageModal() {
+    document.getElementById('packageModal').style.display = 'none';
+}
+
+async function populatePackageDropdowns() {
+    try {
+        const res = await fetch('/api/club/dashboard');
+        if (!res.ok) return;
+        const data = await res.json();
+        const members = data.members || [];
+
+        const studentSelect = document.getElementById('pkgMemberId');
+        const coachSelect = document.getElementById('pkgCoachId');
+        studentSelect.innerHTML = '<option value="">선택</option>';
+        coachSelect.innerHTML = '<option value="">선택</option>';
+
+        members.forEach(m => {
+            const opt = `<option value="${m.id}">${m.full_name} (${m.club_role || ''})</option>`;
+            if (['student'].includes(m.club_role)) {
+                studentSelect.innerHTML += opt;
+            }
+            if (['coach', 'head_coach', 'owner'].includes(m.club_role)) {
+                coachSelect.innerHTML += opt;
+            }
+        });
+    } catch (e) {
+        console.error('populatePackageDropdowns error:', e);
+    }
+}
+
+async function submitPackage() {
+    const memberId = document.getElementById('pkgMemberId').value;
+    const coachId = document.getElementById('pkgCoachId').value;
+    if (!memberId || !coachId) { alert('수강생과 코치를 선택하세요'); return; }
+
+    const data = {
+        member_id: memberId,
+        coach_id: coachId,
+        package_type: document.getElementById('pkgType').value,
+        total_sessions: parseInt(document.getElementById('pkgSessions').value),
+        total_price: parseInt(document.getElementById('pkgPrice').value) || 0,
+        notes: document.getElementById('pkgNotes').value || null,
+    };
+    const expires = document.getElementById('pkgExpires').value;
+    if (expires) data.expires_at = new Date(expires).toISOString();
+
+    try {
+        const res = await fetch('/api/lessons/packages', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            alert(err.detail || '등록 실패');
+            return;
+        }
+        alert('패키지가 등록되었습니다');
+        closePackageModal();
+        loadLessonPackages();
+    } catch (e) {
+        alert('등록 중 오류 발생');
+    }
+}
+
+// ==================== Initialize ====================
+
+document.addEventListener('DOMContentLoaded', () => {
+    loadDashboard();
+    initKakaoShare();
+    loadLessonPackages();
+    loadPendingRequests();
+});
 </script>
 {% endblock %}

@@ -1,120 +1,157 @@
 {% extends "base.html" %}
 
-{% block title %}내 클럽 - Korean Fencing Tracker{% endblock %}
+{% block title %}내 클럽 - FencingMind Club{% endblock %}
 
 {% block extra_css %}
 <style>
+/* ==============================================
+   STUDENT DASHBOARD - Mobile-First Dark Theme
+   ============================================== */
+
+/* --- Layout --- */
 .student-dashboard {
-    padding: 2rem 0;
-    max-width: 800px;
+    padding: 1rem;
+    max-width: 600px;
     margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
 }
 
+/* --- Welcome Card --- */
 .welcome-card {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
+    background: linear-gradient(135deg, var(--accent-secondary) 0%, var(--accent-primary) 100%);
     border-radius: 16px;
-    padding: 2rem;
-    margin-bottom: 2rem;
+    padding: 1.25rem 1.5rem;
+    border: 1px solid var(--border-light);
 }
 
 .welcome-card h1 {
-    font-size: 1.5rem;
-    margin-bottom: 0.5rem;
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 0.25rem;
 }
 
 .welcome-card .club-name {
-    font-size: 1rem;
-    opacity: 0.9;
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.85);
 }
 
+/* --- Check-in Section --- */
 .checkin-section {
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    background: var(--bg-card);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
     padding: 1.5rem;
-    margin-bottom: 1.5rem;
     text-align: center;
 }
 
 .checkin-btn {
-    display: inline-flex;
+    display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 1rem 2rem;
-    background: #4caf50;
-    color: white;
+    justify-content: center;
+    gap: 0.75rem;
+    width: 100%;
+    min-height: 56px;
+    padding: 0.875rem 1.5rem;
+    background: linear-gradient(135deg, var(--success-color), #059669);
+    color: #fff;
     border: none;
-    border-radius: 12px;
-    font-size: 1.1rem;
-    font-weight: 600;
+    border-radius: 14px;
+    font-size: 1.125rem;
+    font-weight: 700;
+    font-family: inherit;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    box-shadow: 0 4px 16px rgba(16, 185, 129, 0.35);
+    -webkit-tap-highlight-color: transparent;
 }
 
 .checkin-btn:hover {
-    background: #43a047;
     transform: translateY(-2px);
+    box-shadow: 0 6px 24px rgba(16, 185, 129, 0.45);
+}
+
+.checkin-btn:active {
+    transform: translateY(0);
 }
 
 .checkin-btn.checked {
-    background: #9e9e9e;
+    background: var(--bg-tertiary);
+    color: var(--text-muted);
     cursor: default;
+    box-shadow: none;
 }
 
 .checkin-btn.checked:hover {
     transform: none;
+    box-shadow: none;
 }
 
 .checkin-status {
-    margin-top: 1rem;
-    font-size: 0.9rem;
-    color: #666;
+    margin-top: 0.75rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    min-height: 1.25rem;
 }
 
 .checkin-status.success {
-    color: #4caf50;
+    color: var(--success-color);
+    font-weight: 500;
 }
 
-/* Stats Cards */
+/* --- Stats Grid --- */
 .stats-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 1rem;
-    margin-bottom: 1.5rem;
+    gap: 0.75rem;
 }
 
 .stat-card {
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-    padding: 1.2rem;
+    background: var(--bg-card);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    padding: 1rem;
     text-align: center;
+    transition: border-color 0.2s ease;
+}
+
+.stat-card:hover {
+    border-color: var(--border-light);
 }
 
 .stat-card .icon {
     font-size: 1.5rem;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.375rem;
 }
 
 .stat-card .value {
-    font-size: 1.8rem;
-    font-weight: 700;
-    color: #1a1a2e;
+    font-size: 1.75rem;
+    font-weight: 800;
+    color: var(--accent-gold, #d4a574);
+    font-family: 'Inter', sans-serif;
+    line-height: 1.2;
 }
 
 .stat-card .label {
-    font-size: 0.8rem;
-    color: #666;
-    margin-top: 0.3rem;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 0.25rem;
+    font-weight: 500;
 }
 
-/* Section Cards */
+/* --- Section Card --- */
 .section-card {
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-    margin-bottom: 1.5rem;
+    background: var(--bg-card);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
     overflow: hidden;
 }
 
@@ -122,23 +159,39 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 1rem 1.5rem;
-    border-bottom: 1px solid #eee;
+    padding: 0.875rem 1.25rem;
+    border-bottom: 1px solid var(--border-color);
 }
 
 .section-header h2 {
-    font-size: 1.1rem;
-    color: #1a1a2e;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
     display: flex;
     align-items: center;
     gap: 0.5rem;
 }
 
-.section-content {
-    padding: 1rem 1.5rem;
+.section-header a {
+    color: var(--accent-gold, #d4a574);
+    font-size: 0.8rem;
+    text-decoration: none;
+    font-weight: 500;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 0.25rem;
 }
 
-/* Attendance List */
+.section-header a:hover {
+    text-decoration: underline;
+}
+
+.section-content {
+    padding: 0.75rem 1.25rem;
+}
+
+/* --- Attendance List --- */
 .attendance-list {
     list-style: none;
     padding: 0;
@@ -149,8 +202,9 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0.8rem 0;
-    border-bottom: 1px solid #f0f0f0;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--border-color);
+    min-height: 48px;
 }
 
 .attendance-item:last-child {
@@ -159,29 +213,36 @@
 
 .attendance-date {
     font-weight: 500;
+    color: var(--text-primary);
+    font-size: 0.9rem;
 }
 
 .attendance-time {
-    color: #666;
-    font-size: 0.85rem;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    margin-top: 0.125rem;
 }
 
 .attendance-type {
     display: inline-block;
-    padding: 0.2rem 0.6rem;
-    border-radius: 4px;
-    font-size: 0.75rem;
-    background: #e3f2fd;
-    color: #1976d2;
+    padding: 0.25rem 0.625rem;
+    border-radius: 6px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    background: rgba(30, 58, 138, 0.2);
+    color: var(--info-color);
+    border: 1px solid rgba(59, 130, 246, 0.25);
+    white-space: nowrap;
 }
 
-/* Lesson Schedule */
+/* --- Lesson Schedule --- */
 .lesson-item {
     display: flex;
     align-items: center;
-    gap: 1rem;
-    padding: 0.8rem 0;
-    border-bottom: 1px solid #f0f0f0;
+    gap: 0.875rem;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--border-color);
+    min-height: 48px;
 }
 
 .lesson-item:last-child {
@@ -189,29 +250,113 @@
 }
 
 .lesson-time {
-    background: #667eea;
-    color: white;
-    padding: 0.5rem 0.8rem;
-    border-radius: 8px;
-    font-weight: 600;
-    min-width: 60px;
+    background: var(--accent-secondary);
+    color: #fff;
+    padding: 0.5rem 0.625rem;
+    border-radius: 10px;
+    font-weight: 700;
+    font-size: 0.8rem;
+    min-width: 56px;
     text-align: center;
+    flex-shrink: 0;
+    line-height: 1.3;
 }
 
 .lesson-info h4 {
-    font-size: 0.95rem;
-    margin-bottom: 0.2rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.125rem;
 }
 
 .lesson-info p {
     font-size: 0.8rem;
-    color: #666;
+    color: var(--text-muted);
 }
 
-/* Announcements */
+/* --- Lesson Packages --- */
+.pkg-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.pkg-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--border-color);
+    min-height: 48px;
+}
+
+.pkg-item:last-child {
+    border-bottom: none;
+}
+
+.pkg-coach {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+}
+
+.pkg-type {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 0.125rem;
+}
+
+.pkg-count {
+    text-align: right;
+}
+
+.pkg-remaining {
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: var(--accent-gold, #d4a574);
+}
+
+.pkg-remaining.low {
+    color: var(--warning-color);
+}
+
+.pkg-remaining.zero {
+    color: var(--text-muted);
+}
+
+.pkg-total {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+
+.request-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    width: 100%;
+    min-height: 44px;
+    padding: 0.625rem 1rem;
+    background: var(--accent-secondary);
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: opacity 0.15s ease;
+    margin-top: 0.75rem;
+}
+
+.request-btn:hover {
+    opacity: 0.9;
+}
+
+/* --- Announcements --- */
 .announcement-item {
-    padding: 1rem 0;
-    border-bottom: 1px solid #f0f0f0;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--border-color);
 }
 
 .announcement-item:last-child {
@@ -220,62 +365,95 @@
 
 .announcement-title {
     font-weight: 600;
-    margin-bottom: 0.3rem;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    margin-bottom: 0.25rem;
 }
 
 .announcement-meta {
-    font-size: 0.8rem;
-    color: #888;
+    font-size: 0.75rem;
+    color: var(--text-muted);
 }
 
 .announcement-preview {
-    font-size: 0.9rem;
-    color: #555;
-    margin-top: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-top: 0.375rem;
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
+    line-height: 1.5;
 }
 
-/* Empty State */
+/* --- Empty State --- */
 .empty-state {
     text-align: center;
-    padding: 2rem;
-    color: #888;
+    padding: 1.5rem 1rem;
+    color: var(--text-muted);
 }
 
 .empty-state .icon {
-    font-size: 2rem;
+    font-size: 1.75rem;
     margin-bottom: 0.5rem;
 }
 
-/* My Profile Link */
+.empty-state p {
+    font-size: 0.875rem;
+}
+
+/* --- Profile Link --- */
 .profile-link {
-    display: block;
-    text-align: center;
-    padding: 1rem;
-    color: #667eea;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 48px;
+    padding: 0.75rem 1rem;
+    color: var(--accent-gold, #d4a574);
     text-decoration: none;
-    font-weight: 500;
+    font-weight: 600;
+    font-size: 0.9rem;
+    border-radius: 14px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-card);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    transition: border-color 0.2s ease, background 0.2s ease;
+    -webkit-tap-highlight-color: transparent;
 }
 
 .profile-link:hover {
-    text-decoration: underline;
+    border-color: var(--border-light);
+    background: var(--bg-card-hover);
 }
 
-@media (max-width: 600px) {
+/* --- Desktop Enhancement --- */
+@media (min-width: 601px) {
     .student-dashboard {
-        padding: 1rem;
+        padding: 1.5rem 1rem;
+        gap: 1.25rem;
     }
 
-    .stats-grid {
-        grid-template-columns: repeat(2, 1fr);
-        gap: 0.8rem;
+    .welcome-card {
+        padding: 1.5rem 2rem;
+    }
+
+    .welcome-card h1 {
+        font-size: 1.5rem;
+    }
+
+    .checkin-btn {
+        width: auto;
+        min-width: 240px;
+        margin: 0 auto;
     }
 
     .stat-card .value {
-        font-size: 1.5rem;
+        font-size: 2rem;
+    }
+
+    .section-content {
+        padding: 1rem 1.5rem;
     }
 }
 </style>
@@ -285,14 +463,14 @@
 <div class="container student-dashboard">
     <!-- Welcome Card -->
     <div class="welcome-card">
-        <h1 id="welcomeName">안녕하세요!</h1>
-        <p class="club-name" id="clubName">클럽 로딩 중...</p>
+        <h1 id="welcomeName">로딩 중...</h1>
+        <p class="club-name" id="clubName">클럽 정보 로딩 중...</p>
     </div>
 
     <!-- Check-in Section -->
     <div class="checkin-section">
-        <button class="checkin-btn" id="checkinBtn" onclick="doCheckIn()">
-            <span>✓</span> 출석 체크인
+        <button class="checkin-btn" id="checkinBtn" onclick="doCheckIn()" type="button">
+            체크인
         </button>
         <div class="checkin-status" id="checkinStatus"></div>
     </div>
@@ -314,8 +492,8 @@
     <!-- My Attendance -->
     <div class="section-card">
         <div class="section-header">
-            <h2>📋 내 출석 현황</h2>
-            <a href="/club/my-attendance" style="color: #667eea; font-size: 0.9rem;">전체보기</a>
+            <h2>📋 내 출석</h2>
+            <a href="/club/my-attendance">전체 보기</a>
         </div>
         <div class="section-content" id="attendanceContent">
             <div class="empty-state">
@@ -328,13 +506,26 @@
     <!-- My Lessons -->
     <div class="section-card">
         <div class="section-header">
-            <h2>📚 내 레슨 일정</h2>
-            <a href="/club/my-lessons" style="color: #667eea; font-size: 0.9rem;">전체보기</a>
+            <h2>📖 내 레슨</h2>
+            <a href="/club/my-lessons">전체 보기</a>
         </div>
         <div class="section-content" id="lessonsContent">
             <div class="empty-state">
-                <div class="icon">📚</div>
-                <p>레슨 일정 로딩 중...</p>
+                <div class="icon">📖</div>
+                <p>레슨 정보 로딩 중...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- My Lesson Packages -->
+    <div class="section-card">
+        <div class="section-header">
+            <h2>🎫 내 레슨 패키지</h2>
+        </div>
+        <div class="section-content" id="myPackagesContent">
+            <div class="empty-state">
+                <div class="icon">🎫</div>
+                <p>패키지 정보 로딩 중...</p>
             </div>
         </div>
     </div>
@@ -342,8 +533,8 @@
     <!-- Announcements -->
     <div class="section-card">
         <div class="section-header">
-            <h2>📢 클럽 공지사항</h2>
-            <a href="/club/announcements" style="color: #667eea; font-size: 0.9rem;">전체보기</a>
+            <h2>📢 공지사항</h2>
+            <a href="/club/announcements">전체 보기</a>
         </div>
         <div class="section-content" id="announcementsContent">
             <div class="empty-state">
@@ -360,38 +551,42 @@
 
 {% block extra_js %}
 <script>
-const TEST_MODE = true;
 const API_BASE = '/api/club';
-const API_SUFFIX = TEST_MODE ? '?test=1' : '';
 
 let memberData = null;
 
+function getAuthHeaders() {
+    return { 'Authorization': `Bearer ${localStorage.getItem('access_token')}` };
+}
+
+function handleUnauthorized() {
+    localStorage.removeItem('access_token');
+    window.location.href = '/auth/login?redirect=/api/club/';
+}
+
 async function loadDashboard() {
     try {
-        const headers = TEST_MODE ? {} : {
-            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-        };
+        const meResponse = await fetch(`${API_BASE}/me`, {
+            headers: getAuthHeaders()
+        });
 
-        // 내 정보 로드
-        const meResponse = await fetch(`${API_BASE}/me${API_SUFFIX}`, { headers });
+        if (meResponse.status === 401) {
+            handleUnauthorized();
+            return;
+        }
+
         if (meResponse.ok) {
             memberData = await meResponse.json();
             document.getElementById('welcomeName').textContent =
-                `안녕하세요, ${memberData.full_name}님!`;
+                `${memberData.full_name}님, 안녕하세요!`;
             document.getElementById('clubName').textContent =
                 memberData.organization_name || '클럽 정보 없음';
         }
 
-        // 출석 현황 로드
         loadAttendance();
-
-        // 레슨 일정 로드
         loadLessons();
-
-        // 공지사항 로드
+        loadMyPackages();
         loadAnnouncements();
-
-        // 체크인 상태 확인
         checkCheckinStatus();
 
     } catch (error) {
@@ -401,11 +596,15 @@ async function loadDashboard() {
 
 async function checkCheckinStatus() {
     try {
-        const headers = TEST_MODE ? {} : {
-            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-        };
+        const response = await fetch(`${API_BASE}/check-in/status`, {
+            headers: getAuthHeaders()
+        });
 
-        const response = await fetch(`${API_BASE}/check-in/status${API_SUFFIX}`, { headers });
+        if (response.status === 401) {
+            handleUnauthorized();
+            return;
+        }
+
         if (response.ok) {
             const data = await response.json();
             const btn = document.getElementById('checkinBtn');
@@ -413,10 +612,10 @@ async function checkCheckinStatus() {
 
             if (data.already_checked_in) {
                 btn.classList.add('checked');
-                btn.innerHTML = '<span>✓</span> 출석 완료';
+                btn.textContent = '체크인 완료';
                 btn.disabled = true;
                 status.className = 'checkin-status success';
-                status.textContent = `오늘 ${data.check_in_time || ''} 출석 완료`;
+                status.textContent = `오늘 체크인 완료 ${data.check_in_time || ''}`;
             }
         }
     } catch (error) {
@@ -426,54 +625,59 @@ async function checkCheckinStatus() {
 
 async function doCheckIn() {
     const btn = document.getElementById('checkinBtn');
-    if (btn.classList.contains('checked')) return;
+    if (btn.classList.contains('checked') || btn.disabled) return;
+
+    btn.disabled = true;
 
     try {
-        const headers = {
-            'Content-Type': 'application/json',
-            ...(TEST_MODE ? {} : {'Authorization': `Bearer ${localStorage.getItem('access_token')}`})
-        };
-
-        const response = await fetch(`${API_BASE}/check-in${API_SUFFIX}`, {
+        const response = await fetch(`${API_BASE}/check-in`, {
             method: 'POST',
-            headers,
+            headers: {
+                'Content-Type': 'application/json',
+                ...getAuthHeaders()
+            },
             body: JSON.stringify({ attendance_type: 'regular' })
         });
 
+        if (response.status === 401) {
+            handleUnauthorized();
+            return;
+        }
+
         if (response.ok) {
             btn.classList.add('checked');
-            btn.innerHTML = '<span>✓</span> 출석 완료';
-            btn.disabled = true;
+            btn.textContent = '체크인 완료';
 
             const status = document.getElementById('checkinStatus');
             status.className = 'checkin-status success';
-            status.textContent = '출석 체크인 완료!';
+            status.textContent = '체크인 완료!';
 
-            // 출석 목록 새로고침
             loadAttendance();
         } else {
+            btn.disabled = false;
             const error = await response.json();
-            alert(error.detail || '체크인 실패');
+            alert(error.detail || '체크인에 실패했습니다');
         }
     } catch (error) {
+        btn.disabled = false;
         console.error('Check-in error:', error);
         alert('체크인 중 오류가 발생했습니다.');
     }
 }
 
 async function loadAttendance() {
-    const container = document.getElementById('attendanceContent');
-
     try {
-        const headers = TEST_MODE ? {} : {
-            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-        };
+        const response = await fetch(`${API_BASE}/my/attendance`, {
+            headers: getAuthHeaders()
+        });
 
-        const response = await fetch(`${API_BASE}/my/attendance${API_SUFFIX}`, { headers });
+        if (response.status === 401) {
+            handleUnauthorized();
+            return;
+        }
 
         if (!response.ok) {
-            // API 미구현시 테스트 데이터
-            renderTestAttendance();
+            renderFallbackAttendance();
             return;
         }
 
@@ -483,19 +687,19 @@ async function loadAttendance() {
 
     } catch (error) {
         console.error('Attendance error:', error);
-        renderTestAttendance();
+        renderFallbackAttendance();
     }
 }
 
-function renderTestAttendance() {
-    const today = new Date().toISOString().split('T')[0];
-    const testData = [
-        { date: today, check_in_at: '16:30', type: 'regular' },
-        { date: '2024-12-20', check_in_at: '16:45', type: 'regular' },
-        { date: '2024-12-18', check_in_at: '17:00', type: 'lesson' },
-    ];
-    renderAttendance(testData);
-    document.getElementById('monthlyAttendance').textContent = '12';
+function renderFallbackAttendance() {
+    const container = document.getElementById('attendanceContent');
+    container.innerHTML = `
+        <div class="empty-state">
+            <div class="icon">📋</div>
+            <p>출석 기록이 없습니다</p>
+        </div>
+    `;
+    document.getElementById('monthlyAttendance').textContent = '0';
 }
 
 function renderAttendance(attendance) {
@@ -513,7 +717,7 @@ function renderAttendance(attendance) {
 
     const typeLabels = {
         regular: '정규 훈련',
-        lesson: '개인 레슨',
+        lesson: '레슨',
         competition: '대회',
         other: '기타'
     };
@@ -526,7 +730,7 @@ function renderAttendance(attendance) {
                         <div class="attendance-date">${formatDate(a.date || a.check_in_at)}</div>
                         <div class="attendance-time">${a.check_in_at?.split('T')[1]?.slice(0,5) || a.check_in_at || ''}</div>
                     </div>
-                    <span class="attendance-type">${typeLabels[a.type] || a.type || '훈련'}</span>
+                    <span class="attendance-type">${typeLabels[a.type] || a.type || 'Training'}</span>
                 </li>
             `).join('')}
         </ul>
@@ -534,17 +738,18 @@ function renderAttendance(attendance) {
 }
 
 async function loadLessons() {
-    const container = document.getElementById('lessonsContent');
-
     try {
-        const headers = TEST_MODE ? {} : {
-            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-        };
+        const response = await fetch(`${API_BASE}/my/lessons`, {
+            headers: getAuthHeaders()
+        });
 
-        const response = await fetch(`${API_BASE}/my/lessons${API_SUFFIX}`, { headers });
+        if (response.status === 401) {
+            handleUnauthorized();
+            return;
+        }
 
         if (!response.ok) {
-            renderTestLessons();
+            renderFallbackLessons();
             return;
         }
 
@@ -554,18 +759,19 @@ async function loadLessons() {
 
     } catch (error) {
         console.error('Lessons error:', error);
-        renderTestLessons();
+        renderFallbackLessons();
     }
 }
 
-function renderTestLessons() {
-    const testData = [
-        { day: '월', time: '17:00', coach: '김코치', type: '개인 레슨' },
-        { day: '수', time: '17:00', coach: '김코치', type: '개인 레슨' },
-        { day: '금', time: '16:00', coach: '이코치', type: '그룹 레슨' },
-    ];
-    renderLessons(testData);
-    document.getElementById('upcomingLessons').textContent = '3';
+function renderFallbackLessons() {
+    const container = document.getElementById('lessonsContent');
+    container.innerHTML = `
+        <div class="empty-state">
+            <div class="icon">📖</div>
+            <p>예정된 레슨이 없습니다</p>
+        </div>
+    `;
+    document.getElementById('upcomingLessons').textContent = '0';
 }
 
 function renderLessons(lessons) {
@@ -574,7 +780,7 @@ function renderLessons(lessons) {
     if (!lessons || lessons.length === 0) {
         container.innerHTML = `
             <div class="empty-state">
-                <div class="icon">📚</div>
+                <div class="icon">📖</div>
                 <p>예정된 레슨이 없습니다</p>
             </div>
         `;
@@ -585,25 +791,26 @@ function renderLessons(lessons) {
         <div class="lesson-item">
             <div class="lesson-time">${l.day || ''}<br>${l.time || ''}</div>
             <div class="lesson-info">
-                <h4>${l.type || '레슨'}</h4>
-                <p>${l.coach || '담당 코치'} 코치</p>
+                <h4>${l.type || 'Lesson'}</h4>
+                <p>${l.coach || 'Coach'}</p>
             </div>
         </div>
     `).join('');
 }
 
 async function loadAnnouncements() {
-    const container = document.getElementById('announcementsContent');
-
     try {
-        const headers = TEST_MODE ? {} : {
-            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-        };
+        const response = await fetch(`${API_BASE}/announcements`, {
+            headers: getAuthHeaders()
+        });
 
-        const response = await fetch(`${API_BASE}/announcements${API_SUFFIX}`, { headers });
+        if (response.status === 401) {
+            handleUnauthorized();
+            return;
+        }
 
         if (!response.ok) {
-            renderTestAnnouncements();
+            renderFallbackAnnouncements();
             return;
         }
 
@@ -612,16 +819,18 @@ async function loadAnnouncements() {
 
     } catch (error) {
         console.error('Announcements error:', error);
-        renderTestAnnouncements();
+        renderFallbackAnnouncements();
     }
 }
 
-function renderTestAnnouncements() {
-    const testData = [
-        { title: '12월 대회 참가 안내', date: '2024-12-15', preview: '이번 12월 회장배 대회 참가 신청을 받습니다...' },
-        { title: '연말 휴관 안내', date: '2024-12-10', preview: '12월 30일 ~ 1월 2일까지 휴관합니다...' },
-    ];
-    renderAnnouncements(testData);
+function renderFallbackAnnouncements() {
+    const container = document.getElementById('announcementsContent');
+    container.innerHTML = `
+        <div class="empty-state">
+            <div class="icon">📢</div>
+            <p>공지사항이 없습니다</p>
+        </div>
+    `;
 }
 
 function renderAnnouncements(announcements) {
@@ -646,13 +855,89 @@ function renderAnnouncements(announcements) {
     `).join('');
 }
 
+async function loadMyPackages() {
+    const container = document.getElementById('myPackagesContent');
+    try {
+        const response = await fetch('/api/lessons/packages/my', {
+            headers: getAuthHeaders()
+        });
+
+        if (response.status === 401) {
+            handleUnauthorized();
+            return;
+        }
+
+        if (!response.ok) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="icon">🎫</div>
+                    <p>패키지 정보를 불러올 수 없습니다</p>
+                </div>
+            `;
+            return;
+        }
+
+        const data = await response.json();
+        const packages = data.packages || [];
+
+        if (packages.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="icon">🎫</div>
+                    <p>등록된 레슨 패키지가 없습니다</p>
+                </div>
+            `;
+            return;
+        }
+
+        // Update stats card
+        const totalRemaining = packages.reduce((sum, p) => sum + (p.remaining_sessions || 0), 0);
+        const upcomingEl = document.getElementById('upcomingLessons');
+        if (upcomingEl) upcomingEl.textContent = totalRemaining;
+
+        const typeLabels = {
+            '10_pack': '10회', '20_pack': '20회',
+            'single': '1회', 'custom': '커스텀'
+        };
+
+        container.innerHTML = `
+            <ul class="pkg-list">
+                ${packages.map(p => {
+                    const remaining = p.remaining_sessions || 0;
+                    const total = p.total_sessions || 0;
+                    const cls = remaining === 0 ? 'zero' : remaining <= 2 ? 'low' : '';
+                    return `
+                        <li class="pkg-item">
+                            <div>
+                                <div class="pkg-coach">${p.coach_name || '코치'}</div>
+                                <div class="pkg-type">${typeLabels[p.package_type] || p.package_type} 패키지</div>
+                            </div>
+                            <div class="pkg-count">
+                                <div class="pkg-remaining ${cls}">${remaining}</div>
+                                <div class="pkg-total">/ ${total}회</div>
+                            </div>
+                        </li>
+                    `;
+                }).join('')}
+            </ul>
+        `;
+    } catch (error) {
+        console.error('My packages error:', error);
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="icon">🎫</div>
+                <p>패키지 정보를 불러올 수 없습니다</p>
+            </div>
+        `;
+    }
+}
+
 function formatDate(dateStr) {
     if (!dateStr) return '';
     const date = new Date(dateStr);
     return date.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' });
 }
 
-// Initialize
 document.addEventListener('DOMContentLoaded', loadDashboard);
 </script>
 {% endblock %}

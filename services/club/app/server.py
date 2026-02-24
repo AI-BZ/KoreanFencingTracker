@@ -1,6 +1,6 @@
 """
 FencingMind Club Management SaaS
-포트: 75 | 파일럿: 최병철펜싱클럽
+포트: 72 | 파일럿: 최병철펜싱클럽
 """
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
@@ -13,6 +13,10 @@ from loguru import logger
 from . import config
 from .database import get_supabase_client
 from .club import club_router
+from .billing import billing_router
+from .notifications import notifications_router
+from .schedule import schedule_router
+from .lessons import lessons_router
 
 templates: Jinja2Templates = None
 
@@ -43,24 +47,41 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+ALLOWED_ORIGINS = [
+    "https://app.fencingmind.ai",
+    "https://fencingmind.ai",
+    "http://localhost:72",
+    "http://127.0.0.1:72",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+    allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
 )
 
 if config.STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(config.STATIC_DIR)), name="static")
 
-# Club 라우터 마운트 (핵심!)
+# 라우터 마운트
 app.include_router(club_router, prefix="/api")
+app.include_router(billing_router, prefix="/api")
+app.include_router(notifications_router, prefix="/api")
+app.include_router(schedule_router, prefix="/api")
+app.include_router(lessons_router, prefix="/api")
 
 
 # ─────────────────────────────────────────────────────────────
 # Health Check
 # ─────────────────────────────────────────────────────────────
+
+@app.get("/api/kakao-key")
+async def kakao_key():
+    """Kakao JavaScript App Key (public, safe to expose)"""
+    return {"kakao_app_key": config.KAKAO_CLIENT_ID or ""}
+
 
 @app.get("/api/health")
 async def health():
@@ -104,15 +125,26 @@ async def offline_page():
 
 
 # ─────────────────────────────────────────────────────────────
-# Pages (club_router의 HTML 페이지가 /api/club/ 하위에 있으므로
-# 루트 페이지만 여기서 제공)
+# Pages — 루트: 인증 여부에 따라 랜딩 or 대시보드 리다이렉트
 # ─────────────────────────────────────────────────────────────
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
+    from .club.dependencies import try_get_current_club_member
+    from fastapi.responses import RedirectResponse
+
+    member = await try_get_current_club_member(request)
+    if member:
+        # 인증된 사용자 → 역할별 대시보드로 리다이렉트
+        return RedirectResponse(url="/api/club/", status_code=302)
+
+    # 미인증 → 랜딩 페이지
     if templates:
         try:
-            return templates.TemplateResponse("base.html", {"request": request})
+            return templates.TemplateResponse(
+                "club/landing.html",
+                {"request": request, "title": "FencingMind Club"}
+            )
         except Exception:
             pass
     return HTMLResponse(HOME_HTML)
@@ -157,7 +189,7 @@ HOME_HTML = """
     </nav>
     <div class="container">
         <h1>FencingMind Club Management</h1>
-        <p class="subtitle">app.fencingmind.ai | Port 75 | Pilot: 최병철펜싱클럽</p>
+        <p class="subtitle">app.fencingmind.ai | Port 72 | Pilot: 최병철펜싱클럽</p>
 
         <div class="grid">
             <div class="card">
@@ -174,10 +206,10 @@ HOME_HTML = """
                 <h3>Phase 2 - Advanced</h3>
                 <ul>
                     <li><span class="status planned">PLAN</span> Kakao Login</li>
-                    <li><span class="status planned">PLAN</span> Push Notifications</li>
-                    <li><span class="status planned">PLAN</span> Public Club Page</li>
-                    <li><span class="status planned">PLAN</span> Lesson Booking</li>
-                    <li><span class="status planned">PLAN</span> Payment (Toss)</li>
+                    <li><span class="status done">DONE</span> Push Notifications (FCM)</li>
+                    <li><span class="status done">DONE</span> Billing & Invoices</li>
+                    <li><span class="status planned">PLAN</span> Kakao Alimtalk</li>
+                    <li><span class="status planned">PLAN</span> PortOne Payment</li>
                 </ul>
             </div>
         </div>

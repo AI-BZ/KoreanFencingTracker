@@ -1,93 +1,219 @@
 {% extends "base.html" %}
 
-{% block title %}클럽 대시보드 - Korean Fencing Tracker{% endblock %}
+{% block title %}클럽 대시보드 - FencingMind Club{% endblock %}
 
 {% block extra_css %}
 <style>
 .club-dashboard {
-    padding: 2rem 0;
+    padding: 1.5rem 0;
 }
 
 .dashboard-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 2rem;
+    margin-bottom: 1.5rem;
     flex-wrap: wrap;
     gap: 1rem;
 }
 
 .dashboard-header h1 {
-    font-size: 1.8rem;
-    color: #1a1a2e;
+    font-size: 1.6rem;
+    color: var(--text-primary);
 }
 
 .dashboard-header .club-name {
-    color: #667eea;
+    color: var(--accent-primary);
 }
 
-.dashboard-grid {
+.header-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+/* Stat Cards Grid */
+.stats-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 1.5rem;
-    margin-bottom: 2rem;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.5rem;
 }
 
-.dashboard-card {
-    background: white;
+@media (max-width: 900px) {
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 500px) {
+    .stats-grid { grid-template-columns: 1fr; }
+}
+
+.stat-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
     border-radius: 12px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-    padding: 1.5rem;
+    padding: 1.25rem;
+    backdrop-filter: blur(10px);
 }
 
-.card-header {
+.stat-card .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+}
+
+.stat-card .card-header h3 {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+    margin: 0;
+}
+
+.stat-card .card-header .icon {
+    font-size: 1.3rem;
+}
+
+.stat-card .card-value {
+    font-size: 2.2rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.2;
+}
+
+.stat-card .card-value.accent { color: var(--info-color); }
+.stat-card .card-value.success { color: var(--success-color); }
+.stat-card .card-value.warning { color: var(--warning-color); }
+.stat-card .card-value.danger { color: var(--danger-color); }
+
+.stat-card .card-subtitle {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-top: 0.25rem;
+}
+
+/* Main Content Layout: 2-column for desktop */
+.dashboard-body {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+@media (max-width: 900px) {
+    .dashboard-body { grid-template-columns: 1fr; }
+}
+
+/* Panels */
+.panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1.25rem;
+    backdrop-filter: blur(10px);
+}
+
+.panel-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin-bottom: 1rem;
 }
 
-.card-header h3 {
-    font-size: 1rem;
-    color: #666;
-    font-weight: 500;
+.panel-header h2 {
+    font-size: 1.1rem;
+    color: var(--text-primary);
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
 }
 
-.card-header .icon {
-    font-size: 1.5rem;
+/* Sidebar panels stack */
+.sidebar-panels {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
 }
 
-.card-value {
-    font-size: 2.5rem;
-    font-weight: 700;
-    color: #1a1a2e;
+/* Today Schedule */
+.schedule-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 0;
+    border-bottom: 1px solid var(--border-color);
 }
 
-.card-value.highlight {
-    color: #667eea;
+.schedule-item:last-child { border-bottom: none; }
+
+.schedule-time {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    min-width: 50px;
 }
 
-.card-value.warning {
-    color: #f5a623;
+.schedule-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
 }
 
-.card-value.success {
-    color: #4caf50;
-}
+.schedule-dot.training { background: var(--info-color); }
+.schedule-dot.lesson { background: var(--success-color); }
+.schedule-dot.competition { background: var(--accent-primary); }
+.schedule-dot.other { background: var(--text-muted); }
 
-.card-subtitle {
+.schedule-title {
     font-size: 0.9rem;
-    color: #888;
-    margin-top: 0.5rem;
+    color: var(--text-primary);
 }
+
+/* Alerts */
+.alerts-section {
+    margin-bottom: 1rem;
+}
+
+.alert {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.alert.warning {
+    background: rgba(245, 158, 11, 0.15);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    color: var(--warning-color);
+}
+
+.alert.info {
+    background: rgba(59, 130, 246, 0.15);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    color: var(--info-color);
+}
+
+.alert.success {
+    background: rgba(16, 185, 129, 0.15);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    color: var(--success-color);
+}
+
+.alert.error {
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: var(--danger-color);
+}
+
+.alert-icon { font-size: 1rem; }
 
 /* Roster Section */
 .roster-section {
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-    padding: 1.5rem;
-    margin-bottom: 2rem;
+    margin-bottom: 1.5rem;
 }
 
 .roster-header {
@@ -97,12 +223,6 @@
     margin-bottom: 1rem;
     flex-wrap: wrap;
     gap: 0.5rem;
-}
-
-.roster-header h2 {
-    font-size: 1.3rem;
-    color: #1a1a2e;
-    margin: 0;
 }
 
 .roster-actions {
@@ -118,42 +238,37 @@
 
 .roster-table th,
 .roster-table td {
-    padding: 0.8rem;
+    padding: 0.7rem 0.5rem;
     text-align: left;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid var(--border-color);
 }
 
 .roster-table th {
     font-weight: 600;
-    color: #666;
-    font-size: 0.85rem;
+    color: var(--text-muted);
+    font-size: 0.8rem;
     text-transform: uppercase;
 }
 
 .roster-table tr:hover {
-    background: #f8f9ff;
+    background: var(--bg-card-hover);
 }
 
 .roster-table tr.dragging {
     opacity: 0.5;
-    background: #e3f2fd;
+    background: rgba(59, 130, 246, 0.1);
 }
 
 .roster-table tr.drag-over {
-    border-top: 2px solid #667eea;
+    border-top: 2px solid var(--info-color);
 }
 
-.roster-table tr[draggable="true"] {
-    cursor: grab;
-}
-
-.roster-table tr[draggable="true"]:active {
-    cursor: grabbing;
-}
+.roster-table tr[draggable="true"] { cursor: grab; }
+.roster-table tr[draggable="true"]:active { cursor: grabbing; }
 
 .player-name {
     font-weight: 600;
-    color: #1a1a2e;
+    color: var(--text-primary);
 }
 
 .player-name a {
@@ -162,53 +277,53 @@
 }
 
 .player-name a:hover {
-    color: #667eea;
+    color: var(--accent-primary);
 }
 
 .drag-handle {
-    color: #ccc;
-    margin-right: 0.5rem;
+    color: var(--text-muted);
+    margin-right: 0.3rem;
     cursor: grab;
 }
 
 /* Badges */
 .badge {
     display: inline-block;
-    padding: 0.25rem 0.5rem;
+    padding: 0.2rem 0.5rem;
     border-radius: 4px;
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     font-weight: 500;
 }
 
 .badge.transfer {
-    background: #ffebee;
-    color: #c62828;
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--danger-color);
 }
 
 .badge.current-team {
-    background: #e8f5e9;
-    color: #2e7d32;
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--success-color);
 }
 
 .weapon-badge {
     display: inline-block;
-    padding: 0.2rem 0.5rem;
+    padding: 0.15rem 0.4rem;
     border-radius: 4px;
-    font-size: 0.75rem;
-    background: #f5f5f5;
-    color: #666;
+    font-size: 0.7rem;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
 }
 
-.stat-value {
+.roster-stat-value {
     font-weight: 600;
-    color: #667eea;
+    color: var(--info-color);
 }
 
 /* Inactive Section */
 .inactive-section {
-    margin-top: 1.5rem;
-    border-top: 1px solid #eee;
-    padding-top: 1rem;
+    margin-top: 1.25rem;
+    border-top: 1px solid var(--border-color);
+    padding-top: 0.75rem;
 }
 
 .inactive-header {
@@ -221,15 +336,15 @@
 }
 
 .inactive-header:hover {
-    background: #f9f9f9;
+    background: var(--bg-tertiary);
     margin: 0 -1rem;
     padding: 0.5rem 1rem;
     border-radius: 8px;
 }
 
 .inactive-header h3 {
-    font-size: 1.1rem;
-    color: #666;
+    font-size: 1rem;
+    color: var(--text-secondary);
     margin: 0;
     display: flex;
     align-items: center;
@@ -238,7 +353,7 @@
 
 .toggle-icon {
     transition: transform 0.2s;
-    font-size: 0.8rem;
+    font-size: 0.75rem;
 }
 
 .toggle-icon.expanded {
@@ -247,7 +362,7 @@
 
 .inactive-content {
     display: none;
-    margin-top: 1rem;
+    margin-top: 0.75rem;
 }
 
 .inactive-content.show {
@@ -255,19 +370,6 @@
 }
 
 /* Attendance Section */
-.attendance-section {
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-    padding: 1.5rem;
-}
-
-.attendance-section h2 {
-    font-size: 1.3rem;
-    margin-bottom: 1rem;
-    color: #1a1a2e;
-}
-
 .checkin-list {
     list-style: none;
     padding: 0;
@@ -278,71 +380,154 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0.8rem 0;
-    border-bottom: 1px solid #eee;
+    padding: 0.6rem 0;
+    border-bottom: 1px solid var(--border-color);
 }
 
-.checkin-item:last-child {
-    border-bottom: none;
+.checkin-item:last-child { border-bottom: none; }
+
+.checkin-name { font-weight: 600; color: var(--text-primary); }
+.checkin-time { color: var(--text-muted); font-size: 0.85rem; }
+.checkin-type { font-size: 0.75rem; color: var(--info-color); margin-left: 0.5rem; }
+
+/* Buttons */
+.action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.5rem 1rem;
+    background: var(--accent-primary);
+    color: var(--text-primary);
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+    text-decoration: none;
 }
 
-.checkin-name {
-    font-weight: 600;
+.action-btn:hover {
+    filter: brightness(1.15);
 }
 
-.checkin-time {
-    color: #888;
+.action-btn.secondary {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+}
+
+.action-btn.secondary:hover {
+    background: var(--bg-card-hover);
+    color: var(--text-primary);
+}
+
+.action-btn.small {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+}
+
+.action-btn.success {
+    background: var(--success-color);
+}
+
+/* Modal */
+.modal-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal-overlay.show { display: flex; }
+
+.modal-content {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1.5rem;
+    max-width: 480px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.25rem;
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 1.2rem;
+    color: var(--text-primary);
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: var(--text-muted);
+}
+
+.modal-close:hover { color: var(--text-primary); }
+
+.form-group { margin-bottom: 1rem; }
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.4rem;
+    font-weight: 500;
+    color: var(--text-secondary);
     font-size: 0.9rem;
 }
 
-.checkin-type {
-    font-size: 0.8rem;
-    color: #667eea;
-}
-
-/* Alerts */
-.alerts-section {
-    margin-bottom: 2rem;
-}
-
-.alert {
-    display: flex;
-    align-items: center;
-    gap: 0.8rem;
-    padding: 1rem;
+.form-group input,
+.form-group select {
+    width: 100%;
+    padding: 0.7rem;
+    border: 1px solid var(--border-color);
     border-radius: 8px;
-    margin-bottom: 0.5rem;
+    font-size: 0.95rem;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
 }
 
-.alert.warning {
-    background: #fff8e1;
-    border: 1px solid #ffcc02;
+.form-group input:focus,
+.form-group select:focus {
+    outline: none;
+    border-color: var(--accent-primary);
 }
 
-.alert.info {
-    background: #e3f2fd;
-    border: 1px solid #90caf9;
+.search-results {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    margin-top: 0.5rem;
 }
 
-.alert.success {
-    background: #e8f5e9;
-    border: 1px solid #a5d6a7;
+.search-result-item {
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid var(--border-color);
+    cursor: pointer;
 }
 
-.alert.error {
-    background: #ffebee;
-    border: 1px solid #ef9a9a;
-}
-
-.alert-icon {
-    font-size: 1.2rem;
-}
+.search-result-item:hover { background: var(--bg-tertiary); }
+.search-result-item:last-child { border-bottom: none; }
+.search-result-name { font-weight: 600; color: var(--text-primary); }
+.search-result-team { font-size: 0.8rem; color: var(--text-muted); }
 
 /* Loading */
 .loading {
     text-align: center;
-    padding: 3rem;
-    color: #888;
+    padding: 2rem;
+    color: var(--text-muted);
 }
 
 .loading::after {
@@ -356,157 +541,30 @@
     60%, 100% { content: '...'; }
 }
 
-/* Empty state */
 .empty-state {
     text-align: center;
-    padding: 2rem;
-    color: #888;
+    padding: 1.5rem;
+    color: var(--text-muted);
 }
 
-/* Buttons */
-.action-btn {
-    display: inline-flex;
+/* Quick link items in sidebar */
+.quick-links { list-style: none; padding: 0; margin: 0; }
+
+.quick-links li a {
+    display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 1rem;
-    background: #667eea;
-    color: white;
-    border: none;
+    gap: 0.6rem;
+    padding: 0.5rem 0.75rem;
     border-radius: 8px;
-    cursor: pointer;
+    color: var(--text-secondary);
+    text-decoration: none;
     font-size: 0.9rem;
-    transition: background 0.2s;
+    transition: all 0.15s;
 }
 
-.action-btn:hover {
-    background: #5a6fd6;
-}
-
-.action-btn.secondary {
-    background: #f5f5f5;
-    color: #333;
-}
-
-.action-btn.secondary:hover {
-    background: #eee;
-}
-
-.action-btn.small {
-    padding: 0.3rem 0.6rem;
-    font-size: 0.8rem;
-}
-
-.action-btn.success {
-    background: #4caf50;
-}
-
-.action-btn.success:hover {
-    background: #43a047;
-}
-
-/* Modal */
-.modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0,0,0,0.5);
-    display: none;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-}
-
-.modal-overlay.show {
-    display: flex;
-}
-
-.modal-content {
-    background: white;
-    border-radius: 12px;
-    padding: 2rem;
-    max-width: 500px;
-    width: 90%;
-    max-height: 80vh;
-    overflow-y: auto;
-}
-
-.modal-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1.5rem;
-}
-
-.modal-header h3 {
-    margin: 0;
-    font-size: 1.3rem;
-}
-
-.modal-close {
-    background: none;
-    border: none;
-    font-size: 1.5rem;
-    cursor: pointer;
-    color: #666;
-}
-
-.form-group {
-    margin-bottom: 1rem;
-}
-
-.form-group label {
-    display: block;
-    margin-bottom: 0.5rem;
-    font-weight: 500;
-    color: #333;
-}
-
-.form-group input,
-.form-group select {
-    width: 100%;
-    padding: 0.75rem;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    font-size: 1rem;
-}
-
-.form-group input:focus,
-.form-group select:focus {
-    outline: none;
-    border-color: #667eea;
-}
-
-.search-results {
-    max-height: 200px;
-    overflow-y: auto;
-    border: 1px solid #eee;
-    border-radius: 8px;
-    margin-top: 0.5rem;
-}
-
-.search-result-item {
-    padding: 0.75rem;
-    border-bottom: 1px solid #eee;
-    cursor: pointer;
-}
-
-.search-result-item:hover {
-    background: #f5f5f5;
-}
-
-.search-result-item:last-child {
-    border-bottom: none;
-}
-
-.search-result-name {
-    font-weight: 600;
-}
-
-.search-result-team {
-    font-size: 0.85rem;
-    color: #666;
+.quick-links li a:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
 }
 </style>
 {% endblock %}
@@ -517,10 +575,10 @@
         <h1>
             <span class="club-name" id="clubName">Loading...</span> 대시보드
         </h1>
-        <div class="actions" id="headerActions">
-            <button class="action-btn" onclick="location.href='/club/checkin'">
-                ✓ 출석 체크인
-            </button>
+        <div class="header-actions">
+            <a href="/api/club/checkin" class="action-btn">&#10003; 출석 체크인</a>
+            <a href="/api/club/accounting-page" class="action-btn secondary">&#128176; 회계관리</a>
+            <a href="/api/schedule/page" class="action-btn secondary">&#128197; 스케줄</a>
         </div>
     </div>
 
@@ -528,79 +586,131 @@
     <div class="alerts-section" id="alertsSection"></div>
 
     <!-- Stats Grid -->
-    <div class="dashboard-grid">
-        <div class="dashboard-card">
+    <div class="stats-grid">
+        <div class="stat-card">
             <div class="card-header">
                 <h3>오늘 출석</h3>
-                <span class="icon">📋</span>
+                <span class="icon">&#128203;</span>
             </div>
-            <div class="card-value highlight" id="todayAttendance">-</div>
+            <div class="card-value accent" id="todayAttendance">-</div>
             <div class="card-subtitle">명 체크인</div>
         </div>
 
-        <div class="dashboard-card">
+        <div class="stat-card">
             <div class="card-header">
-                <h3>소속 선수</h3>
-                <span class="icon">👥</span>
+                <h3>전체 회원</h3>
+                <span class="icon">&#128101;</span>
             </div>
             <div class="card-value" id="totalMembers">-</div>
             <div class="card-subtitle">활동 <span id="activeCount">-</span>명 / 미활동 <span id="inactiveCount">-</span>명</div>
         </div>
 
-        <div class="dashboard-card">
+        <div class="stat-card">
             <div class="card-header">
-                <h3>이번 주 훈련</h3>
-                <span class="icon">🗓️</span>
+                <h3>이번달 매출</h3>
+                <span class="icon">&#128176;</span>
             </div>
-            <div class="card-value" id="weeklyTraining">-</div>
-            <div class="card-subtitle">회 예정</div>
+            <div class="card-value success" id="monthlyRevenue">-</div>
+            <div class="card-subtitle">원</div>
         </div>
 
-        <div class="dashboard-card">
+        <div class="stat-card">
             <div class="card-header">
-                <h3>예정 대회</h3>
-                <span class="icon">🏆</span>
+                <h3>미납 건수</h3>
+                <span class="icon">&#9888;&#65039;</span>
             </div>
-            <div class="card-value" id="upcomingComps">-</div>
+            <div class="card-value danger" id="overdueCount">-</div>
             <div class="card-subtitle">건</div>
         </div>
     </div>
 
-    <!-- Team Roster -->
-    <div class="roster-section">
-        <div class="roster-header">
-            <h2>🏆 소속 선수 현황</h2>
-            <div class="roster-actions">
-                <button class="action-btn small secondary" onclick="syncPlayers()" id="syncBtn">
-                    🔄 대회 데이터 동기화
-                </button>
-                <button class="action-btn small secondary" onclick="openAddPlayerModal()">
-                    ➕ 선수 추가
-                </button>
+    <!-- Main body: content + sidebar -->
+    <div class="dashboard-body">
+        <!-- Left: Roster + Attendance -->
+        <div class="main-content-area">
+            <!-- Team Roster -->
+            <div class="panel roster-section">
+                <div class="roster-header">
+                    <h2>&#127942; 소속 선수 현황</h2>
+                    <div class="roster-actions">
+                        <button class="action-btn small secondary" onclick="syncPlayers()" id="syncBtn">
+                            &#128260; 동기화
+                        </button>
+                        <button class="action-btn small secondary" onclick="openAddPlayerModal()">
+                            &#10133; 선수 추가
+                        </button>
+                    </div>
+                </div>
+                <div id="rosterContent">
+                    <div class="loading">선수 데이터 로딩 중</div>
+                </div>
+
+                <!-- Inactive Players Section -->
+                <div class="inactive-section" id="inactiveSection" style="display: none;">
+                    <div class="inactive-header" onclick="toggleInactive()">
+                        <h3>
+                            <span class="toggle-icon" id="toggleIcon">&#9654;</span>
+                            미활동 리스트 (<span id="inactiveListCount">0</span>명)
+                        </h3>
+                        <span style="font-size: 0.8rem; color: var(--text-muted);">최근 3개월 내 대회 미출전</span>
+                    </div>
+                    <div class="inactive-content" id="inactiveContent"></div>
+                </div>
+            </div>
+
+            <!-- Today's Attendance -->
+            <div class="panel">
+                <div class="panel-header">
+                    <h2>&#128203; 오늘 출석 현황</h2>
+                </div>
+                <div id="attendanceContent">
+                    <div class="loading">출석 데이터 로딩 중</div>
+                </div>
             </div>
         </div>
-        <div id="rosterContent">
-            <div class="loading">선수 데이터 로딩 중</div>
-        </div>
 
-        <!-- Inactive Players Section -->
-        <div class="inactive-section" id="inactiveSection" style="display: none;">
-            <div class="inactive-header" onclick="toggleInactive()">
-                <h3>
-                    <span class="toggle-icon" id="toggleIcon">▶</span>
-                    미활동 리스트 (<span id="inactiveListCount">0</span>명)
-                </h3>
-                <span style="font-size: 0.85rem; color: #888;">최근 3개월 내 대회 미출전</span>
+        <!-- Right Sidebar -->
+        <div class="sidebar-panels">
+            <!-- Today's Schedule -->
+            <div class="panel">
+                <div class="panel-header">
+                    <h2>&#128197; 오늘 일정</h2>
+                    <a href="/api/schedule/page" class="action-btn small secondary">전체보기</a>
+                </div>
+                <div id="todayScheduleContent">
+                    <div class="loading">일정 로딩 중</div>
+                </div>
             </div>
-            <div class="inactive-content" id="inactiveContent"></div>
-        </div>
-    </div>
 
-    <!-- Today's Attendance -->
-    <div class="attendance-section">
-        <h2>📋 오늘 출석 현황</h2>
-        <div id="attendanceContent">
-            <div class="loading">출석 데이터 로딩 중</div>
+            <!-- Lesson Packages -->
+            <div class="panel">
+                <div class="panel-header">
+                    <h2>&#127915; 레슨 패키지</h2>
+                    <a href="/api/club/lessons-page" class="action-btn small secondary">관리</a>
+                </div>
+                <div id="lessonPackagesPanel">
+                    <div class="loading">패키지 로딩 중</div>
+                </div>
+            </div>
+
+            <!-- Quick Navigation -->
+            <div class="panel">
+                <div class="panel-header">
+                    <h2>&#128279; 바로가기</h2>
+                </div>
+                <ul class="quick-links">
+                    <li><a href="/api/club/">&#127968; 대시보드</a></li>
+                    <li><a href="/api/club/checkin">&#10003; 출석 체크인</a></li>
+                    <li><a href="/api/club/members">&#128101; 회원 관리</a></li>
+                    <li><a href="/api/club/lessons-page">&#128218; 레슨 관리</a></li>
+                    <li><a href="/api/schedule/page">&#128197; 스케줄</a></li>
+                    <li><a href="/api/club/accounting-page">&#128176; 회계 관리</a></li>
+                    <li><a href="/api/club/players/team/roster-status">&#127942; 선수 현황</a></li>
+                    <li><a href="/api/club/competition-entries-page">&#127941; 대회 관리</a></li>
+                    <li><a href="/api/club/parent/children">&#128106; 학부모 연동</a></li>
+                    <li><a href="/api/club/settings">&#9881;&#65039; 클럽 설정</a></li>
+                </ul>
+            </div>
         </div>
     </div>
 </div>
@@ -619,7 +729,7 @@
             <div class="search-results" id="searchResults" style="display: none;"></div>
         </div>
 
-        <div style="text-align: center; margin: 1rem 0; color: #888;">또는</div>
+        <div style="text-align: center; margin: 1rem 0; color: var(--text-muted);">또는</div>
 
         <div class="form-group">
             <label>신규 선수 수동 등록</label>
@@ -645,29 +755,76 @@
 
 {% block extra_js %}
 <script>
-const TEST_MODE = true;
 const API_BASE = '/api/club';
-const API_SUFFIX = TEST_MODE ? '?test=1' : '';
 
 let rosterData = null;
+
+function getAuthHeaders() {
+    return {
+        'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+    };
+}
+
+function getAuthHeadersJson() {
+    return {
+        'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+        'Content-Type': 'application/json'
+    };
+}
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
     loadDashboard();
     loadRosterWithStatus();
+    loadTodaySchedule();
+    loadLessonPackagesPanel();
 });
+
+// Lesson Packages Panel
+async function loadLessonPackagesPanel() {
+    const container = document.getElementById('lessonPackagesPanel');
+    try {
+        const res = await fetch('/api/lessons/packages?limit=5', { headers: getAuthHeaders() });
+        if (!res.ok) {
+            container.innerHTML = '<p style="color:var(--text-muted); padding:0.5rem;">데이터 로드 실패</p>';
+            return;
+        }
+        const data = await res.json();
+        const packages = data.items || [];
+
+        if (packages.length === 0) {
+            container.innerHTML = '<p style="color:var(--text-muted); padding:0.5rem; text-align:center;">등록된 패키지 없음</p>';
+            return;
+        }
+
+        const statusIcons = { active: '🟢', exhausted: '⚪', expired: '🟡', cancelled: '🔴' };
+        container.innerHTML = packages.map(p => `
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:0.5rem 0; border-bottom:1px solid var(--border-color);">
+                <div>
+                    <div style="font-weight:500; color:var(--text-primary); font-size:0.9rem;">${p.member_name || p.member_id}</div>
+                    <div style="font-size:0.75rem; color:var(--text-muted);">${p.coach_name || ''} · ${p.package_type}</div>
+                </div>
+                <div style="text-align:right;">
+                    <span style="font-weight:700; color:var(--accent-gold);">${p.remaining_sessions}</span>
+                    <span style="color:var(--text-muted); font-size:0.8rem;">/ ${p.total_sessions}</span>
+                    <span style="margin-left:0.25rem;">${statusIcons[p.status] || ''}</span>
+                </div>
+            </div>
+        `).join('');
+    } catch (e) {
+        console.error('Lesson packages panel error:', e);
+        container.innerHTML = '<p style="color:var(--text-muted); padding:0.5rem;">로딩 실패</p>';
+    }
+}
 
 // Dashboard
 async function loadDashboard() {
     try {
-        const headers = TEST_MODE ? {} : {
-            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-        };
-        const response = await fetch(`${API_BASE}/dashboard${API_SUFFIX}`, { headers });
+        const response = await fetch(`${API_BASE}/dashboard`, { headers: getAuthHeaders() });
 
         if (!response.ok) {
             if (response.status === 401) {
-                window.location.href = '/auth/login?redirect=/club/';
+                window.location.href = '/auth/login?redirect=/api/club/';
                 return;
             }
             throw new Error('대시보드 로드 실패');
@@ -684,36 +841,71 @@ async function loadDashboard() {
 function renderDashboard(data) {
     document.getElementById('clubName').textContent = data.organization_name;
     document.getElementById('todayAttendance').textContent = data.today_attendance;
-    document.getElementById('weeklyTraining').textContent = data.weekly_training || 5;
-    document.getElementById('upcomingComps').textContent = data.upcoming_competitions?.length || 0;
 
-    const filteredAlerts = (data.alerts || []).filter(a => a.alert_type !== 'overdue_fee');
-    renderAlerts(filteredAlerts);
+    // Revenue and overdue from dashboard or defaults
+    const revenue = data.monthly_revenue || 0;
+    document.getElementById('monthlyRevenue').textContent = revenue.toLocaleString('ko-KR');
+    document.getElementById('overdueCount').textContent = data.overdue_count || 0;
+
+    renderAlerts(data.alerts || []);
     renderAttendance(data.today_checkins);
+}
 
-    if (TEST_MODE) {
-        addAdminButtons();
+// Today Schedule
+async function loadTodaySchedule() {
+    try {
+        const today = new Date();
+        const start = today.toISOString().split('T')[0] + 'T00:00:00';
+        const end = today.toISOString().split('T')[0] + 'T23:59:59';
+
+        const response = await fetch(
+            `/api/schedule/events?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`,
+            { headers: getAuthHeaders() }
+        );
+
+        if (!response.ok) throw new Error('일정 로드 실패');
+
+        const events = await response.json();
+        renderTodaySchedule(events);
+
+    } catch (error) {
+        console.error('Schedule error:', error);
+        document.getElementById('todayScheduleContent').innerHTML =
+            '<div class="empty-state">일정을 불러올 수 없습니다</div>';
     }
 }
 
-function addAdminButtons() {
-    const actionsDiv = document.getElementById('headerActions');
-    if (!actionsDiv.querySelector('.accounting-btn')) {
-        const btn = document.createElement('button');
-        btn.className = 'action-btn secondary accounting-btn';
-        btn.innerHTML = '💰 회계관리';
-        btn.onclick = () => location.href = '/club/accounting';
-        actionsDiv.appendChild(btn);
+function renderTodaySchedule(events) {
+    const container = document.getElementById('todayScheduleContent');
+
+    if (!events || events.length === 0) {
+        container.innerHTML = '<div class="empty-state">오늘 예정된 일정이 없습니다</div>';
+        return;
     }
+
+    const typeClasses = {
+        'training': 'training',
+        'lesson': 'lesson',
+        'competition': 'competition',
+    };
+
+    container.innerHTML = events.slice(0, 8).map(ev => {
+        const startTime = ev.start ? new Date(ev.start).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : '';
+        const dotClass = typeClasses[ev.extendedProps?.event_type] || 'other';
+        return `
+            <div class="schedule-item">
+                <span class="schedule-time">${startTime}</span>
+                <span class="schedule-dot ${dotClass}"></span>
+                <span class="schedule-title">${ev.title || ''}</span>
+            </div>
+        `;
+    }).join('');
 }
 
 // Roster with Activity Status
 async function loadRosterWithStatus() {
     try {
-        const headers = TEST_MODE ? {} : {
-            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-        };
-        const response = await fetch(`${API_BASE}/players/team/roster-status${API_SUFFIX}`, { headers });
+        const response = await fetch(`${API_BASE}/players/team/roster-status`, { headers: getAuthHeaders() });
 
         if (!response.ok) throw new Error('로스터 로드 실패');
 
@@ -728,12 +920,10 @@ async function loadRosterWithStatus() {
 }
 
 function renderRosterWithStatus(data) {
-    // Update stats
     document.getElementById('totalMembers').textContent = data.active_count;
     document.getElementById('activeCount').textContent = data.active_count;
     document.getElementById('inactiveCount').textContent = data.inactive_count;
 
-    // Active players table
     const container = document.getElementById('rosterContent');
 
     if (!data.active_players || data.active_players.length === 0) {
@@ -742,7 +932,6 @@ function renderRosterWithStatus(data) {
         container.innerHTML = renderPlayerTable(data.active_players, 'active');
     }
 
-    // Inactive players section
     const inactiveSection = document.getElementById('inactiveSection');
     if (data.inactive_players && data.inactive_players.length > 0) {
         inactiveSection.style.display = 'block';
@@ -752,7 +941,6 @@ function renderRosterWithStatus(data) {
         inactiveSection.style.display = 'none';
     }
 
-    // Setup drag and drop
     setupDragAndDrop();
 }
 
@@ -764,7 +952,7 @@ function renderPlayerTable(players, listType) {
                     <th></th>
                     <th>이름</th>
                     <th>무기</th>
-                    <th>대회 수</th>
+                    <th>대회</th>
                     <th>최근 대회</th>
                     ${listType === 'inactive' ? '<th>현재 소속</th>' : '<th>최근 결과</th>'}
                     <th>상세</th>
@@ -773,7 +961,7 @@ function renderPlayerTable(players, listType) {
             <tbody>
                 ${players.map(player => `
                     <tr draggable="true" data-member-id="${player.member_id}" data-list-type="${listType}">
-                        <td><span class="drag-handle">⋮⋮</span></td>
+                        <td><span class="drag-handle">&#8942;&#8942;</span></td>
                         <td class="player-name">
                             ${player.player_id
                                 ? `<a href="/player/${player.player_id}">${player.name}</a>`
@@ -784,7 +972,7 @@ function renderPlayerTable(players, listType) {
                                 ? `<span class="weapon-badge">${player.weapon}</span>`
                                 : '-'}
                         </td>
-                        <td class="stat-value">${player.competition_count || 0}</td>
+                        <td class="roster-stat-value">${player.competition_count || 0}</td>
                         <td>${player.last_competition_date || '-'}</td>
                         ${listType === 'inactive'
                             ? `<td>${renderCurrentTeam(player)}</td>`
@@ -792,8 +980,8 @@ function renderPlayerTable(players, listType) {
                         }
                         <td>
                             ${player.player_id
-                                ? `<a href="/club/players/${player.player_id}/profile" class="action-btn small secondary">상세</a>`
-                                : '<span style="color:#999">미연결</span>'}
+                                ? `<a href="/api/club/players/${player.player_id}/profile" class="action-btn small secondary">상세</a>`
+                                : '<span style="color:var(--text-muted)">미연결</span>'}
                         </td>
                     </tr>
                 `).join('')}
@@ -874,22 +1062,17 @@ async function handleDrop(e) {
     if (targetListType === sourceListType) return;
 
     const memberId = draggedRow.dataset.memberId;
-    const newStatus = targetListType; // 'active' or 'inactive'
+    const newStatus = targetListType;
 
     try {
-        const headers = TEST_MODE ? {'Content-Type': 'application/json'} : {
-            'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
-            'Content-Type': 'application/json'
-        };
-
         const response = await fetch(
-            `${API_BASE}/players/team/move-player?member_id=${memberId}&status=${newStatus}${TEST_MODE ? '&test=1' : ''}`,
-            { method: 'POST', headers }
+            `${API_BASE}/players/team/move-player?member_id=${memberId}&status=${newStatus}`,
+            { method: 'POST', headers: getAuthHeadersJson() }
         );
 
         if (response.ok) {
             showAlert('success', `선수가 ${newStatus === 'active' ? '소속 선수' : '미활동'} 리스트로 이동되었습니다.`);
-            loadRosterWithStatus(); // Reload
+            loadRosterWithStatus();
         } else {
             throw new Error('이동 실패');
         }
@@ -903,32 +1086,26 @@ async function handleDrop(e) {
 async function syncPlayers() {
     const btn = document.getElementById('syncBtn');
     btn.disabled = true;
-    btn.innerHTML = '🔄 동기화 중...';
+    btn.textContent = '동기화 중...';
 
     try {
-        const headers = TEST_MODE ? {'Content-Type': 'application/json'} : {
-            'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
-            'Content-Type': 'application/json'
-        };
-
-        const response = await fetch(`${API_BASE}/players/team/sync${API_SUFFIX}`, {
+        const response = await fetch(`${API_BASE}/players/team/sync`, {
             method: 'POST',
-            headers
+            headers: getAuthHeadersJson()
         });
 
         if (!response.ok) throw new Error('동기화 실패');
 
         const result = await response.json();
-
         showAlert('success', `동기화 완료: ${result.newly_registered}명 새로 등록, 총 ${result.total_found}명`);
-        loadRosterWithStatus(); // Reload
+        loadRosterWithStatus();
 
     } catch (error) {
         showAlert('error', '대회 데이터 동기화에 실패했습니다.');
         console.error(error);
     } finally {
         btn.disabled = false;
-        btn.innerHTML = '🔄 대회 데이터 동기화';
+        btn.innerHTML = '&#128260; 동기화';
     }
 }
 
@@ -989,14 +1166,9 @@ function renderSearchResults(results) {
 
 async function addPlayerFromSearch(playerId, playerName) {
     try {
-        const headers = TEST_MODE ? {'Content-Type': 'application/json'} : {
-            'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
-            'Content-Type': 'application/json'
-        };
-
         const response = await fetch(
-            `${API_BASE}/players/team/add-player?player_id=${playerId}${TEST_MODE ? '&test=1' : ''}`,
-            { method: 'POST', headers }
+            `${API_BASE}/players/team/add-player?player_id=${playerId}`,
+            { method: 'POST', headers: getAuthHeadersJson() }
         );
 
         if (!response.ok) {
@@ -1023,16 +1195,10 @@ async function addManualPlayer() {
     }
 
     try {
-        const headers = TEST_MODE ? {'Content-Type': 'application/json'} : {
-            'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
-            'Content-Type': 'application/json'
-        };
-
         let url = `${API_BASE}/players/team/add-player?player_name=${encodeURIComponent(name)}`;
         if (weapon) url += `&weapon=${encodeURIComponent(weapon)}`;
-        if (TEST_MODE) url += '&test=1';
 
-        const response = await fetch(url, { method: 'POST', headers });
+        const response = await fetch(url, { method: 'POST', headers: getAuthHeadersJson() });
 
         if (!response.ok) {
             const error = await response.json();
@@ -1056,11 +1222,11 @@ function renderAlerts(alerts) {
         return;
     }
 
-    const icons = { 'warning': '⚠️', 'info': 'ℹ️', 'error': '🚨', 'success': '✅' };
+    const icons = { 'warning': '&#9888;&#65039;', 'info': '&#8505;&#65039;', 'error': '&#128680;', 'success': '&#9989;' };
 
     container.innerHTML = alerts.map(alert => `
         <div class="alert ${alert.severity}">
-            <span class="alert-icon">${icons[alert.severity] || 'ℹ️'}</span>
+            <span class="alert-icon">${icons[alert.severity] || '&#8505;&#65039;'}</span>
             <span>${alert.message}</span>
         </div>
     `).join('');
@@ -1068,15 +1234,16 @@ function renderAlerts(alerts) {
 
 function showAlert(type, message) {
     const container = document.getElementById('alertsSection');
-    const alert = document.createElement('div');
-    alert.className = `alert ${type}`;
-    alert.innerHTML = `
-        <span class="alert-icon">${type === 'success' ? '✅' : type === 'error' ? '🚨' : 'ℹ️'}</span>
+    const alertEl = document.createElement('div');
+    alertEl.className = `alert ${type}`;
+    const iconMap = { 'success': '&#9989;', 'error': '&#128680;', 'info': '&#8505;&#65039;', 'warning': '&#9888;&#65039;' };
+    alertEl.innerHTML = `
+        <span class="alert-icon">${iconMap[type] || '&#8505;&#65039;'}</span>
         <span>${message}</span>
     `;
-    container.insertBefore(alert, container.firstChild);
+    container.insertBefore(alertEl, container.firstChild);
 
-    setTimeout(() => alert.remove(), 5000);
+    setTimeout(() => alertEl.remove(), 5000);
 }
 
 function renderAttendance(checkins) {

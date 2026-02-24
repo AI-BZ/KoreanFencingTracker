@@ -28,10 +28,12 @@
                 <span class="logo-icon">&#9876;&#65039;</span>
                 <span class="logo-text">FencingMind Club</span>
             </a>
-            <div class="nav-links">
-                <a href="/api/club/">Dashboard</a>
-                <a href="/api/club/checkin">Check-in</a>
-                <a href="/api/club/lessons-page">Lessons</a>
+            <div class="nav-links" id="navLinks">
+                <a href="/api/club/">대시보드</a>
+                <a href="/api/club/checkin">체크인</a>
+                <a href="/api/club/lessons-page">레슨</a>
+                <a href="/api/schedule/page">스케줄</a>
+                <a href="#" id="navLogout" style="display:none;" onclick="handleLogout()">로그아웃</a>
             </div>
         </div>
     </nav>
@@ -46,8 +48,29 @@
         </div>
     </footer>
 
+    <!-- Kakao SDK -->
+    <script src="https://t1.kakaocdn.net/kakao_js_sdk/2.7.4/kakao.min.js"
+            integrity="sha384-DKYJZ8NLiK8MN4/C5P2ezmFnFQl/d2yOG7loRK3wuy06TZRlkU5TPmMGXlmEputS"
+            crossorigin="anonymous"></script>
+    <script src="/static/js/kakao-share.js"></script>
+
     {% block extra_js %}{% endblock %}
     <script>
+    // Auth state: show/hide logout link
+    (function() {
+        const token = localStorage.getItem('access_token');
+        const logoutLink = document.getElementById('navLogout');
+        if (token && logoutLink) {
+            logoutLink.style.display = '';
+        }
+    })();
+
+    function handleLogout() {
+        localStorage.removeItem('access_token');
+        document.cookie = 'access_token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+        window.location.href = '/';
+    }
+
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
             navigator.serviceWorker.register('/sw.js', { scope: '/' })

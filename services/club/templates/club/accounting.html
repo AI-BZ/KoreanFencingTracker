@@ -243,10 +243,9 @@
 
 {% block extra_js %}
 <script>
-// 테스트 모드 (dashboard.html과 동일)
-const TEST_MODE = true;
+const TEST_MODE = false;
 const API_BASE = '/api/club';
-const API_SUFFIX = TEST_MODE ? '?test=1' : '';
+const API_SUFFIX = '';
 
 async function loadAccountingData() {
     const container = document.getElementById('accountingContent');

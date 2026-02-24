@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+{% block title %}Schedule - FencingMind Club{% endblock %}
+
+{% block extra_css %}
+<!-- FullCalendar v6 (CSS is bundled in JS for v6) -->
+<link rel="stylesheet" href="/static/css/schedule.css?v=20260223">
+{% endblock %}
+
+{% block content %}
+<div class="schedule-container">
+    <!-- Sidebar -->
+    <aside class="schedule-sidebar" id="sidebar">
+        <!-- Filter Tabs -->
+        <div class="sidebar-section">
+            <h3 class="sidebar-title">View</h3>
+            <div class="filter-tabs">
+                <button class="filter-tab active" data-filter="all" onclick="setFilter('all')">
+                    <span class="tab-icon">&#128197;</span> All
+                </button>
+                <button class="filter-tab" data-filter="club" onclick="setFilter('club')">
+                    <span class="tab-icon">&#127963;</span> Club
+                </button>
+                <button class="filter-tab" data-filter="coaches" onclick="setFilter('coaches')">
+                    <span class="tab-icon">&#129338;</span> Coach
+                </button>
+                <button class="filter-tab" data-filter="my" onclick="setFilter('my')">
+                    <span class="tab-icon">&#128100;</span> My
+                </button>
+            </div>
+        </div>
+
+        <!-- Event Type Filters -->
+        <div class="sidebar-section">
+            <h3 class="sidebar-title">Event Type</h3>
+            <div class="event-type-filters" id="eventTypeFilters">
+                <label class="type-filter">
+                    <input type="checkbox" value="training" checked onchange="applyFilters()">
+                    <span class="type-dot" style="background:#667eea"></span>
+                    Training
+                </label>
+                <label class="type-filter">
+                    <input type="checkbox" value="lesson" checked onchange="applyFilters()">
+                    <span class="type-dot" style="background:#48bb78"></span>
+                    Lesson
+                </label>
+                <label class="type-filter">
+                    <input type="checkbox" value="competition" checked onchange="applyFilters()">
+                    <span class="type-dot" style="background:#ed8936"></span>
+                    Competition
+                </label>
+                <label class="type-filter">
+                    <input type="checkbox" value="club_event" checked onchange="applyFilters()">
+                    <span class="type-dot" style="background:#9f7aea"></span>
+                    Club Event
+                </label>
+                <label class="type-filter">
+                    <input type="checkbox" value="holiday" checked onchange="applyFilters()">
+                    <span class="type-dot" style="background:#fc8181"></span>
+                    Holiday
+                </label>
+                <label class="type-filter">
+                    <input type="checkbox" value="personal" checked onchange="applyFilters()">
+                    <span class="type-dot" style="background:#4fd1c5"></span>
+                    Personal
+                </label>
+                <label class="type-filter">
+                    <input type="checkbox" value="meeting" checked onchange="applyFilters()">
+                    <span class="type-dot" style="background:#f6ad55"></span>
+                    Meeting
+                </label>
+            </div>
+        </div>
+
+        <!-- Coach Filter -->
+        <div class="sidebar-section">
+            <h3 class="sidebar-title">Coach</h3>
+            <select id="coachFilter" class="sidebar-select" onchange="applyFilters()">
+                <option value="">All Coaches</option>
+            </select>
+        </div>
+
+        <!-- Mini Calendar (date picker) -->
+        <div class="sidebar-section">
+            <h3 class="sidebar-title">Quick Jump</h3>
+            <input type="date" id="quickDate" class="sidebar-input" onchange="jumpToDate(this.value)">
+        </div>
+
+        <!-- Add Event Button -->
+        <div class="sidebar-section">
+            <button class="btn-add-event" onclick="openCreateModal()">
+                + New Event
+            </button>
+        </div>
+    </aside>
+
+    <!-- Main Calendar -->
+    <div class="calendar-main">
+        <!-- Mobile Sidebar Toggle -->
+        <button class="sidebar-toggle" onclick="toggleSidebar()">&#9776; Filters</button>
+        <div id="calendar"></div>
+    </div>
+</div>
+
+<!-- ─── Event Create/Edit Modal ─── -->
+<div class="modal-overlay" id="eventModal" style="display:none">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 id="modalTitle">New Event</h2>
+            <button class="modal-close" onclick="closeModal()">&times;</button>
+        </div>
+        <form id="eventForm" onsubmit="saveEvent(event)">
+            <input type="hidden" id="eventId" value="">
+
+            <div class="form-row">
+                <div class="form-group flex-2">
+                    <label>Title *</label>
+                    <input type="text" id="evTitle" required maxlength="200" placeholder="Event title">
+                </div>
+                <div class="form-group flex-1">
+                    <label>Type</label>
+                    <select id="evType" onchange="updateColorPreview()">
+                        <option value="training">Training</option>
+                        <option value="lesson">Lesson</option>
+                        <option value="competition">Competition</option>
+                        <option value="club_event">Club Event</option>
+                        <option value="holiday">Holiday</option>
+                        <option value="personal">Personal</option>
+                        <option value="meeting">Meeting</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group flex-1">
+                    <label>Start *</label>
+                    <input type="datetime-local" id="evStart" required>
+                </div>
+                <div class="form-group flex-1">
+                    <label>End *</label>
+                    <input type="datetime-local" id="evEnd" required>
+                </div>
+                <div class="form-group" style="align-self:flex-end">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="evAllDay" onchange="toggleAllDay()"> All Day
+                    </label>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group flex-1">
+                    <label>Visibility</label>
+                    <select id="evVisibility">
+                        <option value="club">Club (everyone)</option>
+                        <option value="coaches">Coaches only</option>
+                        <option value="personal">Personal</option>
+                    </select>
+                </div>
+                <div class="form-group flex-1">
+                    <label>Assigned Coach</label>
+                    <select id="evCoach">
+                        <option value="">None</option>
+                    </select>
+                </div>
+                <div class="form-group flex-1">
+                    <label>Color</label>
+                    <div class="color-row">
+                        <input type="color" id="evColor" value="#667eea">
+                        <span class="color-preview" id="colorPreview"></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Location</label>
+                <input type="text" id="evLocation" placeholder="Location (optional)">
+            </div>
+
+            <div class="form-group">
+                <label>Description</label>
+                <textarea id="evDescription" rows="3" placeholder="Details (optional)"></textarea>
+            </div>
+
+            <!-- Recurrence -->
+            <div class="form-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="evRecurring" onchange="toggleRecurrence()"> Recurring Event
+                </label>
+            </div>
+            <div id="recurrenceOptions" style="display:none">
+                <div class="form-row">
+                    <div class="form-group flex-1">
+                        <label>Frequency</label>
+                        <select id="evRecFreq" onchange="toggleDayPicker()">
+                            <option value="daily">Daily</option>
+                            <option value="weekly" selected>Weekly</option>
+                            <option value="monthly">Monthly</option>
+                        </select>
+                    </div>
+                    <div class="form-group flex-1">
+                        <label>Until</label>
+                        <input type="date" id="evRecUntil">
+                    </div>
+                </div>
+                <div class="form-group" id="dayPickerGroup">
+                    <label>Days</label>
+                    <div class="day-picker">
+                        <label class="day-chip"><input type="checkbox" value="0"> Mon</label>
+                        <label class="day-chip"><input type="checkbox" value="1"> Tue</label>
+                        <label class="day-chip"><input type="checkbox" value="2"> Wed</label>
+                        <label class="day-chip"><input type="checkbox" value="3"> Thu</label>
+                        <label class="day-chip"><input type="checkbox" value="4"> Fri</label>
+                        <label class="day-chip"><input type="checkbox" value="5"> Sat</label>
+                        <label class="day-chip"><input type="checkbox" value="6"> Sun</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="btn-cancel" onclick="closeModal()">Cancel</button>
+                <button type="button" class="btn-danger" id="btnDelete" style="display:none" onclick="deleteEvent()">Delete</button>
+                <button type="submit" class="btn-primary">Save</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ─── Event Detail Modal ─── -->
+<div class="modal-overlay" id="detailModal" style="display:none">
+    <div class="modal-content modal-sm">
+        <div class="modal-header">
+            <h2 id="detailTitle"></h2>
+            <button class="modal-close" onclick="closeDetailModal()">&times;</button>
+        </div>
+        <div class="detail-body">
+            <div class="detail-row" id="detailType"></div>
+            <div class="detail-row" id="detailTime"></div>
+            <div class="detail-row" id="detailLocation"></div>
+            <div class="detail-row" id="detailCoach"></div>
+            <div class="detail-row" id="detailVisibility"></div>
+            <div class="detail-row" id="detailDesc"></div>
+            <div class="detail-row" id="detailParticipants"></div>
+        </div>
+        <div class="modal-actions">
+            <button class="btn-cancel" onclick="closeDetailModal()">Close</button>
+            <button class="btn-secondary" id="btnEdit" onclick="editFromDetail()">Edit</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- FullCalendar v6 -->
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
+<script src="/static/js/schedule.js?v=20260223"></script>
+{% endblock %}

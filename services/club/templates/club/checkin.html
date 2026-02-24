@@ -250,11 +250,9 @@
 
 {% block extra_js %}
 <script>
-// 테스트 모드: 기본 활성화 (로그인 시스템 완성 전까지)
-// TODO: 로그인 시스템 완성 후 false로 변경
-const TEST_MODE = true;
+const TEST_MODE = false;
 const API_BASE = '/api/club';
-const API_SUFFIX = TEST_MODE ? '?test=1' : '';
+const API_SUFFIX = '';
 let currentStatus = null;
 
 async function loadCheckinStatus() {

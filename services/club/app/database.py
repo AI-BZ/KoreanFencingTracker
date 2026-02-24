@@ -1,28 +1,9 @@
 """
-독립 Supabase 클라이언트 (scraper 의존성 없음)
+Supabase 클라이언트 - shared_core 래퍼
 
-Club 마이크로서비스 전용 - database/supabase_client.py의 get_supabase_client()를 대체
+shared_core.db.client의 싱글톤 클라이언트를 재수출합니다.
+기존 import 호환성 유지: from ..database import get_supabase_client
 """
-from typing import Optional
-from supabase import create_client, Client
-from loguru import logger
+from shared_core.db.client import get_supabase_client
 
-from . import config
-
-_supabase_client: Optional[Client] = None
-
-
-def get_supabase_client() -> Client:
-    """
-    Supabase 클라이언트 인스턴스 반환 (싱글톤)
-    """
-    global _supabase_client
-    if _supabase_client is None:
-        if not config.SUPABASE_URL or not config.SUPABASE_KEY:
-            raise ValueError("SUPABASE_URL과 SUPABASE_KEY 환경변수를 설정해주세요")
-        _supabase_client = create_client(
-            config.SUPABASE_URL,
-            config.SUPABASE_KEY
-        )
-        logger.info("Supabase client initialized")
-    return _supabase_client
+__all__ = ["get_supabase_client"]

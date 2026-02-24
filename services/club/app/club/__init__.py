@@ -7,15 +7,14 @@ Club Management Module
 """
 
 from .router import router as club_router
+from .dependencies import ClubMemberContext, ClubRole
 from .models import (
-    ClubRole,
     MemberStatus,
     AttendanceType,
     CheckinMethod,
     FeeType,
     FeeStatus
 )
-from .dependencies import ClubMemberContext
 
 __all__ = [
     "club_router",
