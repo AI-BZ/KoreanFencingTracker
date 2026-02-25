@@ -363,9 +363,9 @@
             <div class="icon">&#128197;</div>
             <div class="label">수업 일정</div>
         </a>
-        <a href="#fees" class="quick-action-btn">
-            <div class="icon">&#128176;</div>
-            <div class="label">비용 내역</div>
+        <a href="/api/club/billing" class="quick-action-btn">
+            <div class="icon">&#128179;</div>
+            <div class="label">결제 관리</div>
         </a>
         <a href="#lessons" class="quick-action-btn">
             <div class="icon">&#128218;</div>
@@ -389,6 +389,12 @@
     <h2 class="section-title">&#127915; 자녀 레슨 패키지</h2>
     <div id="childPackagesSection">
         <div class="loading">패키지 정보 로딩 중</div>
+    </div>
+
+    <!-- Upcoming Competitions -->
+    <h2 class="section-title">&#127942; 다가오는 대회</h2>
+    <div id="competitionsSection">
+        <div class="loading">대회 정보 로딩 중</div>
     </div>
 
     <!-- Fees -->
@@ -444,8 +450,9 @@ async function loadParentDashboard() {
         console.error('대시보드 로드 오류:', error);
     }
 
-    // Load children data (independent calls)
+    // Load children data and competitions (independent calls)
     loadChildren();
+    loadCompetitions();
 }
 
 async function loadChildren() {
@@ -728,6 +735,57 @@ async function loadChildrenPackages(children) {
         section.innerHTML = '<div class="empty-state"><p>등록된 레슨 패키지가 없습니다.</p></div>';
     } else {
         section.innerHTML = allHtml;
+    }
+}
+
+async function loadCompetitions() {
+    const section = document.getElementById('competitionsSection');
+    try {
+        const response = await fetch('/api/competitions/events?status=upcoming&limit=5', {
+            headers: getAuthHeaders()
+        });
+
+        if (!response.ok) {
+            section.innerHTML = '<div class="info-panel"><p>대회 정보를 불러올 수 없습니다.</p></div>';
+            return;
+        }
+
+        const data = await response.json();
+        const events = data.items || [];
+
+        if (events.length === 0) {
+            section.innerHTML = '<div class="info-panel"><p>예정된 대회가 없습니다.</p></div>';
+            return;
+        }
+
+        section.innerHTML = events.map(e => `
+            <div class="child-card">
+                <div class="child-header">
+                    <div class="child-avatar" style="background: var(--accent-blue, #3b82f6);">&#127942;</div>
+                    <div class="child-meta">
+                        <h3>${e.name}</h3>
+                        <p>${e.start_date}${e.location ? ' · ' + e.location : ''}${e.weapon ? ' · ' + e.weapon : ''}</p>
+                    </div>
+                </div>
+                <div class="attendance-summary">
+                    <div class="att-stat">
+                        <div class="value">${e.entry_fee ? '₩' + e.entry_fee.toLocaleString('ko-KR') : '무료'}</div>
+                        <div class="label">참가비</div>
+                    </div>
+                    <div class="att-stat">
+                        <div class="value">${(e.rsvp_summary?.attending_count || 0)}</div>
+                        <div class="label">참가 신청</div>
+                    </div>
+                    <div class="att-stat">
+                        <div class="value">${e.rsvp_deadline || '-'}</div>
+                        <div class="label">응답 마감</div>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    } catch (error) {
+        console.error('Competitions error:', error);
+        section.innerHTML = '<div class="info-panel"><p>대회 정보를 불러올 수 없습니다.</p></div>';
     }
 }
 </script>

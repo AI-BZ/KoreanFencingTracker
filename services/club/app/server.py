@@ -17,6 +17,7 @@ from .billing import billing_router
 from .notifications import notifications_router
 from .schedule import schedule_router
 from .lessons import lessons_router
+from .competitions import competitions_router
 
 templates: Jinja2Templates = None
 
@@ -71,6 +72,7 @@ app.include_router(billing_router, prefix="/api")
 app.include_router(notifications_router, prefix="/api")
 app.include_router(schedule_router, prefix="/api")
 app.include_router(lessons_router, prefix="/api")
+app.include_router(competitions_router, prefix="/api")
 
 
 # ─────────────────────────────────────────────────────────────

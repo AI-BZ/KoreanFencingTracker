@@ -530,6 +530,19 @@
         </div>
     </div>
 
+    <!-- Upcoming Competitions -->
+    <div class="section-card">
+        <div class="section-header">
+            <h2>🏆 다가오는 대회</h2>
+        </div>
+        <div class="section-content" id="competitionsContent">
+            <div class="empty-state">
+                <div class="icon">🏆</div>
+                <p>대회 정보 로딩 중...</p>
+            </div>
+        </div>
+    </div>
+
     <!-- Announcements -->
     <div class="section-card">
         <div class="section-header">
@@ -586,6 +599,7 @@ async function loadDashboard() {
         loadAttendance();
         loadLessons();
         loadMyPackages();
+        loadCompetitions();
         loadAnnouncements();
         checkCheckinStatus();
 
@@ -853,6 +867,72 @@ function renderAnnouncements(announcements) {
             <div class="announcement-preview">${a.preview || a.content?.slice(0, 100) || ''}</div>
         </div>
     `).join('');
+}
+
+async function loadCompetitions() {
+    const container = document.getElementById('competitionsContent');
+    try {
+        const response = await fetch('/api/competitions/events?status=upcoming&limit=5', {
+            headers: getAuthHeaders()
+        });
+
+        if (response.status === 401) { handleUnauthorized(); return; }
+
+        if (!response.ok) {
+            container.innerHTML = `<div class="empty-state"><div class="icon">🏆</div><p>대회 정보를 불러올 수 없습니다</p></div>`;
+            return;
+        }
+
+        const data = await response.json();
+        const events = data.items || [];
+
+        if (events.length === 0) {
+            container.innerHTML = `<div class="empty-state"><div class="icon">🏆</div><p>예정된 대회가 없습니다</p></div>`;
+            return;
+        }
+
+        container.innerHTML = events.map(e => `
+            <div style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <div style="font-weight: 600; color: var(--text-primary);">${e.name}</div>
+                        <div style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.25rem;">
+                            📅 ${e.start_date}${e.location ? ' · 📍 ' + e.location : ''}${e.weapon ? ' · ⚔️ ' + e.weapon : ''}
+                        </div>
+                        ${e.rsvp_deadline ? `<div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.15rem;">응답 마감: ${e.rsvp_deadline}</div>` : ''}
+                    </div>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <button onclick="submitRSVP('${e.id}', 'attending')" style="padding: 0.4rem 0.8rem; background: var(--accent-green, #22c55e); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.8rem;">참가</button>
+                        <button onclick="submitRSVP('${e.id}', 'not_attending')" style="padding: 0.4rem 0.8rem; background: var(--text-muted); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.8rem;">불참</button>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    } catch (error) {
+        console.error('Competitions error:', error);
+        container.innerHTML = `<div class="empty-state"><div class="icon">🏆</div><p>대회 정보를 불러올 수 없습니다</p></div>`;
+    }
+}
+
+async function submitRSVP(eventId, status) {
+    try {
+        const response = await fetch(`/api/competitions/events/${eventId}/rsvp`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+            body: JSON.stringify({ status })
+        });
+
+        if (response.ok) {
+            alert(status === 'attending' ? '참가 응답 완료!' : '불참 응답 완료!');
+            loadCompetitions();
+        } else {
+            const err = await response.json();
+            alert(err.detail || 'RSVP 제출 실패');
+        }
+    } catch (error) {
+        console.error('RSVP error:', error);
+        alert('응답 제출 중 오류가 발생했습니다');
+    }
 }
 
 async function loadMyPackages() {

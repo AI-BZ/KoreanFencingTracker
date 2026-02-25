@@ -205,3 +205,19 @@ async def lessons_page(request: Request):
         "club/lessons.html",
         {"request": request, "title": "레슨 관리"}
     )
+
+
+@router.get("/billing", response_class=HTMLResponse)
+async def billing_page(request: Request):
+    """
+    결제 관리 페이지 (학부모/학생용 청구서 조회 및 카드 결제)
+    """
+    return templates.TemplateResponse(
+        "club/billing.html",
+        {
+            "request": request,
+            "title": "결제 관리",
+            "portone_store_id": config.PORTONE_STORE_ID,
+            "portone_channel_key": getattr(config, "PORTONE_CHANNEL_KEY", ""),
+        }
+    )

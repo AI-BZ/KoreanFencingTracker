@@ -693,6 +693,16 @@
                 </div>
             </div>
 
+            <!-- Upcoming Competitions -->
+            <div class="panel">
+                <div class="panel-header">
+                    <h2>&#127942; 다가오는 대회</h2>
+                </div>
+                <div id="competitionsPanel">
+                    <div class="loading">대회 정보 로딩 중</div>
+                </div>
+            </div>
+
             <!-- Quick Navigation -->
             <div class="panel">
                 <div class="panel-header">
@@ -705,6 +715,7 @@
                     <li><a href="/api/club/lessons-page">&#128218; 레슨 관리</a></li>
                     <li><a href="/api/schedule/page">&#128197; 스케줄</a></li>
                     <li><a href="/api/club/accounting-page">&#128176; 회계 관리</a></li>
+                    <li><a href="/api/club/billing">&#128179; 결제 관리</a></li>
                     <li><a href="/api/club/players/team/roster-status">&#127942; 선수 현황</a></li>
                     <li><a href="/api/club/competition-entries-page">&#127941; 대회 관리</a></li>
                     <li><a href="/api/club/parent/children">&#128106; 학부모 연동</a></li>
@@ -778,7 +789,51 @@ document.addEventListener('DOMContentLoaded', () => {
     loadRosterWithStatus();
     loadTodaySchedule();
     loadLessonPackagesPanel();
+    loadCompetitionsPanel();
 });
+
+// Competitions Panel
+async function loadCompetitionsPanel() {
+    const container = document.getElementById('competitionsPanel');
+    try {
+        const res = await fetch('/api/competitions/events?status=upcoming&limit=5', {
+            headers: getAuthHeaders()
+        });
+        if (!res.ok) {
+            container.innerHTML = '<div style="padding:1rem; color:var(--text-muted);">대회 정보를 불러올 수 없습니다</div>';
+            return;
+        }
+        const data = await res.json();
+        const events = data.items || [];
+        if (events.length === 0) {
+            container.innerHTML = '<div style="padding:1rem; color:var(--text-muted);">예정된 대회가 없습니다</div>';
+            return;
+        }
+        container.innerHTML = `<ul style="list-style:none; padding:0; margin:0;">
+            ${events.map(e => {
+                const rsvp = e.rsvp_summary || {};
+                return `<li style="padding: 0.75rem 1rem; border-bottom: 1px solid var(--border-color);">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <div style="font-weight:600; color:var(--text-primary);">${e.name}</div>
+                            <div style="font-size:0.8rem; color:var(--text-secondary);">
+                                ${e.start_date}${e.location ? ' · ' + e.location : ''}
+                            </div>
+                        </div>
+                        <div style="text-align:right; font-size:0.8rem;">
+                            <span style="color:#22c55e;">✓${rsvp.attending_count || 0}</span>
+                            <span style="color:#ef4444; margin-left:0.5rem;">✗${rsvp.not_attending_count || 0}</span>
+                            <span style="color:#f59e0b; margin-left:0.5rem;">?${rsvp.maybe_count || 0}</span>
+                        </div>
+                    </div>
+                </li>`;
+            }).join('')}
+        </ul>`;
+    } catch (error) {
+        console.error('Competitions error:', error);
+        container.innerHTML = '<div style="padding:1rem; color:var(--text-muted);">대회 정보를 불러올 수 없습니다</div>';
+    }
+}
 
 // Lesson Packages Panel
 async function loadLessonPackagesPanel() {

@@ -987,6 +987,83 @@
         </div>
     </div>
 
+    <!-- Upcoming Competitions Section -->
+    <div class="roster-section" id="competitionsSection">
+        <div class="roster-header">
+            <h2>🏆 다가오는 대회</h2>
+            <div class="roster-actions">
+                <button class="action-btn small" onclick="openCompetitionModal()">+ 대회 등록</button>
+            </div>
+        </div>
+        <div id="competitionsContent">
+            <div class="loading">대회 정보 로딩 중</div>
+        </div>
+    </div>
+
+    <!-- Competition Create Modal -->
+    <div id="competitionModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>대회 이벤트 등록</h3>
+                <button class="close-btn" onclick="closeCompetitionModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>대회명 *</label>
+                    <input type="text" id="compName" required style="width:100%; padding:0.5rem; border:1px solid var(--border-color); border-radius:6px; background:var(--bg-secondary); color:var(--text-primary);">
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+                    <div class="form-group">
+                        <label>시작일 *</label>
+                        <input type="date" id="compStartDate" required style="width:100%; padding:0.5rem; border:1px solid var(--border-color); border-radius:6px; background:var(--bg-secondary); color:var(--text-primary);">
+                    </div>
+                    <div class="form-group">
+                        <label>종료일</label>
+                        <input type="date" id="compEndDate" style="width:100%; padding:0.5rem; border:1px solid var(--border-color); border-radius:6px; background:var(--bg-secondary); color:var(--text-primary);">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>장소</label>
+                    <input type="text" id="compLocation" style="width:100%; padding:0.5rem; border:1px solid var(--border-color); border-radius:6px; background:var(--bg-secondary); color:var(--text-primary);">
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+                    <div class="form-group">
+                        <label>무기</label>
+                        <select id="compWeapon" style="width:100%; padding:0.5rem; border:1px solid var(--border-color); border-radius:6px; background:var(--bg-secondary); color:var(--text-primary);">
+                            <option value="">선택</option>
+                            <option value="플뢰레">플뢰레</option>
+                            <option value="에페">에페</option>
+                            <option value="사브르">사브르</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>연령</label>
+                        <input type="text" id="compAgeGroup" placeholder="예: 초등부" style="width:100%; padding:0.5rem; border:1px solid var(--border-color); border-radius:6px; background:var(--bg-secondary); color:var(--text-primary);">
+                    </div>
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:1rem;">
+                    <div class="form-group">
+                        <label>참가비 (원)</label>
+                        <input type="number" id="compEntryFee" value="0" min="0" step="5000" style="width:100%; padding:0.5rem; border:1px solid var(--border-color); border-radius:6px; background:var(--bg-secondary); color:var(--text-primary);">
+                    </div>
+                    <div class="form-group">
+                        <label>코치 출장비</label>
+                        <input type="number" id="compCoachFee" value="0" min="0" step="10000" style="width:100%; padding:0.5rem; border:1px solid var(--border-color); border-radius:6px; background:var(--bg-secondary); color:var(--text-primary);">
+                    </div>
+                    <div class="form-group">
+                        <label>교통비</label>
+                        <input type="number" id="compTransFee" value="0" min="0" step="10000" style="width:100%; padding:0.5rem; border:1px solid var(--border-color); border-radius:6px; background:var(--bg-secondary); color:var(--text-primary);">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>RSVP 마감일</label>
+                    <input type="date" id="compRsvpDeadline" style="width:100%; padding:0.5rem; border:1px solid var(--border-color); border-radius:6px; background:var(--bg-secondary); color:var(--text-primary);">
+                </div>
+                <button class="action-btn" style="width:100%;" onclick="submitCompetition()">대회 등록</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Announcements Section -->
     <div class="roster-section">
         <h2>클럽 공지사항</h2>
@@ -2437,6 +2514,99 @@ document.addEventListener('DOMContentLoaded', () => {
     initKakaoShare();
     loadLessonPackages();
     loadPendingRequests();
+    loadCompetitions();
 });
+
+// =============================================
+// Competition Events
+// =============================================
+
+async function loadCompetitions() {
+    const container = document.getElementById('competitionsContent');
+    try {
+        const res = await fetch('/api/competitions/events?status=upcoming&limit=5', {
+            headers: getAuthHeaders()
+        });
+        if (!res.ok) {
+            container.innerHTML = '<p class="loading">대회 정보를 불러올 수 없습니다</p>';
+            return;
+        }
+        const data = await res.json();
+        const events = data.items || [];
+        if (events.length === 0) {
+            container.innerHTML = '<p class="loading">예정된 대회가 없습니다</p>';
+            return;
+        }
+        container.innerHTML = `<table class="roster-table">
+            <thead><tr>
+                <th>대회명</th><th>날짜</th><th>장소</th><th>참가/불참/미정</th><th>마감</th>
+            </tr></thead>
+            <tbody>
+                ${events.map(e => {
+                    const r = e.rsvp_summary || {};
+                    return `<tr>
+                        <td style="font-weight:600;">${e.name}</td>
+                        <td>${e.start_date}</td>
+                        <td>${e.location || '-'}</td>
+                        <td><span style="color:#22c55e;">${r.attending_count||0}</span> / <span style="color:#ef4444;">${r.not_attending_count||0}</span> / <span style="color:#f59e0b;">${r.maybe_count||0}</span></td>
+                        <td>${e.rsvp_deadline || '-'}</td>
+                    </tr>`;
+                }).join('')}
+            </tbody>
+        </table>`;
+    } catch (error) {
+        console.error('Competitions error:', error);
+        container.innerHTML = '<p class="loading">대회 정보를 불러올 수 없습니다</p>';
+    }
+}
+
+function openCompetitionModal() {
+    document.getElementById('competitionModal').style.display = 'flex';
+}
+
+function closeCompetitionModal() {
+    document.getElementById('competitionModal').style.display = 'none';
+}
+
+async function submitCompetition() {
+    const name = document.getElementById('compName').value.trim();
+    const startDate = document.getElementById('compStartDate').value;
+    if (!name || !startDate) {
+        alert('대회명과 시작일은 필수입니다');
+        return;
+    }
+
+    const body = {
+        name,
+        start_date: startDate,
+        end_date: document.getElementById('compEndDate').value || null,
+        location: document.getElementById('compLocation').value || null,
+        weapon: document.getElementById('compWeapon').value || null,
+        age_group: document.getElementById('compAgeGroup').value || null,
+        entry_fee: parseInt(document.getElementById('compEntryFee').value) || 0,
+        coach_travel_fee: parseInt(document.getElementById('compCoachFee').value) || 0,
+        transportation_fee: parseInt(document.getElementById('compTransFee').value) || 0,
+        rsvp_deadline: document.getElementById('compRsvpDeadline').value || null,
+    };
+
+    try {
+        const res = await fetch('/api/competitions/events', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+            body: JSON.stringify(body)
+        });
+        if (res.ok) {
+            alert('대회가 등록되었습니다');
+            closeCompetitionModal();
+            loadCompetitions();
+        } else {
+            const err = await res.json();
+            alert(err.detail || '대회 등록 실패');
+        }
+    } catch (error) {
+        console.error('Competition create error:', error);
+        alert('대회 등록 중 오류가 발생했습니다');
+    }
+}
 </script>
 {% endblock %}

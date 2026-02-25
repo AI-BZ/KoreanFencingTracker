@@ -38,6 +38,7 @@ KAKAO_CHANNEL_ID = os.getenv("KAKAO_CHANNEL_ID", "")  # 카카오톡 채널 pfId
 # PortOne (결제)
 PORTONE_API_SECRET = os.getenv("PORTONE_API_SECRET", "")
 PORTONE_STORE_ID = os.getenv("PORTONE_STORE_ID", "")
+PORTONE_CHANNEL_KEY = os.getenv("PORTONE_CHANNEL_KEY", "")
 
 # Test Mode
 TEST_MODE = os.getenv("CLUB_TEST_MODE", "0") == "1"
