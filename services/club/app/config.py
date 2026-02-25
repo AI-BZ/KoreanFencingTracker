@@ -29,11 +29,18 @@ DATA_SERVICE_URL = os.getenv("DATA_SERVICE_URL", "http://localhost:71")
 # FCM (Firebase Cloud Messaging)
 FCM_CREDENTIALS_PATH = os.getenv("FCM_CREDENTIALS_PATH", "")  # Firebase service account JSON
 
-# Kakao Alimtalk (비즈메시지 API)
+# Kakao Alimtalk (비즈메시지 API) - Legacy keys
 ALIMTALK_API_KEY = os.getenv("ALIMTALK_API_KEY", "")
 ALIMTALK_API_SECRET = os.getenv("ALIMTALK_API_SECRET", "")
 ALIMTALK_SENDER_PHONE = os.getenv("ALIMTALK_SENDER_PHONE", "")
 KAKAO_CHANNEL_ID = os.getenv("KAKAO_CHANNEL_ID", "")  # 카카오톡 채널 pfId
+
+# Solapi (카카오 알림톡 발송 - https://docs.solapi.com/)
+SOLAPI_API_KEY = os.getenv("SOLAPI_API_KEY", "")
+SOLAPI_API_SECRET = os.getenv("SOLAPI_API_SECRET", "")
+SOLAPI_SENDER_PHONE = os.getenv("SOLAPI_SENDER_PHONE", "")
+SOLAPI_KAKAO_CHANNEL_ID = os.getenv("SOLAPI_KAKAO_CHANNEL_ID", "")
+SOLAPI_TEMPLATE_ID = os.getenv("SOLAPI_TEMPLATE_ID", "")
 
 # PortOne (결제)
 PORTONE_API_SECRET = os.getenv("PORTONE_API_SECRET", "")

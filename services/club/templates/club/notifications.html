@@ -1,0 +1,1464 @@
+{% extends "base.html" %}
+
+{% block title %}알림 설정 - FencingMind Club{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ==============================================
+   NOTIFICATIONS PAGE - Mobile-First Dark Theme
+   ============================================== */
+
+/* --- Layout --- */
+.notifications-page {
+    padding: 1rem;
+    max-width: 800px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+/* --- Header --- */
+.notif-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.back-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: 1.2rem;
+    flex-shrink: 0;
+    transition: all 0.2s;
+}
+
+.back-btn:hover {
+    border-color: var(--border-light);
+    color: var(--text-primary);
+    background: var(--bg-card-hover);
+}
+
+.notif-header h1 {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+/* --- Stat Cards --- */
+.notif-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.75rem;
+}
+
+@media (max-width: 600px) {
+    .notif-stats { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 360px) {
+    .notif-stats { grid-template-columns: 1fr; }
+}
+
+.notif-stat-card {
+    background: var(--bg-card);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    padding: 1rem;
+    text-align: center;
+    transition: border-color 0.2s;
+}
+
+.notif-stat-card:hover {
+    border-color: var(--border-light);
+}
+
+.notif-stat-card .icon {
+    font-size: 1.3rem;
+    margin-bottom: 0.25rem;
+}
+
+.notif-stat-card .value {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    font-family: 'Inter', sans-serif;
+    line-height: 1.2;
+}
+
+.notif-stat-card .value.success { color: var(--success-color); }
+.notif-stat-card .value.warning { color: var(--warning-color); }
+.notif-stat-card .value.danger { color: var(--danger-color); }
+.notif-stat-card .value.info { color: var(--info-color); }
+
+.notif-stat-card .label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 0.2rem;
+    font-weight: 500;
+}
+
+/* --- Section Card --- */
+.section-card {
+    background: var(--bg-card);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    overflow: hidden;
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.875rem 1.25rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.section-header h2 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.section-header .header-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.35rem 0.75rem;
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: opacity 0.15s;
+    min-height: 36px;
+}
+
+.section-header .header-action:hover {
+    opacity: 0.9;
+}
+
+.section-header .header-action.secondary {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+}
+
+.section-header .header-action.secondary:hover {
+    color: var(--text-primary);
+    border-color: var(--border-light);
+}
+
+.section-content {
+    padding: 0.75rem 1.25rem;
+}
+
+/* --- Subscription Info --- */
+.sub-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.sub-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.sub-row:last-child {
+    border-bottom: none;
+}
+
+.sub-label {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+.sub-value {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+}
+
+.tier-badge {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.tier-badge.free {
+    background: rgba(107, 114, 128, 0.2);
+    color: var(--text-muted);
+    border: 1px solid rgba(107, 114, 128, 0.3);
+}
+
+.tier-badge.basic {
+    background: rgba(59, 130, 246, 0.15);
+    color: var(--info-color);
+    border: 1px solid rgba(59, 130, 246, 0.25);
+}
+
+.tier-badge.premium {
+    background: rgba(212, 165, 116, 0.15);
+    color: var(--accent-gold);
+    border: 1px solid rgba(212, 165, 116, 0.25);
+}
+
+.usage-bar {
+    width: 100%;
+    height: 6px;
+    background: var(--bg-tertiary);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-top: 0.25rem;
+}
+
+.usage-bar-fill {
+    height: 100%;
+    background: var(--info-color);
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+
+.usage-bar-fill.warning { background: var(--warning-color); }
+.usage-bar-fill.danger { background: var(--danger-color); }
+
+/* --- Notification Item --- */
+.notif-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.875rem 0;
+    border-bottom: 1px solid var(--border-color);
+    min-height: 56px;
+}
+
+.notif-item:last-child {
+    border-bottom: none;
+}
+
+.notif-item.unread {
+    background: rgba(59, 130, 246, 0.04);
+    margin: 0 -1.25rem;
+    padding-left: 1.25rem;
+    padding-right: 1.25rem;
+}
+
+.notif-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 1rem;
+    background: var(--bg-tertiary);
+}
+
+.notif-icon.invoice { background: rgba(245, 158, 11, 0.15); }
+.notif-icon.lesson { background: rgba(59, 130, 246, 0.15); }
+.notif-icon.checkin { background: rgba(16, 185, 129, 0.15); }
+.notif-icon.competition { background: rgba(201, 48, 44, 0.15); }
+.notif-icon.system { background: rgba(107, 114, 128, 0.15); }
+.notif-icon.reminder { background: rgba(239, 68, 68, 0.15); }
+.notif-icon.payment_confirm { background: rgba(16, 185, 129, 0.15); }
+
+.notif-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.notif-title {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    margin-bottom: 0.15rem;
+}
+
+.notif-message {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    line-height: 1.4;
+}
+
+.notif-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.3rem;
+}
+
+.notif-time {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+
+/* --- Status Badge --- */
+.status-badge {
+    display: inline-block;
+    padding: 0.15rem 0.4rem;
+    border-radius: 5px;
+    font-size: 0.65rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.status-badge.sent {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--success-color);
+    border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.status-badge.read {
+    background: rgba(107, 114, 128, 0.15);
+    color: var(--text-muted);
+    border: 1px solid rgba(107, 114, 128, 0.25);
+}
+
+.status-badge.pending {
+    background: rgba(245, 158, 11, 0.15);
+    color: var(--warning-color);
+    border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+.status-badge.failed {
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--danger-color);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+/* --- Vacancy Alert --- */
+.vacancy-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--border-color);
+    min-height: 48px;
+}
+
+.vacancy-item:last-child {
+    border-bottom: none;
+}
+
+.vacancy-info h4 {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.1rem;
+}
+
+.vacancy-info p {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.vacancy-delete {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    border-radius: 8px;
+    color: var(--danger-color);
+    cursor: pointer;
+    font-size: 1rem;
+    transition: all 0.15s;
+    flex-shrink: 0;
+}
+
+.vacancy-delete:hover {
+    background: rgba(239, 68, 68, 0.2);
+    border-color: rgba(239, 68, 68, 0.4);
+}
+
+/* --- Device Item --- */
+.device-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--border-color);
+    min-height: 48px;
+}
+
+.device-item:last-child {
+    border-bottom: none;
+}
+
+.device-info h4 {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.1rem;
+}
+
+.device-info p {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.device-delete {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    border-radius: 8px;
+    color: var(--danger-color);
+    cursor: pointer;
+    font-size: 1rem;
+    transition: all 0.15s;
+    flex-shrink: 0;
+}
+
+.device-delete:hover {
+    background: rgba(239, 68, 68, 0.2);
+    border-color: rgba(239, 68, 68, 0.4);
+}
+
+/* --- Load More --- */
+.load-more-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: 44px;
+    padding: 0.625rem 1rem;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.15s;
+    margin-top: 0.5rem;
+}
+
+.load-more-btn:hover {
+    background: var(--bg-card-hover);
+    color: var(--text-primary);
+    border-color: var(--border-light);
+}
+
+/* --- Empty State --- */
+.empty-state {
+    text-align: center;
+    padding: 1.5rem 1rem;
+    color: var(--text-muted);
+}
+
+.empty-state .icon {
+    font-size: 1.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.empty-state p {
+    font-size: 0.875rem;
+}
+
+/* --- Loading --- */
+.loading {
+    text-align: center;
+    padding: 1.5rem;
+    color: var(--text-muted);
+}
+
+/* --- Modal --- */
+.modal-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 1rem;
+}
+
+.modal-overlay.show { display: flex; }
+
+.modal-content {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1.5rem;
+    max-width: 480px;
+    width: 100%;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.25rem;
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 1.2rem;
+    color: var(--text-primary);
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: var(--text-muted);
+    padding: 0.25rem;
+}
+
+.modal-close:hover { color: var(--text-primary); }
+
+.form-group {
+    margin-bottom: 1rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.4rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.form-group select,
+.form-group input {
+    width: 100%;
+    padding: 0.7rem;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 0.95rem;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    font-family: inherit;
+}
+
+.form-group select:focus,
+.form-group input:focus {
+    outline: none;
+    border-color: var(--info-color);
+}
+
+.checkbox-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.5rem;
+}
+
+@media (max-width: 420px) {
+    .checkbox-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+.checkbox-item {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.checkbox-item input[type="checkbox"] {
+    width: auto;
+    accent-color: var(--info-color);
+}
+
+.time-range {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.time-range input {
+    flex: 1;
+}
+
+.time-range span {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+.submit-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    width: 100%;
+    min-height: 44px;
+    padding: 0.625rem 1rem;
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: opacity 0.15s ease, transform 0.15s ease;
+    margin-top: 0.5rem;
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+}
+
+.submit-btn:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+}
+
+.submit-btn:active {
+    transform: translateY(0);
+}
+
+.submit-btn:disabled {
+    background: var(--bg-tertiary);
+    color: var(--text-muted);
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+/* --- Student Only Section Visibility --- */
+.student-only { display: none; }
+.student-only.visible { display: block; }
+.staff-only { display: none; }
+.staff-only.visible { display: block; }
+
+/* --- Desktop Enhancement --- */
+@media (min-width: 601px) {
+    .notifications-page {
+        padding: 1.5rem 1rem;
+        gap: 1.25rem;
+    }
+
+    .notif-header h1 {
+        font-size: 1.5rem;
+    }
+
+    .notif-stat-card .value {
+        font-size: 1.75rem;
+    }
+
+    .section-content {
+        padding: 1rem 1.5rem;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container notifications-page">
+    <!-- Header -->
+    <div class="notif-header">
+        <a href="/api/club/" class="back-btn" title="대시보드로 돌아가기">&#8592;</a>
+        <h1>&#128276; 알림 설정</h1>
+    </div>
+
+    <!-- Stats (staff-only) -->
+    <div class="notif-stats staff-only" id="statsSection">
+        <div class="notif-stat-card">
+            <div class="icon">&#128232;</div>
+            <div class="value info" id="statTotal">-</div>
+            <div class="label">이번 달 발송</div>
+        </div>
+        <div class="notif-stat-card">
+            <div class="value success" id="statFcm">-</div>
+            <div class="label">FCM</div>
+        </div>
+        <div class="notif-stat-card">
+            <div class="value warning" id="statAlimtalk">-</div>
+            <div class="label">알림톡</div>
+        </div>
+        <div class="notif-stat-card">
+            <div class="value danger" id="statFailed">-</div>
+            <div class="label">실패</div>
+        </div>
+    </div>
+
+    <!-- Subscription Info (staff-only) -->
+    <div class="section-card staff-only" id="subSection">
+        <div class="section-header">
+            <h2>&#128179; 구독 정보</h2>
+        </div>
+        <div class="section-content" id="subContent">
+            <div class="loading">구독 정보 로딩 중...</div>
+        </div>
+    </div>
+
+    <!-- Notification History -->
+    <div class="section-card">
+        <div class="section-header">
+            <h2>&#128172; 알림 기록</h2>
+            <button class="header-action secondary" id="readAllBtn" onclick="markAllRead()">모두 읽음</button>
+        </div>
+        <div class="section-content" id="notifHistoryContent">
+            <div class="loading">알림 로딩 중...</div>
+        </div>
+        <div style="padding: 0 1.25rem 0.75rem;">
+            <button class="load-more-btn" id="loadMoreBtn" onclick="loadMoreNotifications()" style="display:none;">
+                더 보기
+            </button>
+        </div>
+    </div>
+
+    <!-- Vacancy Alerts (student-only) -->
+    <div class="section-card student-only" id="vacancySection">
+        <div class="section-header">
+            <h2>&#128276; 공강 알림 설정</h2>
+            <button class="header-action" onclick="openVacancyModal()">+ 새 알림 추가</button>
+        </div>
+        <div class="section-content" id="vacancyContent">
+            <div class="loading">공강 알림 로딩 중...</div>
+        </div>
+    </div>
+
+    <!-- Push Token Management -->
+    <div class="section-card">
+        <div class="section-header">
+            <h2>&#128241; 등록 기기</h2>
+        </div>
+        <div class="section-content" id="devicesContent">
+            <div class="loading">기기 정보 로딩 중...</div>
+        </div>
+    </div>
+</div>
+
+<!-- Vacancy Subscribe Modal -->
+<div class="modal-overlay" id="vacancyModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>공강 알림 추가</h3>
+            <button class="modal-close" onclick="closeVacancyModal()">&times;</button>
+        </div>
+
+        <div class="form-group">
+            <label>코치 선택</label>
+            <select id="vacancyCoach">
+                <option value="">로딩 중...</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>요일 선택</label>
+            <div class="checkbox-grid">
+                <label class="checkbox-item"><input type="checkbox" name="vacancy_day" value="0"> 월</label>
+                <label class="checkbox-item"><input type="checkbox" name="vacancy_day" value="1"> 화</label>
+                <label class="checkbox-item"><input type="checkbox" name="vacancy_day" value="2"> 수</label>
+                <label class="checkbox-item"><input type="checkbox" name="vacancy_day" value="3"> 목</label>
+                <label class="checkbox-item"><input type="checkbox" name="vacancy_day" value="4"> 금</label>
+                <label class="checkbox-item"><input type="checkbox" name="vacancy_day" value="5"> 토</label>
+                <label class="checkbox-item"><input type="checkbox" name="vacancy_day" value="6"> 일</label>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>희망 시간대</label>
+            <div class="time-range">
+                <input type="time" id="vacancyTimeFrom" value="14:00">
+                <span>~</span>
+                <input type="time" id="vacancyTimeTo" value="18:00">
+            </div>
+        </div>
+
+        <button class="submit-btn" onclick="submitVacancySubscribe()" id="vacancySubmitBtn">
+            알림 등록
+        </button>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const NOTIF_API = '/api/notifications';
+const LESSON_API = '/api/lessons';
+const CLUB_API = '/api/club';
+
+let currentOffset = 0;
+const PAGE_SIZE = 20;
+let totalNotifs = 0;
+let currentRole = null;
+
+function getAuthHeaders() {
+    return { 'Authorization': `Bearer ${localStorage.getItem('access_token')}` };
+}
+
+function getAuthHeadersJson() {
+    return {
+        'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+        'Content-Type': 'application/json'
+    };
+}
+
+function handleUnauthorized() {
+    localStorage.removeItem('access_token');
+    window.location.href = '/auth/login?redirect=/api/club/notifications';
+}
+
+// =============================================
+// Type Icons & Labels
+// =============================================
+
+const typeIcons = {
+    invoice: '&#128176;',
+    reminder: '&#128680;',
+    payment_confirm: '&#9989;',
+    checkin: '&#128203;',
+    lesson: '&#128218;',
+    competition: '&#127942;',
+    system: '&#9881;',
+};
+
+const typeLabels = {
+    invoice: '청구서',
+    reminder: '리마인더',
+    payment_confirm: '납부확인',
+    checkin: '출석',
+    lesson: '레슨',
+    competition: '대회',
+    system: '시스템',
+};
+
+const statusLabels = {
+    sent: '발송',
+    read: '읽음',
+    pending: '대기',
+    failed: '실패',
+};
+
+const channelLabels = {
+    fcm: 'FCM',
+    alimtalk: '알림톡',
+    sms: 'SMS',
+    app: '앱',
+};
+
+const dayLabels = ['월', '화', '수', '목', '금', '토', '일'];
+
+const deviceTypeLabels = {
+    ios: 'iOS',
+    android: 'Android',
+    web: '웹 브라우저',
+};
+
+const deviceTypeIcons = {
+    ios: '&#127822;',
+    android: '&#129302;',
+    web: '&#127760;',
+};
+
+// =============================================
+// Initialize
+// =============================================
+
+document.addEventListener('DOMContentLoaded', async () => {
+    await detectRole();
+    loadNotifications();
+    loadDevices();
+
+    if (currentRole === 'student') {
+        loadVacancySubscriptions();
+        loadCoachesList();
+    }
+
+    if (['owner', 'head_coach', 'coach', 'assistant', 'staff'].includes(currentRole)) {
+        loadStats();
+        loadSubscription();
+    }
+});
+
+async function detectRole() {
+    try {
+        const res = await fetch(`${CLUB_API}/me`, { headers: getAuthHeaders() });
+        if (res.status === 401) { handleUnauthorized(); return; }
+        if (!res.ok) return;
+
+        const data = await res.json();
+        currentRole = data.club_role || 'student';
+
+        // Show/hide sections based on role
+        const staffRoles = ['owner', 'head_coach', 'coach', 'assistant', 'staff'];
+        if (staffRoles.includes(currentRole)) {
+            document.querySelectorAll('.staff-only').forEach(el => el.classList.add('visible'));
+        }
+        if (currentRole === 'student') {
+            document.querySelectorAll('.student-only').forEach(el => el.classList.add('visible'));
+        }
+    } catch (e) {
+        console.error('Role detect error:', e);
+    }
+}
+
+// =============================================
+// Stats (staff-only)
+// =============================================
+
+async function loadStats() {
+    try {
+        const res = await fetch(`${NOTIF_API}/stats`, { headers: getAuthHeaders() });
+        if (res.status === 401) { handleUnauthorized(); return; }
+        if (!res.ok) return;
+
+        const data = await res.json();
+        document.getElementById('statTotal').textContent = data.total_sent || 0;
+        document.getElementById('statFcm').textContent = data.fcm_sent || 0;
+        document.getElementById('statAlimtalk').textContent = data.alimtalk_sent || 0;
+        document.getElementById('statFailed').textContent = data.failed_count || 0;
+    } catch (e) {
+        console.error('Stats error:', e);
+    }
+}
+
+// =============================================
+// Subscription Info (staff-only)
+// =============================================
+
+async function loadSubscription() {
+    const container = document.getElementById('subContent');
+    try {
+        const res = await fetch(`${NOTIF_API}/subscription`, { headers: getAuthHeaders() });
+        if (res.status === 401) { handleUnauthorized(); return; }
+        if (!res.ok) {
+            container.innerHTML = '<div class="empty-state"><p>구독 정보를 불러올 수 없습니다</p></div>';
+            return;
+        }
+
+        const sub = await res.json();
+        const tier = sub.tier || 'free';
+        const limit = sub.alimtalk_limit || 0;
+        const used = sub.alimtalk_used || 0;
+        const remaining = sub.alimtalk_remaining || 0;
+        const pct = limit > 0 ? Math.round((used / limit) * 100) : 0;
+        const barClass = pct > 90 ? 'danger' : pct > 70 ? 'warning' : '';
+
+        container.innerHTML = `
+            <div class="sub-info">
+                <div class="sub-row">
+                    <span class="sub-label">구독 등급</span>
+                    <span class="tier-badge ${tier}">${tier}</span>
+                </div>
+                <div class="sub-row">
+                    <span class="sub-label">FCM 푸시</span>
+                    <span class="sub-value" style="color: var(--success-color);">&#9989; 무제한</span>
+                </div>
+                <div class="sub-row">
+                    <span class="sub-label">알림톡 사용량</span>
+                    <span class="sub-value">${used} / ${limit}</span>
+                </div>
+                <div style="padding: 0.25rem 0;">
+                    <div class="usage-bar">
+                        <div class="usage-bar-fill ${barClass}" style="width: ${pct}%;"></div>
+                    </div>
+                </div>
+                <div class="sub-row">
+                    <span class="sub-label">알림톡 잔여</span>
+                    <span class="sub-value">${remaining}건</span>
+                </div>
+            </div>
+        `;
+    } catch (e) {
+        console.error('Subscription error:', e);
+        container.innerHTML = '<div class="empty-state"><p>구독 정보를 불러올 수 없습니다</p></div>';
+    }
+}
+
+// =============================================
+// Notification History
+// =============================================
+
+async function loadNotifications() {
+    const container = document.getElementById('notifHistoryContent');
+    currentOffset = 0;
+
+    try {
+        const res = await fetch(`${NOTIF_API}/my?limit=${PAGE_SIZE}&offset=0`, {
+            headers: getAuthHeaders()
+        });
+        if (res.status === 401) { handleUnauthorized(); return; }
+
+        if (!res.ok) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="icon">&#128172;</div>
+                    <p>알림을 불러올 수 없습니다</p>
+                </div>
+            `;
+            return;
+        }
+
+        const data = await res.json();
+        totalNotifs = data.total || 0;
+        const notifications = data.notifications || [];
+
+        if (notifications.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="icon">&#128172;</div>
+                    <p>알림이 없습니다</p>
+                </div>
+            `;
+            document.getElementById('loadMoreBtn').style.display = 'none';
+            return;
+        }
+
+        container.innerHTML = renderNotifications(notifications);
+        currentOffset = notifications.length;
+
+        const loadMoreBtn = document.getElementById('loadMoreBtn');
+        loadMoreBtn.style.display = currentOffset < totalNotifs ? '' : 'none';
+
+    } catch (e) {
+        console.error('Notifications error:', e);
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="icon">&#128172;</div>
+                <p>알림을 불러올 수 없습니다</p>
+            </div>
+        `;
+    }
+}
+
+async function loadMoreNotifications() {
+    const btn = document.getElementById('loadMoreBtn');
+    btn.disabled = true;
+    btn.textContent = '로딩 중...';
+
+    try {
+        const res = await fetch(`${NOTIF_API}/my?limit=${PAGE_SIZE}&offset=${currentOffset}`, {
+            headers: getAuthHeaders()
+        });
+        if (!res.ok) throw new Error('로드 실패');
+
+        const data = await res.json();
+        const notifications = data.notifications || [];
+
+        if (notifications.length > 0) {
+            const container = document.getElementById('notifHistoryContent');
+            container.insertAdjacentHTML('beforeend', renderNotifications(notifications));
+            currentOffset += notifications.length;
+        }
+
+        btn.style.display = currentOffset < totalNotifs ? '' : 'none';
+    } catch (e) {
+        console.error('Load more error:', e);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '더 보기';
+    }
+}
+
+function renderNotifications(notifications) {
+    return notifications.map(n => {
+        const isUnread = !n.read_at;
+        const typeIcon = typeIcons[n.notification_type] || '&#128172;';
+        const iconClass = n.notification_type || 'system';
+        const statusClass = n.status || 'sent';
+        const statusText = statusLabels[n.status] || n.status;
+        const timeStr = n.sent_at
+            ? formatTimeAgo(n.sent_at)
+            : n.created_at ? formatTimeAgo(n.created_at) : '';
+        const channelText = channelLabels[n.channel] || n.channel;
+
+        return `
+            <div class="notif-item ${isUnread ? 'unread' : ''}" data-id="${n.id}">
+                <div class="notif-icon ${iconClass}">${typeIcon}</div>
+                <div class="notif-body">
+                    <div class="notif-title">${escapeHtml(n.title || typeLabels[n.notification_type] || '알림')}</div>
+                    <div class="notif-message">${escapeHtml(n.message || '')}</div>
+                    <div class="notif-meta">
+                        <span class="status-badge ${statusClass}">${statusText}</span>
+                        <span class="notif-time">${channelText} &middot; ${timeStr}</span>
+                        ${isUnread ? `<button onclick="markAsRead(${n.id}, this)" style="background:none; border:none; color:var(--info-color); font-size:0.7rem; cursor:pointer; padding:0.15rem 0.3rem;">읽음</button>` : ''}
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function markAsRead(notifId, btnEl) {
+    try {
+        const res = await fetch(`${NOTIF_API}/my/${notifId}/read`, {
+            method: 'POST',
+            headers: getAuthHeaders()
+        });
+        if (res.ok) {
+            const item = btnEl.closest('.notif-item');
+            if (item) {
+                item.classList.remove('unread');
+                const badge = item.querySelector('.status-badge');
+                if (badge) {
+                    badge.className = 'status-badge read';
+                    badge.textContent = '읽음';
+                }
+                btnEl.remove();
+            }
+        }
+    } catch (e) {
+        console.error('Mark read error:', e);
+    }
+}
+
+async function markAllRead() {
+    try {
+        const res = await fetch(`${NOTIF_API}/my/read-all`, {
+            method: 'POST',
+            headers: getAuthHeaders()
+        });
+        if (res.ok) {
+            document.querySelectorAll('.notif-item.unread').forEach(item => {
+                item.classList.remove('unread');
+                const badge = item.querySelector('.status-badge');
+                if (badge) {
+                    badge.className = 'status-badge read';
+                    badge.textContent = '읽음';
+                }
+                const readBtn = item.querySelector('button[onclick^="markAsRead"]');
+                if (readBtn) readBtn.remove();
+            });
+        }
+    } catch (e) {
+        console.error('Mark all read error:', e);
+    }
+}
+
+// =============================================
+// Vacancy Alert Subscriptions (student-only)
+// =============================================
+
+async function loadVacancySubscriptions() {
+    const container = document.getElementById('vacancyContent');
+    try {
+        const res = await fetch(`${LESSON_API}/vacancy-subscribe`, {
+            headers: getAuthHeaders()
+        });
+        if (res.status === 401) { handleUnauthorized(); return; }
+
+        if (!res.ok) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="icon">&#128276;</div>
+                    <p>공강 알림 정보를 불러올 수 없습니다</p>
+                </div>
+            `;
+            return;
+        }
+
+        const data = await res.json();
+        const subs = data.subscriptions || [];
+
+        if (subs.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="icon">&#128276;</div>
+                    <p>등록된 공강 알림이 없습니다</p>
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = subs.map(s => {
+            const days = (s.days_of_week || []).map(d => dayLabels[d] || d).join(', ');
+            const timeRange = s.time_from && s.time_to
+                ? `${s.time_from} ~ ${s.time_to}`
+                : '';
+
+            return `
+                <div class="vacancy-item">
+                    <div class="vacancy-info">
+                        <h4>${escapeHtml(s.coach_name || '코치')}</h4>
+                        <p>${days}${timeRange ? ' &middot; ' + timeRange : ''}</p>
+                    </div>
+                    <button class="vacancy-delete" onclick="deleteVacancy('${s.id}')" title="삭제">
+                        &times;
+                    </button>
+                </div>
+            `;
+        }).join('');
+
+    } catch (e) {
+        console.error('Vacancy error:', e);
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="icon">&#128276;</div>
+                <p>공강 알림 정보를 불러올 수 없습니다</p>
+            </div>
+        `;
+    }
+}
+
+async function loadCoachesList() {
+    try {
+        const res = await fetch(`${CLUB_API}/members?role=coach`, {
+            headers: getAuthHeaders()
+        });
+        if (!res.ok) return;
+
+        const data = await res.json();
+        const members = data.members || data || [];
+        const select = document.getElementById('vacancyCoach');
+
+        select.innerHTML = '<option value="">코치를 선택하세요</option>';
+        members.forEach(m => {
+            if (['owner', 'head_coach', 'coach', 'assistant'].includes(m.club_role)) {
+                const opt = document.createElement('option');
+                opt.value = m.id || m.member_id;
+                opt.textContent = m.full_name || m.name || 'Unknown';
+                select.appendChild(opt);
+            }
+        });
+    } catch (e) {
+        console.error('Coaches list error:', e);
+        const select = document.getElementById('vacancyCoach');
+        select.innerHTML = '<option value="">코치 목록을 불러올 수 없습니다</option>';
+    }
+}
+
+function openVacancyModal() {
+    document.getElementById('vacancyModal').classList.add('show');
+}
+
+function closeVacancyModal() {
+    document.getElementById('vacancyModal').classList.remove('show');
+    // Reset form
+    document.getElementById('vacancyCoach').value = '';
+    document.querySelectorAll('input[name="vacancy_day"]').forEach(cb => cb.checked = false);
+    document.getElementById('vacancyTimeFrom').value = '14:00';
+    document.getElementById('vacancyTimeTo').value = '18:00';
+}
+
+async function submitVacancySubscribe() {
+    const coachId = document.getElementById('vacancyCoach').value;
+    if (!coachId) {
+        alert('코치를 선택해주세요.');
+        return;
+    }
+
+    const days = [];
+    document.querySelectorAll('input[name="vacancy_day"]:checked').forEach(cb => {
+        days.push(parseInt(cb.value));
+    });
+    if (days.length === 0) {
+        alert('하루 이상 요일을 선택해주세요.');
+        return;
+    }
+
+    const timeFrom = document.getElementById('vacancyTimeFrom').value;
+    const timeTo = document.getElementById('vacancyTimeTo').value;
+
+    const btn = document.getElementById('vacancySubmitBtn');
+    btn.disabled = true;
+    btn.textContent = '등록 중...';
+
+    try {
+        const res = await fetch(`${LESSON_API}/vacancy-subscribe`, {
+            method: 'POST',
+            headers: getAuthHeadersJson(),
+            body: JSON.stringify({
+                coach_id: coachId,
+                days_of_week: days,
+                time_from: timeFrom,
+                time_to: timeTo,
+            })
+        });
+
+        if (res.ok) {
+            closeVacancyModal();
+            loadVacancySubscriptions();
+        } else {
+            const err = await res.json().catch(() => ({}));
+            alert(err.detail || '등록에 실패했습니다');
+        }
+    } catch (e) {
+        console.error('Subscribe error:', e);
+        alert('등록 중 오류가 발생했습니다');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '알림 등록';
+    }
+}
+
+async function deleteVacancy(subId) {
+    if (!confirm('이 공강 알림을 삭제하시겠습니까?')) return;
+
+    try {
+        const res = await fetch(`${LESSON_API}/vacancy-subscribe/${subId}`, {
+            method: 'DELETE',
+            headers: getAuthHeaders()
+        });
+
+        if (res.ok) {
+            loadVacancySubscriptions();
+        } else {
+            const err = await res.json().catch(() => ({}));
+            alert(err.detail || '삭제에 실패했습니다');
+        }
+    } catch (e) {
+        console.error('Delete vacancy error:', e);
+        alert('삭제 중 오류가 발생했습니다');
+    }
+}
+
+// =============================================
+// Push Token Devices
+// =============================================
+
+async function loadDevices() {
+    const container = document.getElementById('devicesContent');
+    try {
+        const res = await fetch(`${NOTIF_API}/push-tokens`, {
+            headers: getAuthHeaders()
+        });
+        if (res.status === 401) { handleUnauthorized(); return; }
+
+        if (!res.ok) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="icon">&#128241;</div>
+                    <p>기기 정보를 불러올 수 없습니다</p>
+                </div>
+            `;
+            return;
+        }
+
+        const data = await res.json();
+        const tokens = data.tokens || [];
+
+        if (tokens.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="icon">&#128241;</div>
+                    <p>등록된 기기가 없습니다</p>
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = tokens.map(t => {
+            const icon = deviceTypeIcons[t.device_type] || '&#128241;';
+            const typeName = deviceTypeLabels[t.device_type] || t.device_type;
+            const name = t.device_name || typeName;
+            const lastUsed = t.last_used_at ? formatTimeAgo(t.last_used_at) : '';
+            const tokenShort = (t.token || '').slice(0, 16) + '...';
+
+            return `
+                <div class="device-item">
+                    <div class="device-info">
+                        <h4>${icon} ${escapeHtml(name)}</h4>
+                        <p>${typeName}${lastUsed ? ' &middot; ' + lastUsed : ''}${t.token ? ' &middot; ' + tokenShort : ''}</p>
+                    </div>
+                    <button class="device-delete" onclick="deleteDevice('${escapeAttr(t.token || t.id)}')" title="삭제">
+                        &times;
+                    </button>
+                </div>
+            `;
+        }).join('');
+
+    } catch (e) {
+        console.error('Devices error:', e);
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="icon">&#128241;</div>
+                <p>기기 정보를 불러올 수 없습니다</p>
+            </div>
+        `;
+    }
+}
+
+async function deleteDevice(token) {
+    if (!confirm('이 기기를 삭제하시겠습니까?')) return;
+
+    try {
+        const res = await fetch(`${NOTIF_API}/push-token/${encodeURIComponent(token)}`, {
+            method: 'DELETE',
+            headers: getAuthHeaders()
+        });
+
+        if (res.ok) {
+            loadDevices();
+        } else {
+            const err = await res.json().catch(() => ({}));
+            alert(err.detail || '삭제에 실패했습니다');
+        }
+    } catch (e) {
+        console.error('Delete device error:', e);
+        alert('삭제 중 오류가 발생했습니다');
+    }
+}
+
+// =============================================
+// Utilities
+// =============================================
+
+function formatTimeAgo(dateStr) {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMin = Math.floor(diffMs / 60000);
+    const diffHr = Math.floor(diffMs / 3600000);
+    const diffDay = Math.floor(diffMs / 86400000);
+
+    if (diffMin < 1) return '방금';
+    if (diffMin < 60) return `${diffMin}분 전`;
+    if (diffHr < 24) return `${diffHr}시간 전`;
+    if (diffDay < 7) return `${diffDay}일 전`;
+
+    return date.toLocaleDateString('ko-KR', {
+        month: 'short', day: 'numeric'
+    });
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.appendChild(document.createTextNode(str));
+    return div.innerHTML;
+}
+
+function escapeAttr(str) {
+    if (!str) return '';
+    return str.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+}
+
+// Close modal on outside click
+document.getElementById('vacancyModal').addEventListener('click', function(e) {
+    if (e.target === this) closeVacancyModal();
+});
+</script>
+{% endblock %}

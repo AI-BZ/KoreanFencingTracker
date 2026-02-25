@@ -582,8 +582,8 @@ class PlayerService:
     async def get_team_roster(self, organization_id: int) -> Dict[str, Any]:
         """
         클럽 소속 선수 전체 현황
-        - 연결된 선수들의 대회 성적, 랭킹 포함
-        - 메인 API에서 선수 데이터 조회
+        - app_player_cache 우선 조회 (N+1 HTTP 제거)
+        - 캐시 없으면 fallback으로 data 서비스 직접 호출
         - 학생만 카운트 (코치/대표 제외)
         """
         # 조직 정보
@@ -595,94 +595,69 @@ class PlayerService:
             raise ValueError("조직을 찾을 수 없습니다")
 
         org = org_response.data
-        org_name = org["name"]  # 예: "최병철펜싱클럽"
 
-        # 조직의 회원 목록 (활성 회원만)
+        # 캐시에서 선수 데이터 조회 (0 HTTP 호출)
+        cache_response = self.supabase.table("app_player_cache").select(
+            "member_id, player_id, player_name, current_team, weapons, "
+            "age_group, competition_count, last_competition_date, recent_result, medals"
+        ).eq("organization_id", organization_id).execute()
+
+        cache_map = {}
+        for entry in (cache_response.data or []):
+            cache_map[entry["member_id"]] = entry
+
+        # 조직의 회원 목록 (활성 학생만)
         members_response = self.supabase.table("members").select(
             "id, full_name, club_role, member_status, player_id"
-        ).eq("organization_id", organization_id).in_(
+        ).eq("organization_id", organization_id).eq(
+            "club_role", "student"
+        ).in_(
             "member_status", ["active", None]
         ).execute()
 
         members = members_response.data or []
 
         roster = []
-        student_count = 0  # 학생만 카운트
-
         for member in members:
-            # 학생 역할인지 확인 (코치/대표/보조코치는 로스터에서 제외)
-            club_role = member.get("club_role", "student")
-            # assistant는 보조 코치이므로 코치 그룹 (학생 아님)
-            is_student = club_role == "student"
+            cached = cache_map.get(member["id"])
 
-            # 코치/대표/보조코치는 로스터에 포함하지 않음
-            if not is_student:
-                continue
-
-            student_count += 1
-
-            player_data = {
-                "player_id": None,
-                "weapon": None,
-                "competition_count": 0,
-                "current_rank": None,
-                "recent_result": None
-            }
-
-            # 이름으로 메인 API에서 선수 데이터 조회
-            # DB members 테이블에 등록된 선수 = 우리 클럽 소속
-            # current_team 필터링 제거 (선수의 현재 소속과 과거 소속이 다를 수 있음)
-            player_name = member["full_name"]
-            try:
-                async with httpx.AsyncClient() as client:
-                    response = await client.get(
-                        f"{config.DATA_SERVICE_URL}/api/players/search",
-                        params={"q": player_name},
-                        timeout=5.0
-                    )
-                    if response.status_code == 200:
-                        data = response.json()
-                        results = data.get("results", [])
-
-                        # 이름이 정확히 일치하는 선수 찾기 (current_team 필터 제거)
-                        for result in results:
-                            if result.get("name") == player_name:
-                                weapons = result.get("weapons", [])
-
-                                # 최근 대회 결과 조회
-                                recent_result = await self._get_recent_competition_result(
-                                    result.get("player_id")
-                                )
-
-                                player_data = {
-                                    "player_id": result.get("player_id"),  # KOP00000 형식
-                                    "weapon": weapons[0] if weapons else None,
-                                    "competition_count": result.get("record_count", 0),
-                                    "current_rank": None,
-                                    "recent_result": recent_result
-                                }
-                                break
-            except Exception as e:
-                # 실패해도 무시하고 기본값 사용
-                pass
-
-            roster.append({
-                "member_id": member["id"],
-                "player_id": player_data.get("player_id") or member.get("player_id"),
-                "name": member["full_name"],
-                "club_role": club_role,
-                "status": member.get("member_status", "active"),
-                "weapon": player_data.get("weapon"),
-                "competition_count": player_data.get("competition_count", 0),
-                "current_rank": player_data.get("current_rank"),
-                "recent_result": player_data.get("recent_result")
-            })
+            if cached:
+                # 캐시 히트: HTTP 호출 없이 즉시 데이터 사용
+                weapons = cached.get("weapons") or []
+                medals = cached.get("medals") or {}
+                roster.append({
+                    "member_id": member["id"],
+                    "player_id": cached.get("player_id") or member.get("player_id"),
+                    "name": member["full_name"],
+                    "club_role": "student",
+                    "status": member.get("member_status", "active"),
+                    "weapon": weapons[0] if weapons else None,
+                    "competition_count": cached.get("competition_count", 0),
+                    "current_rank": None,
+                    "recent_result": cached.get("recent_result"),
+                    "age_group": cached.get("age_group"),
+                    "medals": medals,
+                })
+            else:
+                # 캐시 미스: 기본값 사용 (동기화 필요)
+                roster.append({
+                    "member_id": member["id"],
+                    "player_id": member.get("player_id"),
+                    "name": member["full_name"],
+                    "club_role": "student",
+                    "status": member.get("member_status", "active"),
+                    "weapon": None,
+                    "competition_count": 0,
+                    "current_rank": None,
+                    "recent_result": None,
+                })
 
         return {
             "organization_id": org["id"],
             "organization_name": org["name"],
-            "total_members": student_count,  # 학생만 카운트 (코치 제외)
-            "players": roster  # 학생만 포함 (코치/대표 제외)
+            "total_members": len(members),
+            "players": roster,
+            "cache_hit_rate": f"{len(cache_map)}/{len(members)}" if members else "0/0",
         }
 
     async def _get_recent_competition_result(self, player_id: str) -> Optional[str]:

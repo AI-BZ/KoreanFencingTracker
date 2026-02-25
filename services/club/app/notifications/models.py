@@ -117,3 +117,42 @@ class NotificationStatsResponse(BaseModel):
     alimtalk_limit: int
     alimtalk_remaining: int
     failed_count: int
+
+
+# =============================================
+# Vacancy (공강) Notification Models
+# =============================================
+
+class VacancySubscription(BaseModel):
+    """공강 알림 구독 요청"""
+    coach_id: Optional[str] = None  # NULL = 전체 코치
+    day_of_week: Optional[List[int]] = None  # 0=월, 6=일
+    time_start: Optional[str] = None  # "14:00"
+    time_end: Optional[str] = None    # "18:00"
+
+
+class VacancySubscriptionResponse(BaseModel):
+    """공강 알림 구독 응답"""
+    id: str
+    coach_id: Optional[str] = None
+    coach_name: Optional[str] = None
+    day_of_week: Optional[List[int]] = None
+    time_start: Optional[str] = None
+    time_end: Optional[str] = None
+    is_active: bool
+
+
+class VacancyNotifyRequest(BaseModel):
+    """공강 알림 발송 요청 (코치용)"""
+    lesson_id: int
+    coach_id: str
+    day_of_week: Optional[int] = None  # 0=월, 6=일
+    time_start: Optional[str] = None   # "14:00"
+    time_end: Optional[str] = None     # "15:00"
+
+
+class VacancyNotifyResponse(BaseModel):
+    """공강 알림 발송 결과"""
+    total: int
+    sent: int
+    failed: int

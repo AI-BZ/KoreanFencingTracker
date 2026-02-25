@@ -1,17 +1,25 @@
 """
-Notification Service - FCM Push + Kakao Alimtalk
+Notification Service - FCM Push + Kakao Alimtalk + Vacancy Notifications
 
 구독 등급별 알림톡 한도 관리:
 - free: FCM only (알림톡 비활성)
 - basic: 500 알림톡/월
 - premium: 2000 알림톡/월
 - enterprise: 무제한
+
+Solapi API v4 연동: https://docs.solapi.com/
 """
 
+import hmac
+import hashlib
+import uuid
 from datetime import datetime, date
 from typing import Optional, List, Tuple
+
+import httpx
 from loguru import logger
 
+from .. import config
 from ..database import get_supabase_client
 from ..billing.models import TIER_ALIMTALK_LIMITS
 from .models import (
@@ -250,7 +258,7 @@ class NotificationService:
     async def _send_alimtalk(
         self, org_id: int, member_id: str, title: str, message: str
     ) -> Tuple[bool, Optional[str]]:
-        """카카오 알림톡 발송"""
+        """카카오 알림톡 발송 (Solapi API v4)"""
         # 1. 구독 등급 확인 + 한도 체크
         can_send, error = self._check_alimtalk_quota(org_id)
         if not can_send:
@@ -266,41 +274,89 @@ class NotificationService:
 
         phone = member_result.data["phone"]
 
-        # TODO: 비즈메시지 API 연동 (Solapi, NHN Cloud 등)
-        # 현재는 한도 차감만 (실제 발송은 API 설정 후)
-        #
-        # import httpx
-        # async with httpx.AsyncClient() as client:
-        #     response = await client.post(
-        #         "https://api.solapi.com/messages/v4/send",
-        #         json={
-        #             "message": {
-        #                 "to": phone,
-        #                 "from": SENDER_PHONE,
-        #                 "kakaoOptions": {
-        #                     "pfId": KAKAO_CHANNEL_ID,
-        #                     "templateId": TEMPLATE_ID,
-        #                     "variables": {"title": title, "message": message},
-        #                 }
-        #             }
-        #         },
-        #         headers={"Authorization": f"Bearer {API_KEY}"}
-        #     )
+        # 3. Solapi API 연동
+        api_key = config.SOLAPI_API_KEY
+        api_secret = config.SOLAPI_API_SECRET
 
-        logger.info(f"Alimtalk to member {member_id} (phone: {phone[:3]}***)")
+        if not api_key or not api_secret:
+            # Dev mode: API 키 미설정 시 시뮬레이션
+            logger.info(
+                f"Alimtalk 시뮬레이션 (API 키 미설정): "
+                f"member {member_id} (phone: {phone[:3]}***)"
+            )
+            self._increment_alimtalk_usage(org_id)
+            return True, None
 
-        # 3. 사용량 증가
-        self._increment_alimtalk_usage(org_id)
+        # Solapi HMAC-SHA256 인증 헤더 생성
+        date_str = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        salt = str(uuid.uuid4())
+        signature = hmac.new(
+            api_secret.encode("utf-8"),
+            f"{date_str}{salt}".encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
 
-        return True, None
+        headers = {
+            "Authorization": (
+                f"HMAC-SHA256 apiKey={api_key}, "
+                f"date={date_str}, salt={salt}, signature={signature}"
+            ),
+            "Content-Type": "application/json",
+        }
+
+        payload = {
+            "message": {
+                "to": phone,
+                "from": config.SOLAPI_SENDER_PHONE,
+                "kakaoOptions": {
+                    "pfId": config.SOLAPI_KAKAO_CHANNEL_ID,
+                    "templateId": config.SOLAPI_TEMPLATE_ID,
+                    "variables": {
+                        "#{title}": title,
+                        "#{message}": message,
+                    },
+                },
+            }
+        }
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    "https://api.solapi.com/messages/v4/send",
+                    json=payload,
+                    headers=headers,
+                    timeout=10.0,
+                )
+
+                if response.status_code == 200:
+                    logger.info(
+                        f"Alimtalk 발송 성공: member {member_id} "
+                        f"(phone: {phone[:3]}***)"
+                    )
+                    self._increment_alimtalk_usage(org_id)
+                    return True, None
+                else:
+                    error_msg = response.text
+                    logger.error(
+                        f"Solapi 발송 실패 (HTTP {response.status_code}): "
+                        f"{error_msg}"
+                    )
+                    return False, f"Solapi error ({response.status_code}): {error_msg}"
+
+        except httpx.TimeoutException:
+            logger.error(f"Solapi 요청 타임아웃: member {member_id}")
+            return False, "Solapi 요청 타임아웃 (10초)"
+        except Exception as e:
+            logger.error(f"Solapi 요청 오류: {e}")
+            return False, f"Solapi 요청 오류: {str(e)}"
 
     def _check_alimtalk_quota(self, org_id: int) -> Tuple[bool, Optional[str]]:
         """알림톡 한도 확인"""
         sub = self.supabase.table("app_subscriptions").select(
             "tier, alimtalk_limit, alimtalk_used, alimtalk_reset_at, is_active"
-        ).eq("org_id", org_id).single().execute()
+        ).eq("org_id", org_id).maybe_single().execute()
 
-        if not sub.data or not sub.data.get("is_active"):
+        if not sub or not sub.data or not sub.data.get("is_active"):
             return False, "활성 구독 없음 (알림톡은 유료 구독 필요)"
 
         tier = sub.data["tier"]
@@ -438,9 +494,9 @@ class NotificationService:
         """구독 정보 조회"""
         result = self.supabase.table("app_subscriptions").select(
             "*"
-        ).eq("org_id", org_id).single().execute()
+        ).eq("org_id", org_id).maybe_single().execute()
 
-        if not result.data:
+        if not result or not result.data:
             return None
 
         sub = result.data
@@ -493,6 +549,208 @@ class NotificationService:
             "alimtalk_remaining": sub["alimtalk_remaining"] if sub else 0,
             "failed_count": failed.count or 0,
         }
+
+    # ─────────────────────────────────────────
+    # 공강 (Vacancy) 알림
+    # ─────────────────────────────────────────
+
+    async def subscribe_vacancy(
+        self, org_id: int, member_id: str, data: dict,
+    ) -> dict:
+        """공강 알림 구독 등록"""
+        record = {
+            "organization_id": org_id,
+            "member_id": member_id,
+            "coach_id": data.get("coach_id"),
+            "day_of_week": data.get("day_of_week"),
+            "time_start": data.get("time_start"),
+            "time_end": data.get("time_end"),
+            "is_active": True,
+        }
+
+        result = self.supabase.table("app_vacancy_subscribers").insert(
+            record
+        ).execute()
+
+        if not result.data:
+            raise Exception("공강 알림 구독 등록 실패")
+
+        sub = result.data[0]
+
+        # 코치 이름 조회 (coach_id 지정 시)
+        coach_name = None
+        if sub.get("coach_id"):
+            coach = self.supabase.table("members").select(
+                "name"
+            ).eq("id", sub["coach_id"]).single().execute()
+            if coach.data:
+                coach_name = coach.data.get("name")
+
+        return {
+            "id": sub["id"],
+            "coach_id": sub.get("coach_id"),
+            "coach_name": coach_name,
+            "day_of_week": sub.get("day_of_week"),
+            "time_start": sub.get("time_start"),
+            "time_end": sub.get("time_end"),
+            "is_active": sub["is_active"],
+        }
+
+    async def unsubscribe_vacancy(
+        self, org_id: int, subscription_id: str, member_id: str,
+    ) -> bool:
+        """공강 알림 구독 해제"""
+        result = self.supabase.table("app_vacancy_subscribers").update({
+            "is_active": False,
+        }).eq(
+            "id", subscription_id
+        ).eq(
+            "organization_id", org_id
+        ).eq(
+            "member_id", member_id
+        ).execute()
+
+        return bool(result.data)
+
+    async def get_vacancy_subscriptions(
+        self, org_id: int, member_id: str,
+    ) -> list:
+        """내 공강 알림 구독 목록"""
+        result = self.supabase.table("app_vacancy_subscribers").select(
+            "*"
+        ).eq(
+            "organization_id", org_id
+        ).eq(
+            "member_id", member_id
+        ).eq(
+            "is_active", True
+        ).order("created_at", desc=True).execute()
+
+        subscriptions = []
+        for sub in (result.data or []):
+            coach_name = None
+            if sub.get("coach_id"):
+                coach = self.supabase.table("members").select(
+                    "name"
+                ).eq("id", sub["coach_id"]).single().execute()
+                if coach.data:
+                    coach_name = coach.data.get("name")
+
+            subscriptions.append({
+                "id": sub["id"],
+                "coach_id": sub.get("coach_id"),
+                "coach_name": coach_name,
+                "day_of_week": sub.get("day_of_week"),
+                "time_start": sub.get("time_start"),
+                "time_end": sub.get("time_end"),
+                "is_active": sub["is_active"],
+            })
+
+        return subscriptions
+
+    async def notify_vacancy(
+        self,
+        org_id: int,
+        lesson_id: int,
+        coach_id: str,
+        lesson_time: dict,
+    ) -> dict:
+        """
+        공강 발생 시 매칭되는 구독자에게 알림 발송.
+
+        lesson_time: {"day_of_week": 2, "time_start": "14:00", "time_end": "15:00"}
+        """
+        day = lesson_time.get("day_of_week")
+        time_start = lesson_time.get("time_start")
+        time_end = lesson_time.get("time_end")
+
+        # 매칭 구독자 조회:
+        # - 같은 org
+        # - is_active = True
+        # - coach_id가 NULL이거나 해당 코치
+        # - day_of_week가 NULL이거나 해당 요일 포함
+        # - time 범위 겹침 (NULL이면 전체 시간)
+        query = self.supabase.table("app_vacancy_subscribers").select(
+            "*, members!app_vacancy_subscribers_member_id_fkey(name)"
+        ).eq(
+            "organization_id", org_id
+        ).eq(
+            "is_active", True
+        )
+
+        subs = query.execute()
+        matched = []
+
+        for sub in (subs.data or []):
+            # 코치 필터: NULL = all coaches, 아니면 매칭
+            if sub.get("coach_id") and sub["coach_id"] != coach_id:
+                continue
+
+            # 요일 필터: NULL = all days, 아니면 포함 여부
+            sub_days = sub.get("day_of_week")
+            if sub_days and day is not None and day not in sub_days:
+                continue
+
+            # 시간 필터: NULL = all times, 아니면 겹침 체크
+            sub_start = sub.get("time_start")
+            sub_end = sub.get("time_end")
+            if sub_start and sub_end and time_start and time_end:
+                # 겹침: sub_start < time_end AND sub_end > time_start
+                if sub_start >= time_end or sub_end <= time_start:
+                    continue
+
+            matched.append(sub)
+
+        if not matched:
+            return {"total": 0, "sent": 0, "failed": 0}
+
+        # 코치 이름 조회
+        coach_result = self.supabase.table("members").select(
+            "name"
+        ).eq("id", coach_id).single().execute()
+        coach_name = coach_result.data.get("name", "코치") if coach_result.data else "코치"
+
+        # 요일 한글 변환
+        day_names = ["월", "화", "수", "목", "금", "토", "일"]
+        day_str = day_names[day] if day is not None and 0 <= day <= 6 else ""
+
+        title = "공강 알림"
+        message = (
+            f"{coach_name} 코치님의 {day_str}요일 "
+            f"{time_start or ''}~{time_end or ''} 레슨에 자리가 생겼습니다."
+        )
+
+        sent = 0
+        failed = 0
+
+        for sub in matched:
+            try:
+                await self.send_notification(
+                    org_id=org_id,
+                    member_id=sub["member_id"],
+                    notification_type=NotificationType.lesson.value,
+                    title=title,
+                    message=message,
+                    channels=[
+                        NotificationChannel.fcm.value,
+                        NotificationChannel.app.value,
+                    ],
+                    reference_type="lesson",
+                    reference_id=lesson_id,
+                )
+                sent += 1
+            except Exception as e:
+                logger.error(
+                    f"공강 알림 발송 실패 (member {sub['member_id']}): {e}"
+                )
+                failed += 1
+
+        logger.info(
+            f"공강 알림 발송 완료: org {org_id}, lesson {lesson_id}, "
+            f"매칭 {len(matched)}명, 발송 {sent}명, 실패 {failed}명"
+        )
+
+        return {"total": len(matched), "sent": sent, "failed": failed}
 
 
 # 싱글톤

@@ -22,6 +22,10 @@ from .models import (
     NotificationResponse,
     NotificationStatsResponse,
     NotificationChannel,
+    VacancySubscription,
+    VacancySubscriptionResponse,
+    VacancyNotifyRequest,
+    VacancyNotifyResponse,
 )
 from .service import notification_service
 
@@ -201,3 +205,78 @@ async def get_notification_stats(
     """이번 달 알림 통계"""
     stats = notification_service.get_notification_stats(member.organization_id)
     return NotificationStatsResponse(**stats)
+
+
+# =============================================
+# 공강 (Vacancy) 알림 (학생/코치용)
+# =============================================
+
+@router.post(
+    "/vacancy/subscribe",
+    response_model=VacancySubscriptionResponse,
+)
+async def subscribe_vacancy(
+    data: VacancySubscription,
+    member: ClubMemberContext = Depends(get_current_club_member),
+):
+    """공강 알림 구독 (학생이 원하는 시간대/코치 등록)"""
+    result = await notification_service.subscribe_vacancy(
+        org_id=member.organization_id,
+        member_id=member.member_id,
+        data=data.model_dump(),
+    )
+    return VacancySubscriptionResponse(**result)
+
+
+@router.delete("/vacancy/{subscription_id}")
+async def unsubscribe_vacancy(
+    subscription_id: str,
+    member: ClubMemberContext = Depends(get_current_club_member),
+):
+    """공강 알림 구독 해제"""
+    success = await notification_service.unsubscribe_vacancy(
+        org_id=member.organization_id,
+        subscription_id=subscription_id,
+        member_id=member.member_id,
+    )
+    if not success:
+        raise HTTPException(404, "구독을 찾을 수 없습니다")
+    return {"success": True, "message": "공강 알림 구독이 해제되었습니다"}
+
+
+@router.get("/vacancy/my")
+async def get_my_vacancy_subscriptions(
+    member: ClubMemberContext = Depends(get_current_club_member),
+):
+    """내 공강 알림 구독 목록"""
+    subscriptions = await notification_service.get_vacancy_subscriptions(
+        org_id=member.organization_id,
+        member_id=member.member_id,
+    )
+    return {
+        "subscriptions": [
+            VacancySubscriptionResponse(**sub) for sub in subscriptions
+        ]
+    }
+
+
+@router.post(
+    "/vacancy/notify",
+    response_model=VacancyNotifyResponse,
+)
+async def notify_vacancy(
+    data: VacancyNotifyRequest,
+    member: ClubMemberContext = Depends(require_coach),
+):
+    """공강 알림 발송 (코치 이상 - 레슨 자리 발생 시)"""
+    result = await notification_service.notify_vacancy(
+        org_id=member.organization_id,
+        lesson_id=data.lesson_id,
+        coach_id=data.coach_id,
+        lesson_time={
+            "day_of_week": data.day_of_week,
+            "time_start": data.time_start,
+            "time_end": data.time_end,
+        },
+    )
+    return VacancyNotifyResponse(**result)

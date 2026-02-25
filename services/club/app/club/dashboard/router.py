@@ -207,6 +207,17 @@ async def lessons_page(request: Request):
     )
 
 
+@router.get("/notifications", response_class=HTMLResponse)
+async def notifications_page(request: Request):
+    """
+    알림 설정 페이지 (알림 기록, 구독 정보, 공강 알림, 푸시 토큰 관리)
+    """
+    return templates.TemplateResponse(
+        "club/notifications.html",
+        {"request": request, "title": "알림 설정"}
+    )
+
+
 @router.get("/billing", response_class=HTMLResponse)
 async def billing_page(request: Request):
     """
