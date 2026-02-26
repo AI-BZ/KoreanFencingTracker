@@ -23,6 +23,9 @@ SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 KAKAO_CLIENT_ID = os.getenv("KAKAO_CLIENT_ID", "")
 KAKAO_REDIRECT_URI = os.getenv("KAKAO_REDIRECT_URI", f"http://localhost:{PORT}/auth/kakao/callback")
 
+# Account Service (인증 리다이렉트)
+ACCOUNT_SERVICE_URL = os.getenv("ACCOUNT_SERVICE_URL", "http://localhost:70")
+
 # Data Service (선수 데이터 API 호출용)
 DATA_SERVICE_URL = os.getenv("DATA_SERVICE_URL", "http://localhost:71")
 

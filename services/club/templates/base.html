@@ -43,11 +43,12 @@
                 <a href="#" id="navLogout" style="display:none;" onclick="handleLogout()">로그아웃</a>
             </div>
             <div class="nav-actions">
-                <button class="nav-notification-btn" id="navNotificationBtn" aria-label="알림" title="알림">
+                <a href="/auth/login" class="nav-login-btn" id="navLoginBtn" style="color:#e2e8f0; text-decoration:none; padding:0.5rem 1rem; border-radius:8px; font-size:0.9rem; border:1px solid rgba(255,255,255,0.15);">로그인</a>
+                <button class="nav-notification-btn" id="navNotificationBtn" aria-label="알림" title="알림" style="display:none;">
                     &#128276;
                     <span class="nav-notification-badge" id="navNotifBadge" style="display:none;"></span>
                 </button>
-                <div class="nav-profile-dropdown" id="navProfileDropdown">
+                <div class="nav-profile-dropdown" id="navProfileDropdown" style="display:none;">
                     <button class="nav-profile-btn" id="navProfileBtn" aria-label="프로필 메뉴">
                         <span class="nav-profile-avatar" id="navProfileAvatar">?</span>
                         <span class="nav-profile-name" id="navProfileName"></span>
@@ -112,33 +113,61 @@
     {% block extra_js %}{% endblock %}
     <script>
     // =========================================================
-    // Auth state: show/hide logout link & profile
+    // Auth state: read JWT cookie (not localStorage)
     // =========================================================
     (function() {
-        var token = localStorage.getItem('access_token');
-        var logoutLink = document.getElementById('navLogout');
-        if (token && logoutLink) {
-            logoutLink.style.display = '';
+        function getCookie(name) {
+            var match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+            return match ? match[2] : null;
         }
 
-        // Profile button initial
+        function parseJWT(token) {
+            try {
+                return JSON.parse(atob(token.split('.')[1]));
+            } catch(e) { return null; }
+        }
+
+        var token = getCookie('access_token');
+        var payload = token ? parseJWT(token) : null;
+        var logoutLink = document.getElementById('navLogout');
+        var loginBtn = document.getElementById('navLoginBtn');
         var profileName = document.getElementById('navProfileName');
         var profileAvatar = document.getElementById('navProfileAvatar');
-        if (token) {
-            // Try to parse JWT for display name
-            try {
-                var payload = JSON.parse(atob(token.split('.')[1]));
-                var name = payload.full_name || payload.name || payload.sub || '';
-                if (profileName && name) profileName.textContent = name;
-                if (profileAvatar && name) profileAvatar.textContent = name.charAt(0).toUpperCase();
-            } catch(e) { /* ignore parse errors */ }
+        var profileDropdown = document.getElementById('navProfileDropdown');
+        var notificationBtn = document.getElementById('navNotificationBtn');
+
+        if (payload && payload.member_id) {
+            // Logged in
+            if (logoutLink) logoutLink.style.display = '';
+            if (loginBtn) loginBtn.style.display = 'none';
+            if (notificationBtn) notificationBtn.style.display = '';
+            if (profileDropdown) profileDropdown.style.display = '';
+
+            // Fetch member info from /auth/me (JWT payload may not have name)
+            fetch('/auth/me')
+                .then(function(r) { return r.ok ? r.json() : null; })
+                .then(function(data) {
+                    if (!data) return;
+                    var name = data.full_name || data.email || '';
+                    if (profileName && name) profileName.textContent = name;
+                    if (profileAvatar && name) profileAvatar.textContent = name.charAt(0).toUpperCase();
+                })
+                .catch(function() {});
+        } else {
+            // Not logged in — show login button, hide profile
+            if (logoutLink) logoutLink.style.display = 'none';
+            if (loginBtn) loginBtn.style.display = '';
+            if (notificationBtn) notificationBtn.style.display = 'none';
+            if (profileDropdown) profileDropdown.style.display = 'none';
         }
     })();
 
     function handleLogout() {
+        // Clear local tokens
         localStorage.removeItem('access_token');
         document.cookie = 'access_token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
-        window.location.href = '/';
+        // Redirect to account service logout
+        window.location.href = '/auth/logout';
     }
 
     // =========================================================

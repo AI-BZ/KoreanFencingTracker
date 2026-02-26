@@ -10,6 +10,8 @@ DELETE /club/announcements/{id}            - 공지사항 삭제
 POST   /club/announcements/{id}/read       - 읽음 처리
 """
 
+from typing import List
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from loguru import logger
 
@@ -59,7 +61,7 @@ async def create_announcement(
         raise HTTPException(500, f"공지사항 작성 실패: {str(e)}")
 
 
-@router.get("/", response_model=list[AnnouncementResponse])
+@router.get("/", response_model=List[AnnouncementResponse])
 async def list_announcements(
     category: str = Query(None, description="카테고리 필터 (general, competition, schedule, urgent)"),
     include_expired: bool = Query(False, description="만료된 공지 포함"),

@@ -1,0 +1,280 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title or "클럽 가입 안내" }} - FencingMind Club{% endblock %}
+
+{% block extra_css %}
+<style>
+    .join-container {
+        max-width: 600px;
+        margin: 3rem auto;
+        padding: 0 1.5rem;
+    }
+
+    .join-header {
+        text-align: center;
+        margin-bottom: 2.5rem;
+    }
+
+    .join-header .welcome-icon {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+    }
+
+    .join-header h1 {
+        font-size: 1.6rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin-bottom: 0.5rem;
+    }
+
+    .join-header .welcome-name {
+        color: var(--accent-primary);
+        font-weight: 700;
+    }
+
+    .join-header p {
+        color: var(--text-secondary);
+        font-size: 0.95rem;
+        line-height: 1.6;
+    }
+
+    .join-methods {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        margin-bottom: 2.5rem;
+    }
+
+    .join-method-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 16px;
+        padding: 1.5rem;
+        transition: border-color 0.2s;
+    }
+
+    .join-method-card:hover {
+        border-color: var(--border-light);
+    }
+
+    .join-method-card.available {
+        cursor: default;
+    }
+
+    .join-method-card.coming-soon {
+        opacity: 0.6;
+    }
+
+    .join-method-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .join-method-icon {
+        font-size: 1.5rem;
+        flex-shrink: 0;
+    }
+
+    .join-method-title {
+        font-size: 1.05rem;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .join-method-badge {
+        font-size: 0.7rem;
+        padding: 0.2rem 0.5rem;
+        border-radius: 6px;
+        font-weight: 600;
+        margin-left: auto;
+        flex-shrink: 0;
+    }
+
+    .badge-recommended {
+        background: rgba(16, 185, 129, 0.15);
+        color: var(--success-color);
+        border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    .badge-coming {
+        background: rgba(107, 107, 123, 0.15);
+        color: var(--text-muted);
+        border: 1px solid rgba(107, 107, 123, 0.3);
+    }
+
+    .join-method-desc {
+        color: var(--text-secondary);
+        font-size: 0.88rem;
+        line-height: 1.6;
+        margin: 0;
+    }
+
+    .join-account-info {
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        padding: 1.25rem 1.5rem;
+        margin-bottom: 2rem;
+    }
+
+    .join-account-info .info-label {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 0.5rem;
+    }
+
+    .join-account-info .info-row {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .join-account-info .info-avatar {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background: var(--accent-primary);
+        color: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 0.95rem;
+        flex-shrink: 0;
+    }
+
+    .join-account-info .info-detail {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .join-account-info .info-name {
+        color: var(--text-primary);
+        font-weight: 600;
+        font-size: 0.95rem;
+    }
+
+    .join-account-info .info-email {
+        color: var(--text-muted);
+        font-size: 0.82rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .join-actions {
+        text-align: center;
+    }
+
+    .join-actions .btn-logout {
+        display: inline-block;
+        color: var(--text-muted);
+        text-decoration: none;
+        font-size: 0.88rem;
+        padding: 0.6rem 1.5rem;
+        border-radius: 8px;
+        border: 1px solid var(--border-color);
+        transition: color 0.2s, border-color 0.2s;
+    }
+
+    .join-actions .btn-logout:hover {
+        color: var(--text-secondary);
+        border-color: var(--border-light);
+    }
+
+    @media (max-width: 480px) {
+        .join-container {
+            margin: 2rem auto;
+        }
+
+        .join-header h1 {
+            font-size: 1.35rem;
+        }
+
+        .join-method-card {
+            padding: 1.2rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="join-container">
+    <div class="join-header">
+        <div class="welcome-icon">&#9876;&#65039;</div>
+        <h1>
+            {% if member_name %}
+                <span class="welcome-name">{{ member_name }}</span>님, 환영합니다!
+            {% else %}
+                환영합니다!
+            {% endif %}
+        </h1>
+        <p>아직 소속된 클럽이 없습니다.<br>아래 방법으로 클럽에 가입해 주세요.</p>
+    </div>
+
+    <div class="join-account-info">
+        <div class="info-label">로그인된 계정</div>
+        <div class="info-row">
+            <div class="info-avatar">
+                {% if member_name %}
+                    {{ member_name[0] }}
+                {% else %}
+                    ?
+                {% endif %}
+            </div>
+            <div class="info-detail">
+                <div class="info-name">{{ member_name or "회원" }}</div>
+                {% if member_email %}
+                    <div class="info-email">{{ member_email }}</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="join-methods">
+        <div class="join-method-card available">
+            <div class="join-method-header">
+                <span class="join-method-icon">&#128233;</span>
+                <span class="join-method-title">코치/관장에게 초대 받기</span>
+                <span class="join-method-badge badge-recommended">추천</span>
+            </div>
+            <p class="join-method-desc">
+                소속 클럽의 코치님 또는 관장님에게 초대를 요청하세요.
+                초대를 받으면 자동으로 클럽에 가입됩니다.
+            </p>
+        </div>
+
+        <div class="join-method-card coming-soon">
+            <div class="join-method-header">
+                <span class="join-method-icon">&#128269;</span>
+                <span class="join-method-title">클럽 검색 후 가입 신청</span>
+                <span class="join-method-badge badge-coming">준비 중</span>
+            </div>
+            <p class="join-method-desc">
+                클럽을 검색하고 가입을 신청할 수 있습니다.
+                코치님의 승인 후 가입이 완료됩니다.
+            </p>
+        </div>
+
+        <div class="join-method-card coming-soon">
+            <div class="join-method-header">
+                <span class="join-method-icon">&#127942;</span>
+                <span class="join-method-title">새 클럽 등록 (관장 전용)</span>
+                <span class="join-method-badge badge-coming">준비 중</span>
+            </div>
+            <p class="join-method-desc">
+                새로운 펜싱 클럽을 등록합니다.
+                사업자 인증 후 클럽을 개설할 수 있습니다.
+            </p>
+        </div>
+    </div>
+
+    <div class="join-actions">
+        <a href="#" class="btn-logout" onclick="handleLogout(); return false;">로그아웃</a>
+    </div>
+</div>
+{% endblock %}

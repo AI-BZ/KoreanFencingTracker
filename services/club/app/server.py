@@ -15,6 +15,7 @@ from . import config
 from .database import get_supabase_client
 from .middleware import rate_limiter
 from .errors import global_exception_handler, value_error_handler
+from .auth import auth_router
 from .club import club_router
 from .billing import billing_router
 from .notifications import notifications_router
@@ -62,8 +63,10 @@ app = FastAPI(
 
 ALLOWED_ORIGINS = [
     "https://app.fencingmind.ai",
+    "https://account.fencingmind.ai",
     "https://fencingmind.ai",
     "http://localhost:72",
+    "http://localhost:70",
     "http://127.0.0.1:72",
 ]
 
@@ -75,6 +78,7 @@ if config.DEBUG:
         "http://localhost:8080",
         "http://127.0.0.1:3000",
         "http://127.0.0.1:5173",
+        "http://127.0.0.1:70",
     ])
 
 app.add_middleware(
@@ -126,6 +130,7 @@ if config.STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(config.STATIC_DIR)), name="static")
 
 # 라우터 마운트
+app.include_router(auth_router)  # /auth/* - prefix 없음 (account 리다이렉트 shim)
 app.include_router(club_router, prefix="/api")
 app.include_router(billing_router, prefix="/api")
 app.include_router(notifications_router, prefix="/api")
@@ -197,14 +202,33 @@ async def offline_page():
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     from .club.dependencies import try_get_current_club_member
+    from shared_core.auth.jwt import get_current_member
     from fastapi.responses import RedirectResponse
 
     member = await try_get_current_club_member(request)
     if member:
-        # 인증된 사용자 → 역할별 대시보드로 리다이렉트
+        # 인증된 클럽 소속 사용자 -> 역할별 대시보드로 리다이렉트
         return RedirectResponse(url="/api/club/", status_code=302)
 
-    # 미인증 → 랜딩 페이지
+    # JWT 토큰은 있지만 클럽 미소속인 경우
+    raw_member = await get_current_member(request)
+    if raw_member:
+        # 로그인은 했지만 클럽 미소속 -> 가입 안내 페이지
+        if templates:
+            try:
+                return templates.TemplateResponse(
+                    "club/join_club.html",
+                    {
+                        "request": request,
+                        "title": "클럽 가입",
+                        "member_name": raw_member.get("full_name", ""),
+                        "member_email": raw_member.get("email", ""),
+                    }
+                )
+            except Exception:
+                pass
+
+    # 미인증 -> 랜딩 페이지
     if templates:
         try:
             return templates.TemplateResponse(

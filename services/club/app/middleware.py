@@ -6,7 +6,7 @@ Security Middleware - Rate Limiting & Request Validation
 
 import time
 from collections import defaultdict
-from typing import Callable
+from typing import Callable, Dict, List
 
 from fastapi import Request, HTTPException
 from loguru import logger
@@ -20,7 +20,7 @@ class RateLimiter:
 
     def __init__(self, calls_per_minute: int = 60):
         self.calls_per_minute = calls_per_minute
-        self.requests: dict[str, list[float]] = defaultdict(list)
+        self.requests: Dict[str, List[float]] = defaultdict(list)
 
     def _get_client_ip(self, request: Request) -> str:
         """클라이언트 IP 추출 (프록시 헤더 고려)"""

@@ -4,7 +4,7 @@ Checkin Router
 멀티 체크인/체크아웃 API 엔드포인트
 """
 
-from typing import Optional
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, Query
 
 from ..club.dependencies import (
@@ -107,7 +107,7 @@ async def get_checkin_status(
     )
 
 
-@router.get("/today", response_model=list[AttendanceRecord])
+@router.get("/today", response_model=List[AttendanceRecord])
 async def get_today_attendance(
     member: ClubMemberContext = Depends(require_coach),
 ):
@@ -117,7 +117,7 @@ async def get_today_attendance(
     )
 
 
-@router.get("/history", response_model=list[AttendanceRecord])
+@router.get("/history", response_model=List[AttendanceRecord])
 async def get_attendance_history(
     member_id: Optional[str] = Query(None, description="특정 회원 필터"),
     date_from: Optional[str] = Query(None, description="시작일 (YYYY-MM-DD)"),

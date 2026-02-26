@@ -10,6 +10,8 @@ POST   /club/videos/{video_id}/comments            - 댓글 추가
 DELETE /club/videos/{video_id}/comments/{comment_id} - 댓글 삭제
 """
 
+from typing import List
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from loguru import logger
 
@@ -61,7 +63,7 @@ async def create_video(
         raise HTTPException(500, f"영상 등록 실패: {str(e)}")
 
 
-@router.get("/", response_model=list[VideoResponse])
+@router.get("/", response_model=List[VideoResponse])
 async def list_videos(
     category: str = Query(None, description="카테고리 필터 (training, competition, drill)"),
     member_id: str = Query(None, description="특정 회원의 영상만"),
