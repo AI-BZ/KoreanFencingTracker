@@ -8,10 +8,13 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.responses import Response
 from loguru import logger
 
 from . import config
 from .database import get_supabase_client
+from .middleware import rate_limiter
+from .errors import global_exception_handler, value_error_handler
 from .club import club_router
 from .billing import billing_router
 from .notifications import notifications_router
@@ -19,6 +22,10 @@ from .schedule import schedule_router
 from .lessons import lessons_router
 from .competitions import competitions_router
 from .sync import sync_router
+from .videos import videos_router
+from .announcements import announcements_router
+from .checkin import checkin_router
+from .settings import settings_router
 
 templates: Jinja2Templates = None
 
@@ -49,12 +56,26 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# ─────────────────────────────────────────────────────────────
+# CORS Configuration
+# ─────────────────────────────────────────────────────────────
+
 ALLOWED_ORIGINS = [
     "https://app.fencingmind.ai",
     "https://fencingmind.ai",
     "http://localhost:72",
     "http://127.0.0.1:72",
 ]
+
+# 개발 모드에서는 추가 origin 허용
+if config.DEBUG:
+    ALLOWED_ORIGINS.extend([
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "http://localhost:8080",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:5173",
+    ])
 
 app.add_middleware(
     CORSMiddleware,
@@ -63,6 +84,43 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
     allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
 )
+
+# ─────────────────────────────────────────────────────────────
+# Security Headers Middleware
+# ─────────────────────────────────────────────────────────────
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response: Response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
+
+
+# ─────────────────────────────────────────────────────────────
+# Rate Limiting Middleware
+# ─────────────────────────────────────────────────────────────
+
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    # 헬스체크, 정적 파일은 rate limit 제외
+    path = request.url.path
+    if path in ("/api/health", "/sw.js", "/offline.html") or path.startswith("/static"):
+        return await call_next(request)
+
+    await rate_limiter.check(request)
+    return await call_next(request)
+
+
+# ─────────────────────────────────────────────────────────────
+# Global Exception Handlers
+# ─────────────────────────────────────────────────────────────
+
+app.add_exception_handler(Exception, global_exception_handler)
+app.add_exception_handler(ValueError, value_error_handler)
+
 
 if config.STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(config.STATIC_DIR)), name="static")
@@ -75,6 +133,10 @@ app.include_router(schedule_router, prefix="/api")
 app.include_router(lessons_router, prefix="/api")
 app.include_router(competitions_router, prefix="/api")
 app.include_router(sync_router, prefix="/api")
+app.include_router(videos_router, prefix="/api")
+app.include_router(announcements_router, prefix="/api")
+app.include_router(checkin_router, prefix="/api")
+app.include_router(settings_router, prefix="/api")
 
 
 # ─────────────────────────────────────────────────────────────

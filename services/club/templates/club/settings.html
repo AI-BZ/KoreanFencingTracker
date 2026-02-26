@@ -1,0 +1,1348 @@
+{% extends "base.html" %}
+
+{% block title %}클럽 설정 - FencingMind Club{% endblock %}
+
+{% block extra_css %}
+<style>
+.settings-page {
+    padding: 1.5rem 0;
+}
+
+.settings-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.settings-header h1 {
+    font-size: 1.6rem;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.back-link {
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+
+.back-link:hover { color: var(--text-primary); }
+
+/* Tabs */
+.tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 1.5rem;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.tab-btn {
+    padding: 0.75rem 1.25rem;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+    transition: all 0.2s;
+}
+
+.tab-btn:hover {
+    color: var(--text-secondary);
+}
+
+.tab-btn.active {
+    color: var(--accent-primary);
+    border-bottom-color: var(--accent-primary);
+}
+
+.tab-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--danger-color);
+    color: #fff;
+    font-size: 0.65rem;
+    min-width: 18px;
+    height: 18px;
+    border-radius: 9px;
+    margin-left: 0.4rem;
+    padding: 0 5px;
+    font-weight: 600;
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+/* Panel */
+.settings-panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    backdrop-filter: blur(10px);
+}
+
+.settings-panel h2 {
+    font-size: 1.15rem;
+    color: var(--text-primary);
+    margin-bottom: 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.settings-panel h3 {
+    font-size: 1rem;
+    color: var(--text-secondary);
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+/* Form */
+.form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+@media (max-width: 600px) {
+    .form-grid { grid-template-columns: 1fr; }
+}
+
+.form-grid.single {
+    grid-template-columns: 1fr;
+}
+
+.form-group {
+    margin-bottom: 0.75rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.35rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+    width: 100%;
+    padding: 0.65rem 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 0.9rem;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    font-family: inherit;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
+.form-group textarea {
+    resize: vertical;
+    min-height: 80px;
+}
+
+.form-group .help-text {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 0.25rem;
+}
+
+.form-group .toggle-container {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.toggle-switch {
+    position: relative;
+    width: 44px;
+    height: 24px;
+    flex-shrink: 0;
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    transition: 0.2s;
+}
+
+.toggle-slider::before {
+    content: '';
+    position: absolute;
+    height: 18px;
+    width: 18px;
+    left: 2px;
+    bottom: 2px;
+    background: var(--text-muted);
+    border-radius: 50%;
+    transition: 0.2s;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+    background: var(--success-color);
+    border-color: var(--success-color);
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+    transform: translateX(20px);
+    background: #fff;
+}
+
+/* Buttons */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.6rem 1.25rem;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: all 0.2s;
+    font-family: inherit;
+}
+
+.btn-primary {
+    background: var(--accent-primary);
+    color: #fff;
+}
+
+.btn-primary:hover { filter: brightness(1.15); }
+
+.btn-secondary {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+}
+
+.btn-secondary:hover {
+    background: var(--bg-card-hover);
+    color: var(--text-primary);
+}
+
+.btn-success {
+    background: var(--success-color);
+    color: #fff;
+}
+
+.btn-success:hover { filter: brightness(1.15); }
+
+.btn-danger {
+    background: var(--danger-color);
+    color: #fff;
+}
+
+.btn-danger:hover { filter: brightness(1.15); }
+
+.btn-sm {
+    padding: 0.35rem 0.75rem;
+    font-size: 0.8rem;
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    margin-top: 1.25rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-color);
+}
+
+/* Pending Members Table */
+.pending-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.pending-table th,
+.pending-table td {
+    padding: 0.65rem 0.5rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.pending-table th {
+    font-weight: 600;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+}
+
+.pending-table tr:hover {
+    background: var(--bg-card-hover);
+}
+
+.pending-table .member-name {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.pending-table .member-email {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.pending-table .action-cell {
+    display: flex;
+    gap: 0.4rem;
+}
+
+/* Stats Grid */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+@media (max-width: 900px) {
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 500px) {
+    .stats-grid { grid-template-columns: 1fr; }
+}
+
+.stat-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1.25rem;
+    text-align: center;
+}
+
+.stat-card .stat-value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.2;
+}
+
+.stat-card .stat-value.accent { color: var(--info-color); }
+.stat-card .stat-value.success { color: var(--success-color); }
+.stat-card .stat-value.warning { color: var(--warning-color); }
+.stat-card .stat-value.danger { color: var(--danger-color); }
+
+.stat-card .stat-label {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-top: 0.25rem;
+}
+
+/* Role Distribution */
+.role-bars {
+    margin-top: 1rem;
+}
+
+.role-bar-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
+.role-bar-label {
+    min-width: 80px;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.role-bar-track {
+    flex: 1;
+    height: 8px;
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.role-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.5s;
+}
+
+.role-bar-fill.coach { background: var(--info-color); }
+.role-bar-fill.student { background: var(--success-color); }
+.role-bar-fill.parent { background: var(--warning-color); }
+.role-bar-fill.staff { background: var(--accent-gold); }
+.role-bar-fill.other { background: var(--text-muted); }
+
+.role-bar-count {
+    min-width: 30px;
+    text-align: right;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+/* Recent Joins */
+.recent-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.recent-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.recent-item:last-child { border-bottom: none; }
+
+.recent-name { font-weight: 500; color: var(--text-primary); font-size: 0.9rem; }
+.recent-role { font-size: 0.75rem; color: var(--text-muted); }
+.recent-date { font-size: 0.8rem; color: var(--text-muted); }
+
+/* Danger Zone */
+.danger-zone {
+    border-color: rgba(239, 68, 68, 0.3);
+}
+
+.danger-zone h2 {
+    color: var(--danger-color);
+}
+
+.danger-zone .danger-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.danger-zone .danger-item:last-child { border-bottom: none; }
+
+.danger-desc h4 {
+    font-size: 0.95rem;
+    color: var(--text-primary);
+    margin-bottom: 0.15rem;
+}
+
+.danger-desc p {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+/* Confirm Dialog */
+.confirm-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.confirm-overlay.show { display: flex; }
+
+.confirm-dialog {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1.5rem;
+    max-width: 420px;
+    width: 90%;
+}
+
+.confirm-dialog h3 {
+    margin-bottom: 0.75rem;
+    color: var(--text-primary);
+    font-size: 1.1rem;
+}
+
+.confirm-dialog p {
+    color: var(--text-secondary);
+    margin-bottom: 1.25rem;
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.confirm-dialog .confirm-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+}
+
+/* Empty State */
+.empty-state {
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-muted);
+}
+
+.loading {
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-muted);
+}
+
+/* Toast */
+.toast-container {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    z-index: 2000;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.toast {
+    padding: 0.75rem 1.25rem;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    box-shadow: var(--shadow-md);
+    animation: slideIn 0.3s ease;
+    max-width: 350px;
+}
+
+.toast.success {
+    background: rgba(16, 185, 129, 0.9);
+    color: #fff;
+}
+
+.toast.error {
+    background: rgba(239, 68, 68, 0.9);
+    color: #fff;
+}
+
+.toast.info {
+    background: rgba(59, 130, 246, 0.9);
+    color: #fff;
+}
+
+@keyframes slideIn {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container settings-page">
+    <div class="settings-header">
+        <h1>&#9881;&#65039; 클럽 설정</h1>
+        <a href="/api/club/" class="back-link">&#8592; 대시보드</a>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+        <button class="tab-btn active" data-tab="profile" onclick="switchTab('profile')">
+            &#127970; 프로필
+        </button>
+        <button class="tab-btn" data-tab="settings" onclick="switchTab('settings')">
+            &#128295; 설정
+        </button>
+        <button class="tab-btn" data-tab="members" onclick="switchTab('members')">
+            &#128101; 회원 승인
+            <span class="tab-badge" id="pendingBadge" style="display:none;">0</span>
+        </button>
+        <button class="tab-btn" data-tab="stats" onclick="switchTab('stats')">
+            &#128202; 통계
+        </button>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- ============================== -->
+    <!-- Tab 1: Club Profile -->
+    <!-- ============================== -->
+    <div class="tab-content active" id="tab-profile">
+        <div class="settings-panel">
+            <h2>&#127970; 클럽 프로필</h2>
+            <div id="profileLoading" class="loading">프로필 로딩 중...</div>
+            <form id="profileForm" style="display:none;" onsubmit="return saveProfile(event)">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>클럽명 *</label>
+                        <input type="text" id="profileName" required maxlength="100">
+                    </div>
+                    <div class="form-group">
+                        <label>이메일</label>
+                        <input type="email" id="profileEmail" maxlength="100">
+                    </div>
+                    <div class="form-group">
+                        <label>전화번호</label>
+                        <input type="tel" id="profilePhone" maxlength="20" placeholder="010-0000-0000">
+                    </div>
+                    <div class="form-group">
+                        <label>설립연도</label>
+                        <input type="number" id="profileYear" min="1900" max="2100">
+                    </div>
+                    <div class="form-group">
+                        <label>웹사이트</label>
+                        <input type="url" id="profileWebsite" maxlength="200" placeholder="https://...">
+                    </div>
+                    <div class="form-group">
+                        <label>로고 URL</label>
+                        <input type="url" id="profileLogo" maxlength="500" placeholder="https://...">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>주소</label>
+                    <input type="text" id="profileAddress" maxlength="200">
+                </div>
+                <div class="form-group">
+                    <label>클럽 소개</label>
+                    <textarea id="profileDescription" maxlength="500" rows="3" placeholder="클럽을 소개해주세요..."></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="loadProfile()">초기화</button>
+                    <button type="submit" class="btn btn-primary" id="profileSaveBtn">저장</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ============================== -->
+    <!-- Tab 2: Check-in & Fee Settings -->
+    <!-- ============================== -->
+    <div class="tab-content" id="tab-settings">
+        <!-- Check-in Settings -->
+        <div class="settings-panel">
+            <h2>&#128205; 체크인 설정</h2>
+            <div id="settingsLoading" class="loading">설정 로딩 중...</div>
+            <form id="settingsForm" style="display:none;" onsubmit="return saveSettings(event)">
+                <div class="form-group">
+                    <label>자동 체크인</label>
+                    <div class="toggle-container">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="settingsAutoCheckin">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span style="font-size:0.85rem; color:var(--text-secondary);">클럽 IP 범위 내 자동 체크인 활성화</span>
+                    </div>
+                </div>
+
+                <h3>IP 기반 체크인</h3>
+                <div class="form-group">
+                    <label>클럽 IP 범위</label>
+                    <input type="text" id="settingsIp" maxlength="100" placeholder="예: 192.168.1.0/24">
+                    <div class="help-text">클럽 네트워크의 공인 IP 또는 IP 범위를 입력하세요</div>
+                </div>
+
+                <h3>WiFi 기반 체크인</h3>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>WiFi SSID</label>
+                        <input type="text" id="settingsWifiSsid" maxlength="100" placeholder="클럽 WiFi 이름">
+                    </div>
+                    <div class="form-group">
+                        <label>WiFi BSSID</label>
+                        <input type="text" id="settingsWifiBssid" maxlength="100" placeholder="AA:BB:CC:DD:EE:FF">
+                        <div class="help-text">WiFi 라우터의 MAC 주소 (보안 강화용)</div>
+                    </div>
+                </div>
+
+                <h3>QR 코드 체크인</h3>
+                <div class="form-group">
+                    <label>QR 갱신 주기 (분)</label>
+                    <input type="number" id="settingsQrMinutes" min="1" max="60" placeholder="5">
+                    <div class="help-text">QR 코드가 자동으로 변경되는 간격 (분). 짧을수록 보안이 강화됩니다.</div>
+                </div>
+
+                <h3>GPS 기반 체크인 (Geofence)</h3>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>위도</label>
+                        <input type="number" id="settingsLat" step="0.000001" min="-90" max="90" placeholder="37.5665">
+                    </div>
+                    <div class="form-group">
+                        <label>경도</label>
+                        <input type="number" id="settingsLng" step="0.000001" min="-180" max="180" placeholder="126.9780">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>반경 (m)</label>
+                    <input type="number" id="settingsRadius" min="10" max="5000" placeholder="100">
+                    <div class="help-text">클럽 중심으로부터 체크인 허용 반경 (미터)</div>
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="loadSettings()">초기화</button>
+                    <button type="submit" class="btn btn-primary" id="settingsSaveBtn">저장</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Fee Defaults -->
+        <div class="settings-panel">
+            <h2>&#128176; 비용 기본값</h2>
+            <form id="feeForm" style="display:none;" onsubmit="return saveFeeSettings(event)">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>기본 월회비 (원)</label>
+                        <input type="number" id="settingsMonthlyFee" min="0" step="1000" placeholder="100000">
+                    </div>
+                    <div class="form-group">
+                        <label>기본 레슨비 (원)</label>
+                        <input type="number" id="settingsLessonFee" min="0" step="1000" placeholder="50000">
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary" id="feeSaveBtn">비용 설정 저장</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ============================== -->
+    <!-- Tab 3: Member Approval -->
+    <!-- ============================== -->
+    <div class="tab-content" id="tab-members">
+        <div class="settings-panel">
+            <h2>&#128101; 가입 승인 대기</h2>
+            <div id="pendingLoading" class="loading">목록 로딩 중...</div>
+            <div id="pendingContent" style="display:none;"></div>
+        </div>
+    </div>
+
+    <!-- ============================== -->
+    <!-- Tab 4: Member Stats -->
+    <!-- ============================== -->
+    <div class="tab-content" id="tab-stats">
+        <div id="statsLoading" class="loading">통계 로딩 중...</div>
+        <div id="statsContent" style="display:none;">
+            <div class="stats-grid" id="statsGrid"></div>
+
+            <div class="settings-panel">
+                <h2>&#128202; 역할별 분포</h2>
+                <div class="role-bars" id="roleBars"></div>
+            </div>
+
+            <div class="settings-panel">
+                <h2>&#128197; 최근 가입</h2>
+                <ul class="recent-list" id="recentJoins"></ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Confirm Dialog -->
+<div class="confirm-overlay" id="confirmOverlay">
+    <div class="confirm-dialog">
+        <h3 id="confirmTitle">확인</h3>
+        <p id="confirmMessage">정말 진행하시겠습니까?</p>
+        <div class="form-group" id="confirmReasonGroup" style="display:none;">
+            <label>거절 사유</label>
+            <textarea id="confirmReason" rows="2" placeholder="거절 사유를 입력하세요..."></textarea>
+        </div>
+        <div class="form-group" id="confirmRoleGroup" style="display:none;">
+            <label>부여할 역할</label>
+            <select id="confirmRole">
+                <option value="student">수강생</option>
+                <option value="parent">학부모</option>
+                <option value="assistant">보조 코치</option>
+                <option value="coach">코치</option>
+                <option value="staff">스태프</option>
+            </select>
+        </div>
+        <div class="confirm-actions">
+            <button class="btn btn-secondary" onclick="closeConfirm()">취소</button>
+            <button class="btn" id="confirmBtn" onclick="executeConfirm()">확인</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const API_BASE = '/api/club/settings';
+let confirmCallback = null;
+
+function getAuthHeaders() {
+    return { 'Authorization': `Bearer ${localStorage.getItem('access_token')}` };
+}
+
+function getAuthHeadersJson() {
+    return {
+        'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+        'Content-Type': 'application/json'
+    };
+}
+
+// ========================
+// Toast Notifications
+// ========================
+function showToast(type, message) {
+    const container = document.getElementById('toastContainer');
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    container.appendChild(toast);
+    setTimeout(() => toast.remove(), 4000);
+}
+
+// ========================
+// Tabs
+// ========================
+function switchTab(tabName) {
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+    document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+    document.getElementById(`tab-${tabName}`).classList.add('active');
+
+    // Lazy load
+    if (tabName === 'profile') loadProfile();
+    if (tabName === 'settings') loadSettings();
+    if (tabName === 'members') loadPendingMembers();
+    if (tabName === 'stats') loadStats();
+}
+
+// ========================
+// Confirm Dialog
+// ========================
+function showConfirm(title, message, btnClass, btnText, callback, options = {}) {
+    document.getElementById('confirmTitle').textContent = title;
+    document.getElementById('confirmMessage').textContent = message;
+    document.getElementById('confirmBtn').className = `btn ${btnClass}`;
+    document.getElementById('confirmBtn').textContent = btnText;
+    document.getElementById('confirmReasonGroup').style.display = options.showReason ? 'block' : 'none';
+    document.getElementById('confirmRoleGroup').style.display = options.showRole ? 'block' : 'none';
+    document.getElementById('confirmReason').value = '';
+    document.getElementById('confirmRole').value = 'student';
+    confirmCallback = callback;
+    document.getElementById('confirmOverlay').classList.add('show');
+}
+
+function closeConfirm() {
+    document.getElementById('confirmOverlay').classList.remove('show');
+    confirmCallback = null;
+}
+
+function executeConfirm() {
+    if (confirmCallback) {
+        const reason = document.getElementById('confirmReason').value;
+        const role = document.getElementById('confirmRole').value;
+        confirmCallback({ reason, role });
+    }
+    closeConfirm();
+}
+
+// Close confirm on overlay click
+document.getElementById('confirmOverlay').addEventListener('click', function(e) {
+    if (e.target === this) closeConfirm();
+});
+
+// ========================
+// Profile
+// ========================
+async function loadProfile() {
+    const loading = document.getElementById('profileLoading');
+    const form = document.getElementById('profileForm');
+    loading.style.display = 'block';
+    form.style.display = 'none';
+
+    try {
+        const res = await fetch(`${API_BASE}/profile`, { headers: getAuthHeaders() });
+        if (!res.ok) throw new Error('프로필 로드 실패');
+
+        const data = await res.json();
+        document.getElementById('profileName').value = data.name || '';
+        document.getElementById('profileEmail').value = data.email || '';
+        document.getElementById('profilePhone').value = data.phone || '';
+        document.getElementById('profileYear').value = data.established_year || '';
+        document.getElementById('profileWebsite').value = data.website || '';
+        document.getElementById('profileLogo').value = data.logo_url || '';
+        document.getElementById('profileAddress').value = data.address || '';
+        document.getElementById('profileDescription').value = data.description || '';
+
+        loading.style.display = 'none';
+        form.style.display = 'block';
+    } catch (error) {
+        console.error('Profile load error:', error);
+        loading.textContent = '프로필을 불러올 수 없습니다';
+    }
+}
+
+async function saveProfile(e) {
+    e.preventDefault();
+    const btn = document.getElementById('profileSaveBtn');
+    btn.disabled = true;
+    btn.textContent = '저장 중...';
+
+    const payload = {};
+    const name = document.getElementById('profileName').value.trim();
+    if (name) payload.name = name;
+
+    const fields = ['email', 'phone', 'website', 'address', 'description'];
+    fields.forEach(f => {
+        const el = document.getElementById('profile' + f.charAt(0).toUpperCase() + f.slice(1));
+        if (el && el.value.trim()) payload[f] = el.value.trim();
+    });
+
+    const logo = document.getElementById('profileLogo').value.trim();
+    if (logo) payload.logo_url = logo;
+
+    const year = document.getElementById('profileYear').value;
+    if (year) payload.established_year = parseInt(year);
+
+    try {
+        const res = await fetch(`${API_BASE}/profile`, {
+            method: 'PUT',
+            headers: getAuthHeadersJson(),
+            body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.detail || '저장 실패');
+        }
+
+        showToast('success', '프로필이 저장되었습니다');
+    } catch (error) {
+        showToast('error', error.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '저장';
+    }
+    return false;
+}
+
+// ========================
+// Settings (Check-in & Fees)
+// ========================
+async function loadSettings() {
+    const loading = document.getElementById('settingsLoading');
+    const form = document.getElementById('settingsForm');
+    const feeForm = document.getElementById('feeForm');
+    loading.style.display = 'block';
+    form.style.display = 'none';
+    feeForm.style.display = 'none';
+
+    try {
+        const res = await fetch(`${API_BASE}/settings`, { headers: getAuthHeaders() });
+        if (!res.ok) throw new Error('설정 로드 실패');
+
+        const data = await res.json();
+        document.getElementById('settingsAutoCheckin').checked = data.auto_checkin_enabled || false;
+        document.getElementById('settingsIp').value = data.auto_checkin_ip || '';
+        document.getElementById('settingsWifiSsid').value = data.wifi_ssid || '';
+        document.getElementById('settingsWifiBssid').value = data.wifi_bssid || '';
+        document.getElementById('settingsQrMinutes').value = data.qr_refresh_minutes || '';
+        document.getElementById('settingsLat').value = data.geofence_lat || '';
+        document.getElementById('settingsLng').value = data.geofence_lng || '';
+        document.getElementById('settingsRadius').value = data.geofence_radius_m || '';
+        document.getElementById('settingsMonthlyFee').value = data.default_monthly_fee || '';
+        document.getElementById('settingsLessonFee').value = data.default_lesson_fee || '';
+
+        loading.style.display = 'none';
+        form.style.display = 'block';
+        feeForm.style.display = 'block';
+    } catch (error) {
+        console.error('Settings load error:', error);
+        loading.textContent = '설정을 불러올 수 없습니다';
+    }
+}
+
+async function saveSettings(e) {
+    e.preventDefault();
+    const btn = document.getElementById('settingsSaveBtn');
+    btn.disabled = true;
+    btn.textContent = '저장 중...';
+
+    const payload = {
+        auto_checkin_enabled: document.getElementById('settingsAutoCheckin').checked,
+    };
+
+    const ip = document.getElementById('settingsIp').value.trim();
+    if (ip) payload.auto_checkin_ip = ip;
+
+    const ssid = document.getElementById('settingsWifiSsid').value.trim();
+    if (ssid) payload.wifi_ssid = ssid;
+
+    const bssid = document.getElementById('settingsWifiBssid').value.trim();
+    if (bssid) payload.wifi_bssid = bssid;
+
+    const qr = document.getElementById('settingsQrMinutes').value;
+    if (qr) payload.qr_refresh_minutes = parseInt(qr);
+
+    const lat = document.getElementById('settingsLat').value;
+    if (lat) payload.geofence_lat = parseFloat(lat);
+
+    const lng = document.getElementById('settingsLng').value;
+    if (lng) payload.geofence_lng = parseFloat(lng);
+
+    const radius = document.getElementById('settingsRadius').value;
+    if (radius) payload.geofence_radius_m = parseInt(radius);
+
+    try {
+        const res = await fetch(`${API_BASE}/settings`, {
+            method: 'PUT',
+            headers: getAuthHeadersJson(),
+            body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.detail || '저장 실패');
+        }
+
+        showToast('success', '체크인 설정이 저장되었습니다');
+    } catch (error) {
+        showToast('error', error.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '저장';
+    }
+    return false;
+}
+
+async function saveFeeSettings(e) {
+    e.preventDefault();
+    const btn = document.getElementById('feeSaveBtn');
+    btn.disabled = true;
+    btn.textContent = '저장 중...';
+
+    const payload = {};
+    const monthly = document.getElementById('settingsMonthlyFee').value;
+    if (monthly) payload.default_monthly_fee = parseInt(monthly);
+
+    const lesson = document.getElementById('settingsLessonFee').value;
+    if (lesson) payload.default_lesson_fee = parseInt(lesson);
+
+    if (Object.keys(payload).length === 0) {
+        showToast('info', '변경 사항이 없습니다');
+        btn.disabled = false;
+        btn.textContent = '비용 설정 저장';
+        return false;
+    }
+
+    try {
+        const res = await fetch(`${API_BASE}/settings`, {
+            method: 'PUT',
+            headers: getAuthHeadersJson(),
+            body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.detail || '저장 실패');
+        }
+
+        showToast('success', '비용 설정이 저장되었습니다');
+    } catch (error) {
+        showToast('error', error.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '비용 설정 저장';
+    }
+    return false;
+}
+
+// ========================
+// Pending Members
+// ========================
+async function loadPendingMembers() {
+    const loading = document.getElementById('pendingLoading');
+    const content = document.getElementById('pendingContent');
+    loading.style.display = 'block';
+    content.style.display = 'none';
+
+    try {
+        const res = await fetch(`${API_BASE}/members/pending`, { headers: getAuthHeaders() });
+        if (!res.ok) throw new Error('목록 로드 실패');
+
+        const data = await res.json();
+        const members = data.members || [];
+
+        // Update badge
+        const badge = document.getElementById('pendingBadge');
+        if (members.length > 0) {
+            badge.textContent = members.length;
+            badge.style.display = 'inline-flex';
+        } else {
+            badge.style.display = 'none';
+        }
+
+        if (members.length === 0) {
+            content.innerHTML = '<div class="empty-state">승인 대기 중인 회원이 없습니다</div>';
+        } else {
+            content.innerHTML = `
+                <table class="pending-table">
+                    <thead>
+                        <tr>
+                            <th>이름</th>
+                            <th>이메일</th>
+                            <th>전화번호</th>
+                            <th>신청일</th>
+                            <th>처리</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${members.map(m => `
+                            <tr>
+                                <td class="member-name">${m.full_name}</td>
+                                <td class="member-email">${m.email || '-'}</td>
+                                <td>${m.phone || '-'}</td>
+                                <td>${m.requested_at ? new Date(m.requested_at).toLocaleDateString('ko-KR') : '-'}</td>
+                                <td class="action-cell">
+                                    <button class="btn btn-success btn-sm" onclick="confirmApprove('${m.id}', '${m.full_name}')">
+                                        승인
+                                    </button>
+                                    <button class="btn btn-danger btn-sm" onclick="confirmReject('${m.id}', '${m.full_name}')">
+                                        거절
+                                    </button>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+        }
+
+        loading.style.display = 'none';
+        content.style.display = 'block';
+    } catch (error) {
+        console.error('Pending members error:', error);
+        loading.textContent = '목록을 불러올 수 없습니다';
+    }
+}
+
+function confirmApprove(memberId, memberName) {
+    showConfirm(
+        '회원 승인',
+        `${memberName}님을 승인하시겠습니까?`,
+        'btn-success',
+        '승인',
+        async (opts) => {
+            try {
+                const res = await fetch(`${API_BASE}/members/approve`, {
+                    method: 'POST',
+                    headers: getAuthHeadersJson(),
+                    body: JSON.stringify({
+                        member_id: memberId,
+                        action: 'approve',
+                        role: opts.role || 'student'
+                    })
+                });
+
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.detail || '승인 실패');
+                }
+
+                showToast('success', `${memberName}님이 승인되었습니다`);
+                loadPendingMembers();
+            } catch (error) {
+                showToast('error', error.message);
+            }
+        },
+        { showRole: true }
+    );
+}
+
+function confirmReject(memberId, memberName) {
+    showConfirm(
+        '회원 거절',
+        `${memberName}님의 가입을 거절하시겠습니까?`,
+        'btn-danger',
+        '거절',
+        async (opts) => {
+            try {
+                const res = await fetch(`${API_BASE}/members/reject`, {
+                    method: 'POST',
+                    headers: getAuthHeadersJson(),
+                    body: JSON.stringify({
+                        member_id: memberId,
+                        action: 'reject',
+                        rejection_reason: opts.reason || null
+                    })
+                });
+
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.detail || '거절 실패');
+                }
+
+                showToast('success', `${memberName}님이 거절되었습니다`);
+                loadPendingMembers();
+            } catch (error) {
+                showToast('error', error.message);
+            }
+        },
+        { showReason: true }
+    );
+}
+
+// ========================
+// Member Stats
+// ========================
+const ROLE_LABELS = {
+    owner: '대표',
+    head_coach: '수석 코치',
+    coach: '코치',
+    assistant: '보조 코치',
+    student: '수강생',
+    parent: '학부모',
+    staff: '스태프'
+};
+
+const ROLE_BAR_CLASS = {
+    owner: 'coach',
+    head_coach: 'coach',
+    coach: 'coach',
+    assistant: 'staff',
+    student: 'student',
+    parent: 'parent',
+    staff: 'staff'
+};
+
+async function loadStats() {
+    const loading = document.getElementById('statsLoading');
+    const content = document.getElementById('statsContent');
+    loading.style.display = 'block';
+    content.style.display = 'none';
+
+    try {
+        const res = await fetch(`${API_BASE}/members/stats`, { headers: getAuthHeaders() });
+        if (!res.ok) throw new Error('통계 로드 실패');
+
+        const data = await res.json();
+        renderStats(data);
+
+        loading.style.display = 'none';
+        content.style.display = 'block';
+    } catch (error) {
+        console.error('Stats error:', error);
+        loading.textContent = '통계를 불러올 수 없습니다';
+    }
+}
+
+function renderStats(data) {
+    // Stats Grid
+    document.getElementById('statsGrid').innerHTML = `
+        <div class="stat-card">
+            <div class="stat-value accent">${data.total_members}</div>
+            <div class="stat-label">전체 회원</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value success">${data.active_members}</div>
+            <div class="stat-label">활동 회원</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">${data.inactive_members}</div>
+            <div class="stat-label">비활동 회원</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value warning">${data.pending_members}</div>
+            <div class="stat-label">승인 대기</div>
+        </div>
+    `;
+
+    // Role Distribution
+    const roleBars = document.getElementById('roleBars');
+    const byRole = data.by_role || {};
+    const maxCount = Math.max(...Object.values(byRole), 1);
+
+    roleBars.innerHTML = Object.entries(byRole)
+        .sort((a, b) => b[1] - a[1])
+        .map(([role, count]) => {
+            const pct = Math.round((count / maxCount) * 100);
+            const label = ROLE_LABELS[role] || role;
+            const barClass = ROLE_BAR_CLASS[role] || 'other';
+            return `
+                <div class="role-bar-item">
+                    <span class="role-bar-label">${label}</span>
+                    <div class="role-bar-track">
+                        <div class="role-bar-fill ${barClass}" style="width:${pct}%"></div>
+                    </div>
+                    <span class="role-bar-count">${count}</span>
+                </div>
+            `;
+        }).join('');
+
+    // Recent Joins
+    const recentList = document.getElementById('recentJoins');
+    const recent = data.recent_joins || [];
+
+    if (recent.length === 0) {
+        recentList.innerHTML = '<li class="empty-state">최근 가입 회원이 없습니다</li>';
+    } else {
+        recentList.innerHTML = recent.map(m => {
+            const dateStr = m.created_at
+                ? new Date(m.created_at).toLocaleDateString('ko-KR')
+                : '-';
+            const roleLabel = ROLE_LABELS[m.club_role] || m.club_role;
+            return `
+                <li class="recent-item">
+                    <div>
+                        <span class="recent-name">${m.full_name}</span>
+                        <span class="recent-role">${roleLabel}</span>
+                    </div>
+                    <span class="recent-date">${dateStr}</span>
+                </li>
+            `;
+        }).join('');
+    }
+}
+
+// ========================
+// Initialize
+// ========================
+document.addEventListener('DOMContentLoaded', () => {
+    loadProfile();
+    // Also pre-check pending count for badge
+    fetch(`${API_BASE}/members/pending`, { headers: getAuthHeaders() })
+        .then(res => res.ok ? res.json() : null)
+        .then(data => {
+            if (data && data.total > 0) {
+                const badge = document.getElementById('pendingBadge');
+                badge.textContent = data.total;
+                badge.style.display = 'inline-flex';
+            }
+        })
+        .catch(() => {});
+});
+</script>
+{% endblock %}

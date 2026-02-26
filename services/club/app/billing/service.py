@@ -15,6 +15,8 @@ from .models import (
     PaymentStatus,
     SplitType,
     InvoiceType,
+    BillingRunResult,
+    OverdueAlert,
 )
 from .portone import portone_client, PortOneError
 
@@ -641,6 +643,310 @@ class BillingService:
             member_id, card_number_masked,
         )
         return key
+
+    # ─────────────────────────────────────────
+    # 반복 청구 (app_recurring_billing)
+    # ─────────────────────────────────────────
+
+    def create_recurring_billing(self, org_id: int, data: dict) -> dict:
+        """반복 청구 규칙 생성"""
+        from dateutil.relativedelta import relativedelta
+
+        billing_day = data.get("billing_day", 1)
+        today = date.today()
+
+        # 다음 청구일 계산
+        if today.day >= billing_day:
+            next_billing = (today.replace(day=1) + relativedelta(months=1)).replace(
+                day=min(billing_day, 28)
+            )
+        else:
+            next_billing = today.replace(day=min(billing_day, 28))
+
+        record = {
+            "organization_id": org_id,
+            "member_id": data["member_id"],
+            "fee_type": data["fee_type"],
+            "amount": data["amount"],
+            "billing_day": billing_day,
+            "is_active": True,
+            "next_billing_at": datetime.combine(next_billing, datetime.min.time()).isoformat(),
+        }
+
+        result = self.supabase.table("app_recurring_billing").insert(record).execute()
+        if not result.data:
+            raise ValueError("반복 청구 생성 실패")
+
+        return result.data[0]
+
+    def list_recurring_billings(
+        self,
+        org_id: int,
+        member_id: Optional[str] = None,
+        active_only: bool = True,
+    ) -> List[dict]:
+        """반복 청구 규칙 목록"""
+        query = self.supabase.table("app_recurring_billing").select(
+            "*, members!app_recurring_billing_member_id_fkey(full_name)"
+        ).eq("organization_id", org_id)
+
+        if member_id:
+            query = query.eq("member_id", member_id)
+        if active_only:
+            query = query.eq("is_active", True)
+
+        result = query.order("created_at", desc=True).execute()
+
+        billings = []
+        for b in (result.data or []):
+            member_info = b.get("members", {}) or {}
+            billings.append({
+                **b,
+                "member_name": member_info.get("full_name"),
+            })
+        return billings
+
+    def update_recurring_billing(self, billing_id: str, org_id: int, data: dict) -> Optional[dict]:
+        """반복 청구 규칙 수정"""
+        from dateutil.relativedelta import relativedelta
+
+        update_data = {k: v for k, v in data.items() if v is not None}
+
+        # billing_day 변경 시 next_billing_at 재계산
+        if "billing_day" in update_data:
+            new_day = update_data["billing_day"]
+            today = date.today()
+            if today.day >= new_day:
+                next_billing = (today.replace(day=1) + relativedelta(months=1)).replace(
+                    day=min(new_day, 28)
+                )
+            else:
+                next_billing = today.replace(day=min(new_day, 28))
+            update_data["next_billing_at"] = datetime.combine(
+                next_billing, datetime.min.time()
+            ).isoformat()
+
+        result = self.supabase.table("app_recurring_billing").update(
+            update_data
+        ).eq("id", billing_id).eq("organization_id", org_id).execute()
+
+        if not result.data:
+            return None
+        return result.data[0]
+
+    def delete_recurring_billing(self, billing_id: str, org_id: int) -> bool:
+        """반복 청구 규칙 비활성화 (soft delete)"""
+        result = self.supabase.table("app_recurring_billing").update({
+            "is_active": False,
+        }).eq("id", billing_id).eq("organization_id", org_id).execute()
+        return bool(result.data)
+
+    def run_billing_cycle(self, org_id: int) -> dict:
+        """반복 청구 사이클 실행 - 모든 활성 규칙의 due된 건 처리"""
+        from dateutil.relativedelta import relativedelta
+
+        now = datetime.now()
+
+        # 활성 규칙 중 next_billing_at <= now인 것들
+        result = self.supabase.table("app_recurring_billing").select(
+            "*, members!app_recurring_billing_member_id_fkey(full_name)"
+        ).eq("organization_id", org_id).eq("is_active", True).lte(
+            "next_billing_at", now.isoformat()
+        ).execute()
+
+        total_processed = 0
+        fees_created = 0
+        errors = 0
+        details = []
+
+        for billing in (result.data or []):
+            total_processed += 1
+            member_info = billing.get("members", {}) or {}
+            member_name = member_info.get("full_name", "회원")
+
+            try:
+                # fees 테이블에 새 청구 레코드 생성
+                fee_data = {
+                    "organization_id": org_id,
+                    "member_id": billing["member_id"],
+                    "amount": billing["amount"],
+                    "fee_type": billing["fee_type"],
+                    "status": "pending",
+                    "due_date": now.strftime("%Y-%m-%d"),
+                    "description": f"[자동] {member_name} - {billing['fee_type']}",
+                }
+
+                fee_result = self.supabase.table("fees").insert(fee_data).execute()
+
+                if fee_result.data:
+                    fees_created += 1
+
+                    # billing 규칙 업데이트: last_billed_at, next_billing_at
+                    billing_day = billing.get("billing_day", 1)
+                    today = date.today()
+                    next_date = (today.replace(day=1) + relativedelta(months=1)).replace(
+                        day=min(billing_day, 28)
+                    )
+
+                    self.supabase.table("app_recurring_billing").update({
+                        "last_billed_at": now.isoformat(),
+                        "next_billing_at": datetime.combine(
+                            next_date, datetime.min.time()
+                        ).isoformat(),
+                    }).eq("id", billing["id"]).execute()
+
+                    details.append(f"{member_name}: {billing['amount']}원 청구 생성")
+                else:
+                    errors += 1
+                    details.append(f"{member_name}: 청구 생성 실패")
+
+            except Exception as e:
+                errors += 1
+                details.append(f"{member_name}: 오류 - {str(e)}")
+                logger.error(f"반복 청구 실행 실패 (billing_id={billing['id']}): {e}")
+
+        logger.info(
+            f"반복 청구 사이클 완료: org={org_id}, 처리={total_processed}, "
+            f"생성={fees_created}, 오류={errors}"
+        )
+
+        return {
+            "total_processed": total_processed,
+            "fees_created": fees_created,
+            "errors": errors,
+            "details": details,
+        }
+
+    def detect_overdue_fees(self, org_id: int, days_threshold: int = 7) -> List[dict]:
+        """연체 감지 - pending 상태이면서 days_threshold 이상 지난 건"""
+        from datetime import timedelta
+
+        threshold_date = (datetime.now() - timedelta(days=days_threshold)).isoformat()
+
+        # pending 상태이고 created_at이 threshold보다 오래된 fees 조회
+        result = self.supabase.table("fees").select(
+            "*, members!fees_member_id_fkey(full_name, phone, guardian_member_id)"
+        ).eq("organization_id", org_id).eq(
+            "status", "pending"
+        ).lte("created_at", threshold_date).execute()
+
+        alerts = []
+        for fee in (result.data or []):
+            member_info = fee.get("members", {}) or {}
+
+            # 연체 상태로 업데이트
+            self.supabase.table("fees").update({
+                "status": "overdue",
+            }).eq("id", fee["id"]).execute()
+
+            # 연체 일수 계산
+            created = fee.get("created_at", "")
+            if created:
+                try:
+                    created_dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
+                    days_overdue = (datetime.now(created_dt.tzinfo) - created_dt).days
+                except (ValueError, TypeError):
+                    days_overdue = days_threshold
+            else:
+                days_overdue = days_threshold
+
+            # 학부모(보호자) 정보 조회
+            parent_name = None
+            parent_phone = None
+            guardian_id = member_info.get("guardian_member_id")
+            if guardian_id:
+                parent_result = self.supabase.table("members").select(
+                    "full_name, phone"
+                ).eq("id", guardian_id).maybe_single().execute()
+                if parent_result and parent_result.data:
+                    parent_name = parent_result.data.get("full_name")
+                    parent_phone = parent_result.data.get("phone")
+
+            alerts.append({
+                "member_id": fee["member_id"],
+                "member_name": member_info.get("full_name"),
+                "fee_id": fee["id"],
+                "amount": fee["amount"],
+                "due_date": fee.get("due_date"),
+                "days_overdue": days_overdue,
+                "parent_name": parent_name,
+                "parent_phone": parent_phone,
+            })
+
+        logger.info(
+            f"연체 감지 완료: org={org_id}, 연체건수={len(alerts)}"
+        )
+
+        return alerts
+
+    async def send_overdue_notifications(self, org_id: int, alerts: List[dict]) -> dict:
+        """연체 알림 발송"""
+        from ..notifications.service import notification_service
+
+        sent = 0
+        failed = 0
+
+        for alert in alerts:
+            member_name = alert.get("member_name", "회원")
+            amount = alert.get("amount", 0)
+            days = alert.get("days_overdue", 0)
+
+            title = "납부 안내"
+            message = (
+                f"{member_name}님, 미납 비용이 있습니다. "
+                f"금액: {amount:,}원 (연체 {days}일). "
+                f"빠른 납부 부탁드립니다."
+            )
+
+            # 본인에게 알림
+            try:
+                await notification_service.send_notification(
+                    org_id=org_id,
+                    member_id=alert["member_id"],
+                    notification_type="billing",
+                    title=title,
+                    message=message,
+                    channels=["fcm", "app"],
+                    reference_type="fee",
+                    reference_id=alert.get("fee_id"),
+                )
+                sent += 1
+            except Exception as e:
+                logger.error(f"연체 알림 발송 실패 (member {alert['member_id']}): {e}")
+                failed += 1
+
+            # 학부모(보호자)에게도 알림
+            guardian_id = None
+            if alert.get("parent_name"):
+                # guardian_member_id를 다시 조회
+                member_result = self.supabase.table("members").select(
+                    "guardian_member_id"
+                ).eq("id", alert["member_id"]).maybe_single().execute()
+                if member_result and member_result.data:
+                    guardian_id = member_result.data.get("guardian_member_id")
+
+            if guardian_id:
+                parent_message = (
+                    f"자녀({member_name})의 미납 비용이 있습니다. "
+                    f"금액: {amount:,}원 (연체 {days}일). "
+                    f"확인 부탁드립니다."
+                )
+                try:
+                    await notification_service.send_notification(
+                        org_id=org_id,
+                        member_id=guardian_id,
+                        notification_type="billing",
+                        title="자녀 납부 안내",
+                        message=parent_message,
+                        channels=["fcm", "app"],
+                        reference_type="fee",
+                        reference_id=alert.get("fee_id"),
+                    )
+                except Exception as e:
+                    logger.error(f"학부모 연체 알림 발송 실패 (guardian {guardian_id}): {e}")
+
+        logger.info(f"연체 알림 발송 완료: org={org_id}, 성공={sent}, 실패={failed}")
+        return {"sent": sent, "failed": failed, "total": len(alerts)}
 
     async def auto_pay_with_billing_key(
         self,

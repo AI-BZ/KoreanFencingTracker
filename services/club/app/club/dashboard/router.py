@@ -232,3 +232,36 @@ async def billing_page(request: Request):
             "portone_channel_key": getattr(config, "PORTONE_CHANNEL_KEY", ""),
         }
     )
+
+
+@router.get("/videos", response_class=HTMLResponse)
+async def videos_page(request: Request):
+    """
+    영상 코멘트 페이지 (YouTube 영상 공유 및 코치 코멘트)
+    """
+    return templates.TemplateResponse(
+        "club/videos.html",
+        {"request": request, "title": "영상 코멘트"}
+    )
+
+
+@router.get("/announcements-page", response_class=HTMLResponse)
+async def announcements_page(request: Request):
+    """
+    공지사항 페이지 (클럽 공지사항 조회/관리)
+    """
+    return templates.TemplateResponse(
+        "club/announcements.html",
+        {"request": request, "title": "공지사항"}
+    )
+
+
+@router.get("/settings", response_class=HTMLResponse)
+async def settings_page(request: Request):
+    """
+    클럽 설정 페이지 (프로필, 체크인 설정, 회원 승인)
+    """
+    return templates.TemplateResponse(
+        "club/settings.html",
+        {"request": request, "title": "클럽 설정"}
+    )

@@ -1,432 +1,1336 @@
 {% extends "base.html" %}
 
-{% block title %}출석 체크인 - Korean Fencing Tracker{% endblock %}
+{% block title %}체크인 - FencingMind Club{% endblock %}
 
 {% block extra_css %}
 <style>
+/* =============================================
+   Checkin Page - Mobile-first Dark Theme
+   ============================================= */
 .checkin-page {
-    min-height: calc(100vh - 200px);
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 1rem;
+    min-height: calc(100vh - 160px);
+}
+
+/* Toast */
+.toast-container {
+    position: fixed;
+    top: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    pointer-events: none;
+    width: 90%;
+    max-width: 400px;
+}
+
+.toast {
+    padding: 14px 20px;
+    border-radius: 12px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    animation: toastIn 0.3s ease-out, toastOut 0.3s ease-in 2.7s forwards;
+    pointer-events: auto;
+    text-align: center;
+}
+
+.toast.success {
+    background: rgba(16, 185, 129, 0.2);
+    border: 1px solid rgba(16, 185, 129, 0.4);
+    color: #6ee7b7;
+}
+
+.toast.error {
+    background: rgba(239, 68, 68, 0.2);
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    color: #fca5a5;
+}
+
+.toast.info {
+    background: rgba(59, 130, 246, 0.2);
+    border: 1px solid rgba(59, 130, 246, 0.4);
+    color: #93c5fd;
+}
+
+@keyframes toastIn {
+    from { opacity: 0; transform: translateY(-20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes toastOut {
+    from { opacity: 1; }
+    to { opacity: 0; transform: translateY(-10px); }
+}
+
+/* Status Card */
+.status-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+    text-align: center;
+}
+
+.status-icon {
+    font-size: 3rem;
+    display: block;
+    margin-bottom: 0.5rem;
+}
+
+.status-label {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.3rem;
+}
+
+.status-time {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
+
+.status-card.checked-in {
+    border-color: rgba(16, 185, 129, 0.4);
+}
+
+.status-card.checked-out {
+    border-color: rgba(212, 165, 116, 0.4);
+}
+
+.status-card.not-checked-in {
+    border-color: var(--border-color);
+}
+
+/* Duration Badge */
+.duration-badge {
+    display: inline-block;
+    background: rgba(212, 165, 116, 0.15);
+    color: var(--accent-gold);
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-top: 0.5rem;
+}
+
+/* Section Title */
+.section-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.75rem;
+    padding-left: 4px;
+}
+
+/* Main Action Button */
+.action-btn {
+    width: 100%;
+    padding: 1.2rem;
+    font-size: 1.15rem;
+    font-weight: 700;
+    border: none;
+    border-radius: 14px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    font-family: inherit;
+    margin-bottom: 0.75rem;
+    min-height: 60px;
+}
+
+.action-btn:active {
+    transform: scale(0.98);
+}
+
+.action-btn.checkin-primary {
+    background: linear-gradient(135deg, var(--accent-primary), #a02320) !important;
+    color: white !important;
+    box-shadow: 0 4px 20px var(--glow-primary);
+}
+
+.action-btn.checkin-primary:hover {
+    box-shadow: 0 6px 30px var(--glow-primary);
+    transform: translateY(-2px);
+}
+
+.action-btn.checkout-btn {
+    background: linear-gradient(135deg, #f59e0b, #d97706) !important;
+    color: #1a1a25 !important;
+    box-shadow: 0 4px 20px rgba(245, 158, 11, 0.3);
+}
+
+.action-btn.checkout-btn:hover {
+    box-shadow: 0 6px 30px rgba(245, 158, 11, 0.4);
+}
+
+.action-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+/* Method Grid */
+.method-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 1rem;
+}
+
+.method-btn {
+    background: var(--bg-card) !important;
+    border: 1px solid var(--border-color) !important;
+    border-radius: 12px;
+    padding: 1rem 0.75rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-align: center;
+    font-family: inherit;
+    min-height: 80px;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 2rem;
+    gap: 6px;
+}
+
+.method-btn:hover {
+    border-color: var(--accent-primary) !important;
+    background: var(--bg-card-hover) !important;
+}
+
+.method-btn:active {
+    transform: scale(0.97);
+}
+
+.method-btn .method-icon {
+    font-size: 1.5rem;
+}
+
+.method-btn .method-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-secondary) !important;
+}
+
+/* QR Scanner */
+.qr-scanner-container {
+    display: none;
+    margin-bottom: 1rem;
+}
+
+.qr-scanner-container.active {
+    display: block;
+}
+
+.qr-video-wrapper {
+    position: relative;
+    width: 100%;
+    max-width: 300px;
+    margin: 0 auto;
+    border-radius: 16px;
+    overflow: hidden;
+    border: 2px solid var(--accent-primary);
+}
+
+.qr-video-wrapper video {
+    width: 100%;
+    display: block;
+}
+
+.qr-video-wrapper canvas {
+    display: none;
+}
+
+.qr-overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 200px;
+    height: 200px;
+    border: 2px solid rgba(201, 48, 44, 0.6);
+    border-radius: 12px;
+    pointer-events: none;
+}
+
+.qr-overlay::before,
+.qr-overlay::after {
+    content: '';
+    position: absolute;
+    width: 30px;
+    height: 30px;
+    border-color: var(--accent-primary);
+    border-style: solid;
+}
+
+.qr-overlay::before {
+    top: -2px; left: -2px;
+    border-width: 3px 0 0 3px;
+    border-radius: 4px 0 0 0;
+}
+
+.qr-overlay::after {
+    bottom: -2px; right: -2px;
+    border-width: 0 3px 3px 0;
+    border-radius: 0 0 4px 0;
+}
+
+.qr-status-text {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    margin-top: 0.75rem;
+}
+
+.qr-close-btn {
+    display: block;
+    margin: 0.75rem auto 0;
+    padding: 8px 20px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    background: var(--bg-tertiary) !important;
+    color: var(--text-secondary) !important;
+    border: 1px solid var(--border-color) !important;
+    font-family: inherit;
+}
+
+/* WiFi Section */
+.wifi-confirm-box {
+    display: none;
+    background: var(--bg-card);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    border-radius: 12px;
+    padding: 1.25rem;
+    margin-bottom: 1rem;
     text-align: center;
 }
 
-.checkin-card {
-    background: white;
-    border-radius: 20px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-    padding: 2.5rem;
-    max-width: 400px;
-    width: 100%;
-}
-
-.checkin-icon {
-    font-size: 4rem;
-    margin-bottom: 1rem;
-}
-
-.checkin-title {
-    font-size: 1.5rem;
-    color: #1a1a2e;
-    margin-bottom: 0.5rem;
-}
-
-.checkin-subtitle {
-    color: #666;
-    margin-bottom: 2rem;
-}
-
-.checkin-status {
-    padding: 1rem;
-    border-radius: 12px;
-    margin-bottom: 1.5rem;
-}
-
-.checkin-status.available {
-    background: #e8f5e9;
-    border: 2px solid #4caf50;
-}
-
-.checkin-status.auto {
-    background: #e3f2fd;
-    border: 2px solid #2196f3;
-}
-
-.checkin-status.done {
-    background: #f5f5f5;
-    border: 2px solid #bdbdbd;
-}
-
-.status-icon {
-    font-size: 2.5rem;
+.wifi-confirm-box.active {
     display: block;
-    margin-bottom: 0.5rem;
 }
 
-.status-text {
-    font-weight: 600;
+.wifi-ssid-display {
     font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--info-color);
+    margin: 0.5rem 0;
 }
 
-.status-time {
-    color: #666;
-    font-size: 0.9rem;
-    margin-top: 0.3rem;
+.wifi-confirm-btns {
+    display: flex;
+    gap: 10px;
+    margin-top: 1rem;
 }
 
-.checkin-btn {
-    width: 100%;
-    padding: 1.2rem;
-    font-size: 1.2rem;
+.wifi-confirm-btns button {
+    flex: 1;
+    padding: 10px;
+    border-radius: 8px;
     font-weight: 600;
-    border: none;
-    border-radius: 12px;
     cursor: pointer;
-    transition: all 0.3s;
+    font-family: inherit;
+    font-size: 0.9rem;
+}
+
+.wifi-yes-btn {
+    background: linear-gradient(135deg, #3b82f6, #2563eb) !important;
+    color: white !important;
+    border: none !important;
+}
+
+.wifi-no-btn {
+    background: var(--bg-tertiary) !important;
+    color: var(--text-secondary) !important;
+    border: 1px solid var(--border-color) !important;
+}
+
+/* Coach QR Display */
+.qr-display-section {
+    display: none;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+    text-align: center;
+}
+
+.qr-display-section.active {
+    display: block;
+}
+
+.qr-display-image {
+    max-width: 280px;
+    margin: 0.75rem auto;
+    background: white;
+    padding: 16px;
+    border-radius: 12px;
+}
+
+.qr-display-image img {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+
+.qr-code-text {
+    font-family: monospace;
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--accent-gold);
+    letter-spacing: 0.1em;
+    margin: 0.75rem 0;
+}
+
+.qr-timer {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
+
+.qr-timer .countdown {
+    font-weight: 700;
+    color: var(--warning-color);
+}
+
+.qr-generate-btn {
+    margin-top: 1rem;
+    padding: 10px 24px;
+    border-radius: 10px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.9rem;
+    background: linear-gradient(135deg, var(--accent-primary), #a02320) !important;
+    color: white !important;
+    border: none !important;
+}
+
+/* Today Attendance */
+.today-list {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    overflow: hidden;
     margin-bottom: 1rem;
 }
 
-.checkin-btn.primary {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
+.today-list-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-color);
 }
 
-.checkin-btn.primary:hover:not(:disabled) {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+.today-list-item:last-child {
+    border-bottom: none;
 }
 
-.checkin-btn.auto {
-    background: linear-gradient(135deg, #4caf50 0%, #66bb6a 100%);
-    color: white;
+.today-member-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }
 
-.checkin-btn:disabled {
-    background: #e0e0e0;
-    color: #999;
-    cursor: not-allowed;
+.today-member-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--bg-tertiary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--text-secondary);
 }
 
-.checkin-type-select {
-    margin-bottom: 1.5rem;
+.today-member-name {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--text-primary);
 }
 
-.checkin-type-select label {
-    display: block;
-    text-align: left;
-    margin-bottom: 0.5rem;
-    color: #666;
+.today-member-time {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.today-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.today-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.today-status-dot.in {
+    background: var(--success-color);
+    box-shadow: 0 0 6px rgba(16, 185, 129, 0.5);
+}
+
+.today-status-dot.out {
+    background: var(--text-muted);
+}
+
+.today-status-label {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.today-empty {
+    padding: 2rem;
+    text-align: center;
+    color: var(--text-muted);
     font-size: 0.9rem;
 }
 
-.checkin-type-select select {
-    width: 100%;
-    padding: 0.8rem;
-    border: 2px solid #eee;
-    border-radius: 8px;
-    font-size: 1rem;
-    background: white;
+/* History List */
+.history-list {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    overflow: hidden;
+    margin-bottom: 1rem;
 }
 
-.checkin-type-select select:focus {
-    border-color: #667eea;
-    outline: none;
+.history-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-color);
 }
 
-.info-box {
-    background: #f8f9ff;
-    padding: 1rem;
-    border-radius: 8px;
-    margin-top: 1.5rem;
+.history-item:last-child {
+    border-bottom: none;
+}
+
+.history-date {
     font-size: 0.85rem;
-    color: #666;
+    font-weight: 600;
+    color: var(--text-primary);
 }
 
-.info-box .ip {
-    font-family: monospace;
-    background: #eee;
-    padding: 0.2rem 0.5rem;
-    border-radius: 4px;
+.history-time {
+    font-size: 0.8rem;
+    color: var(--text-muted);
 }
 
-/* Loading state */
-.loading-spinner {
+.history-duration {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--accent-gold);
+}
+
+.history-method-tag {
+    font-size: 0.7rem;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: rgba(59, 130, 246, 0.15);
+    color: var(--info-color);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+/* Stats Card */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-bottom: 1rem;
+}
+
+.mini-stat {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1rem;
+    text-align: center;
+}
+
+.mini-stat-value {
+    font-size: 1.8rem;
+    font-weight: 800;
+    color: var(--accent-gold);
+    font-family: 'Inter', sans-serif;
+}
+
+.mini-stat-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+    font-weight: 500;
+}
+
+/* Loading Spinner */
+.spinner {
     display: inline-block;
-    width: 24px;
-    height: 24px;
-    border: 3px solid rgba(255,255,255,0.3);
+    width: 22px;
+    height: 22px;
+    border: 3px solid rgba(255, 255, 255, 0.2);
     border-top-color: white;
     border-radius: 50%;
-    animation: spin 1s linear infinite;
+    animation: spin 0.8s linear infinite;
 }
 
 @keyframes spin {
     to { transform: rotate(360deg); }
 }
 
-/* Success animation */
-.success-animation {
-    animation: scaleIn 0.3s ease-out;
+/* Section divider */
+.section-divider {
+    height: 1px;
+    background: var(--border-color);
+    margin: 1.25rem 0;
 }
 
-@keyframes scaleIn {
-    from {
-        transform: scale(0.8);
-        opacity: 0;
-    }
-    to {
-        transform: scale(1);
-        opacity: 1;
-    }
+/* Coach section toggle */
+.coach-section {
+    display: none;
 }
 
-/* Mobile optimization */
-@media (max-width: 480px) {
-    .checkin-card {
-        padding: 1.5rem;
-        border-radius: 16px;
+.coach-section.visible {
+    display: block;
+}
+
+/* Mobile adjustments */
+@media (max-width: 380px) {
+    .method-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
     }
 
-    .checkin-icon {
-        font-size: 3rem;
+    .method-btn {
+        padding: 0.75rem 0.5rem;
+        min-height: 70px;
     }
 
-    .checkin-title {
+    .method-btn .method-icon {
         font-size: 1.3rem;
     }
 
-    .checkin-btn {
+    .action-btn {
         padding: 1rem;
-        font-size: 1.1rem;
+        font-size: 1.05rem;
     }
-}
-
-/* User info */
-.user-info {
-    margin-bottom: 1.5rem;
-    padding: 1rem;
-    background: #f8f9ff;
-    border-radius: 10px;
-}
-
-.user-name {
-    font-size: 1.2rem;
-    font-weight: 600;
-    color: #1a1a2e;
-}
-
-.user-club {
-    color: #667eea;
-    font-size: 0.9rem;
-}
-
-/* Error state */
-.error-message {
-    background: #ffebee;
-    color: #c62828;
-    padding: 1rem;
-    border-radius: 8px;
-    margin-bottom: 1rem;
 }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="checkin-page">
-    <div class="checkin-card">
-        <div class="checkin-icon">⚔️</div>
-        <h1 class="checkin-title">출석 체크인</h1>
-        <p class="checkin-subtitle">오늘 훈련 출석을 기록하세요</p>
+<!-- Toast Container -->
+<div class="toast-container" id="toastContainer"></div>
 
-        <div id="checkinContent">
-            <div class="loading-spinner" style="margin: 2rem auto;"></div>
+<div class="checkin-page">
+    <!-- Status Card -->
+    <div class="status-card not-checked-in" id="statusCard">
+        <span class="status-icon" id="statusIcon">&#9876;&#65039;</span>
+        <div class="status-label" id="statusLabel">로딩 중...</div>
+        <div class="status-time" id="statusTime"></div>
+    </div>
+
+    <!-- Main Action Area -->
+    <div id="actionArea">
+        <!-- Populated by JS -->
+    </div>
+
+    <!-- QR Scanner (hidden by default) -->
+    <div class="qr-scanner-container" id="qrScannerContainer">
+        <div class="section-title">QR 코드 스캔</div>
+        <div class="qr-video-wrapper">
+            <video id="qrVideo" playsinline autoplay></video>
+            <canvas id="qrCanvas"></canvas>
+            <div class="qr-overlay"></div>
         </div>
+        <div class="qr-status-text" id="qrScanStatus">카메라에 QR 코드를 비춰주세요</div>
+        <button class="qr-close-btn" onclick="stopQrScanner()">스캔 닫기</button>
+    </div>
+
+    <!-- WiFi Confirm (hidden by default) -->
+    <div class="wifi-confirm-box" id="wifiConfirmBox">
+        <div style="font-size: 0.9rem; color: var(--text-secondary);">현재 이 WiFi에 연결되어 있나요?</div>
+        <div class="wifi-ssid-display" id="wifiSsidDisplay">--</div>
+        <div class="wifi-confirm-btns">
+            <button class="wifi-yes-btn" onclick="doWifiCheckin()">네, 연결되어 있어요</button>
+            <button class="wifi-no-btn" onclick="hideWifiConfirm()">아니오</button>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-grid" id="statsGrid">
+        <div class="mini-stat">
+            <div class="mini-stat-value" id="statMonth">-</div>
+            <div class="mini-stat-label">이번 달 출석</div>
+        </div>
+        <div class="mini-stat">
+            <div class="mini-stat-value" id="statStreak">-</div>
+            <div class="mini-stat-label">연속 출석</div>
+        </div>
+        <div class="mini-stat">
+            <div class="mini-stat-value" id="statTotal">-</div>
+            <div class="mini-stat-label">총 출석</div>
+        </div>
+        <div class="mini-stat">
+            <div class="mini-stat-value" id="statAvgDur">-</div>
+            <div class="mini-stat-label">평균 훈련 (분)</div>
+        </div>
+    </div>
+
+    <div class="section-divider"></div>
+
+    <!-- Coach: QR Display -->
+    <div class="coach-section" id="coachQrSection">
+        <div class="section-title">QR 코드 (TV 표시용)</div>
+        <div class="qr-display-section active" id="qrDisplaySection">
+            <div id="qrDisplayContent">
+                <div style="color: var(--text-muted); font-size: 0.9rem;">
+                    QR 코드를 생성해주세요
+                </div>
+            </div>
+            <button class="qr-generate-btn" id="qrGenerateBtn" onclick="generateQR()">QR 코드 생성</button>
+        </div>
+    </div>
+
+    <!-- Coach: Today's Attendance -->
+    <div class="coach-section" id="coachTodaySection">
+        <div class="section-title">오늘 출석 현황</div>
+        <div class="today-list" id="todayList">
+            <div class="today-empty">로딩 중...</div>
+        </div>
+    </div>
+
+    <div class="section-divider"></div>
+
+    <!-- History -->
+    <div class="section-title">최근 출석 기록</div>
+    <div class="history-list" id="historyList">
+        <div class="today-empty">로딩 중...</div>
     </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
+<!-- jsQR for QR scanning -->
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+
 <script>
-const TEST_MODE = false;
-const API_BASE = '/api/club';
-const API_SUFFIX = '';
+// =============================================
+// Config & State
+// =============================================
+const API_BASE = '/api/club/checkin';
 let currentStatus = null;
+let isCoach = false;
+let qrVideoStream = null;
+let qrAnimFrame = null;
+let qrRefreshTimer = null;
+let wifiConfig = null;
 
-async function loadCheckinStatus() {
-    const container = document.getElementById('checkinContent');
+function getAuthHeaders() {
+    const token = localStorage.getItem('access_token');
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    return headers;
+}
 
+// =============================================
+// Toast System
+// =============================================
+function showToast(message, type = 'info') {
+    const container = document.getElementById('toastContainer');
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    container.appendChild(toast);
+    setTimeout(() => { if (toast.parentNode) toast.remove(); }, 3000);
+}
+
+// =============================================
+// Initialization
+// =============================================
+document.addEventListener('DOMContentLoaded', async () => {
+    await loadCheckinStatus();
+    await loadStats();
+    await loadHistory();
+    await loadWifiConfig();
+
+    // Determine if user is coach
     try {
-        const headers = TEST_MODE ? {} : {
-            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-        };
-        const response = await fetch(`${API_BASE}/check-in/status${API_SUFFIX}`, { headers });
+        const resp = await fetch('/auth/me', { headers: getAuthHeaders() });
+        if (resp.ok) {
+            const user = await resp.json();
+            const coachRoles = ['owner', 'head_coach', 'coach', 'assistant', 'staff'];
+            isCoach = coachRoles.includes(user.club_role);
+        }
+    } catch (e) {
+        // Fallback: try loading today's attendance (only coaches can)
+        try {
+            const r = await fetch(`${API_BASE}/today`, { headers: getAuthHeaders() });
+            isCoach = r.ok;
+        } catch (_) {}
+    }
 
-        if (!response.ok) {
-            if (response.status === 401) {
-                window.location.href = '/auth/login?redirect=/club/checkin';
+    if (isCoach) {
+        document.querySelectorAll('.coach-section').forEach(el => el.classList.add('visible'));
+        await loadTodayAttendance();
+        await loadCurrentQR();
+    }
+});
+
+// =============================================
+// Status
+// =============================================
+async function loadCheckinStatus() {
+    try {
+        const resp = await fetch(`${API_BASE}/status`, { headers: getAuthHeaders() });
+        if (!resp.ok) {
+            if (resp.status === 401) {
+                window.location.href = '/auth/login?redirect=/api/club/checkin';
                 return;
             }
             throw new Error('상태 확인 실패');
         }
-
-        currentStatus = await response.json();
-
-        // 사용자 정보 로드
-        let userInfo = null;
-        if (TEST_MODE) {
-            userInfo = { full_name: '테스트코치', organization_name: '최병철펜싱클럽' };
-        } else {
-            const userResponse = await fetch('/auth/me');
-            if (userResponse.ok) {
-                userInfo = await userResponse.json();
-            }
-        }
-
-        renderCheckinUI(currentStatus, userInfo);
-
-    } catch (error) {
-        console.error('Status check error:', error);
-        container.innerHTML = `
-            <div class="error-message">
-                체크인 상태를 확인할 수 없습니다.
-                <br><a href="/auth/login?redirect=/club/checkin">로그인</a>이 필요합니다.
-            </div>
-        `;
+        currentStatus = await resp.json();
+        renderStatus();
+    } catch (e) {
+        console.error('Status error:', e);
+        document.getElementById('statusLabel').textContent = '상태 확인 실패';
+        document.getElementById('statusTime').innerHTML =
+            '<a href="/auth/login?redirect=/api/club/checkin" style="color: var(--accent-gold);">로그인이 필요합니다</a>';
     }
 }
 
-function renderCheckinUI(status, userInfo) {
-    const container = document.getElementById('checkinContent');
+function renderStatus() {
+    const card = document.getElementById('statusCard');
+    const icon = document.getElementById('statusIcon');
+    const label = document.getElementById('statusLabel');
+    const time = document.getElementById('statusTime');
+    const actionArea = document.getElementById('actionArea');
 
-    let userInfoHTML = '';
-    if (userInfo) {
-        userInfoHTML = `
-            <div class="user-info">
-                <div class="user-name">${userInfo.full_name || userInfo.display_name}</div>
-                <div class="user-club">${userInfo.organization_name || '소속 클럽'}</div>
+    card.className = 'status-card';
+
+    if (currentStatus.already_checked_in) {
+        // Currently checked in (no checkout yet)
+        card.classList.add('checked-in');
+        icon.textContent = '\u2705';
+        label.textContent = '체크인 완료';
+
+        const checkinTime = new Date(currentStatus.checkin_record.check_in_at);
+        time.textContent = checkinTime.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) + ' 체크인';
+
+        actionArea.innerHTML = `
+            <button class="action-btn checkout-btn" onclick="doCheckout()">
+                \u{1F6AA} 체크아웃
+            </button>
+        `;
+    } else if (currentStatus.checked_out) {
+        // Checked out today
+        card.classList.add('checked-out');
+        icon.textContent = '\u{1F3C6}';
+        label.textContent = '오늘 훈련 완료';
+
+        const record = currentStatus.checkin_record;
+        const ciTime = new Date(record.check_in_at);
+        const coTime = new Date(record.checked_out_at);
+        const dur = Math.round((coTime - ciTime) / 60000);
+        time.innerHTML = `
+            ${ciTime.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })} ~
+            ${coTime.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+            <br><span class="duration-badge">${formatDuration(dur)}</span>
+        `;
+
+        actionArea.innerHTML = `
+            <button class="action-btn checkin-primary" onclick="doCheckin('auto_ip')" style="opacity:0.7;">
+                \u{1F504} 다시 체크인
+            </button>
+        `;
+    } else {
+        // Not checked in
+        card.classList.add('not-checked-in');
+        icon.textContent = '\u2694\uFE0F';
+        label.textContent = '출석 체크인';
+
+        if (currentStatus.auto_checkin_available) {
+            time.textContent = '클럽 IP 자동 인식됨';
+        } else {
+            time.textContent = '아래 방식으로 체크인하세요';
+        }
+
+        actionArea.innerHTML = `
+            <button class="action-btn checkin-primary" id="mainCheckinBtn" onclick="doSmartCheckin()">
+                \u2694\uFE0F 체크인
+            </button>
+            <div class="method-grid">
+                <button class="method-btn" onclick="showWifiConfirm()">
+                    <span class="method-icon">\u{1F4F6}</span>
+                    <span class="method-label">WiFi 체크인</span>
+                </button>
+                <button class="method-btn" onclick="startQrScanner()">
+                    <span class="method-icon">\u{1F4F1}</span>
+                    <span class="method-label">QR 스캔</span>
+                </button>
+                <button class="method-btn" onclick="doCheckin('gps')">
+                    <span class="method-icon">\u{1F4CD}</span>
+                    <span class="method-label">위치 인증</span>
+                </button>
+                <button class="method-btn" onclick="doCheckin('manual')" id="manualCheckinBtn" style="display:none;">
+                    <span class="method-icon">\u270B</span>
+                    <span class="method-label">수동 체크인</span>
+                </button>
             </div>
         `;
+
+        // Show manual button for coaches
+        setTimeout(() => {
+            if (isCoach && document.getElementById('manualCheckinBtn')) {
+                document.getElementById('manualCheckinBtn').style.display = '';
+            }
+        }, 200);
     }
+}
 
-    if (status.already_checked_in) {
-        // 이미 체크인 완료
-        const checkinTime = new Date(status.checkin_record.check_in_at);
-        container.innerHTML = `
-            ${userInfoHTML}
-            <div class="checkin-status done success-animation">
-                <span class="status-icon">✅</span>
-                <div class="status-text">오늘 출석 완료!</div>
-                <div class="status-time">${checkinTime.toLocaleTimeString('ko-KR', {
-                    hour: '2-digit',
-                    minute: '2-digit'
-                })} 체크인</div>
-            </div>
-            <button class="checkin-btn" disabled>이미 체크인했습니다</button>
-            <a href="/club/" class="checkin-btn primary" style="display:block; text-decoration:none; text-align:center;">
-                대시보드로 이동
-            </a>
-        `;
+// =============================================
+// Smart Check-in (auto-detect best method)
+// =============================================
+async function doSmartCheckin() {
+    const btn = document.getElementById('mainCheckinBtn');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 체크인 중...'; }
+
+    // Try WiFi first if config is available, then IP, then show alternatives
+    if (wifiConfig && wifiConfig.ssid && currentStatus.auto_checkin_available) {
+        // IP available - try IP first
+        await doCheckin('auto_ip');
         return;
     }
 
-    // 체크인 가능
-    const autoAvailable = status.auto_checkin_available;
+    if (currentStatus.auto_checkin_available) {
+        await doCheckin('auto_ip');
+        return;
+    }
 
-    container.innerHTML = `
-        ${userInfoHTML}
-        <div class="checkin-status ${autoAvailable ? 'auto' : 'available'}">
-            <span class="status-icon">${autoAvailable ? '📍' : '👋'}</span>
-            <div class="status-text">
-                ${autoAvailable ? '클럽 내 위치 확인됨' : '출석 체크인 가능'}
-            </div>
-            ${autoAvailable ? '<div class="status-time">IP 기반 자동 인식</div>' : ''}
-        </div>
-
-        <div class="checkin-type-select">
-            <label for="attendanceType">출석 유형</label>
-            <select id="attendanceType">
-                <option value="regular">정규 훈련</option>
-                <option value="lesson">개인/그룹 레슨</option>
-                <option value="competition">대회 참가</option>
-                <option value="makeup">보강</option>
-                <option value="trial">체험</option>
-            </select>
-        </div>
-
-        <button
-            class="checkin-btn ${autoAvailable ? 'auto' : 'primary'}"
-            id="checkinBtn"
-            onclick="doCheckin()"
-        >
-            ${autoAvailable ? '🎯 자동 체크인' : '✓ 체크인하기'}
-        </button>
-
-        <div class="info-box">
-            현재 IP: <span class="ip">${status.client_ip}</span>
-            <br>
-            ${autoAvailable
-                ? '클럽 IP 범위 내에서 접속 중입니다.'
-                : '클럽 외부에서 접속 중입니다.'}
-        </div>
-    `;
+    // No auto method, show toast hinting at alternatives
+    if (btn) { btn.disabled = false; btn.innerHTML = '\u2694\uFE0F 체크인'; }
+    showToast('자동 체크인 불가. WiFi, QR, 또는 위치 인증을 사용해주세요.', 'info');
 }
 
-async function doCheckin() {
-    const btn = document.getElementById('checkinBtn');
-    const attendanceType = document.getElementById('attendanceType').value;
+// =============================================
+// Check-in Methods
+// =============================================
+async function doCheckin(method, extra = {}) {
+    const body = { method, attendance_type: 'regular', ...extra };
 
-    btn.disabled = true;
-    btn.innerHTML = '<span class="loading-spinner"></span> 체크인 중...';
+    // GPS: get location
+    if (method === 'gps') {
+        try {
+            showToast('위치 확인 중...', 'info');
+            const pos = await new Promise((resolve, reject) => {
+                navigator.geolocation.getCurrentPosition(resolve, reject, {
+                    enableHighAccuracy: true, timeout: 10000
+                });
+            });
+            body.latitude = pos.coords.latitude;
+            body.longitude = pos.coords.longitude;
+        } catch (e) {
+            showToast('위치 정보를 가져올 수 없습니다. 위치 접근을 허용해주세요.', 'error');
+            return;
+        }
+    }
 
     try {
-        const headers = {
-            'Content-Type': 'application/json',
-            ...(TEST_MODE ? {} : {'Authorization': `Bearer ${localStorage.getItem('access_token')}`})
-        };
-        const response = await fetch(`${API_BASE}/check-in${API_SUFFIX}`, {
+        const resp = await fetch(`${API_BASE}/`, {
             method: 'POST',
-            headers,
-            body: JSON.stringify({
-                attendance_type: attendanceType
-            })
+            headers: getAuthHeaders(),
+            body: JSON.stringify(body),
         });
 
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || '체크인 실패');
+        const data = await resp.json();
+
+        if (resp.ok) {
+            showToast(data.message || '체크인 완료!', 'success');
+            await loadCheckinStatus();
+            await loadStats();
+            await loadHistory();
+            if (isCoach) await loadTodayAttendance();
+        } else {
+            showToast(data.detail || '체크인 실패', 'error');
+            // Re-render buttons
+            renderStatus();
         }
-
-        const result = await response.json();
-
-        // 성공 - UI 업데이트
-        document.getElementById('checkinContent').innerHTML = `
-            <div class="checkin-status done success-animation">
-                <span class="status-icon">🎉</span>
-                <div class="status-text">체크인 완료!</div>
-                <div class="status-time">${new Date().toLocaleTimeString('ko-KR', {
-                    hour: '2-digit',
-                    minute: '2-digit'
-                })}</div>
-            </div>
-            <button class="checkin-btn" disabled>오늘 출석이 기록되었습니다</button>
-            <a href="/club/" class="checkin-btn primary" style="display:block; text-decoration:none; text-align:center;">
-                대시보드로 이동
-            </a>
-        `;
-
-    } catch (error) {
-        console.error('Checkin error:', error);
-        btn.disabled = false;
-        btn.innerHTML = '✓ 체크인하기';
-
-        alert(error.message || '체크인에 실패했습니다. 다시 시도해주세요.');
+    } catch (e) {
+        console.error('Checkin error:', e);
+        showToast('네트워크 오류. 다시 시도해주세요.', 'error');
+        renderStatus();
     }
 }
 
-// Initialize
-document.addEventListener('DOMContentLoaded', loadCheckinStatus);
+// =============================================
+// Checkout
+// =============================================
+async function doCheckout() {
+    try {
+        const resp = await fetch(`${API_BASE}/checkout`, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ method: 'manual' }),
+        });
+
+        const data = await resp.json();
+
+        if (resp.ok) {
+            showToast(data.message || '체크아웃 완료!', 'success');
+            await loadCheckinStatus();
+            await loadStats();
+            await loadHistory();
+            if (isCoach) await loadTodayAttendance();
+        } else {
+            showToast(data.detail || '체크아웃 실패', 'error');
+        }
+    } catch (e) {
+        showToast('네트워크 오류', 'error');
+    }
+}
+
+// =============================================
+// WiFi Check-in
+// =============================================
+async function loadWifiConfig() {
+    try {
+        const resp = await fetch(`${API_BASE}/wifi-config`, { headers: getAuthHeaders() });
+        if (resp.ok) {
+            wifiConfig = await resp.json();
+        }
+    } catch (e) {}
+}
+
+function showWifiConfirm() {
+    if (!wifiConfig || !wifiConfig.ssid) {
+        showToast('클럽 WiFi가 설정되어 있지 않습니다.', 'error');
+        return;
+    }
+    document.getElementById('wifiSsidDisplay').textContent = wifiConfig.ssid;
+    document.getElementById('wifiConfirmBox').classList.add('active');
+}
+
+function hideWifiConfirm() {
+    document.getElementById('wifiConfirmBox').classList.remove('active');
+}
+
+async function doWifiCheckin() {
+    hideWifiConfirm();
+    await doCheckin('wifi', {
+        wifi_ssid: wifiConfig.ssid,
+        wifi_bssid: wifiConfig.bssid || null,
+    });
+}
+
+// =============================================
+// QR Scanner
+// =============================================
+function startQrScanner() {
+    const container = document.getElementById('qrScannerContainer');
+    container.classList.add('active');
+
+    const video = document.getElementById('qrVideo');
+    const canvas = document.getElementById('qrCanvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+        .then(stream => {
+            qrVideoStream = stream;
+            video.srcObject = stream;
+            video.play();
+            scanQR(video, canvas, ctx);
+        })
+        .catch(err => {
+            console.error('Camera error:', err);
+            showToast('카메라를 사용할 수 없습니다.', 'error');
+            stopQrScanner();
+        });
+}
+
+function scanQR(video, canvas, ctx) {
+    if (!qrVideoStream) return;
+
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height, {
+            inversionAttempts: 'dontInvert',
+        });
+
+        if (code) {
+            document.getElementById('qrScanStatus').textContent = 'QR 코드 인식됨!';
+            stopQrScanner();
+            doCheckin('qr', { qr_code: code.data });
+            return;
+        }
+    }
+
+    qrAnimFrame = requestAnimationFrame(() => scanQR(video, canvas, ctx));
+}
+
+function stopQrScanner() {
+    if (qrVideoStream) {
+        qrVideoStream.getTracks().forEach(t => t.stop());
+        qrVideoStream = null;
+    }
+    if (qrAnimFrame) {
+        cancelAnimationFrame(qrAnimFrame);
+        qrAnimFrame = null;
+    }
+    document.getElementById('qrScannerContainer').classList.remove('active');
+    document.getElementById('qrScanStatus').textContent = '카메라에 QR 코드를 비춰주세요';
+}
+
+// =============================================
+// QR Display (Coach)
+// =============================================
+async function generateQR() {
+    const btn = document.getElementById('qrGenerateBtn');
+    btn.disabled = true;
+    btn.textContent = '생성 중...';
+
+    try {
+        const resp = await fetch(`${API_BASE}/qr/generate`, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+        });
+
+        if (resp.ok) {
+            const data = await resp.json();
+            renderQRDisplay(data);
+            showToast('QR 코드 생성 완료', 'success');
+        } else {
+            showToast('QR 생성 실패', 'error');
+        }
+    } catch (e) {
+        showToast('네트워크 오류', 'error');
+    }
+
+    btn.disabled = false;
+    btn.textContent = 'QR 코드 새로 생성';
+}
+
+async function loadCurrentQR() {
+    try {
+        const resp = await fetch(`${API_BASE}/qr/current`, { headers: getAuthHeaders() });
+        if (resp.ok) {
+            const data = await resp.json();
+            if (data.active) {
+                renderQRDisplay(data);
+            }
+        }
+    } catch (e) {}
+}
+
+function renderQRDisplay(data) {
+    const content = document.getElementById('qrDisplayContent');
+    const validUntil = new Date(data.valid_until);
+
+    let imageHtml = '';
+    if (data.qr_image_data_url) {
+        imageHtml = `
+            <div class="qr-display-image">
+                <img src="${data.qr_image_data_url}" alt="QR Code">
+            </div>
+        `;
+    }
+
+    content.innerHTML = `
+        ${imageHtml}
+        <div class="qr-code-text">${data.qr_code}</div>
+        <div class="qr-timer">
+            만료: <span class="countdown" id="qrCountdown">--:--</span>
+        </div>
+    `;
+
+    // Start countdown
+    if (qrRefreshTimer) clearInterval(qrRefreshTimer);
+    qrRefreshTimer = setInterval(() => {
+        const now = new Date();
+        const diff = validUntil - now;
+        const el = document.getElementById('qrCountdown');
+        if (!el) { clearInterval(qrRefreshTimer); return; }
+
+        if (diff <= 0) {
+            el.textContent = '만료됨';
+            el.style.color = 'var(--danger-color)';
+            clearInterval(qrRefreshTimer);
+            // Auto-refresh
+            setTimeout(generateQR, 1000);
+        } else {
+            const m = Math.floor(diff / 60000);
+            const s = Math.floor((diff % 60000) / 1000);
+            el.textContent = `${m}:${s.toString().padStart(2, '0')}`;
+        }
+    }, 1000);
+}
+
+// =============================================
+// Stats
+// =============================================
+async function loadStats() {
+    try {
+        const resp = await fetch(`${API_BASE}/stats`, { headers: getAuthHeaders() });
+        if (resp.ok) {
+            const stats = await resp.json();
+            document.getElementById('statMonth').textContent = stats.this_month || 0;
+            document.getElementById('statStreak').textContent = stats.streak || 0;
+            document.getElementById('statTotal').textContent = stats.total_days || 0;
+            document.getElementById('statAvgDur').textContent =
+                stats.avg_duration_minutes ? Math.round(stats.avg_duration_minutes) : '-';
+        }
+    } catch (e) {}
+}
+
+// =============================================
+// Today Attendance (Coach)
+// =============================================
+async function loadTodayAttendance() {
+    const container = document.getElementById('todayList');
+    try {
+        const resp = await fetch(`${API_BASE}/today`, { headers: getAuthHeaders() });
+        if (!resp.ok) return;
+
+        const records = await resp.json();
+
+        if (!records.length) {
+            container.innerHTML = '<div class="today-empty">오늘 체크인한 회원이 없습니다</div>';
+            return;
+        }
+
+        container.innerHTML = records.map(r => {
+            const ciTime = new Date(r.check_in_at);
+            const isOut = !!r.checked_out_at;
+            const initial = (r.member_name || '?')[0];
+            const timeStr = ciTime.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+
+            let statusHtml = '';
+            if (isOut) {
+                statusHtml = `
+                    <span class="today-status-dot out"></span>
+                    <span class="today-status-label">${formatDuration(r.duration_minutes)}</span>
+                `;
+            } else {
+                statusHtml = `
+                    <span class="today-status-dot in"></span>
+                    <span class="today-status-label">훈련 중</span>
+                `;
+            }
+
+            return `
+                <div class="today-list-item">
+                    <div class="today-member-info">
+                        <div class="today-member-avatar">${initial}</div>
+                        <div>
+                            <div class="today-member-name">${r.member_name}</div>
+                            <div class="today-member-time">${timeStr} &middot; ${methodLabel(r.method)}</div>
+                        </div>
+                    </div>
+                    <div class="today-status">${statusHtml}</div>
+                </div>
+            `;
+        }).join('');
+
+    } catch (e) {
+        container.innerHTML = '<div class="today-empty">출석 현황 로딩 실패</div>';
+    }
+}
+
+// =============================================
+// History
+// =============================================
+async function loadHistory() {
+    const container = document.getElementById('historyList');
+    try {
+        const resp = await fetch(`${API_BASE}/history?limit=10`, { headers: getAuthHeaders() });
+        if (!resp.ok) {
+            container.innerHTML = '<div class="today-empty">기록 없음</div>';
+            return;
+        }
+
+        const records = await resp.json();
+
+        if (!records.length) {
+            container.innerHTML = '<div class="today-empty">출석 기록이 없습니다</div>';
+            return;
+        }
+
+        container.innerHTML = records.map(r => {
+            const ciDate = new Date(r.check_in_at);
+            const dateStr = ciDate.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', weekday: 'short' });
+            const timeStr = ciDate.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+
+            let durStr = '-';
+            if (r.duration_minutes != null) {
+                durStr = formatDuration(r.duration_minutes);
+            }
+
+            return `
+                <div class="history-item">
+                    <div>
+                        <div class="history-date">${dateStr}</div>
+                        <div class="history-time">${timeStr}</div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div class="history-duration">${durStr}</div>
+                        <span class="history-method-tag">${methodLabel(r.method)}</span>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+    } catch (e) {
+        container.innerHTML = '<div class="today-empty">기록 로딩 실패</div>';
+    }
+}
+
+// =============================================
+// Helpers
+// =============================================
+function formatDuration(minutes) {
+    if (minutes == null) return '-';
+    if (minutes < 60) return `${minutes}분`;
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return m > 0 ? `${h}시간 ${m}분` : `${h}시간`;
+}
+
+function methodLabel(method) {
+    const labels = {
+        'auto_ip': 'IP',
+        'manual': '수동',
+        'qr': 'QR',
+        'gps': 'GPS',
+        'wifi': 'WiFi',
+        'coach_proxy': '대리',
+        'coach': '코치',
+        'auto_wifi': 'WiFi',
+        'auto_geo': 'GPS',
+    };
+    return labels[method] || method || '-';
+}
 </script>
 {% endblock %}

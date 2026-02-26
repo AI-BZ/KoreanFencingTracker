@@ -13,6 +13,7 @@ from ..club.dependencies import (
     ClubMemberContext,
     get_current_club_member,
     require_coach,
+    require_admin,
     require_staff,
 )
 from .models import (
@@ -31,6 +32,11 @@ from .models import (
     RecurringBillCreate,
     RecurringBillUpdate,
     RecurringBillResponse,
+    RecurringBillingCreate,
+    RecurringBillingUpdate,
+    RecurringBillingResponse,
+    OverdueAlert,
+    BillingRunResult,
     FeeTemplateCreate,
     FeeTemplateUpdate,
     FeeTemplateResponse,
@@ -562,6 +568,178 @@ async def deactivate_billing_key(
     if not success:
         raise HTTPException(404, "등록된 카드가 없습니다")
     return {"success": True, "message": "카드가 해지되었습니다"}
+
+
+# =============================================
+# 반복 청구 (app_recurring_billing)
+# =============================================
+
+@router.post("/recurring-billing", response_model=RecurringBillingResponse)
+async def create_recurring_billing(
+    data: RecurringBillingCreate,
+    member: ClubMemberContext = Depends(require_admin),
+):
+    """반복 청구 규칙 생성 (관리자 전용)"""
+    try:
+        billing = billing_service.create_recurring_billing(
+            org_id=member.organization_id,
+            data={
+                "member_id": data.member_id,
+                "fee_type": data.fee_type.value,
+                "amount": data.amount,
+                "billing_day": data.billing_day,
+            },
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    return RecurringBillingResponse(
+        id=billing["id"],
+        member_id=billing["member_id"],
+        fee_type=billing["fee_type"],
+        amount=billing["amount"],
+        billing_day=billing["billing_day"],
+        is_active=billing["is_active"],
+        last_billed_at=billing.get("last_billed_at"),
+        next_billing_at=billing.get("next_billing_at"),
+        created_at=billing.get("created_at"),
+    )
+
+
+@router.get("/recurring-billing")
+async def list_recurring_billings(
+    member_id: Optional[str] = Query(None),
+    active_only: bool = Query(True),
+    member: ClubMemberContext = Depends(require_admin),
+):
+    """반복 청구 규칙 목록 (관리자 전용)"""
+    billings = billing_service.list_recurring_billings(
+        org_id=member.organization_id,
+        member_id=member_id,
+        active_only=active_only,
+    )
+    return {
+        "total": len(billings),
+        "recurring_billings": [
+            RecurringBillingResponse(
+                id=b["id"],
+                member_id=b["member_id"],
+                member_name=b.get("member_name"),
+                fee_type=b["fee_type"],
+                amount=b["amount"],
+                billing_day=b["billing_day"],
+                is_active=b["is_active"],
+                last_billed_at=b.get("last_billed_at"),
+                next_billing_at=b.get("next_billing_at"),
+                created_at=b.get("created_at"),
+            )
+            for b in billings
+        ],
+    }
+
+
+@router.put("/recurring-billing/{billing_id}", response_model=RecurringBillingResponse)
+async def update_recurring_billing(
+    billing_id: str,
+    data: RecurringBillingUpdate,
+    member: ClubMemberContext = Depends(require_admin),
+):
+    """반복 청구 규칙 수정 (관리자 전용)"""
+    update_data = data.model_dump(exclude_none=True)
+    if not update_data:
+        raise HTTPException(400, "수정할 항목이 없습니다")
+
+    result = billing_service.update_recurring_billing(
+        billing_id=billing_id,
+        org_id=member.organization_id,
+        data=update_data,
+    )
+    if not result:
+        raise HTTPException(404, "반복 청구 규칙을 찾을 수 없습니다")
+
+    return RecurringBillingResponse(
+        id=result["id"],
+        member_id=result["member_id"],
+        fee_type=result["fee_type"],
+        amount=result["amount"],
+        billing_day=result["billing_day"],
+        is_active=result["is_active"],
+        last_billed_at=result.get("last_billed_at"),
+        next_billing_at=result.get("next_billing_at"),
+        created_at=result.get("created_at"),
+    )
+
+
+@router.delete("/recurring-billing/{billing_id}")
+async def delete_recurring_billing(
+    billing_id: str,
+    member: ClubMemberContext = Depends(require_admin),
+):
+    """반복 청구 규칙 비활성화 (관리자 전용)"""
+    success = billing_service.delete_recurring_billing(
+        billing_id=billing_id,
+        org_id=member.organization_id,
+    )
+    if not success:
+        raise HTTPException(404, "반복 청구 규칙을 찾을 수 없습니다")
+    return {"success": True, "message": "반복 청구 규칙이 비활성화되었습니다"}
+
+
+@router.post("/run-cycle", response_model=BillingRunResult)
+async def run_billing_cycle(
+    member: ClubMemberContext = Depends(require_admin),
+):
+    """반복 청구 사이클 실행 (관리자 전용)"""
+    result = billing_service.run_billing_cycle(member.organization_id)
+    return BillingRunResult(**result)
+
+
+# =============================================
+# 연체 관리
+# =============================================
+
+@router.get("/overdue")
+async def detect_overdue_fees(
+    days_threshold: int = Query(7, ge=1, le=365),
+    member: ClubMemberContext = Depends(require_coach),
+):
+    """연체 감지 및 목록 (코치 이상)"""
+    alerts = billing_service.detect_overdue_fees(
+        org_id=member.organization_id,
+        days_threshold=days_threshold,
+    )
+    return {
+        "total": len(alerts),
+        "days_threshold": days_threshold,
+        "alerts": [OverdueAlert(**a) for a in alerts],
+    }
+
+
+@router.post("/overdue/notify")
+async def send_overdue_notifications(
+    days_threshold: int = Query(7, ge=1, le=365),
+    member: ClubMemberContext = Depends(require_admin),
+):
+    """연체 알림 발송 (관리자 전용)"""
+    # 먼저 연체 감지
+    alerts = billing_service.detect_overdue_fees(
+        org_id=member.organization_id,
+        days_threshold=days_threshold,
+    )
+
+    if not alerts:
+        return {"success": True, "message": "연체 건이 없습니다", "sent": 0, "total": 0}
+
+    result = await billing_service.send_overdue_notifications(
+        org_id=member.organization_id,
+        alerts=alerts,
+    )
+
+    return {
+        "success": True,
+        "message": f"{result['sent']}명에게 연체 알림을 발송했습니다",
+        **result,
+    }
 
 
 # =============================================

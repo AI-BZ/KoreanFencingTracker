@@ -72,6 +72,15 @@ class RecurringBillType(str, Enum):
     lesson = "lesson"
 
 
+class RecurringBillingFeeType(str, Enum):
+    """반복 청구 비용 유형 (app_recurring_billing용)"""
+    monthly_dues = "monthly_dues"
+    lesson = "lesson"
+    competition_entry = "competition_entry"
+    equipment_repair = "equipment_repair"
+    other = "other"
+
+
 class SubscriptionTier(str, Enum):
     """구독 등급"""
     free = "free"             # FCM only
@@ -178,6 +187,59 @@ class RecurringBillUpdate(BaseModel):
     billing_day: Optional[int] = Field(default=None, ge=1, le=28)
     auto_pay: Optional[bool] = None
     is_active: Optional[bool] = None
+
+
+# =============================================
+# Recurring Billing (app_recurring_billing)
+# =============================================
+
+class RecurringBillingCreate(BaseModel):
+    """반복 청구 설정 생성"""
+    member_id: str = Field(..., min_length=1, max_length=100)
+    fee_type: RecurringBillingFeeType
+    amount: int = Field(..., gt=0, le=10_000_000, description="청구 금액 (원)")
+    billing_day: int = Field(default=1, ge=1, le=28, description="매월 청구일 (1~28)")
+
+
+class RecurringBillingUpdate(BaseModel):
+    """반복 청구 수정"""
+    amount: Optional[int] = Field(default=None, gt=0, le=10_000_000)
+    billing_day: Optional[int] = Field(default=None, ge=1, le=28)
+    is_active: Optional[bool] = None
+
+
+class RecurringBillingResponse(BaseModel):
+    """반복 청구 응답"""
+    id: str
+    member_id: str
+    member_name: Optional[str] = None
+    fee_type: str
+    amount: int
+    billing_day: int
+    is_active: bool
+    last_billed_at: Optional[datetime] = None
+    next_billing_at: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+
+
+class OverdueAlert(BaseModel):
+    """연체 알림"""
+    member_id: str
+    member_name: Optional[str] = None
+    fee_id: int
+    amount: int
+    due_date: Optional[date] = None
+    days_overdue: int
+    parent_name: Optional[str] = None
+    parent_phone: Optional[str] = None
+
+
+class BillingRunResult(BaseModel):
+    """청구 실행 결과"""
+    total_processed: int
+    fees_created: int
+    errors: int
+    details: List[str] = []
 
 
 class FeeTemplateCreate(BaseModel):
