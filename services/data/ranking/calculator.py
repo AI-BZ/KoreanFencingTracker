@@ -299,7 +299,12 @@ def classify_competition_level(competition_name: str) -> str:
     """
     name = competition_name
 
-    # NATIONAL (최우선) - 대회명에 '국가대표' 포함
+    # 겸 국가대표: 주 대회가 종별/오픈이면서 국가대표 선발을 겸하는 경우
+    # → ELITE (일반 검색에서도 표시)
+    if '겸' in name and '국가대표' in name:
+        return 'ELITE'
+
+    # NATIONAL - 순수 국가대표 선발대회만
     if '국가대표' in name:
         return 'NATIONAL'
 
@@ -429,12 +434,12 @@ def matches_age_group_for_ranking(result_age: str, filter_age: str) -> bool:
 
 def extract_weapon(event_name: str) -> str:
     """종목명에서 무기 추출"""
-    if "플러레" in event_name or "foil" in event_name.lower():
-        return "플러레"
-    elif "에뻬" in event_name or "epee" in event_name.lower():
-        return "에뻬"
+    if "플뢰레" in event_name or "플러레" in event_name or "foil" in event_name.lower():
+        return "foil"
+    elif "에페" in event_name or "에뻬" in event_name or "epee" in event_name.lower():
+        return "epee"
     elif "사브르" in event_name or "sabre" in event_name.lower():
-        return "사브르"
+        return "sabre"
     return ""
 
 
@@ -625,7 +630,7 @@ class RankingCalculator:
         랭킹 계산
 
         Args:
-            weapon: 무기 필터 (플러레/에뻬/사브르)
+            weapon: 무기 필터 (foil/epee/sabre)
             gender: 성별 필터 (남/여)
             age_group: 연령대 필터 (E1/E2/E3/MS/HS/UNI/SR)
             category: 구분 필터 (PRO/CLUB) - 중학교 이상만 적용
@@ -744,7 +749,7 @@ class RankingCalculator:
         """
         all_rankings = {}
 
-        weapons = ["플러레", "에뻬", "사브르"]
+        weapons = ["foil", "epee", "sabre"]
         genders = ["남", "여"]
         age_groups = ["E1", "E2", "E3", "MS", "HS", "UNI", "SR"]
         categories = ["PRO", "CLUB"]  # 전문/동호인
@@ -845,7 +850,7 @@ def main():
     parser = argparse.ArgumentParser(description="한국 펜싱 랭킹 계산기")
     parser.add_argument("--data", type=str, default="data/fencing_full_data_v2.json", help="데이터 파일")
     parser.add_argument("--output", type=str, default="data/rankings.json", help="출력 파일")
-    parser.add_argument("--weapon", type=str, help="무기 (플러레/에뻬/사브르)")
+    parser.add_argument("--weapon", type=str, help="무기 (foil/epee/sabre)")
     parser.add_argument("--gender", type=str, help="성별 (남/여)")
     parser.add_argument("--age-group", type=str, help="연령대 (E1/E2/E3/MS/HS/UNI/SR)")
     parser.add_argument("--year", type=int, help="시즌 연도 (생략시 롤링)")
