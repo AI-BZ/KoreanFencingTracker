@@ -246,6 +246,24 @@
     "status_live": "LIVE",
     "status_upcoming": "Upcoming"
   },
+  "gate": {
+    "recent_results": "Recent Competition Results",
+    "login_cta": "Log in to see full data",
+    "signup_cta": "Sign up free for full access",
+    "summary_preview": "Log in to see full statistics, medal analysis, and weapon-specific results.",
+    "history_preview": "Available after sign-up:",
+    "history_f1": "Full competition history",
+    "history_f2": "Filter by year/weapon",
+    "history_f3": "Detailed bout results (Pool/DE)",
+    "strength_preview": "Available analysis after sign-up:",
+    "strength_f1": "Head-to-Head records",
+    "strength_f2": "Round-by-round performance",
+    "strength_f3": "Weapon-specific stats",
+    "analysis_preview": "Premium analysis features:",
+    "analysis_f1": "AI-powered match analysis",
+    "analysis_f2": "FencingLab tactical reports",
+    "analysis_f3": "Growth trend graphs"
+  },
   "rankings": {
     "title": "FencingLab Ranking",
     "page_title": "FencingLab Ranking - Korean Fencing Tracker",
