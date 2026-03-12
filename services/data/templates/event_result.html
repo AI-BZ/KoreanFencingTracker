@@ -5,6 +5,396 @@
 {% block extra_css %}
 <link rel="stylesheet" href="/static/css/components.css">
 <link rel="stylesheet" href="/static/css/bracket.css">
+<link rel="stylesheet" href="/static/css/player-search.css">
+<style>
+/* =====================================================
+   PLAYER SEARCH SECTION - Dark Mode Compatible
+   ===================================================== */
+.player-search-section {
+    margin: 1rem 0;
+    padding: 1.25rem;
+    background: var(--bg-card, rgba(18, 18, 26, 0.85));
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-radius: 12px;
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+    /* CRITICAL: Ensure search dropdowns appear above all other content */
+    position: relative;
+    z-index: 1000;
+}
+
+/* Autocomplete dropdown must appear above tables and other content */
+.autocomplete-container {
+    position: relative;
+    z-index: 10000;
+}
+
+.autocomplete-dropdown {
+    z-index: 99999 !important;
+}
+
+.search-box {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.search-box input {
+    flex: 1;
+    min-width: 200px;
+    padding: 12px 16px;
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+    border-radius: 10px;
+    font-size: 0.95rem;
+    background: var(--bg-secondary, rgba(26, 26, 37, 0.9));
+    color: var(--text-primary, #fff);
+    font-family: inherit;
+    transition: all 0.3s ease;
+}
+
+.search-box input::placeholder {
+    color: var(--text-muted, #6b6b7b);
+}
+
+.search-box input:focus {
+    outline: none;
+    border-color: var(--accent-primary, #c9302c);
+    box-shadow: 0 0 0 3px rgba(201, 48, 44, 0.15);
+}
+
+.search-box button {
+    padding: 12px 18px;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.9rem;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+#search-btn {
+    background: linear-gradient(135deg, var(--accent-primary, #c9302c), #a02320);
+    color: white;
+    box-shadow: 0 4px 15px rgba(201, 48, 44, 0.3);
+}
+
+#search-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(201, 48, 44, 0.4);
+}
+
+#clear-search-btn {
+    background: rgba(239, 68, 68, 0.15);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+#clear-search-btn:hover {
+    background: rgba(239, 68, 68, 0.25);
+}
+
+/* Search Result Panel */
+.search-result-panel {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: var(--bg-tertiary, rgba(26, 26, 37, 0.9));
+    border-radius: 10px;
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+}
+
+.result-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+}
+
+.result-title {
+    font-weight: 600;
+    color: var(--text-primary, #fff);
+}
+
+.result-count {
+    font-size: 0.85rem;
+    color: var(--accent-gold, #d4a574);
+    font-weight: 600;
+}
+
+.result-content {
+    max-height: 350px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+/* Player Result Card */
+.player-result-card {
+    background: var(--bg-card, rgba(18, 18, 26, 0.85));
+    padding: 14px;
+    border-radius: 10px;
+    margin-bottom: 10px;
+    border-left: 4px solid var(--accent-primary, #c9302c);
+    border-top: 1px solid var(--border-color, rgba(255, 255, 255, 0.05));
+    border-right: 1px solid var(--border-color, rgba(255, 255, 255, 0.05));
+    border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.05));
+    transition: all 0.2s ease;
+}
+
+.player-result-card:hover {
+    border-left-color: var(--accent-gold, #d4a574);
+    transform: translateX(4px);
+}
+
+.player-result-card .name {
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: var(--text-primary, #fff);
+}
+
+.player-result-card .team {
+    color: var(--text-muted, #6b6b7b);
+    font-size: 0.9rem;
+    margin-top: 2px;
+}
+
+.player-result-card .info-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.player-result-card .info-item {
+    background: var(--bg-secondary, rgba(26, 26, 37, 0.9));
+    padding: 8px 10px;
+    border-radius: 8px;
+    text-align: center;
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.05));
+}
+
+.player-result-card .info-label {
+    font-size: 0.7rem;
+    color: var(--text-muted, #6b6b7b);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+}
+
+.player-result-card .info-value {
+    font-weight: 700;
+    color: var(--text-primary, #fff);
+    font-size: 0.95rem;
+}
+
+/* Pool number link style */
+.player-result-card .pool-link {
+    color: var(--accent-gold, #d4a574);
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    transition: color 0.2s;
+}
+
+.player-result-card .pool-link:hover {
+    color: var(--accent-primary, #c9302c);
+}
+
+/* =====================================================
+   HIGHLIGHT STYLES - Dark Mode Compatible
+   ===================================================== */
+.player-highlighted {
+    background: rgba(245, 158, 11, 0.15) !important;
+    border-left: 4px solid #f59e0b !important;
+    box-shadow: 0 0 10px rgba(245, 158, 11, 0.2);
+}
+
+tr.player-highlighted {
+    background: rgba(245, 158, 11, 0.15) !important;
+}
+
+tr.player-highlighted td {
+    background: transparent !important;
+}
+
+.match-card.player-highlighted {
+    border: 2px solid #f59e0b !important;
+    box-shadow: 0 0 15px rgba(245, 158, 11, 0.3);
+}
+
+.bout-player.player-highlighted {
+    background: rgba(245, 158, 11, 0.2) !important;
+    border-radius: 6px;
+    padding: 4px;
+}
+
+.podium-place.player-highlighted {
+    box-shadow: 0 0 20px rgba(245, 158, 11, 0.5);
+}
+
+/* =====================================================
+   MY PLAYER PANEL - Dark Mode Compatible
+   ===================================================== */
+.my-player-panel {
+    margin-top: 1rem;
+    padding: 12px 16px;
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(234, 179, 8, 0.1));
+    border-radius: 10px;
+    border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.my-player-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.my-player-icon {
+    font-size: 1.3rem;
+}
+
+.my-player-label {
+    font-weight: 600;
+    color: #fbbf24;
+    font-size: 0.9rem;
+}
+
+.my-player-name {
+    font-weight: 700;
+    color: var(--text-primary, #fff);
+    background: var(--bg-secondary, rgba(26, 26, 37, 0.9));
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+}
+
+.auto-highlight-btn {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    color: white;
+    border: none;
+    padding: 8px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-left: auto;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+}
+
+.auto-highlight-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
+}
+
+.remove-btn {
+    background: rgba(239, 68, 68, 0.15);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.remove-btn:hover {
+    background: rgba(239, 68, 68, 0.25);
+    border-color: rgba(239, 68, 68, 0.5);
+}
+
+/* Set My Player Button */
+.set-my-player-btn {
+    margin-top: 6px;
+    padding: 8px 12px;
+    background: linear-gradient(135deg, #6366f1, #4f46e5);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-weight: 600;
+    margin-left: 6px;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+}
+
+.set-my-player-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+}
+
+/* Action buttons row */
+.player-result-card .action-buttons {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+}
+
+.highlight-btn {
+    padding: 8px 14px;
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.highlight-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
+}
+
+/* =====================================================
+   RESPONSIVE ADJUSTMENTS
+   ===================================================== */
+@media (max-width: 768px) {
+    .player-result-card .info-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .search-box {
+        flex-direction: column;
+    }
+
+    .search-box input {
+        width: 100%;
+    }
+
+    .search-box button {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .my-player-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .auto-highlight-btn {
+        margin-left: 0;
+        margin-top: 8px;
+        width: 100%;
+        text-align: center;
+    }
+}
+</style>
 {% endblock %}
 
 {% block content %}
@@ -38,6 +428,41 @@
                 {% if event.event_type %}<span class="type-tag">{{ event.event_type }}</span>{% endif %}
             </span>
         </div>
+    </section>
+
+    <!-- Player Search in Event with Autocomplete -->
+    <section class="player-search-section">
+        <div class="search-box">
+            <div class="autocomplete-container" id="autocomplete-container">
+                <input type="text"
+                       id="event-player-search"
+                       placeholder="선수 이름으로 검색 (예: 홍길동)..."
+                       autocomplete="off">
+            </div>
+            <button type="button" id="search-btn" class="search-btn">🔍 검색</button>
+            <button type="button" id="clear-search-btn" class="clear-btn" style="display:none">✕ 해제</button>
+        </div>
+        <!-- 내 선수 지정 패널 -->
+        <div id="my-player-panel" class="my-player-panel" style="display:none">
+            <div class="my-player-header">
+                <span class="my-player-icon">⭐</span>
+                <span class="my-player-label">내 선수</span>
+                <span id="my-player-name" class="my-player-name"></span>
+                <button type="button" id="auto-highlight-btn" class="auto-highlight-btn">자동 하이라이트</button>
+                <button type="button" id="remove-my-player-btn" class="remove-btn">✕</button>
+            </div>
+        </div>
+        <div id="player-search-result" class="search-result-panel" style="display:none">
+            <div class="result-header">
+                <span class="result-title">📋 검색 결과</span>
+                <span class="result-count"></span>
+            </div>
+            <div class="result-content"></div>
+        </div>
+        <!-- DE Result Table Container (선수의 실제 DE 경기 결과) -->
+        <div id="de-result-container" class="de-result-section" style="display:none"></div>
+        <!-- DE Prediction Table Container -->
+        <div id="de-prediction-container" class="de-prediction-section" style="display:none"></div>
     </section>
 
     <!-- Tab Navigation -->
@@ -87,8 +512,8 @@
                     {% for player in event.pool_total_ranking %}
                     <tr>
                         <td class="rank">{{ player.rank }}</td>
-                        <td class="player-name"><a href="/player/{{ player.name|urlencode }}?team={{ player.team|urlencode }}">{{ player.name }}</a></td>
-                        <td>{{ player.team }}</td>
+                        <td class="player-name"><a href="/player/{{ player.name|urlencode }}?team={{ player.team|urlencode }}" class="player-link">{{ player.name }}</a></td>
+                        <td><a href="/search?q={{ player.team|urlencode }}" class="team-link">{{ player.team }}</a></td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -124,8 +549,8 @@
                     {% for player in pool.results|sort(attribute='rank') %}
                     <tr>
                         <td class="rank">{{ player.rank or '-' }}</td>
-                        <td class="player-name"><a href="/player/{{ player.name|urlencode }}?team={{ player.team|urlencode }}">{{ player.name }}</a></td>
-                        <td>{{ player.team }}</td>
+                        <td class="player-name"><a href="/player/{{ player.name|urlencode }}?team={{ player.team|urlencode }}" class="player-link">{{ player.name }}</a></td>
+                        <td><a href="/search?q={{ player.team|urlencode }}" class="team-link">{{ player.team }}</a></td>
                         <td>{{ player.wins or 0 }}</td>
                         <td>{{ player.losses or 0 }}</td>
                         <td>{% if player.indicator > 0 %}+{% endif %}{{ player.indicator or 0 }}</td>
@@ -160,7 +585,7 @@
                             {% for player in pool.results %}
                             <tr>
                                 <td><strong>{{ loop.index }}</strong></td>
-                                <td class="player-col"><a href="/player/{{ player.name|urlencode }}?team={{ player.team|urlencode }}">{{ player.name }}</a></td>
+                                <td class="player-col"><a href="/player/{{ player.name|urlencode }}?team={{ player.team|urlencode }}" class="player-link">{{ player.name }}</a></td>
                                 {% for score in player.scores %}
                                     {% if score is none %}
                                     <td class="self">X</td>
@@ -193,15 +618,15 @@
                     <div class="bout-item">
                         <div class="bout-players">
                             <div class="bout-player {% if bout.winner_name == bout.player1_name %}winner{% else %}loser{% endif %}">
-                                <div><a href="/player/{{ bout.player1_name|urlencode }}?team={{ bout.player1_team|urlencode }}">{{ bout.player1_name }}</a></div>
-                                <small>{{ bout.player1_team }}</small>
+                                <div><a href="/player/{{ bout.player1_name|urlencode }}?team={{ bout.player1_team|urlencode }}" class="player-link">{{ bout.player1_name }}</a></div>
+                                <small><a href="/search?q={{ bout.player1_team|urlencode }}" class="team-link">{{ bout.player1_team }}</a></small>
                             </div>
                             <div class="bout-score">
                                 {{ bout.player1_score }} - {{ bout.player2_score }}
                             </div>
                             <div class="bout-player {% if bout.winner_name == bout.player2_name %}winner{% else %}loser{% endif %}">
-                                <div><a href="/player/{{ bout.player2_name|urlencode }}?team={{ bout.player2_team|urlencode }}">{{ bout.player2_name }}</a></div>
-                                <small>{{ bout.player2_team }}</small>
+                                <div><a href="/player/{{ bout.player2_name|urlencode }}?team={{ bout.player2_team|urlencode }}" class="player-link">{{ bout.player2_name }}</a></div>
+                                <small><a href="/search?q={{ bout.player2_team|urlencode }}" class="team-link">{{ bout.player2_team }}</a></small>
                             </div>
                         </div>
                     </div>
@@ -217,10 +642,20 @@
     </div>
 
     <div id="tab-tournament" class="tab-content">
-        {% if event.normalized_bracket and event.normalized_bracket.rounds %}
-        {# 새로운 정규화된 대진표 컴포넌트 사용 #}
-        {% set bracket = event.normalized_bracket %}
-        {% include 'components/bracket.html' %}
+        {% if event.normalized_bracket %}
+            {% if event.normalized_bracket.format == 'dual_de' %}
+            {# Dual DE 포맷 (국가대표 선발전 등) - 특별 컴포넌트 사용 #}
+            {% set dual_bracket = event.normalized_bracket %}
+            {% include 'components/dual-bracket-tabs.html' %}
+            {% elif event.normalized_bracket.rounds %}
+            {# 표준 단일 DE 포맷 - 기존 컴포넌트 사용 #}
+            {% set bracket = event.normalized_bracket %}
+            {% include 'components/bracket.html' %}
+            {% else %}
+            <div class="empty">
+                <p>DE (Direct Elimination) 데이터가 없습니다</p>
+            </div>
+            {% endif %}
         {% elif event.de_bracket or event.de_seeding %}
         {# 레거시 대진표 데이터 (정규화 안된 경우 - 폴백) #}
         <div class="bracket-container">
@@ -241,8 +676,8 @@
                     {% if not loop.previtem or loop.previtem.seed != player.seed %}
                     <div class="seeding-item">
                         <span class="seeding-rank">{{ player.seed }}</span>
-                        <a href="/player/{{ player.name|urlencode }}?team={{ player.team|urlencode }}" class="seeding-name">{{ player.name }}</a>
-                        <span class="seeding-team">{{ player.team }}</span>
+                        <a href="/player/{{ player.name|urlencode }}?team={{ player.team|urlencode }}" class="seeding-name player-link">{{ player.name }}</a>
+                        <span class="seeding-team"><a href="/search?q={{ player.team|urlencode }}" class="team-link">{{ player.team }}</a></span>
                     </div>
                     {% endif %}
                     {% endfor %}
@@ -332,7 +767,9 @@
     </div>
 
     <div id="tab-final" class="tab-content">
-        {% if event.final_rankings %}
+        {% set has_gold_medal = event.final_rankings|selectattr('rank', 'equalto', 1)|first %}
+        {% if event.final_rankings and has_gold_medal %}
+        <!-- DE가 완료되어 1위(금메달)가 있는 경우에만 최종결과 표시 -->
         <!-- Podium -->
         <div class="podium-section">
             <h3>🏆 시상대</h3>
@@ -345,8 +782,8 @@
                 <div class="podium-place second">
                     <div class="podium-medal">🥈</div>
                     <div class="podium-box">
-                        <div class="podium-name"><a href="/player/{{ silver.name|urlencode }}?team={{ silver.team|urlencode }}">{{ silver.name }}</a></div>
-                        <div class="podium-team">{{ silver.team }}</div>
+                        <div class="podium-name"><a href="/player/{{ silver.name|urlencode }}?team={{ silver.team|urlencode }}" class="player-link">{{ silver.name }}</a></div>
+                        <div class="podium-team"><a href="/search?q={{ silver.team|urlencode }}" class="team-link">{{ silver.team }}</a></div>
                     </div>
                     <div class="podium-rank">2위</div>
                 </div>
@@ -356,8 +793,8 @@
                 <div class="podium-place first">
                     <div class="podium-medal">🥇</div>
                     <div class="podium-box">
-                        <div class="podium-name"><a href="/player/{{ gold.name|urlencode }}?team={{ gold.team|urlencode }}">{{ gold.name }}</a></div>
-                        <div class="podium-team">{{ gold.team }}</div>
+                        <div class="podium-name"><a href="/player/{{ gold.name|urlencode }}?team={{ gold.team|urlencode }}" class="player-link">{{ gold.name }}</a></div>
+                        <div class="podium-team"><a href="/search?q={{ gold.team|urlencode }}" class="team-link">{{ gold.team }}</a></div>
                     </div>
                     <div class="podium-rank">1위</div>
                 </div>
@@ -368,8 +805,8 @@
                     <div class="podium-medal">🥉</div>
                     <div class="podium-box">
                         {% for bronze in bronzes %}
-                        <div class="podium-name"><a href="/player/{{ bronze.name|urlencode }}?team={{ bronze.team|urlencode }}">{{ bronze.name }}</a></div>
-                        <div class="podium-team">{{ bronze.team }}</div>
+                        <div class="podium-name"><a href="/player/{{ bronze.name|urlencode }}?team={{ bronze.team|urlencode }}" class="player-link">{{ bronze.name }}</a></div>
+                        <div class="podium-team"><a href="/search?q={{ bronze.team|urlencode }}" class="team-link">{{ bronze.team }}</a></div>
                         {% if not loop.last %}<hr style="margin: 8px 0; opacity: 0.3">{% endif %}
                         {% endfor %}
                     </div>
@@ -398,9 +835,9 @@
                         {% if ranking.rank == 1 %}🥇{% elif ranking.rank == 2 %}🥈{% elif ranking.rank == 3 %}🥉{% else %}{{ ranking.rank }}{% endif %}
                     </td>
                     <td class="name-cell">
-                        <a href="/player/{{ ranking.name|urlencode }}?team={{ ranking.team|urlencode }}">{{ ranking.name }}</a>
+                        <a href="/player/{{ ranking.name|urlencode }}?team={{ ranking.team|urlencode }}" class="player-link">{{ ranking.name }}</a>
                     </td>
-                    <td>{{ ranking.team }}</td>
+                    <td><a href="/search?q={{ ranking.team|urlencode }}" class="team-link">{{ ranking.team }}</a></td>
                     <td class="place-cell">{{ ranking.rank }}/{{ total_participants }}</td>
                     <td class="points-cell">{% if ranking.points %}{{ "%.1f"|format(ranking.points) }}pt{% else %}-{% endif %}</td>
                 </tr>
@@ -420,11 +857,17 @@
             </div>
         </div>
         {% else %}
+        {% if event.final_rankings and not has_gold_medal %}
+        <div class="empty">DE가 아직 진행 중이거나 완료되지 않았습니다. 최종 결과는 모든 경기가 끝난 후 확인하세요.</div>
+        {% else %}
         <div class="empty">최종 결과 데이터가 없습니다</div>
+        {% endif %}
         {% endif %}
     </div>
 </div>
 
+<script src="/static/js/player-search.js"></script>
+<script src="/static/js/dual-bracket.js"></script>
 <script>
 // Tab switching
 document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -538,6 +981,306 @@ function toggleSeeding(header) {
         content.style.display = 'none';
         icon.textContent = '▼';
     }
+}
+
+// ==========================================
+// Player Search and Highlight Feature (Enhanced with Autocomplete)
+// ==========================================
+const SUB_EVENT_CD = "{{ event.sub_event_cd }}";
+const EVENT_CD = "{{ competition.competition.event_cd }}";
+
+// Initialize components
+const playerHighlighter = new PlayerHighlighter();
+const deResult = new DEResultTable(
+    document.getElementById('de-result-container'),
+    SUB_EVENT_CD
+);
+const dePrediction = new DEPredictionTable(
+    document.getElementById('de-prediction-container'),
+    SUB_EVENT_CD
+);
+
+// Initialize autocomplete
+const playerSearch = new PlayerSearch({
+    inputElement: document.getElementById('event-player-search'),
+    dropdownContainer: document.getElementById('autocomplete-container'),
+    eventCd: EVENT_CD,
+    subEventCd: SUB_EVENT_CD,  // 현재 이벤트 내 선수만 검색
+    onSelect: (suggestion, method) => {
+        // Auto-search and highlight when selecting from dropdown
+        if (suggestion.name) {
+            performSearch(suggestion.name);
+            // Auto-highlight the selected player
+            playerHighlighter.highlight(suggestion.name);
+        }
+    }
+});
+
+// Search button click
+document.getElementById('search-btn').addEventListener('click', () => {
+    const query = document.getElementById('event-player-search').value.trim();
+    if (query) performSearch(query);
+});
+
+// Clear search
+document.getElementById('clear-search-btn').addEventListener('click', clearSearch);
+
+async function performSearch(query) {
+    if (!query) return;
+
+    const resultPanel = document.getElementById('player-search-result');
+    const resultContent = resultPanel.querySelector('.result-content');
+    const resultCount = resultPanel.querySelector('.result-count');
+    const dePredictionContainer = document.getElementById('de-prediction-container');
+
+    try {
+        const response = await fetch(`/api/events/${SUB_EVENT_CD}/players/search?q=${encodeURIComponent(query)}`);
+        if (!response.ok) throw new Error('검색 실패');
+
+        const data = await response.json();
+
+        if (data.players.length === 0) {
+            resultContent.innerHTML = '<p style="text-align:center;color:var(--text-muted, #6b6b7b);padding:1rem;">검색 결과가 없습니다</p>';
+            resultCount.textContent = '0명';
+            dePredictionContainer.style.display = 'none';
+        } else {
+            resultCount.textContent = `${data.players.length}명`;
+            resultContent.innerHTML = data.players.map(p => {
+                // Pool 정보 렌더링: Pool 번호가 있으면 클릭 가능하게
+                let poolDisplay = '-';
+                if (p.pool_number) {
+                    // Pool 번호는 클릭 가능하게 만들기
+                    const poolLink = `<span class="pool-link" onclick="navigateToPool(${p.pool_number}); event.stopPropagation();">Pool ${p.pool_number}</span>`;
+                    // Pool 순위는 확정된 경우에만 표시 (pool_rank가 있고, 숫자인 경우)
+                    if (p.pool_rank && typeof p.pool_rank === 'number' && p.pool_rank > 0) {
+                        poolDisplay = `${poolLink} <span style="color: var(--accent-gold, #d4a574);">${p.pool_rank}위</span>`;
+                    } else {
+                        poolDisplay = poolLink;
+                    }
+                }
+
+                // DE 매치 표시 (상세 정보) - 라운드 순서대로 정렬 (128강→64강→32강...)
+                let deDisplay = '-';
+                if (p.de_matches && p.de_matches.length > 0) {
+                    // 라운드 번호 추출 후 큰 순서대로 정렬 (128강 → 64강 → 32강...)
+                    const sortedMatches = [...p.de_matches].sort((a, b) => {
+                        const getRoundNum = (r) => {
+                            const match = r.round.match(/(\d+)/);
+                            return match ? parseInt(match[1]) : 0;
+                        };
+                        return getRoundNum(b) - getRoundNum(a);
+                    });
+                    deDisplay = sortedMatches.map(m => {
+                        if (m.result === 'bye') {
+                            return `${m.round}(Seed)`;
+                        } else if (m.result === 'win') {
+                            const score = m.score ? ` ${m.score}` : '';
+                            return `${m.round}(V ${m.opponent}${score})`;
+                        } else if (m.result === 'lose') {
+                            const score = m.score ? ` ${m.score}` : '';
+                            return `${m.round}(L ${m.opponent}${score})`;
+                        } else {
+                            return `${m.round}(vs ${m.opponent || '대기'})`;
+                        }
+                    }).join(' → ');
+                } else if (p.de_rounds && p.de_rounds.length > 0) {
+                    // fallback for old format
+                    deDisplay = p.de_rounds.join(', ');
+                }
+
+                // 최종 순위 표시
+                let finalDisplay = '-';
+                if (p.final_rank && typeof p.final_rank === 'number' && p.final_rank > 0) {
+                    finalDisplay = `${p.final_rank}위`;
+                }
+
+                return `
+                    <div class="player-result-card" data-player-name="${p.name}" data-pool-number="${p.pool_number || ''}">
+                        <div class="name">${p.name}</div>
+                        <div class="team">${p.team || '-'}</div>
+                        <div class="info-grid">
+                            <div class="info-item">
+                                <div class="info-label">Pool</div>
+                                <div class="info-value">${poolDisplay}</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">DE 진출</div>
+                                <div class="info-value">${deDisplay}</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">최종 순위</div>
+                                <div class="info-value">${finalDisplay}</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            // Auto-apply highlight AND DE results/prediction for all found players
+            if (data.players.length > 0) {
+                const firstPlayer = data.players[0];
+
+                // Auto-highlight
+                playerHighlighter.highlight(firstPlayer.name);
+
+                // Auto-show DE result (경기 결과) and DE prediction (예상 대진표)
+                const predictionContainer = document.getElementById('de-prediction-container');
+                predictionContainer.style.display = 'block';
+                await Promise.all([
+                    deResult.load(firstPlayer.name),
+                    dePrediction.load(firstPlayer.name)
+                ]);
+            }
+        }
+
+        resultPanel.style.display = 'block';
+        document.getElementById('clear-search-btn').style.display = 'inline-flex';
+
+    } catch (error) {
+        console.error('Search error:', error);
+        resultContent.innerHTML = '<p style="text-align:center;color:#f87171;padding:1rem;">검색 중 오류가 발생했습니다</p>';
+        resultPanel.style.display = 'block';
+    }
+}
+
+// Show DE Result and Prediction tables
+async function showDEPrediction(playerName) {
+    const predictionContainer = document.getElementById('de-prediction-container');
+    predictionContainer.style.display = 'block';
+
+    // Load both DE result and prediction in parallel
+    await Promise.all([
+        deResult.load(playerName),
+        dePrediction.load(playerName)
+    ]);
+
+    // Scroll to DE result container (which appears first)
+    const resultContainer = document.getElementById('de-result-container');
+    if (resultContainer.style.display !== 'none') {
+        resultContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else {
+        predictionContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+}
+
+// Pool 번호 클릭 시 해당 Pool로 이동
+function navigateToPool(poolNumber) {
+    // 1. Pool 탭이 활성화되어 있지 않다면 활성화
+    const poolsTabBtn = document.querySelector('.tab-btn[data-tab="pools"]');
+    if (poolsTabBtn && !poolsTabBtn.classList.contains('active')) {
+        poolsTabBtn.click();
+    }
+
+    // 잠시 대기 후 Pool 버튼 클릭 및 스크롤 (탭 전환 애니메이션 고려)
+    setTimeout(() => {
+        // 2. 해당 Pool 버튼 클릭
+        const poolBtn = document.querySelector(`.pool-btn[data-pool="${poolNumber}"]`);
+        if (poolBtn) {
+            poolBtn.click();
+
+            // 3. Pool 컨테이너로 스크롤
+            setTimeout(() => {
+                const poolContainer = document.querySelector(`.pool-item[data-pool-id="${poolNumber}"]`);
+                if (poolContainer) {
+                    poolContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            }, 100);
+        }
+
+        showToast(`Pool ${poolNumber}로 이동했습니다`);
+    }, 100);
+}
+
+function clearSearch() {
+    document.getElementById('event-player-search').value = '';
+    document.getElementById('player-search-result').style.display = 'none';
+    document.getElementById('clear-search-btn').style.display = 'none';
+    document.getElementById('de-result-container').style.display = 'none';
+    document.getElementById('de-prediction-container').style.display = 'none';
+    playerHighlighter.clear();
+    playerSearch.clear();
+    deResult.clear();
+}
+
+function highlightPlayer(playerName) {
+    playerHighlighter.highlight(playerName);
+}
+
+// ==========================================
+// My Player Feature (localStorage based)
+// ==========================================
+const MY_PLAYER_KEY = 'fencingmind_my_player';
+
+// 페이지 로드 시 URL 파라미터 확인 및 자동 하이라이트
+document.addEventListener('DOMContentLoaded', () => {
+    // Check for highlight parameter from navigation
+    const urlParams = new URLSearchParams(window.location.search);
+    const highlightPlayer = urlParams.get('highlight');
+
+    if (highlightPlayer) {
+        // Auto-highlight the player from URL parameter
+        setTimeout(() => {
+            const decodedName = decodeURIComponent(highlightPlayer);
+            document.getElementById('event-player-search').value = decodedName;
+            performSearch(decodedName);
+            playerHighlighter.highlight(decodedName);
+            document.getElementById('clear-search-btn').style.display = 'inline-flex';
+        }, 300);
+    } else {
+        // Only load my player if no highlight param
+        loadMyPlayer();
+    }
+});
+
+function loadMyPlayer() {
+    const savedPlayer = localStorage.getItem(MY_PLAYER_KEY);
+    if (savedPlayer) {
+        const player = JSON.parse(savedPlayer);
+        document.getElementById('my-player-name').textContent = player.name;
+        document.getElementById('my-player-panel').style.display = 'block';
+        // 자동 하이라이트 (설정된 경우)
+        if (player.autoHighlight) {
+            setTimeout(() => highlightPlayer(player.name), 500);
+        }
+    }
+}
+
+function setMyPlayer(playerName, playerTeam) {
+    const player = {
+        name: playerName,
+        team: playerTeam || '',
+        autoHighlight: true,
+        savedAt: new Date().toISOString()
+    };
+    localStorage.setItem(MY_PLAYER_KEY, JSON.stringify(player));
+    document.getElementById('my-player-name').textContent = playerName;
+    document.getElementById('my-player-panel').style.display = 'block';
+    showToast(`⭐ ${playerName} 선수가 내 선수로 지정되었습니다`);
+    highlightPlayer(playerName);
+}
+
+function removeMyPlayer() {
+    localStorage.removeItem(MY_PLAYER_KEY);
+    document.getElementById('my-player-panel').style.display = 'none';
+    clearHighlights();
+    showToast('내 선수 지정이 해제되었습니다', 'warning');
+}
+
+// 자동 하이라이트 버튼
+document.getElementById('auto-highlight-btn').addEventListener('click', () => {
+    const savedPlayer = localStorage.getItem(MY_PLAYER_KEY);
+    if (savedPlayer) {
+        const player = JSON.parse(savedPlayer);
+        highlightPlayer(player.name);
+    }
+});
+
+// 내 선수 제거 버튼
+document.getElementById('remove-my-player-btn').addEventListener('click', removeMyPlayer);
+
+// "내 선수로 지정" 기능을 위한 전역 함수
+function addSetMyPlayerButton(playerName, playerTeam) {
+    setMyPlayer(playerName, playerTeam);
 }
 </script>
 {% endblock %}

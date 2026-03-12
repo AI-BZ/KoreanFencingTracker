@@ -131,6 +131,115 @@
         display: none;
     }
 
+    /* UPCOMING 배너 - 예정 대회 */
+    .upcoming-competitions {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 1rem 0;
+        margin-bottom: 0;
+    }
+    .upcoming-header {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        margin-bottom: 0.8rem;
+    }
+    .upcoming-badge {
+        background: white;
+        color: #667eea;
+        padding: 0.3rem 0.8rem;
+        border-radius: 20px;
+        font-weight: 700;
+        font-size: 0.85rem;
+    }
+    .upcoming-title {
+        color: white;
+        font-size: 1.1rem;
+        font-weight: 600;
+    }
+    .upcoming-cards {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+    .upcoming-card {
+        background: rgba(18, 18, 26, 0.95);
+        border-radius: 12px;
+        padding: 0;
+        display: flex;
+        align-items: stretch;
+        cursor: pointer;
+        transition: transform 0.2s, box-shadow 0.2s;
+        text-decoration: none;
+        color: inherit;
+        min-width: 320px;
+        max-width: 450px;
+        overflow: hidden;
+    }
+    .upcoming-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.4);
+    }
+    .upcoming-card-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 56px;
+        background: rgba(102, 126, 234, 0.15);
+        flex-shrink: 0;
+    }
+    .upcoming-card-icon svg {
+        width: 24px;
+        height: 24px;
+        stroke: #a8b4f0;
+        stroke-width: 1.5;
+        fill: none;
+    }
+    .upcoming-card-info {
+        flex: 1;
+        padding: 1rem 1.2rem;
+        min-width: 0;
+    }
+    .upcoming-card-info h4 {
+        margin: 0 0 0.3rem 0;
+        font-size: 0.95rem;
+        color: #fff;
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .upcoming-card-info p {
+        margin: 0;
+        font-size: 0.8rem;
+        color: rgba(255, 255, 255, 0.5);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .upcoming-card-status {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 0.8rem 1rem;
+        background: rgba(255, 255, 255, 0.03);
+        min-width: 80px;
+        flex-shrink: 0;
+    }
+    .upcoming-card-status .status {
+        font-size: 0.8rem;
+        font-weight: 700;
+        color: #ff8080;
+        letter-spacing: 0.5px;
+    }
+    .upcoming-card-status .date {
+        font-size: 0.7rem;
+        color: rgba(255, 255, 255, 0.4);
+        margin-top: 0.25rem;
+    }
+
     /* 선수 검색 - 다크 반투명 */
     .player-search {
         background: rgba(18, 18, 26, 0.85) !important;
@@ -141,6 +250,8 @@
         border: 1px solid rgba(255, 255, 255, 0.08);
         box-shadow: none;
         margin: 2rem 0;
+        position: relative;
+        z-index: 1000;
     }
     .player-search h2 {
         color: white;
@@ -181,7 +292,7 @@
         max-height: 300px;
         overflow-y: auto;
         display: none;
-        z-index: 100;
+        z-index: 99999;
         box-shadow: 0 4px 15px rgba(0,0,0,0.15);
     }
     .search-suggestions.show {
@@ -226,6 +337,8 @@
         border: 1px solid rgba(255, 255, 255, 0.08);
         box-shadow: none;
         margin: 2rem 0;
+        position: relative;
+        z-index: 1;
     }
     .filter-section h3 {
         margin-bottom: 1.5rem;
@@ -569,38 +682,27 @@
     </div>
 </div>
 
-<!-- NOW: Live Competitions Banner -->
-<div class="live-competitions" id="live-competitions">
+<!-- NOW: Live Competitions Banner (동적 로드) -->
+<div class="live-competitions" id="live-competitions" style="display: none;">
     <div class="container">
         <div class="live-header">
             <span class="live-badge">NOW</span>
             <span class="live-title">{{ i18n.common.live.title|default('Live Competitions') }}</span>
         </div>
         <div class="live-cards" id="live-cards">
-            <!-- 익산 U17/U20 -->
-            <a href="/competition/iksan-u17-u20" class="live-card" id="live-u17">
-                <div class="live-card-icon">🏆</div>
-                <div class="live-card-info">
-                    <h4>{{ i18n.common.live.iksan_international|default('2025 익산 국제 펜싱선수권') }}</h4>
-                    <p>{{ i18n.common.live.u17_u20_events|default('U17 / U20 (남녀 3종목)') }}</p>
-                </div>
-                <div class="live-card-status">
-                    <span class="status status-live">{{ i18n.common.live.status_live|default('LIVE') }}</span>
-                    <div class="date">12.16 - 12.21</div>
-                </div>
-            </a>
-            <!-- 익산 U13/U11/U9 -->
-            <a href="/competition/iksan-u13" class="live-card" id="live-u13">
-                <div class="live-card-icon">⚔️</div>
-                <div class="live-card-info">
-                    <h4>{{ i18n.common.live.iksan_international|default('2025 익산 국제 펜싱선수권') }}</h4>
-                    <p>{{ i18n.common.live.u13_u11_u9_events|default('U13 / U11 / U9 (남녀 3종목)') }}</p>
-                </div>
-                <div class="live-card-status">
-                    <span class="status status-upcoming">{{ i18n.common.live.status_upcoming|default('D-1') }}</span>
-                    <div class="date">12.20 - 12.21</div>
-                </div>
-            </a>
+            <!-- 동적으로 로드됨 -->
+        </div>
+    </div>
+</div>
+
+<!-- Upcoming: 예정 대회 Banner -->
+<div class="upcoming-competitions" id="upcoming-competitions" style="display: none;">
+    <div class="container">
+        <div class="upcoming-header">
+            <span class="upcoming-badge">📅 UPCOMING</span>
+        </div>
+        <div class="upcoming-cards" id="upcoming-cards">
+            <!-- 동적으로 로드됨 -->
         </div>
     </div>
 </div>
@@ -624,9 +726,9 @@
             <div class="filter-group">
                 <label>{{ i18n.common.filters.weapon|default('Weapon') }}</label>
                 <div class="filter-buttons" id="filter-weapons">
-                    <button class="filter-btn weapon-foil" data-filter="weapon" data-value="플러레">{{ i18n.common.weapons.foil|default('Foil') }}</button>
-                    <button class="filter-btn weapon-epee" data-filter="weapon" data-value="에뻬">{{ i18n.common.weapons.epee|default('Epee') }}</button>
-                    <button class="filter-btn weapon-sabre" data-filter="weapon" data-value="사브르">{{ i18n.common.weapons.sabre|default('Sabre') }}</button>
+                    <button class="filter-btn weapon-foil" data-filter="weapon" data-value="foil">{{ i18n.common.weapons.foil|default('Foil') }}</button>
+                    <button class="filter-btn weapon-epee" data-filter="weapon" data-value="epee">{{ i18n.common.weapons.epee|default('Epee') }}</button>
+                    <button class="filter-btn weapon-sabre" data-filter="weapon" data-value="sabre">{{ i18n.common.weapons.sabre|default('Sabre') }}</button>
                 </div>
             </div>
 
@@ -699,6 +801,9 @@
 {% block extra_js %}
 <script>
 // i18n translations from server
+// Current language from server
+const currentLang = '{{ lang }}';
+
 const i18n = {
     age_groups: {
         Y8: '{{ i18n.common.age_groups.Y8|default("Y8 (Elem 1-2)") }}',
@@ -759,9 +864,9 @@ const AGE_GROUP_LABELS = {
 
 // Weapon display mapping (using i18n)
 const WEAPON_DISPLAY = {
-    '플러레': i18n.weapons.foil,
-    '에뻬': i18n.weapons.epee,
-    '사브르': i18n.weapons.sabre
+    'foil': i18n.weapons.foil,
+    'epee': i18n.weapons.epee,
+    'sabre': i18n.weapons.sabre
 };
 
 // Gender display mapping (using i18n)
@@ -916,6 +1021,7 @@ async function loadEvents() {
         const params = new URLSearchParams();
         params.append('page', state.page);
         params.append('per_page', state.perPage);
+        params.append('lang', currentLang);  // Add language parameter
 
         for (const [key, value] of Object.entries(state.filters)) {
             if (value) params.append(key, value);
@@ -963,7 +1069,7 @@ async function loadEvents() {
 // 대회 목록 로드
 async function loadCompetitions() {
     try {
-        const res = await fetch('/api/competitions?per_page=100');
+        const res = await fetch('/api/competitions?per_page=100&lang=' + currentLang);
         const data = await res.json();
 
         const listDiv = document.getElementById('competitions-list');
@@ -1147,55 +1253,128 @@ function goToPlayer(name) {
     location.href = '/player/' + encodeURIComponent(name);
 }
 
-// NOW 배너: 진행 중인 대회 상태 업데이트
-document.addEventListener('DOMContentLoaded', function() {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+// NOW/Upcoming 배너: 동적 데이터 로드
+document.addEventListener('DOMContentLoaded', async function() {
+    try {
+        // API에서 실시간 대회 정보 가져오기 (언어 파라미터 포함)
+        const response = await fetch('/api/competitions/live?lang=' + currentLang);
+        const data = await response.json();
 
-    const competitions = [
-        {
-            id: 'live-u17',
-            start: new Date('2025-12-16'),
-            end: new Date('2025-12-21')
-        },
-        {
-            id: 'live-u13',
-            start: new Date('2025-12-20'),
-            end: new Date('2025-12-21')
+        const liveBanner = document.getElementById('live-competitions');
+        const liveCards = document.getElementById('live-cards');
+        const upcomingBanner = document.getElementById('upcoming-competitions');
+        const upcomingCards = document.getElementById('upcoming-cards');
+
+        // 진행 중인 대회 표시
+        if (data.ongoing && data.ongoing.length > 0) {
+            liveBanner.style.display = 'block';
+            liveCards.innerHTML = data.ongoing.map(comp => `
+                <a href="/competition/${comp.comp_idx || comp.event_cd}" class="live-card">
+                    <div class="live-card-icon">🏆</div>
+                    <div class="live-card-info">
+                        <h4>${comp.name}</h4>
+                        <p>Day ${comp.day_number}/${comp.total_days} ${comp.venue ? '• ' + comp.venue : ''}</p>
+                    </div>
+                    <div class="live-card-status">
+                        <span class="status status-live">LIVE</span>
+                        <div class="date">${formatDateRange(comp.start_date, comp.end_date)}</div>
+                    </div>
+                </a>
+            `).join('');
         }
-    ];
 
-    let visibleCount = 0;
-
-    competitions.forEach(comp => {
-        const card = document.getElementById(comp.id);
-        if (!card) return;
-
-        const statusEl = card.querySelector('.status');
-        const isLive = today >= comp.start && today <= comp.end;
-        const isUpcoming = today < comp.start;
-        const isEnded = today > comp.end;
-
-        if (isEnded) {
-            card.style.display = 'none';
-        } else if (isLive) {
-            statusEl.textContent = 'LIVE';
-            statusEl.className = 'status status-live';
-            visibleCount++;
-        } else if (isUpcoming) {
-            const daysUntil = Math.ceil((comp.start - today) / (1000 * 60 * 60 * 24));
-            statusEl.textContent = daysUntil === 0 ? 'TODAY' : `D-${daysUntil}`;
-            statusEl.className = 'status status-upcoming';
-            visibleCount++;
+        // 예정 대회 표시 (7일 이내)
+        if (data.upcoming && data.upcoming.length > 0) {
+            upcomingBanner.style.display = 'block';
+            upcomingCards.innerHTML = data.upcoming.map(comp => `
+                <a href="/competition/${comp.comp_idx || comp.event_cd}" class="upcoming-card">
+                    <div class="upcoming-card-icon">
+                        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 2L4 6v6c0 5.55 3.84 10.74 8 12 4.16-1.26 8-6.45 8-12V6l-8-4z"/>
+                            <path d="M9 12l2 2 4-4"/>
+                        </svg>
+                    </div>
+                    <div class="upcoming-card-info">
+                        <h4>${comp.name}</h4>
+                        <p>${comp.venue || ''}</p>
+                    </div>
+                    <div class="upcoming-card-status">
+                        <span class="status">D-${comp.days_until}</span>
+                        <div class="date">${formatDateRange(comp.start_date, comp.end_date)}</div>
+                    </div>
+                </a>
+            `).join('');
         }
-    });
 
-    // 모든 대회 종료 시 배너 숨김
-    const banner = document.getElementById('live-competitions');
-    if (visibleCount === 0 && banner) {
-        banner.style.display = 'none';
+        // 예정 대회도 로드 (30일 이내)
+        await loadUpcomingCompetitions();
+
+    } catch (error) {
+        console.error('Failed to load live competitions:', error);
     }
 });
+
+// 30일 이내 예정 대회 로드
+async function loadUpcomingCompetitions() {
+    try {
+        const response = await fetch('/api/competitions/upcoming?days=30&limit=5&lang=' + currentLang);
+        const data = await response.json();
+
+        const upcomingBanner = document.getElementById('upcoming-competitions');
+        const upcomingCards = document.getElementById('upcoming-cards');
+
+        // 이미 live API에서 표시된 대회 제외하고 추가 표시
+        if (data.upcoming && data.upcoming.length > 0) {
+            const existingHtml = upcomingCards.innerHTML;
+            const additionalComps = data.upcoming.filter(comp => comp.days_until > 7);
+
+            if (additionalComps.length > 0 || existingHtml === '') {
+                upcomingBanner.style.display = 'block';
+
+                if (existingHtml === '') {
+                    upcomingCards.innerHTML = data.upcoming.slice(0, 5).map(comp => `
+                        <a href="/competition/${comp.comp_idx || comp.event_cd}" class="upcoming-card">
+                            <div class="upcoming-card-icon">
+                                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                    <rect x="3" y="4" width="18" height="18" rx="2"/>
+                                    <path d="M16 2v4M8 2v4M3 10h18"/>
+                                    <path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/>
+                                </svg>
+                            </div>
+                            <div class="upcoming-card-info">
+                                <h4>${comp.name}</h4>
+                                <p>${comp.venue || ''}</p>
+                            </div>
+                            <div class="upcoming-card-status">
+                                <span class="status">${comp.days_until === 0 ? 'TODAY' : 'D-' + comp.days_until}</span>
+                                <div class="date">${formatDateRange(comp.start_date, comp.end_date)}</div>
+                            </div>
+                        </a>
+                    `).join('');
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Failed to load upcoming competitions:', error);
+    }
+}
+
+// 날짜 범위 포맷팅
+function formatDateRange(startDate, endDate) {
+    if (!startDate) return '';
+    const start = new Date(startDate);
+    const end = endDate ? new Date(endDate) : start;
+
+    const startMonth = start.getMonth() + 1;
+    const startDay = start.getDate();
+    const endMonth = end.getMonth() + 1;
+    const endDay = end.getDate();
+
+    if (startMonth === endMonth && startDay === endDay) {
+        return `${startMonth}.${startDay}`;
+    }
+    return `${startMonth}.${startDay} - ${endMonth}.${endDay}`;
+}
 
 // FencingLab Demo Section
 document.addEventListener('DOMContentLoaded', function() {

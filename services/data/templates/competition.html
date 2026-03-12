@@ -29,6 +29,31 @@
         </div>
     </section>
 
+    <!-- Player Search in Competition with Autocomplete -->
+    <section class="comp-player-search-section">
+        <div class="search-header">
+            <h3>선수 검색</h3>
+            <span class="search-hint">대회 내 모든 종목에서 선수를 검색합니다</span>
+        </div>
+        <div class="search-box">
+            <div class="autocomplete-container" id="comp-autocomplete-container">
+                <input type="text"
+                       id="comp-player-search"
+                       placeholder="선수 이름 또는 소속으로 검색..."
+                       autocomplete="off">
+            </div>
+            <button type="button" id="comp-search-btn">검색</button>
+            <button type="button" id="comp-clear-search-btn" style="display:none">해제</button>
+        </div>
+        <div id="comp-search-result" class="search-result-panel" style="display:none">
+            <div class="result-header">
+                <span class="result-title">검색 결과</span>
+                <span class="result-count"></span>
+            </div>
+            <div class="result-content"></div>
+        </div>
+    </section>
+
     <section class="events-section">
         <h2>이벤트 목록</h2>
         <div class="events-grid">
@@ -57,133 +82,291 @@
         </div>
     </section>
 
-    <section class="results-section">
-        <h2>경기 결과</h2>
-
-        {% for event in competition.events %}
-        {% if event.pool_rounds or event.pool_total_ranking or event.final_rankings %}
-        <div class="event-results" id="results-{{ event.sub_event_cd }}">
-            <h3>{{ event.name }}</h3>
-
-            <!-- 탭 네비게이션 -->
-            <div class="result-tabs">
-                {% if event.pool_rounds %}
-                <button class="tab-btn active" data-tab="pool-{{ event.sub_event_cd }}">Pool</button>
-                {% endif %}
-                {% if event.pool_total_ranking %}
-                <button class="tab-btn" data-tab="pool-ranking-{{ event.sub_event_cd }}">Pool 결과</button>
-                {% endif %}
-                {% if event.final_rankings %}
-                <button class="tab-btn" data-tab="final-{{ event.sub_event_cd }}">최종 순위</button>
-                {% endif %}
-            </div>
-
-            {% if event.pool_rounds %}
-            <div class="tab-content active" id="pool-{{ event.sub_event_cd }}">
-                <div class="pool-results">
-                    {% for pool in event.pool_rounds %}
-                    <div class="pool-table">
-                        <div class="pool-header">
-                            <span class="pool-number">Pool {{ pool.pool_number }}</span>
-                            {% if pool.piste %}<span class="pool-info">삐스트: {{ pool.piste }}</span>{% endif %}
-                            {% if pool.referee %}<span class="pool-info">심판: {{ pool.referee }}</span>{% endif %}
-                        </div>
-                        <table class="result-table">
-                            <thead>
-                                <tr>
-                                    <th>No</th>
-                                    <th>이름</th>
-                                    <th>소속</th>
-                                    <th>승률</th>
-                                    <th>지수</th>
-                                    <th>득점</th>
-                                    <th>순위</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for player in pool.results %}
-                                <tr>
-                                    <td>{{ player.no }}</td>
-                                    <td class="player-name"><a href="/player/{{ player.name|urlencode }}">{{ player.name }}</a></td>
-                                    <td>{{ player.team }}</td>
-                                    <td>{{ player.win_rate }}</td>
-                                    <td>{{ player.index }}</td>
-                                    <td>{{ player.score }}</td>
-                                    <td class="rank">{{ player.rank }}</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                    {% endfor %}
-                </div>
-            </div>
-            {% endif %}
-
-            {% if event.pool_total_ranking %}
-            <div class="tab-content" id="pool-ranking-{{ event.sub_event_cd }}">
-                <div class="pool-total-ranking">
-                    <table class="result-table">
-                        <thead>
-                            <tr>
-                                <th>순위</th>
-                                <th>이름</th>
-                                <th>소속</th>
-                                <th>상태</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for ranking in event.pool_total_ranking %}
-                            <tr class="{{ 'qualified' if ranking.status == '진출' else 'eliminated' }}">
-                                <td class="rank">{{ ranking.rank }}</td>
-                                <td class="player-name"><a href="/player/{{ ranking.name|urlencode }}">{{ ranking.name }}</a></td>
-                                <td>{{ ranking.team }}</td>
-                                <td>
-                                    {% if ranking.status == '진출' %}
-                                    <span class="status-badge status-qualified">✓ 진출</span>
-                                    {% else %}
-                                    <span class="status-badge status-eliminated">탈락</span>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-            {% endif %}
-
-            {% if event.final_rankings %}
-            <div class="tab-content" id="final-{{ event.sub_event_cd }}">
-                <div class="final-rankings">
-                    <table class="result-table">
-                        <thead>
-                            <tr>
-                                <th>순위</th>
-                                <th>이름</th>
-                                <th>소속</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for ranking in event.final_rankings %}
-                            <tr>
-                                <td class="rank">{{ ranking.rank }}</td>
-                                <td class="player-name"><a href="/player/{{ ranking.name|urlencode }}">{{ ranking.name }}</a></td>
-                                <td>{{ ranking.team }}</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-            {% endif %}
-        </div>
-        {% endif %}
-        {% endfor %}
-    </section>
 </div>
 
+<link rel="stylesheet" href="/static/css/player-search.css">
 <style>
+/* =====================================================
+   COMPETITION PLAYER SEARCH - Dark Mode Compatible
+   ===================================================== */
+.comp-player-search-section {
+    margin: 1.5rem 0;
+    padding: 1.5rem;
+    background: var(--bg-card, rgba(18, 18, 26, 0.85));
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-radius: 14px;
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+}
+
+.comp-player-search-section .search-header {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+}
+
+.comp-player-search-section .search-header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text-primary, #fff);
+}
+
+.comp-player-search-section .search-hint {
+    font-size: 0.85rem;
+    color: var(--text-muted, #6b6b7b);
+}
+
+.comp-player-search-section .search-box {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.comp-player-search-section .search-box input {
+    flex: 1;
+    min-width: 300px;
+    max-width: 100%;
+    padding: 14px 18px;
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+    border-radius: 10px;
+    font-size: 1rem;
+    background: var(--bg-secondary, rgba(26, 26, 37, 0.9));
+    color: var(--text-primary, #fff);
+    font-family: inherit;
+    transition: all 0.3s ease;
+}
+
+.comp-player-search-section .search-box input::placeholder {
+    color: var(--text-muted, #6b6b7b);
+}
+
+.comp-player-search-section .search-box input:focus {
+    outline: none;
+    border-color: var(--accent-primary, #c9302c);
+    box-shadow: 0 0 0 3px rgba(201, 48, 44, 0.15);
+}
+
+/* Autocomplete dropdown z-index fix - MUST be above all tables and other content */
+.comp-player-search-section {
+    position: relative;
+    z-index: 1000;
+}
+
+.comp-player-search-section .autocomplete-container {
+    position: relative;
+    z-index: 10000;
+}
+
+.comp-player-search-section .autocomplete-dropdown {
+    position: absolute;
+    z-index: 99999 !important;
+}
+
+.comp-player-search-section .search-box button {
+    padding: 12px 20px;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.9rem;
+    transition: all 0.3s ease;
+}
+
+#comp-search-btn {
+    background: linear-gradient(135deg, var(--accent-primary, #c9302c), #a02320);
+    color: white;
+    box-shadow: 0 4px 15px rgba(201, 48, 44, 0.3);
+}
+
+#comp-search-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(201, 48, 44, 0.4);
+}
+
+#comp-clear-search-btn {
+    background: rgba(239, 68, 68, 0.15);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+#comp-clear-search-btn:hover {
+    background: rgba(239, 68, 68, 0.25);
+}
+
+/* Search Result Panel */
+.comp-player-search-section .search-result-panel {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: var(--bg-tertiary, rgba(26, 26, 37, 0.9));
+    border-radius: 10px;
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+}
+
+.comp-player-search-section .result-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+}
+
+.comp-player-search-section .result-title {
+    font-weight: 600;
+    color: var(--text-primary, #fff);
+}
+
+.comp-player-search-section .result-count {
+    font-size: 0.85rem;
+    color: var(--accent-gold, #d4a574);
+    font-weight: 600;
+}
+
+.comp-player-search-section .result-content {
+    max-height: 400px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+/* Player Result Card */
+.comp-result-card {
+    background: var(--bg-card, rgba(18, 18, 26, 0.85));
+    padding: 14px;
+    border-radius: 10px;
+    margin-bottom: 10px;
+    border-left: 4px solid var(--accent-primary, #c9302c);
+    border-top: 1px solid var(--border-color, rgba(255, 255, 255, 0.05));
+    border-right: 1px solid var(--border-color, rgba(255, 255, 255, 0.05));
+    border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.05));
+    transition: all 0.2s ease;
+}
+
+.comp-result-card:hover {
+    border-left-color: var(--accent-gold, #d4a574);
+    transform: translateX(4px);
+}
+
+.comp-result-card .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.comp-result-card .player-info .name {
+    font-weight: 700;
+    font-size: 1.05rem;
+    color: var(--text-primary, #fff);
+}
+
+.comp-result-card .player-info .team {
+    color: var(--text-muted, #6b6b7b);
+    font-size: 0.85rem;
+    margin-top: 2px;
+}
+
+/* Clickable card style */
+.comp-result-card.clickable-card {
+    cursor: pointer;
+    transition: all 0.25s ease;
+}
+
+.comp-result-card.clickable-card:hover {
+    border-left-color: var(--accent-gold, #d4a574);
+    transform: translateX(6px);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.comp-result-card .event-badge {
+    display: inline-block;
+    padding: 6px 12px;
+    background: linear-gradient(135deg, rgba(30, 58, 138, 0.3), rgba(30, 58, 138, 0.2));
+    color: #60a5fa;
+    border: 1px solid rgba(30, 58, 138, 0.4);
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.comp-result-card .info-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+}
+
+.comp-result-card .info-item {
+    background: var(--bg-secondary, rgba(26, 26, 37, 0.9));
+    padding: 8px;
+    border-radius: 6px;
+    text-align: center;
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.05));
+}
+
+.comp-result-card .info-label {
+    font-size: 0.65rem;
+    color: var(--text-muted, #6b6b7b);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 3px;
+}
+
+.comp-result-card .info-value {
+    font-weight: 700;
+    color: var(--text-primary, #fff);
+    font-size: 0.85rem;
+}
+
+
+/* Responsive */
+@media (max-width: 768px) {
+    .comp-result-card .info-grid {
+        grid-template-columns: 1fr;
+        gap: 6px;
+    }
+
+    .comp-result-card .info-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 12px;
+        text-align: left;
+    }
+
+    .comp-result-card .info-label {
+        margin-bottom: 0;
+        font-size: 0.75rem;
+        min-width: 60px;
+    }
+
+    .comp-result-card .info-value {
+        font-size: 0.85rem;
+        text-align: right;
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .comp-player-search-section .search-box {
+        flex-direction: column;
+    }
+
+    .comp-player-search-section .search-box input {
+        width: 100%;
+        min-width: unset;
+    }
+
+    .comp-player-search-section .search-box button {
+        width: 100%;
+    }
+}
+
 /* 탭 스타일 */
 .result-tabs {
     display: flex;
@@ -268,7 +451,14 @@ tr.eliminated:hover {
 }
 </style>
 
+<script src="/static/js/player-search.js"></script>
 <script>
+// Competition Event Code
+const EVENT_CD = "{{ competition.competition.event_cd }}";
+
+// Initialize autocomplete for competition-wide player search
+let compPlayerSearch = null;
+
 document.addEventListener('DOMContentLoaded', function() {
     // 탭 클릭 이벤트
     document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -296,6 +486,157 @@ document.addEventListener('DOMContentLoaded', function() {
             firstContent.classList.add('active');
         }
     });
+
+    // ==========================================
+    // Competition Player Search with Autocomplete
+    // ==========================================
+
+    // Initialize autocomplete
+    compPlayerSearch = new PlayerSearch({
+        inputElement: document.getElementById('comp-player-search'),
+        dropdownContainer: document.getElementById('comp-autocomplete-container'),
+        eventCd: EVENT_CD,
+        onSelect: (suggestion, method) => {
+            // When player is selected from dropdown, navigate directly to event page with highlight
+            if (suggestion.name && suggestion.sub_event_cd) {
+                navigateToEventWithPlayer(suggestion.sub_event_cd, suggestion.name);
+            } else if (suggestion.name) {
+                // Fallback: search to find sub_event_cd if not provided
+                searchCompPlayer();
+            }
+        }
+    });
+
+    document.getElementById('comp-search-btn').addEventListener('click', searchCompPlayer);
+    document.getElementById('comp-player-search').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') searchCompPlayer();
+    });
+    document.getElementById('comp-clear-search-btn').addEventListener('click', clearCompSearch);
 });
+
+async function searchCompPlayer() {
+    const query = document.getElementById('comp-player-search').value.trim();
+    if (!query) return;
+
+    const resultPanel = document.getElementById('comp-search-result');
+    const resultContent = resultPanel.querySelector('.result-content');
+    const resultCount = resultPanel.querySelector('.result-count');
+
+    // Show loading state
+    resultContent.innerHTML = '<p style="text-align:center;color:var(--text-muted, #6b6b7b);padding:1rem;">검색 중...</p>';
+    resultPanel.style.display = 'block';
+
+    try {
+        const response = await fetch(`/api/competition/${EVENT_CD}/players/search?q=${encodeURIComponent(query)}`);
+        if (!response.ok) throw new Error('검색 실패');
+
+        const data = await response.json();
+
+        if (data.results.length === 0) {
+            resultContent.innerHTML = '<p style="text-align:center;color:var(--text-muted, #6b6b7b);padding:1rem;">검색 결과가 없습니다</p>';
+            resultCount.textContent = '0건';
+        } else {
+            resultCount.textContent = `${data.results.length}건`;
+            resultContent.innerHTML = data.results.map(r => {
+                const p = r.player;
+
+                // Pool 정보
+                let poolDisplay = '-';
+                if (p.pool_number) {
+                    poolDisplay = `Pool ${p.pool_number}`;
+                    if (p.pool_rank && typeof p.pool_rank === 'number' && p.pool_rank > 0) {
+                        poolDisplay += ` (${p.pool_rank}위)`;
+                    }
+                }
+
+                // DE 매치 (상세 정보) - 라운드 순서대로 정렬 (128강→64강→32강...)
+                let deDisplay = '-';
+                if (p.de_matches && p.de_matches.length > 0) {
+                    // 라운드 번호 추출 후 큰 순서대로 정렬 (128강 → 64강 → 32강...)
+                    const sortedMatches = [...p.de_matches].sort((a, b) => {
+                        const getRoundNum = (r) => {
+                            const match = r.round.match(/(\d+)/);
+                            return match ? parseInt(match[1]) : 0;
+                        };
+                        return getRoundNum(b) - getRoundNum(a);
+                    });
+                    deDisplay = sortedMatches.map(m => {
+                        if (m.result === 'bye') {
+                            return `${m.round}(Seed)`;
+                        } else if (m.result === 'win') {
+                            const score = m.score ? ` ${m.score}` : '';
+                            return `${m.round}(V ${m.opponent}${score})`;
+                        } else if (m.result === 'lose') {
+                            const score = m.score ? ` ${m.score}` : '';
+                            return `${m.round}(L ${m.opponent}${score})`;
+                        } else {
+                            return `${m.round}(vs ${m.opponent || '대기'})`;
+                        }
+                    }).join(' → ');
+                } else if (p.de_rounds && p.de_rounds.length > 0) {
+                    // fallback for old format
+                    deDisplay = p.de_rounds.join(', ');
+                }
+
+                // 최종 순위
+                let finalDisplay = '-';
+                if (p.final_rank && typeof p.final_rank === 'number' && p.final_rank > 0) {
+                    finalDisplay = `${p.final_rank}위`;
+                }
+
+                return `
+                    <div class="comp-result-card clickable-card" onclick="navigateToEventWithPlayer('${r.sub_event_cd}', '${p.name.replace(/'/g, "\\'")}')">
+                        <div class="card-header">
+                            <div class="player-info">
+                                <div class="name">${p.name}</div>
+                                <div class="team">${p.team || '-'}</div>
+                            </div>
+                            <span class="event-badge">${r.event_name}</span>
+                        </div>
+                        <div class="info-grid">
+                            <div class="info-item">
+                                <div class="info-label">종목</div>
+                                <div class="info-value" style="font-size: 0.75rem;">${r.event_name}</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">Pool</div>
+                                <div class="info-value">${poolDisplay}</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">DE</div>
+                                <div class="info-value" style="font-size: 0.75rem;">${deDisplay}</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">최종순위</div>
+                                <div class="info-value">${finalDisplay}</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        document.getElementById('comp-clear-search-btn').style.display = 'inline-block';
+
+    } catch (error) {
+        console.error('Search error:', error);
+        resultContent.innerHTML = '<p style="text-align:center;color:#f87171;padding:1rem;">검색 중 오류가 발생했습니다</p>';
+    }
+}
+
+function clearCompSearch() {
+    document.getElementById('comp-player-search').value = '';
+    document.getElementById('comp-search-result').style.display = 'none';
+    document.getElementById('comp-clear-search-btn').style.display = 'none';
+    if (compPlayerSearch) {
+        compPlayerSearch.clear();
+    }
+}
+
+// Navigate to event result page with player name in URL for auto-highlight
+function navigateToEventWithPlayer(subEventCd, playerName) {
+    const url = `/competition/${EVENT_CD}?event=${subEventCd}&highlight=${encodeURIComponent(playerName)}`;
+    window.location.href = url;
+}
 </script>
 {% endblock %}

@@ -367,9 +367,9 @@
     let debounceTimer = null;
 
     function getWeaponClass(weapon) {
-        if (weapon === '플러레') return 'foil';
-        if (weapon === '에뻬') return 'epee';
-        if (weapon === '사브르') return 'sabre';
+        if (weapon === 'foil') return 'foil';
+        if (weapon === 'epee') return 'epee';
+        if (weapon === 'sabre') return 'sabre';
         return '';
     }
 
@@ -415,6 +415,10 @@
                 `<span class="weapon ${getWeaponClass(w)}">${w}</span>`
             ).join('');
 
+            const teamDisplay = r.blurred
+                ? '<span class="blurred-text">소속 정보</span>'
+                : (r.current_team || r.teams?.join(', ') || '-');
+
             html += `
                 <div class="autocomplete-item ${isHomonym ? 'homonym' : ''}"
                      data-index="${index}"
@@ -424,7 +428,7 @@
                         ${nameEn}
                         ${homonymBadge}
                     </div>
-                    <div class="autocomplete-team">${r.current_team || r.teams?.join(', ') || '-'}</div>
+                    <div class="autocomplete-team">${teamDisplay}</div>
                     <div class="autocomplete-meta">
                         ${weapons}
                         <span>${r.record_count}회 출전</span>
@@ -538,6 +542,12 @@
                     `;
                 }
 
+                const cardTeamDisplay = r.blurred
+                    ? '<span class="blurred-text">소속 정보</span>'
+                    : (r.current_team || r.teams?.join(', ') || '-');
+
+                const cardTeamHistory = r.blurred ? '' : teamHistoryHtml;
+
                 html += `
                     <div class="player-card ${hasDisambiguation ? 'has-disambiguation' : ''}" onclick="window.location='${playerUrl}'">
                         <div class="player-card-header">
@@ -547,7 +557,7 @@
                                     ${nameEn}
                                     ${disambiguationBadge}
                                 </div>
-                                <div class="player-team">${r.current_team || r.teams?.join(', ') || '-'}</div>
+                                <div class="player-team">${cardTeamDisplay}</div>
                             </div>
                             <div class="player-stats">
                                 <div class="stat-item">
@@ -559,10 +569,21 @@
                         <div class="player-meta">
                             ${weaponTags}
                         </div>
-                        ${teamHistoryHtml}
+                        ${cardTeamHistory}
                     </div>
                 `;
             });
+
+            // Guest: 더 많은 결과가 있으면 로그인 유도 배너
+            if (data.requires_login && data.has_more) {
+                html += `
+                    <div class="search-login-gate">
+                        <p>총 <strong>${data.total}명</strong>의 선수 중 ${data.results.length}명만 표시됩니다</p>
+                        <p>로그인하면 전체 검색 결과를 볼 수 있습니다</p>
+                        <a href="/auth/login" class="gate-cta-btn">로그인 / 회원가입</a>
+                    </div>
+                `;
+            }
 
             resultsDiv.innerHTML = html;
         } catch (error) {

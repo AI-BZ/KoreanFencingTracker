@@ -477,9 +477,9 @@
             <div class="filter-group">
                 <label>{{ i18n.common.filters.weapon|default('Weapon') }}</label>
                 <select id="weapon-select">
-                    <option value="플러레">{{ i18n.common.weapons.foil|default('Foil') }}</option>
-                    <option value="에뻬">{{ i18n.common.weapons.epee|default('Epee') }}</option>
-                    <option value="사브르">{{ i18n.common.weapons.sabre|default('Sabre') }}</option>
+                    <option value="foil">{{ i18n.common.weapons.foil|default('Foil') }}</option>
+                    <option value="epee">{{ i18n.common.weapons.epee|default('Epee') }}</option>
+                    <option value="sabre">{{ i18n.common.weapons.sabre|default('Sabre') }}</option>
                 </select>
             </div>
             <div class="filter-group">
@@ -566,9 +566,9 @@ document.addEventListener('DOMContentLoaded', function() {
             female: {{ (i18n.common.gender.female or "Women's")|tojson }}
         },
         weapons: {
-            '플러레': '{{ i18n.common.weapons.foil|default("Foil")|safe }}',
-            '에뻬': '{{ i18n.common.weapons.epee|default("Epee")|safe }}',
-            '사브르': '{{ i18n.common.weapons.sabre|default("Sabre")|safe }}'
+            'foil': '{{ i18n.common.weapons.foil|default("Foil")|safe }}',
+            'epee': '{{ i18n.common.weapons.epee|default("Epee")|safe }}',
+            'sabre': '{{ i18n.common.weapons.sabre|default("Sabre")|safe }}'
         }
     };
 

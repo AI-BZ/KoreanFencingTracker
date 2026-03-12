@@ -39,6 +39,14 @@
         </div>
     </div>
 
+    <!-- In Progress Notice -->
+    {% if bracket.is_in_progress %}
+    <div class="bracket-notice in-progress">
+        <span class="notice-icon">&#9888;</span>
+        <span class="notice-text">현재 대회가 진행 중입니다. 표시된 경기 결과만 확정된 데이터이며, 나머지 라운드는 경기 완료 후 업데이트됩니다.</span>
+    </div>
+    {% endif %}
+
     <!-- Seeding Section (Collapsible) -->
     {% if bracket.seeding %}
     <details class="bracket-seeding">
@@ -51,8 +59,8 @@
             {% for player in bracket.seeding %}
             <div class="seeding-item">
                 <span class="seeding-rank">{{ player.seed }}</span>
-                <a href="/player/{{ player.name|urlencode }}?team={{ player.team|urlencode }}" class="seeding-name">{{ player.name }}</a>
-                <span class="seeding-team">{{ player.team }}</span>
+                <a href="/player/{{ player.name|urlencode }}?team={{ player.team|urlencode }}" class="seeding-name player-link">{{ player.name }}</a>
+                <span class="seeding-team"><a href="/search?q={{ player.team|urlencode }}" class="team-link">{{ player.team }}</a></span>
             </div>
             {% endfor %}
         </div>
@@ -62,11 +70,11 @@
     <!-- Tree View (Desktop-optimized) -->
     <div class="bracket-view bracket-tree-view active" id="bracket-tree-view">
         {% if bracket.rounds %}
-        {# Calculate total matches to determine size class #}
+        {# Calculate total matches to determine size class (excluding byes) #}
         {% set total_matches = namespace(count=0) %}
         {% for round_name in bracket.rounds %}
             {% set matches = bracket.bouts_by_round.get(round_name, []) if bracket.bouts_by_round else [] %}
-            {% set total_matches.count = total_matches.count + matches|length %}
+            {% set total_matches.count = total_matches.count + matches|rejectattr('is_bye')|list|length %}
         {% endfor %}
         {# Size classes: compact (64+), small (32-63), normal (<32) #}
         {% set size_class = 'bracket-compact' if total_matches.count >= 64 else ('bracket-small' if total_matches.count >= 32 else '') %}
@@ -76,16 +84,22 @@
             <div class="bracket-round" data-round="{{ round_name }}" role="group" aria-label="{{ round_name }}">
                 <div class="round-header">
                     <span class="round-name">{{ round_name }}</span>
+                    {% if round_name == bracket.starting_round %}
                     <span class="round-count">{{ matches|length }}경기</span>
+                    {% else %}
+                    <span class="round-count">{{ matches|rejectattr('is_bye')|list|length }}경기</span>
+                    {% endif %}
                 </div>
                 <div class="round-matches">
                     {% for match in matches %}
-                    <div class="bracket-match"
+                    {# 부전승(bye) 경기는 시작 라운드에서만 표시 #}
+                    {% if not match.is_bye or round_name == bracket.starting_round %}
+                    <div class="bracket-match {% if match.is_bye %}bye-match{% endif %}"
                          data-match-id="{{ match.bout_id }}"
                          role="treeitem"
                          aria-label="Match {{ match.match_number }}: {{ match.player1_name }} vs {{ match.player2_name }}">
                         <!-- Player 1 -->
-                        <div class="match-player {% if match.winner_name and match.winner_name == match.player1_name %}winner{% elif match.winner_seed and match.winner_seed|string == match.player1_seed|string %}winner{% endif %} {% if not match.player1_name or match.player1_name == 'None' %}bye{% endif %}">
+                        <div class="match-player {% if match.winner_name and match.winner_name == match.player1_name %}winner{% elif match.winner_seed and match.winner_seed|string == match.player1_seed|string %}winner{% endif %} {% if not match.player1_name or match.player1_name == 'None' %}bye{% endif %} {% if match.is_forfeit and match.forfeit_player == match.player1_name %}forfeit{% endif %}">
                             <span class="player-seed">[{{ match.player1_seed }}]</span>
                             {% if match.player1_name and match.player1_name != 'None' %}
                             <div class="player-info-tree">
@@ -100,10 +114,14 @@
                             {% else %}
                             <span class="player-name bye-text">Seed</span>
                             {% endif %}
+                            {% if match.is_forfeit and match.forfeit_player == match.player1_name %}
+                            <span class="player-score forfeit-score">기권</span>
+                            {% else %}
                             <span class="player-score">{{ match.player1_score if match.player1_score is not none else '-' }}</span>
+                            {% endif %}
                         </div>
                         <!-- Player 2 -->
-                        <div class="match-player {% if match.winner_name and match.winner_name == match.player2_name %}winner{% elif match.winner_seed and match.winner_seed|string == match.player2_seed|string %}winner{% endif %} {% if not match.player2_name or match.player2_name == 'None' %}bye{% endif %}">
+                        <div class="match-player {% if match.winner_name and match.winner_name == match.player2_name %}winner{% elif match.winner_seed and match.winner_seed|string == match.player2_seed|string %}winner{% endif %} {% if not match.player2_name or match.player2_name == 'None' %}bye{% endif %} {% if match.is_forfeit and match.forfeit_player == match.player2_name %}forfeit{% endif %}">
                             <span class="player-seed">[{{ match.player2_seed }}]</span>
                             {% if match.player2_name and match.player2_name != 'None' %}
                             <div class="player-info-tree">
@@ -118,19 +136,25 @@
                             {% else %}
                             <span class="player-name bye-text">Seed</span>
                             {% endif %}
+                            {% if match.is_forfeit and match.forfeit_player == match.player2_name %}
+                            <span class="player-score forfeit-score">기권</span>
+                            {% else %}
                             <span class="player-score">{{ match.player2_score if match.player2_score is not none else '-' }}</span>
+                            {% endif %}
                         </div>
                         <!-- Connector Lines -->
                         <div class="match-connector"></div>
                     </div>
+                    {% endif %}
                     {% endfor %}
                 </div>
             </div>
             {% endfor %}
 
-            <!-- Champion Display -->
-            {% if bracket.rounds and bracket.bouts_by_round.get(bracket.rounds[-1]) %}
+            <!-- Champion Display (Second DE only, not First DE) -->
+            {% if bracket_phase != "first_de" and bracket.rounds and bracket.bouts_by_round.get(bracket.rounds[-1]) %}
             {% set final_match = bracket.bouts_by_round[bracket.rounds[-1]][0] %}
+            {% if final_match.winner_name and final_match.winner_name != 'None' %}
             <div class="bracket-champion">
                 <div class="champion-header">
                     <span class="champion-icon">&#127942;</span>
@@ -143,6 +167,7 @@
                     </a>
                 </div>
             </div>
+            {% endif %}
             {% endif %}
         </div>
         {% else %}
@@ -175,14 +200,22 @@
              role="tabpanel">
             <div class="round-title-mobile">
                 <span class="round-icon">&#9876;</span>
+                {% if round_name == bracket.starting_round %}
                 {{ round_name }} <span class="match-count">({{ matches|length }}경기)</span>
+                {% else %}
+                {{ round_name }} <span class="match-count">({{ matches|rejectattr('is_bye')|list|length }}경기)</span>
+                {% endif %}
             </div>
             <div class="match-cards">
                 {% for match in matches %}
-                <article class="match-card" data-match-id="{{ match.bout_id }}">
+                {# 부전승(bye) 경기는 시작 라운드에서만 표시 #}
+                {% if not match.is_bye or round_name == bracket.starting_round %}
+                <article class="match-card {% if match.is_bye %}bye-match{% endif %}" data-match-id="{{ match.bout_id }}">
                     <div class="match-header">
                         <span class="match-number">Match {{ match.match_number }}</span>
-                        {% if match.winner_name %}
+                        {% if match.is_forfeit %}
+                        <span class="match-status forfeit">기권</span>
+                        {% elif match.winner_name %}
                         <span class="match-status complete">완료</span>
                         {% else %}
                         <span class="match-status pending">예정</span>
@@ -190,7 +223,7 @@
                     </div>
                     <div class="match-content">
                         <!-- Player 1 -->
-                        <div class="card-player {% if match.winner_seed == match.player1_seed %}winner{% endif %} {% if not match.player1_name or match.player1_name == 'None' %}bye{% endif %}">
+                        <div class="card-player {% if match.winner_seed == match.player1_seed %}winner{% endif %} {% if not match.player1_name or match.player1_name == 'None' %}bye{% endif %} {% if match.is_forfeit and match.forfeit_player == match.player1_name %}forfeit{% endif %}">
                             <div class="player-info">
                                 <span class="player-seed-badge">{{ match.player1_seed }}</span>
                                 <div class="player-details">
@@ -204,15 +237,19 @@
                                     {% endif %}
                                 </div>
                             </div>
+                            {% if match.is_forfeit and match.forfeit_player == match.player1_name %}
+                            <span class="player-score-badge forfeit-badge">기권</span>
+                            {% else %}
                             <span class="player-score-badge {% if match.winner_seed == match.player1_seed %}winning{% endif %}">
                                 {{ match.player1_score if match.player1_score is not none else '-' }}
                             </span>
+                            {% endif %}
                         </div>
 
                         <div class="match-vs">VS</div>
 
                         <!-- Player 2 -->
-                        <div class="card-player {% if match.winner_seed == match.player2_seed %}winner{% endif %} {% if not match.player2_name or match.player2_name == 'None' %}bye{% endif %}">
+                        <div class="card-player {% if match.winner_seed == match.player2_seed %}winner{% endif %} {% if not match.player2_name or match.player2_name == 'None' %}bye{% endif %} {% if match.is_forfeit and match.forfeit_player == match.player2_name %}forfeit{% endif %}">
                             <div class="player-info">
                                 <span class="player-seed-badge">{{ match.player2_seed }}</span>
                                 <div class="player-details">
@@ -226,9 +263,13 @@
                                     {% endif %}
                                 </div>
                             </div>
+                            {% if match.is_forfeit and match.forfeit_player == match.player2_name %}
+                            <span class="player-score-badge forfeit-badge">기권</span>
+                            {% else %}
                             <span class="player-score-badge {% if match.winner_seed == match.player2_seed %}winning{% endif %}">
                                 {{ match.player2_score if match.player2_score is not none else '-' }}
                             </span>
+                            {% endif %}
                         </div>
                     </div>
                     {% if match.winner_name %}
@@ -240,6 +281,7 @@
                     </div>
                     {% endif %}
                 </article>
+                {% endif %}
                 {% endfor %}
             </div>
         </div>
@@ -252,10 +294,147 @@
     </div>
 </div>
 
+<style>
+/* Quarterfinal Group Colors - 8 distinct colors for visual grouping */
+.qf-group-1 { border-left: 4px solid #ef4444 !important; background: linear-gradient(90deg, rgba(239, 68, 68, 0.08) 0%, transparent 30%) !important; }
+.qf-group-2 { border-left: 4px solid #f97316 !important; background: linear-gradient(90deg, rgba(249, 115, 22, 0.08) 0%, transparent 30%) !important; }
+.qf-group-3 { border-left: 4px solid #eab308 !important; background: linear-gradient(90deg, rgba(234, 179, 8, 0.08) 0%, transparent 30%) !important; }
+.qf-group-4 { border-left: 4px solid #22c55e !important; background: linear-gradient(90deg, rgba(34, 197, 94, 0.08) 0%, transparent 30%) !important; }
+.qf-group-5 { border-left: 4px solid #14b8a6 !important; background: linear-gradient(90deg, rgba(20, 184, 166, 0.08) 0%, transparent 30%) !important; }
+.qf-group-6 { border-left: 4px solid #3b82f6 !important; background: linear-gradient(90deg, rgba(59, 130, 246, 0.08) 0%, transparent 30%) !important; }
+.qf-group-7 { border-left: 4px solid #8b5cf6 !important; background: linear-gradient(90deg, rgba(139, 92, 246, 0.08) 0%, transparent 30%) !important; }
+.qf-group-8 { border-left: 4px solid #ec4899 !important; background: linear-gradient(90deg, rgba(236, 72, 153, 0.08) 0%, transparent 30%) !important; }
+
+/* Group legend */
+.qf-group-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding: 10px 12px;
+    background: var(--bg-secondary, rgba(26, 26, 37, 0.9));
+    border-radius: 8px;
+    font-size: 0.75rem;
+}
+.qf-group-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--text-muted, #6b6b7b);
+}
+.qf-group-legend-color {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+}
+.qf-group-legend-color.g1 { background: #ef4444; }
+.qf-group-legend-color.g2 { background: #f97316; }
+.qf-group-legend-color.g3 { background: #eab308; }
+.qf-group-legend-color.g4 { background: #22c55e; }
+.qf-group-legend-color.g5 { background: #14b8a6; }
+.qf-group-legend-color.g6 { background: #3b82f6; }
+.qf-group-legend-color.g7 { background: #8b5cf6; }
+.qf-group-legend-color.g8 { background: #ec4899; }
+
+/* Match card group colors (list view) */
+.match-card.qf-group-1 { border-left: 4px solid #ef4444 !important; }
+.match-card.qf-group-2 { border-left: 4px solid #f97316 !important; }
+.match-card.qf-group-3 { border-left: 4px solid #eab308 !important; }
+.match-card.qf-group-4 { border-left: 4px solid #22c55e !important; }
+.match-card.qf-group-5 { border-left: 4px solid #14b8a6 !important; }
+.match-card.qf-group-6 { border-left: 4px solid #3b82f6 !important; }
+.match-card.qf-group-7 { border-left: 4px solid #8b5cf6 !important; }
+.match-card.qf-group-8 { border-left: 4px solid #ec4899 !important; }
+
+/* Forfeit styles (기권) */
+.match-player.forfeit {
+    opacity: 0.7;
+    text-decoration: line-through;
+    text-decoration-color: #ef4444;
+}
+.match-player.forfeit .player-name {
+    text-decoration: line-through;
+    text-decoration-color: #ef4444;
+}
+.forfeit-score, .forfeit-badge {
+    background: #7f1d1d !important;
+    color: #fca5a5 !important;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+.card-player.forfeit {
+    opacity: 0.7;
+}
+.card-player.forfeit .player-name {
+    text-decoration: line-through;
+    text-decoration-color: #ef4444;
+}
+.match-status.forfeit {
+    background: #7f1d1d;
+    color: #fca5a5;
+}
+</style>
+
 <script>
 (function() {
     const container = document.getElementById('bracket-container');
     if (!container) return;
+
+    // Apply Quarterfinal Group Colors
+    function applyQFGroupColors() {
+        const bracketTree = container.querySelector('.bracket-tree');
+        if (!bracketTree) return;
+
+        const rounds = bracketTree.querySelectorAll('.bracket-round');
+        if (rounds.length === 0) return;
+
+        // For each round, calculate how many matches per QF group
+        rounds.forEach((round, roundIndex) => {
+            const matches = round.querySelectorAll('.bracket-match');
+            const matchCount = matches.length;
+
+            if (matchCount === 0) return;
+
+            // Skip if less than 8 total matches in bracket (no need for grouping)
+            // Calculate matches per group for this round
+            // Example: 64 matches → 8 matches per group, 32 → 4 per group, 16 → 2 per group, 8 → 1 per group
+            const matchesPerGroup = Math.max(1, Math.ceil(matchCount / 8));
+
+            matches.forEach((match, matchIndex) => {
+                // Calculate which QF group (1-8) this match belongs to
+                const groupIndex = Math.floor(matchIndex / matchesPerGroup) + 1;
+                // Clamp to 1-8
+                const group = Math.min(8, Math.max(1, groupIndex));
+                match.classList.add(`qf-group-${group}`);
+            });
+        });
+
+        // Also apply to list view match cards
+        const listView = container.querySelector('.bracket-list-view');
+        if (listView) {
+            const roundPanels = listView.querySelectorAll('.round-panel');
+            roundPanels.forEach(panel => {
+                const cards = panel.querySelectorAll('.match-card');
+                const cardCount = cards.length;
+
+                if (cardCount === 0) return;
+
+                const cardsPerGroup = Math.max(1, Math.ceil(cardCount / 8));
+
+                cards.forEach((card, cardIndex) => {
+                    const groupIndex = Math.floor(cardIndex / cardsPerGroup) + 1;
+                    const group = Math.min(8, Math.max(1, groupIndex));
+                    card.classList.add(`qf-group-${group}`);
+                });
+            });
+        }
+
+    }
+
+    // Apply QF group colors on load
+    applyQFGroupColors();
 
     // View Toggle
     const viewBtns = container.querySelectorAll('.view-btn');

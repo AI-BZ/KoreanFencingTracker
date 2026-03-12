@@ -260,9 +260,9 @@
     <div class="filter-bar">
         <select class="filter-select" id="filter-weapon">
             <option value="">전체 무기</option>
-            <option value="플러레">플러레</option>
-            <option value="에뻬">에뻬</option>
-            <option value="사브르">사브르</option>
+            <option value="foil">플뢰레</option>
+            <option value="epee">에페</option>
+            <option value="sabre">사브르</option>
         </select>
         <select class="filter-select" id="filter-year">
             <option value="">전체 연도</option>
@@ -336,7 +336,7 @@ function renderPlayerData() {
     const weaponStats = document.getElementById('weapon-stats');
     const weapons = playerData.stats.by_weapon;
     weaponStats.innerHTML = Object.entries(weapons).map(([weapon, count]) => {
-        const cls = weapon === '플러레' ? 'foil' : weapon === '에뻬' ? 'epee' : 'sabre';
+        const cls = weapon === 'foil' ? 'foil' : weapon === 'epee' ? 'epee' : 'sabre';
         return `
             <div class="weapon-bar ${cls}">
                 <div class="weapon-count">${count}</div>

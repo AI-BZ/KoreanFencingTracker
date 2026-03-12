@@ -19,8 +19,8 @@
     {% endif %}
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 
-    <link rel="stylesheet" href="/static/css/dark-theme.css?v=20250110">
-    <link rel="stylesheet" href="/static/css/components.css?v=20250110">
+    <link rel="stylesheet" href="/static/css/dark-theme.css?v=20250113">
+    <link rel="stylesheet" href="/static/css/components.css?v=20250113">
     {% block extra_css %}{% endblock %}
 </head>
 <body>
@@ -32,11 +32,12 @@
     <nav class="navbar">
         <div class="container">
             <a href="/{{ lang|default('ko') }}/" class="logo">
-                <span class="logo-icon">⚔️</span>
-                <span class="logo-text">{{ i18n.common.site.title|default('Korean Fencing Tracker') }}</span>
+                <img src="/static/images/logo/FencingMind_logo_long_Tracker.png"
+                     alt="FencingMind Tracker"
+                     class="logo-img">
             </a>
             <div class="auth-nav" id="authNav">
-                <a href="/auth/login" class="auth-btn login-btn" id="loginBtn">{{ i18n.common.nav.login|default('Login') }}</a>
+                <a href="https://account.fencingmind.ai/auth/login?redirect_url={{ request.url | urlencode }}" class="auth-btn login-btn" id="loginBtn">{{ i18n.common.nav.login|default('Login') }}</a>
             </div>
             <div class="nav-links">
                 <a href="/{{ lang|default('ko') }}/">{{ i18n.common.nav.search|default('Search') }}</a>
@@ -65,7 +66,7 @@
 
     <footer class="footer">
         <div class="container">
-            <p>{{ i18n.common.footer.copyright|default('Korean Fencing Tracker') }} &copy; 2024-2025</p>
+            <p>{{ i18n.common.footer.copyright|default('FencingMind Tracker') }} &copy; 2024-2025</p>
             <p>{{ i18n.common.footer.data_source|default('데이터 출처') }}: <a href="https://fencing.sports.or.kr" target="_blank">KFF</a></p>
         </div>
     </footer>
@@ -104,21 +105,27 @@
         updateParallax();
     })();
 
-    // 로그인 상태 확인
+    // 로그인 상태 확인 (2초 타임아웃 - account 서비스 미응답 시 빠르게 포기)
     document.addEventListener('DOMContentLoaded', async function() {
         try {
-            const response = await fetch('/auth/me');
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 2000);
+            const response = await fetch('https://account.fencingmind.ai/auth/me', {
+                credentials: 'include',
+                signal: controller.signal,
+            });
+            clearTimeout(timeoutId);
             if (response.ok) {
                 const member = await response.json();
                 const authNav = document.getElementById('authNav');
                 authNav.innerHTML = `
-                    <a href="/auth/verification" class="auth-btn profile-btn">
+                    <a href="https://account.fencingmind.ai/auth/verification" class="auth-btn profile-btn">
                         ${member.display_name || member.full_name[0]}
                     </a>
                 `;
             }
         } catch (e) {
-            // 로그인 안됨 - 기본 상태 유지
+            // 로그인 안됨 또는 account 서비스 미응답 - 기본 상태 유지
         }
     });
     </script>
