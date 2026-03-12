@@ -104,6 +104,28 @@ async def get_current_member(request: Request) -> Optional[dict]:
         return None
 
 
+def _set_auth_cookie(response, token: str):
+    """인증 쿠키 설정 (domain/secure 포함)"""
+    settings = get_auth_settings()
+    cookie_domain = settings.COOKIE_DOMAIN
+    response.set_cookie(
+        key="access_token",
+        value=token,
+        httponly=True,
+        max_age=60 * 60 * 24,  # 24시간
+        samesite="lax",
+        domain=cookie_domain,
+        secure=cookie_domain is not None,  # prod에서만 secure
+    )
+
+
+def _delete_auth_cookie(response):
+    """인증 쿠키 삭제"""
+    settings = get_auth_settings()
+    cookie_domain = settings.COOKIE_DOMAIN
+    response.delete_cookie("access_token", domain=cookie_domain)
+
+
 def require_auth(request: Request):
     """인증 필수 의존성"""
     member = request.state.member if hasattr(request.state, 'member') else None
@@ -267,13 +289,7 @@ async def oauth_callback(provider: str, code: str, state: str, request: Request)
 
                 # 쿠키에 토큰 저장하고 메인 페이지로 리다이렉트
                 response = RedirectResponse(url="/", status_code=303)
-                response.set_cookie(
-                    key="access_token",
-                    value=access_token,
-                    httponly=True,
-                    max_age=60 * 60 * 24,  # 24시간
-                    samesite="lax",
-                )
+                _set_auth_cookie(response, access_token)
                 return response
 
         # 신규 회원 - 회원가입 페이지로
@@ -503,13 +519,7 @@ async def register_member(
 
     # 쿠키에 토큰 저장하고 인증 페이지로 리다이렉트
     response = RedirectResponse(url="/auth/verification", status_code=303)
-    response.set_cookie(
-        key="access_token",
-        value=access_token,
-        httponly=True,
-        max_age=60 * 60 * 24,
-        samesite="lax",
-    )
+    _set_auth_cookie(response, access_token)
 
     return response
 
@@ -754,7 +764,7 @@ async def link_guardian(
 async def logout():
     """로그아웃"""
     response = RedirectResponse(url="/", status_code=303)
-    response.delete_cookie("access_token")
+    _delete_auth_cookie(response)
     return response
 
 
@@ -762,5 +772,5 @@ async def logout():
 async def logout_get():
     """로그아웃 (GET)"""
     response = RedirectResponse(url="/", status_code=303)
-    response.delete_cookie("access_token")
+    _delete_auth_cookie(response)
     return response

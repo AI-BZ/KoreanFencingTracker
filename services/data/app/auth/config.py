@@ -42,6 +42,9 @@ class AuthSettings(BaseSettings):
     # IP Geolocation (선택사항)
     IP_GEOLOCATION_API_KEY: str = os.getenv("IP_GEOLOCATION_API_KEY", "")
 
+    # Cookie
+    COOKIE_DOMAIN: Optional[str] = os.getenv("COOKIE_DOMAIN")  # .fencingmind.ai (prod) or None (dev)
+
     # 인증 설정
     VERIFICATION_AUTO_APPROVE_THRESHOLD: float = 0.85  # 자동 승인 신뢰도
     VERIFICATION_AUTO_REJECT_THRESHOLD: float = 0.60   # 자동 거부 신뢰도
