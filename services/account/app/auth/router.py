@@ -420,7 +420,10 @@ async def register_member(
     })
 
     # Send verification email
-    await get_email_service().send_verification_email(email, full_name, verification_token)
+    verify_url = f"https://account.fencingmind.ai/auth/verify-email?token={verification_token}"
+    await get_email_service().send_verification_email(
+        email, full_name, verification_token, verify_url=verify_url,
+    )
 
     # Redirect to email verification page instead of /account/verification
     response = RedirectResponse(url=f"/auth/verify-email-sent?email={email}", status_code=303)
@@ -499,7 +502,10 @@ async def resend_verification_email(request: Request):
         "email_verification_expires_at": expires_at.isoformat(),
     }).eq("id", member["id"]).execute()
 
-    await get_email_service().send_verification_email(member["email"], member["full_name"], new_token)
+    verify_url = f"https://account.fencingmind.ai/auth/verify-email?token={new_token}"
+    await get_email_service().send_verification_email(
+        member["email"], member["full_name"], new_token, verify_url=verify_url,
+    )
 
     return RedirectResponse(url=f"/auth/verify-email-sent?email={member['email']}", status_code=303)
 

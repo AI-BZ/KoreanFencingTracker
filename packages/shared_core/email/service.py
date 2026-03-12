@@ -60,9 +60,19 @@ class EmailService:
             logger.error(f"Email send error: {e}")
             return False
 
-    async def send_verification_email(self, to: str, name: str, token: str) -> bool:
-        """인증 메일 발송"""
-        verify_url = f"https://account.fencingmind.ai/auth/verify-email?token={token}"
+    async def send_verification_email(
+        self, to: str, name: str, token: str, verify_url: Optional[str] = None,
+    ) -> bool:
+        """인증 메일 발송
+
+        Args:
+            to: 수신자 이메일
+            name: 수신자 이름
+            token: 인증 토큰
+            verify_url: 인증 URL (None이면 기본 URL 사용)
+        """
+        if not verify_url:
+            verify_url = f"https://account.fencingmind.ai/account/verification/email/verify?token={token}"
         html = get_verification_email_html(name, verify_url)
         return await self._send(to, "[FencingMind] 이메일 인증을 완료해주세요", html)
 
