@@ -1,8 +1,10 @@
 # data.fencingmind.ai - 펜싱 데이터 서비스
 
+**공식 명칭:** FencingMind Tracker
 **서브도메인:** data.fencingmind.ai
 **포트:** 71
 **상태:** ✅ 운영 중 (메인 서비스)
+**로고:** `/static/images/logo/FencingMind_logo_long_Tracker.png`
 
 ---
 
@@ -65,3 +67,210 @@ python -m uvicorn app.server:app --host 0.0.0.0 --port 71
 - 이 서비스의 코드는 `feature/data/*` 브랜치에서만 수정
 - 다른 서비스 코드 수정 금지
 - 공유 패키지 수정 시 `feature/shared/*` 브랜치 사용
+
+---
+
+## 🔴🔴🔴 데이터 수정 원칙 (Data Modification Principles) 🔴🔴🔴
+
+**데이터 표시 오류 발생 시 반드시 이 원칙을 따르세요.**
+
+### 핵심 원칙: 근본 데이터 추적 (Root Data Tracing)
+데이터 표시에 오류가 있을 때, **표시 레이어(템플릿/UI)가 아닌 근본 데이터 소스부터 추적**해야 합니다.
+
+### 데이터 파이프라인 계층
+```
+1. 스크래퍼 (scraper/) - 원본 데이터 수집
+     ↓
+2. DB 저장 (raw_data, de_bracket 등) - 근본 데이터
+     ↓
+3. 서버 API (server.py) - 데이터 가공/전달
+     ↓
+4. 템플릿 (templates/) - 최종 표시
+```
+
+### 오류 수정 절차
+
+**Step 1: 근본 데이터 확인**
+```sql
+-- 예: 라운드 정보가 잘못 표시되는 경우
+SELECT
+    (raw_data->'de_bracket'->>'bracket_size')::int,
+    raw_data->'de_bracket'->>'starting_round'
+FROM events WHERE id = ?
+```
+
+**Step 2: 파이프라인 역추적**
+- DB 데이터가 올바름 → 서버 API 또는 템플릿 문제
+- DB 데이터가 잘못됨 → 스크래퍼 문제
+
+**Step 3: 근본 원인 수정**
+- 증상이 아닌 원인을 수정
+- 하드코딩 제거, 근본 데이터 참조로 교체
+
+### 실제 사례
+
+**문제**: 모든 대회에서 첫 라운드가 "128강"으로 표시됨
+
+**잘못된 접근** ❌:
+```python
+# 템플릿에서 128강을 다른 값으로 바꿈
+round_order = ["128강", "64강", ...]  # 하드코딩된 순서
+```
+
+**올바른 접근** ✅:
+```python
+# DB에 저장된 실제 시작 라운드 사용
+starting_round = de_bracket.get("starting_round", "32강")
+if starting_round in full_round_order:
+    start_idx = full_round_order.index(starting_round)
+    round_order = full_round_order[start_idx:]
+```
+
+### 체크리스트
+- [ ] 근본 데이터(DB) 확인했는가?
+- [ ] 파이프라인 어느 단계에서 오류가 발생하는지 파악했는가?
+- [ ] 하드코딩을 근본 데이터 참조로 교체했는가?
+- [ ] 수정 후 다른 대회/이벤트에서도 정상 작동하는지 확인했는가?
+
+---
+
+## 🔍🔍🔍 데이터 무결성 검증 (Data Integrity Validation) 🔍🔍🔍
+
+### 원칙: 데이터 오류 제로 (ZERO DATA ERRORS)
+데이터 사업에서 **1개의 오류도 있으면 안 된다.** 모든 데이터 수정은 검증을 거쳐야 하며, 새로운 오류 패턴은 반드시 카탈로그에 기록한다.
+
+### 검증 규칙 12개 (R1 ~ R12) 요약
+
+| 규칙 | 검증 대상 | 설명 |
+|------|----------|------|
+| R1a/R1b | 이벤트 | Self-bout / Duplicate bout |
+| R2 | 이벤트 | Winner 일관성 (winner ∉ {p1, p2}) |
+| R3 | 이벤트 | 점수 범위 이상 (음수, >15, 동점) |
+| R4 | 이벤트 | 빈/비표준 round_name |
+| R5 | 이벤트 | Bracket topology (승자→다음 라운드) |
+| R6 | 이벤트 | Final ranking vs DE bracket 불일치 |
+| R7 | 선수 | 같은 라운드 2경기 이상 |
+| R8 | 선수 | 라운드 진행 보존법칙 (경기 유실) |
+| R9 | 선수 | Pool 경기수 이상 (>8) |
+| R10 | 선수 | 성별 불일치 (동명이인) |
+| R11 | 선수 | 나이그룹 역행 (동명이인) |
+| R12 | 선수 | 무기 3종 이상 (동명이인) |
+
+### 필수 검증 명령어
+```bash
+cd services/data
+PYTHONPATH="." python scripts/run_validation.py
+```
+
+### 데이터 파일 수정 시 필수 절차
+1. 코드 수정 (scraper/, server.py, bracket_utils.py 등)
+2. **검증 실행**: `PYTHONPATH="." python scripts/run_validation.py`
+3. **ERROR 0건** 확인 (WARNING은 허용하되 검토 필수)
+4. 새 오류 패턴 발견 시 → `docs/DATA_ERROR_CATALOG.md`에 CASE 추가
+5. 기존 이슈 수정 시 → 카탈로그의 해당 CASE 상태 업데이트
+
+### Claude Code Hook
+`.claude/hooks/data-validation-check.sh`가 Stop 이벤트에서 자동 실행됨.
+데이터 관련 파일(scraper/, data_validator, server.py, bracket_utils, data_pipeline, pipeline_scraper) 수정 시 검증 리마인더를 표시.
+
+### 오류 카탈로그
+**상세 문서:** `services/data/docs/DATA_ERROR_CATALOG.md`
+- 발견된 오류 사례 7건 (CASE-001 ~ 007)
+- 예상 오류 케이스 7건 (CASE-E01 ~ E07)
+- 새 케이스 등록/상태 업데이트 절차 포함
+
+---
+
+## Player-Centric Data Philosophy (선수 중심 데이터 철학)
+
+### 핵심 개념
+**"나를 찾는다" 또는 "보고 싶은 선수를 찾는다"**
+
+데이터 서비스의 핵심 가치는 단순한 데이터 나열이 아닌, 사용자(선수/학부모/코치)가 자신 또는 관심 있는 선수의 정보를 쉽게 찾고 추적할 수 있도록 하는 것입니다.
+
+### 주요 기능
+
+#### 1. 선수 자동완성 검색 (Autocomplete)
+- 이름 입력 시 실시간 드롭다운 제안
+- 동명이인 구분을 위한 소속 정보 함께 표시
+- 대회 내 검색과 전체 검색 지원
+
+```
+API: GET /api/players/autocomplete?q=오&limit=10&event_cd=xxx
+응답: { suggestions: [{ name, team, display, player_id }] }
+```
+
+#### 2. 자동 하이라이트 (Auto-Highlight)
+- 검색된 선수가 나타나는 모든 위치를 자동으로 강조
+- Pool 결과, DE 대진표, 최종 순위 등 전 영역 지원
+- 첫 발견 위치로 자동 스크롤
+
+```javascript
+// 하이라이트 대상 영역
+- Pool 결과 테이블
+- Pool 총 순위
+- DE 대진표 (브라켓)
+- 시상대 (Podium)
+- 최종 순위
+```
+
+#### 3. DE 예측 대진표 (DE Prediction Table)
+- 선수가 각 라운드에서 만날 수 있는 잠재적 상대 목록
+- 상대 전적(Head-to-Head) 정보 포함
+- 시드 기반 대진표 수학적 계산
+
+```
+API: GET /api/events/{sub_event_cd}/de-prediction/{player_name}
+응답: {
+  player: { name, team, seed },
+  predictions: [
+    { round: "64강", potential_opponents: [...] },
+    { round: "32강", potential_opponents: [...] }
+  ]
+}
+```
+
+#### 4. 상대 전적 조회 (Head-to-Head)
+- 두 선수 간 역대 대결 기록
+- Pool/DE 경기 구분
+- 필터: 무기, 나이그룹별
+
+```
+API: GET /api/players/{player}/head-to-head/{opponent}
+응답: {
+  record: { wins, losses, total },
+  matches: [{ date, competition, round, score, winner }]
+}
+```
+
+#### 5. 내 선수 기능 (My Player)
+- localStorage 기반 즐겨찾기 선수 저장
+- 페이지 로드 시 자동 하이라이트
+- 대회 페이지 간 연속성 유지
+
+### 페이지 연동 흐름
+
+```
+대회 목록 → 대회 상세 (Competition)
+                ↓
+         선수 검색 (Autocomplete)
+                ↓
+         검색 결과 카드
+                ↓ [상세 보기 & 하이라이트]
+         종목 결과 (Event Result)
+                ↓
+         자동 하이라이트 + DE 예측
+```
+
+### 관련 파일
+```
+static/js/player-search.js     # PlayerSearch, PlayerHighlighter, DEPredictionTable
+static/css/player-search.css   # 검색 UI 스타일
+templates/event_result.html    # 종목 결과 (하이라이트 적용)
+templates/competition.html     # 대회 상세 (검색 → 종목 이동)
+app/server.py                  # API 엔드포인트
+```
+
+### URL 파라미터
+- `?highlight=선수이름` - 페이지 로드 시 해당 선수 자동 하이라이트
+- 대회 페이지에서 종목 페이지로 이동 시 자동 전달
