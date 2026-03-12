@@ -387,7 +387,7 @@ async def sync_players_from_competition(
     - 코치 이상 권한 필요
     """
     # 조직 이름 조회
-    from database.supabase_client import get_supabase_client
+    from .service import get_supabase_client
     supabase = get_supabase_client()
     org_response = supabase.table("organizations").select("name").eq(
         "id", member.organization_id

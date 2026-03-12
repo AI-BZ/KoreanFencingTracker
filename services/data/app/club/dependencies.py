@@ -111,7 +111,7 @@ async def get_current_club_member(request: Request) -> ClubMemberContext:
     - 또는 쿼리 파라미터 ?test=1
     - 최병철펜싱클럽 코치로 자동 로그인
     """
-    from database.supabase_client import get_supabase_client
+    from .players.service import get_supabase_client
 
     # 테스트 모드 체크 (환경변수 또는 쿼리 파라미터)
     test_param = request.query_params.get("test", "0")
