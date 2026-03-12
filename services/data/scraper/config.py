@@ -71,11 +71,40 @@ class IksanConfig(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="IKSAN_", case_sensitive=False)
 
 
+class StealthScrapingConfig(BaseSettings):
+    """대회 진행 중 스텔스 스크래핑 설정 (30분 간격)"""
+
+    # 스텔스 딜레이 (사람처럼 보이게)
+    stealth_delay_min: float = Field(default=5.0, description="최소 딜레이 (초)")
+    stealth_delay_max: float = Field(default=12.0, description="최대 딜레이 (초)")
+    page_load_delay: float = Field(default=3.0, description="페이지 로드 대기 (초)")
+    between_events_delay_min: float = Field(default=8.0, description="종목 간 최소 딜레이")
+    between_events_delay_max: float = Field(default=15.0, description="종목 간 최대 딜레이")
+
+    # 스케줄 설정
+    update_interval_minutes: int = Field(default=30, description="업데이트 간격 (분)")
+    active_hours_start: int = Field(default=8, description="스크래핑 시작 시간")
+    active_hours_end: int = Field(default=21, description="스크래핑 종료 시간")
+
+    # 스텔스 행동 패턴 (사람처럼)
+    random_mouse_movement: bool = Field(default=True, description="랜덤 마우스 이동")
+    random_scroll: bool = Field(default=True, description="랜덤 스크롤")
+    typing_delay_min: float = Field(default=0.05, description="타이핑 최소 딜레이")
+    typing_delay_max: float = Field(default=0.15, description="타이핑 최대 딜레이")
+
+    # 재시도 설정
+    max_retries: int = Field(default=2, description="최대 재시도")
+    retry_delay: float = Field(default=30.0, description="재시도 전 대기 (초)")
+
+    model_config = SettingsConfigDict(env_prefix="STEALTH_", case_sensitive=False)
+
+
 # 전역 설정 인스턴스
 scraper_config = ScraperConfig()
 supabase_config = SupabaseConfig()
 scheduler_config = SchedulerConfig()
 iksan_config = IksanConfig()
+stealth_config = StealthScrapingConfig()
 
 
 # API 엔드포인트 정의

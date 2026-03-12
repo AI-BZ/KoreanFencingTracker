@@ -6,10 +6,12 @@ KFFFullScraper + DataPipeline + Supabase 통합
 - 실시간 검증 및 품질 모니터링
 """
 import asyncio
+import os
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import asdict
 from loguru import logger
+from dotenv import load_dotenv
 
 # 스크래퍼
 from scraper.full_scraper import KFFFullScraper, Competition
@@ -23,7 +25,21 @@ from data_pipeline import (
 )
 
 # Supabase
-from database.supabase_client import get_supabase_client
+from supabase import create_client, Client
+
+load_dotenv()
+
+
+def get_supabase_client() -> Optional[Client]:
+    """Supabase 클라이언트 생성"""
+    url = os.getenv("SUPABASE_URL")
+    key = os.getenv("SUPABASE_KEY")
+
+    if not url or not key:
+        logger.error("SUPABASE_URL 또는 SUPABASE_KEY 환경변수가 설정되지 않았습니다")
+        return None
+
+    return create_client(url, key)
 
 
 class PipelineScraper:
@@ -282,13 +298,23 @@ class PipelineScraper:
         """종목 upsert (raw_data 포함)"""
         try:
             # raw_data 구성
+            de_bracket = event_data.get("de_bracket", {})
             raw_data = {
                 "pool_rounds": event_data.get("pool_rounds", []),
                 "pool_total_ranking": event_data.get("pool_total_ranking", []),
-                "de_bracket": event_data.get("de_bracket", {}),
+                "de_bracket": de_bracket,
                 "de_matches": event_data.get("de_matches", []),
                 "final_rankings": event_data.get("final_rankings", []),
             }
+
+            # DE 형식 추출 (dual_de vs single_de)
+            de_format = de_bracket.get("format", "single_de")
+            has_first_de = de_bracket.get("first_de") is not None
+            has_second_de = de_bracket.get("second_de") is not None
+
+            # Dual DE 로깅
+            if de_format == "dual_de":
+                logger.info(f"🎯 Dual DE 감지: {event_data.get('name', 'Unknown')}")
 
             data = {
                 "competition_id": competition_id,
@@ -301,6 +327,9 @@ class PipelineScraper:
                 "category": event_data.get("event_type", "개인"),
                 "participants_count": event_data.get("total_participants", 0),
                 "raw_data": raw_data,
+                "de_format": de_format,
+                "has_first_de": has_first_de,
+                "has_second_de": has_second_de,
                 "validated_at": datetime.now().isoformat(),
                 "validation_version": "1.0",
             }

@@ -13,15 +13,17 @@ from dataclasses import dataclass
 # =============================================================================
 
 WEAPON_NORMALIZE_MAP = {
-    # 비표준 → 표준
-    "에페": "에뻬",
-    "플뢰레": "플러레",
-    "사브르": "사브르",  # 이미 표준
-    # 영문 변환
-    "epee": "에뻬",
-    "foil": "플러레",
-    "sabre": "사브르",
-    "saber": "사브르",
+    # 한국어 → 영어 코드
+    "에페": "epee",
+    "에뻬": "epee",
+    "플뢰레": "foil",
+    "플러레": "foil",
+    "사브르": "sabre",
+    # 영문 (이미 표준)
+    "epee": "epee",
+    "foil": "foil",
+    "sabre": "sabre",
+    "saber": "sabre",
     # 빈값 처리
     "": None,
     None: None,
@@ -102,7 +104,7 @@ CATEGORY_NORMALIZE_MAP = {
 # =============================================================================
 
 def normalize_weapon(weapon: Optional[str]) -> Optional[str]:
-    """무기명 정규화: 에페→에뻬, 플뢰레→플러레"""
+    """무기명 정규화: 한국어 → 영어 코드 (foil/epee/sabre)"""
     if weapon is None:
         return None
     weapon_clean = weapon.strip().lower() if isinstance(weapon, str) else str(weapon)
@@ -194,11 +196,11 @@ def normalize_category(category: Optional[str]) -> Optional[str]:
 # event_name 파싱 패턴
 EVENT_NAME_PATTERNS = [
     # 패턴: "남자 중등부 에뻬 개인전 전문"
-    re.compile(r"(남자?|여자?)\s*(초등[저중고]?부?|중등부?|고등부?|대학부?|일반부?|시니어)?\s*(에뻬|플러레|사브르)\s*(개인전|단체전)?\s*(전문|동호인)?"),
+    re.compile(r"(남자?|여자?)\s*(초등[저중고]?부?|중등부?|고등부?|대학부?|일반부?|시니어)?\s*(에뻬|에페|플러레|플뢰레|사브르)\s*(개인전|단체전)?\s*(전문|동호인)?"),
     # 패턴: "에뻬 남자 고등부"
-    re.compile(r"(에뻬|플러레|사브르)\s*(남자?|여자?)\s*(초등[저중고]?부?|중등부?|고등부?|대학부?|일반부?)"),
+    re.compile(r"(에뻬|에페|플러레|플뢰레|사브르)\s*(남자?|여자?)\s*(초등[저중고]?부?|중등부?|고등부?|대학부?|일반부?)"),
     # 패턴: "U13 남자 에뻬"
-    re.compile(r"U(\d+)\s*(남자?|여자?)\s*(에뻬|플러레|사브르)"),
+    re.compile(r"U(\d+)\s*(남자?|여자?)\s*(에뻬|에페|플러레|플뢰레|사브르)"),
 ]
 
 U_AGE_MAP = {

@@ -814,6 +814,99 @@ class DEScraper:
             () => !!document.querySelector('.tournament_table .user_box')
         """)
 
+    async def _extract_tournament_table_data(self, skip_seeding: bool = False) -> Dict:
+        """현재 탭의 tournament_table 데이터 추출
+
+        Args:
+            skip_seeding: True면 시딩 데이터 수집 스킵 (이미 수집됨)
+        """
+        return await self.page.evaluate(f"""
+            () => {{
+                const boxes = document.querySelectorAll('.user_box');
+                if (!boxes.length) return {{ matches: [], seeding: [] }};
+
+                const matchMap = new Map();
+                const seedingMap = new Map();
+                const skipSeeding = {str(skip_seeding).lower()};
+
+                boxes.forEach(box => {{
+                    const sym = box.getAttribute('compmatsym');
+                    const dir = box.getAttribute('dir');
+                    const xpos = parseInt(box.getAttribute('xposition')) || 0;
+                    const score = parseInt(box.getAttribute('score')) || 0;
+                    const wingbn = box.getAttribute('wingbn');
+                    const matchcd = box.getAttribute('matchcd');
+                    const seedNum = parseInt(box.querySelector('.num')?.textContent.trim()) || 0;
+                    const name = box.querySelector('.user_name span')?.textContent.trim() || '';
+                    const team = box.querySelector('.user_aff span')?.textContent.trim() || '';
+
+                    const player = {{
+                        seed: seedNum,
+                        name,
+                        team,
+                        score,
+                        isWinner: wingbn === '1',
+                        isBye: name.toLowerCase().includes('bye') || name === ''
+                    }};
+
+                    // 시드 목록 구축 (32강 또는 64강 데이터에서)
+                    if (!skipSeeding && (xpos === 64 || xpos === 32) && name && !seedingMap.has(seedNum)) {{
+                        seedingMap.set(seedNum, player);
+                    }}
+
+                    if (!matchMap.has(sym)) {{
+                        matchMap.set(sym, {{ matchcd, xposition: xpos, red: null, green: null }});
+                    }}
+
+                    if (dir === 'UP') {{
+                        matchMap.get(sym).red = player;
+                    }} else {{
+                        matchMap.get(sym).green = player;
+                    }}
+                }});
+
+                // 경기 배열 생성
+                const matches = [];
+                let matchNum = 0;
+                matchMap.forEach((match, sym) => {{
+                    if (match.red && match.green) {{
+                        matchNum++;
+                        const roundName = match.xposition + '강';
+                        const winner = match.red.isWinner ? match.red :
+                                      match.green.isWinner ? match.green : null;
+
+                        matches.push({{
+                            match_id: sym,
+                            match_number: matchNum,
+                            round_size: match.xposition,
+                            round_name: roundName,
+                            red_seed: match.red.seed,
+                            red_name: match.red.name,
+                            red_team: match.red.team,
+                            red_score: match.red.score,
+                            red_is_bye: match.red.isBye,
+                            green_seed: match.green.seed,
+                            green_name: match.green.name,
+                            green_team: match.green.team,
+                            green_score: match.green.score,
+                            green_is_bye: match.green.isBye,
+                            winner_name: winner ? winner.name : null,
+                            winner_seed: winner ? winner.seed : null
+                        }});
+                    }}
+                }});
+
+                // 시드 배열 생성
+                const seeding = [];
+                seedingMap.forEach((p, seed) => {{
+                    seeding.push({{ seed: p.seed, name: p.name, team: p.team }});
+                }});
+                seeding.sort((a, b) => a.seed - b.seed);
+
+                return {{ matches, seeding }};
+            }}
+        """)
+
     async def _parse_tournament_table_bracket(self) -> DEBracket:
         """국가대표 선발전 스타일의 .tournament_table 구조 파싱
 
@@ -823,111 +916,110 @@ class DEScraper:
         - score: 점수
         - wingbn: 승자 여부 (1=승)
         - dir: UP/DOWN (대진표 위치)
+
+        수정됨 (2025-01): 멀티 탭 지원 추가
+        - 32강전 탭에서 32강~8강 데이터 수집
+        - 8강전 탭에서 8강~결승 데이터 수집 (준결승, 결승 포함)
         """
         bracket = DEBracket()
 
         try:
-            # 디버깅: .user_box 요소 수 확인
-            box_count = await self.page.evaluate("document.querySelectorAll('.user_box').length")
-            logger.info(f"_parse_tournament_table_bracket: .user_box 요소 수 = {box_count}")
+            # 멀티 탭 지원: 필요한 탭들을 순회하며 데이터 수집
+            # fnGetMatch(5)=32강전, fnGetMatch(3)=8강전
+            tabs_to_parse = [
+                (5, "32강전"),  # 32강, 16강, 8강, 4강 데이터
+                (3, "8강전"),   # 8강, 4강(준결승), 2강(결승), 우승자 데이터
+            ]
 
-            if box_count == 0:
-                logger.warning("  → .user_box 요소가 없음! 페이지 로드 대기 중...")
+            all_matches_data = []
+            seeding_data = []
+            seeding_collected = False
+
+            for fn_param, tab_name in tabs_to_parse:
+                # 탭 클릭
+                logger.debug(f"tournament_table: {tab_name} 탭 로드 (fnGetMatch({fn_param}))")
+                await self.page.evaluate(f"fnGetMatch({fn_param})")
                 await asyncio.sleep(2)
+
+                # 디버깅: .user_box 요소 수 확인
                 box_count = await self.page.evaluate("document.querySelectorAll('.user_box').length")
-                logger.info(f"  → 대기 후 .user_box 요소 수 = {box_count}")
+                logger.debug(f"  → {tab_name}: .user_box 요소 수 = {box_count}")
 
-            data = await self.page.evaluate("""
-                () => {
-                    const boxes = document.querySelectorAll('.user_box');
-                    if (!boxes.length) return { matches: [], seeding: [] };
+                if box_count == 0:
+                    logger.warning(f"  → {tab_name}: .user_box 요소가 없음! 스킵")
+                    continue
 
-                    const matchMap = new Map();
-                    const seedingMap = new Map();
+                data = await self._extract_tournament_table_data(seeding_collected)
+                tab_matches = data.get('matches', [])
+                tab_seeding = data.get('seeding', [])
 
-                    boxes.forEach(box => {
-                        const sym = box.getAttribute('compmatsym');
-                        const dir = box.getAttribute('dir');
-                        const xpos = parseInt(box.getAttribute('xposition')) || 0;
-                        const score = parseInt(box.getAttribute('score')) || 0;
-                        const wingbn = box.getAttribute('wingbn');
-                        const matchcd = box.getAttribute('matchcd');
-                        const seedNum = parseInt(box.querySelector('.num')?.textContent.trim()) || 0;
-                        const name = box.querySelector('.user_name span')?.textContent.trim() || '';
-                        const team = box.querySelector('.user_aff span')?.textContent.trim() || '';
+                logger.debug(f"  → {tab_name}: {len(tab_matches)}경기 수집")
 
-                        const player = {
-                            seed: seedNum,
-                            name,
-                            team,
-                            score,
-                            isWinner: wingbn === '1',
-                            isBye: name.toLowerCase().includes('bye') || name === ''
-                        };
+                # 첫 번째 탭에서만 시딩 수집
+                if not seeding_collected and tab_seeding:
+                    seeding_data = tab_seeding
+                    seeding_collected = True
+                    logger.info(f"tournament_table: 시딩 수집 완료 ({len(seeding_data)}명)")
 
-                        // 시드 목록 구축 (64강 데이터에서)
-                        if (xpos === 64 && name && !seedingMap.has(seedNum)) {
-                            seedingMap.set(seedNum, player);
-                        }
+                all_matches_data.extend(tab_matches)
 
-                        if (!matchMap.has(sym)) {
-                            matchMap.set(sym, { matchcd, xposition: xpos, red: null, green: null });
-                        }
+            # 중복 제거 (같은 match_id는 나중 것 유지 - 더 완전한 데이터)
+            matches_by_id = {}
+            for m in all_matches_data:
+                match_id = m.get('match_id')
+                if match_id:
+                    # 점수가 있는 것을 우선
+                    if match_id not in matches_by_id or (m.get('red_score') or m.get('green_score')):
+                        matches_by_id[match_id] = m
 
-                        if (dir === 'UP') {
-                            matchMap.get(sym).red = player;
-                        } else {
-                            matchMap.get(sym).green = player;
-                        }
-                    });
+            matches_data = list(matches_by_id.values())
+            logger.info(f"tournament_table 파싱: {len(matches_data)}경기 (중복제거 후), {len(seeding_data)}명 시드")
 
-                    // 경기 배열 생성
-                    const matches = [];
-                    let matchNum = 0;
-                    matchMap.forEach((match, sym) => {
-                        if (match.red && match.green) {
-                            matchNum++;
-                            const roundName = match.xposition + '강';
-                            const winner = match.red.isWinner ? match.red :
-                                          match.green.isWinner ? match.green : null;
+            # 팀 이름 보정: tournament_table 구조에서 후속 라운드는
+            # .user_aff span에 팀 이름 대신 이전 경기 점수(예: "15 : 13")가 들어감
+            # 시딩 데이터와 첫 라운드 데이터에서 name→team 매핑 구축 후 보정
+            import re
+            score_pattern = re.compile(r'^\d+\s*:\s*\d+$')
+            name_to_team = {}
 
-                            matches.push({
-                                match_id: sym,
-                                match_number: matchNum,
-                                round_size: match.xposition,
-                                round_name: roundName,
-                                red_seed: match.red.seed,
-                                red_name: match.red.name,
-                                red_team: match.red.team,
-                                red_score: match.red.score,
-                                red_is_bye: match.red.isBye,
-                                green_seed: match.green.seed,
-                                green_name: match.green.name,
-                                green_team: match.green.team,
-                                green_score: match.green.score,
-                                green_is_bye: match.green.isBye,
-                                winner_name: winner ? winner.name : null,
-                                winner_seed: winner ? winner.seed : null
-                            });
-                        }
-                    });
+            # 시딩 데이터에서 매핑 구축
+            for s in seeding_data:
+                if s.get('name') and s.get('team') and not score_pattern.match(s['team']):
+                    name_to_team[s['name']] = s['team']
 
-                    // 시드 배열 생성
-                    const seeding = [];
-                    seedingMap.forEach((p, seed) => {
-                        seeding.push({ seed: p.seed, name: p.name, team: p.team });
-                    });
-                    seeding.sort((a, b) => a.seed - b.seed);
+            # 첫 라운드(유효한 팀 이름이 있는) 경기에서 매핑 추가
+            for m in matches_data:
+                if m.get('red_name') and m.get('red_team') and not score_pattern.match(m['red_team']):
+                    name_to_team[m['red_name']] = m['red_team']
+                if m.get('green_name') and m.get('green_team') and not score_pattern.match(m['green_team']):
+                    name_to_team[m['green_name']] = m['green_team']
 
-                    return { matches, seeding };
-                }
-            """)
+            # 점수가 팀 이름으로 들어간 경우 보정
+            fixed_count = 0
+            for m in matches_data:
+                for prefix in ('red', 'green'):
+                    team_key = f'{prefix}_team'
+                    name_key = f'{prefix}_name'
+                    team_val = m.get(team_key, '')
+                    if team_val and score_pattern.match(team_val):
+                        correct_team = name_to_team.get(m.get(name_key, ''), '')
+                        m[team_key] = correct_team
+                        fixed_count += 1
+                    elif not team_val and m.get(name_key):
+                        m[team_key] = name_to_team.get(m[name_key], '')
 
-            # DEBracket 객체 구성
-            matches_data = data.get('matches', [])
-            seeding_data = data.get('seeding', [])
+            if fixed_count:
+                logger.info(f"tournament_table: {fixed_count}개 팀 이름 보정 (점수→실제 팀)")
 
-            logger.info(f"tournament_table 파싱: {len(matches_data)}경기, {len(seeding_data)}명 시드")
+            # 라운드 이름 정규화 (4강 → 준결승, 2강 → 결승)
+            for m in matches_data:
+                round_size = m.get('round_size', 0)
+                if round_size == 4:
+                    m['round_name'] = '준결승'
+                elif round_size == 2:
+                    m['round_name'] = '결승'
+                elif round_size == 1:
+                    m['round_name'] = '우승'
 
             # 라운드 정보 추출
             round_sizes = set(m['round_size'] for m in matches_data if m.get('round_size'))
@@ -984,6 +1076,9 @@ class DEScraper:
                                  key=lambda r: int(r.replace('강', '')) if '강' in r else 0,
                                  reverse=True)
             bracket.rounds = rounds_found
+
+            # self-bout 등 무효 경기 필터링 (R1a 버그 수정)
+            bracket.matches = self._filter_valid_matches(bracket.matches)
 
             logger.info(f"tournament_table 파싱 완료: 라운드 {bracket.rounds}, {len(bracket.matches)}경기")
 

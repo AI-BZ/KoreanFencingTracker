@@ -366,6 +366,10 @@ def post_process_de_bracket(bracket_data: Dict[str, Any]) -> Dict[str, Any]:
             bouts_by_round[round_name] = []
         bouts_by_round[round_name].append(bout)
 
+    # 4.1 bouts_by_round 내 self-bout 등 무효 경기 방어적 필터링
+    for round_name, round_bouts in bouts_by_round.items():
+        bouts_by_round[round_name] = filter_valid_bouts(round_bouts, f"bouts_by_round[{round_name}]")
+
     # 5. 무효한 라운드 필터링
     if bracket_size in VALID_ROUNDS_BY_SIZE:
         valid_rounds = VALID_ROUNDS_BY_SIZE[bracket_size]
@@ -787,12 +791,12 @@ class KFFFullScraper:
         event_type = ""
         age_group = ""
 
-        if "플러레" in name:
-            weapon = "플러레"
-        elif "에뻬" in name:
-            weapon = "에뻬"
+        if "플뢰레" in name or "플러레" in name:
+            weapon = "foil"
+        elif "에페" in name or "에뻬" in name:
+            weapon = "epee"
         elif "사브르" in name:
-            weapon = "사브르"
+            weapon = "sabre"
 
         if "남" in name:
             gender = "남"
@@ -1731,6 +1735,28 @@ class KFFFullScraper:
         try:
             # DEScraper v4 사용
             scraper = DEScraper(page)
+
+            # ===== tournament_table 구조 먼저 확인 (빠른 체크, 타임아웃 없음) =====
+            # 이 체크를 먼저 하면 Dual DE 감지 타임아웃을 피할 수 있음
+            has_tt = await scraper._has_tournament_table()
+            if has_tt:
+                # tournament_table이 있어도 dual_de일 수 있음 (국가대표 선발전 등)
+                # dual_de는 #schEtc01 selector로 빠르게 체크 (타임아웃 없음)
+                is_dual_de = await scraper.detect_dual_de_format(wait_for_selector=False)
+                if is_dual_de:
+                    logger.info("🏆 Dual DE + tournament_table 구조 감지")
+                    dual_bracket = await scraper.parse_dual_de_bracket()
+                    if dual_bracket and (dual_bracket.first_de or dual_bracket.second_de):
+                        first_de_info = f"first_de={len(dual_bracket.first_de.matches) if dual_bracket.first_de else 0}경기"
+                        second_de_info = f"second_de={len(dual_bracket.second_de.matches) if dual_bracket.second_de else 0}경기"
+                        logger.info(f"📊 Dual DE 파싱 완료: {first_de_info}, {second_de_info}")
+                        return dual_bracket.to_dict()
+                    else:
+                        logger.warning("Dual DE 파싱 실패, tournament_table 단독 파싱으로 fallback")
+
+                logger.info("🏆 tournament_table 구조 감지 - 멀티탭 파서 사용")
+                bracket = await scraper._parse_tournament_table_bracket()
+                return bracket.to_dict()
 
             # ===== Dual DE 형식 감지 (selector 대기 포함) =====
             is_dual_de = await scraper.detect_dual_de_format()

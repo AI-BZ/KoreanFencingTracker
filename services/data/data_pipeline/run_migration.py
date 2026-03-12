@@ -78,7 +78,7 @@ async def run_migration(dry_run: bool = True, verbose: bool = False):
 
     results = []
 
-    # 1. 무기명 정규화 (에페→에뻬, 플뢰레→플러레)
+    # 1. 무기명 정규화 (한국어→영어 코드: foil/epee/sabre)
     print("\n[1/3] 무기명 정규화...")
     weapon_result = await migration.fix_weapon_names(dry_run=dry_run)
     print_result(weapon_result, verbose)
