@@ -129,6 +129,118 @@ git worktree add ../FencingMind-analytics feature/analytics/main
 
 ---
 
+## 🔐 통합 인증 UI 규칙 (ALL SERVICES MUST FOLLOW)
+
+**모든 서브도메인(data, club, community, shop, blog, analytics)은 아래 규칙을 반드시 따라야 합니다.**
+
+### 인증 주체
+- **Account 서비스만 로그인/회원가입을 처리** — 다른 서비스에서 직접 구현 금지
+- 각 서비스는 auth shim 라우터로 account 서비스로 리다이렉트만 함
+- JWT 쿠키(domain=.fencingmind.ai)를 읽어서 인증 상태 확인
+
+### 로그인 버튼 (통일)
+```
+[카카오 아이콘] 카카오로 시작하기     ← 노란색 (#FEE500), 검은 글자
+[구글 아이콘]   Google로 계속하기     ← 흰색 배경, 회색 테두리
+```
+- 버튼 순서: 카카오 → 구글 (한국 시장 우선)
+- 버튼 높이: 48px, 모서리: 8px, 아이콘: 24x24px
+- CSS 클래스: `.auth-btn`, `.kakao-btn`, `.google-btn`
+- SVG 아이콘: `services/account/templates/auth/login.html` 참조
+
+### 로그인 URL 패턴
+```
+로그인:  /auth/login?redirect={현재페이지URL}
+로그아웃: /auth/logout (GET, POST 둘 다 지원)
+```
+- `/auth/login` → account 서비스로 리다이렉트 (auth shim)
+- `redirect` 파라미터로 로그인 후 원래 페이지 복귀
+- 환경변수: `ACCOUNT_SERVICE_URL` (기본값: `https://account.fencingmind.ai`)
+
+### Auth Shim 라우터 (각 서비스에 필수 구현)
+```python
+# services/{service}/app/auth/router.py — data 서비스 참조
+ACCOUNT_URL = os.getenv("ACCOUNT_SERVICE_URL", "https://account.fencingmind.ai")
+
+@router.get("/auth/login")   # → account 서비스 리다이렉트
+@router.get("/auth/me")      # → 로컬 JWT 디코드 (shared_core 사용)
+@router.post("/auth/logout") # → account 서비스 리다이렉트
+@router.get("/auth/logout")  # → account 서비스 리다이렉트
+```
+참고 구현: `services/data/app/auth/router.py`
+
+### 로그인 상태 유지 (JWT 쿠키)
+```
+Cookie: access_token=eyJhbGci...
+  Domain: .fencingmind.ai
+  Path: /
+  HttpOnly: true
+  Secure: true
+  SameSite: Lax
+```
+- 서버 사이드: `shared_core.auth.jwt.extract_token(request)` → 쿠키에서 자동 추출
+- 클라이언트 사이드: HttpOnly이므로 JS 접근 불가 (보안)
+
+### Navbar 로그인/로그아웃 UI (통일)
+```html
+<!-- 비로그인 상태 -->
+<a href="/auth/login?redirect={{ request.url }}" class="btn-login">로그인</a>
+
+<!-- 로그인 상태 -->
+<div class="nav-profile-dropdown">
+    <button class="nav-profile-btn">
+        <span class="nav-profile-avatar">{{ member.full_name[0] }}</span>
+        <span class="nav-profile-name">{{ member.full_name }}</span>
+    </button>
+    <div class="nav-profile-menu">
+        <a href="/dashboard">대시보드</a>
+        <a href="https://account.fencingmind.ai/account/me">내 계정</a>
+        <a href="#" onclick="handleLogout()">로그아웃</a>
+    </div>
+</div>
+```
+
+### 로그아웃 JS (통일)
+```javascript
+function handleLogout() {
+    localStorage.removeItem('access_token');
+    document.cookie = 'access_token=; Path=/; Domain=.fencingmind.ai; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+    window.location.href = '/auth/logout';
+}
+```
+
+### 푸터 링크 (통일)
+```
+이용약관 | 개인정보처리방침 | 개인정보 문의
+```
+- 이용약관: `https://account.fencingmind.ai/legal/terms`
+- 개인정보처리방침: `https://account.fencingmind.ai/legal/privacy`
+- 개인정보 문의: `mailto:privacy@fencingmind.ai`
+- 하단: `(c) 2024-2026 FencingMind LLC`
+
+### club_role vs 사이트 관리자 (혼동 금지)
+```
+club_role (클럽 내 역할) — organization_id 스코프 내에서만 유효
+  owner       = 이 클럽의 대표 (다른 클럽 접근 불가, 사이트 관리 불가)
+  head_coach  = 이 클럽의 수석 코치
+  coach       = 이 클럽의 코치
+  student     = 이 클럽의 수강생
+  parent      = 이 클럽의 학부모
+
+사이트 관리자 (별개 시스템)
+  members.is_admin = true → account.fencingmind.ai/admin 접근
+  club_role과 무관한 독립적인 권한
+```
+- Club 서비스에서 URL에 `/admin`을 사용하지 않음 → `/dashboard/owner` 사용
+- 모든 클럽 데이터 조회 시 `WHERE organization_id = {member.organization_id}` 필수
+
+### 관련 문서
+- `docs/CLUB_AUTH_GUIDE.md` — Club 서비스 인증 연동 상세 가이드
+- `docs/DATA_ACCESS_CONTROL.md` — Data 서비스 등급별 접근 권한 명세
+- `packages/shared_core/CLAUDE.md` — 공유 인증 패키지 설명
+
+---
+
 ## 📁 모노레포 폴더 구조 (현재)
 
 ```

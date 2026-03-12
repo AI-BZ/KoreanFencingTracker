@@ -66038,5 +66038,75 @@
     "source": "romanization",
     "external_id": null,
     "generated_date": "2025-12-24T10:03:52.481725"
+  },
+  "이라은": {
+    "en_name": "Raeun Lee",
+    "en_surname": "Lee",
+    "en_given": "Raeun",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-02-24T09:36:45.689964"
+  },
+  "권수지": {
+    "en_name": "Suji Kwon",
+    "en_surname": "Kwon",
+    "en_given": "Suji",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-02-24T09:36:45.723879"
+  },
+  "정혜인(*)": {
+    "en_name": "Hyein(*) Jung",
+    "en_surname": "Jung",
+    "en_given": "Hyein(*)",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-02-24T09:36:45.757384"
+  },
+  "경상남도펜싱협회": {
+    "en_name": "Sangnamdopensinghyeophoe Gyeong",
+    "en_surname": "Gyeong",
+    "en_given": "Sangnamdopensinghyeophoe",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-02-24T09:36:45.790782"
+  },
+  "진주시펜싱협회": {
+    "en_name": "Jusipensinghyeophoe Jin",
+    "en_surname": "Jin",
+    "en_given": "Jusipensinghyeophoe",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-02-24T09:36:45.823842"
+  },
+  "강한빈": {
+    "en_name": "Hanbin Kang",
+    "en_surname": "Kang",
+    "en_given": "Hanbin",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-02-24T09:36:45.857586"
+  },
+  "김하진(*)": {
+    "en_name": "Hajin(*) Kim",
+    "en_surname": "Kim",
+    "en_given": "Hajin(*)",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-02-24T09:36:45.892757"
   }
 }
