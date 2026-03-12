@@ -9,7 +9,7 @@ from typing import Optional, List
 
 from fastapi import Depends, HTTPException, status, Request
 
-from shared_core.types.member import ClubRole
+from shared_core.types.member import ClubRole, MemberType, MemberVerificationStatus
 from shared_core.auth.jwt import decode_token, extract_token
 from shared_core.db.client import get_supabase_client
 
@@ -45,6 +45,8 @@ class ServiceMemberContext:
         guardian_member_id: Optional[str] = None,
         email: Optional[str] = None,
         member_type: Optional[str] = None,
+        verification_status: Optional[str] = None,
+        email_verified: bool = False,
     ):
         self.member_id = member_id
         self.organization_id = organization_id
@@ -54,6 +56,8 @@ class ServiceMemberContext:
         self.guardian_member_id = guardian_member_id
         self.email = email
         self.member_type = member_type
+        self.verification_status = verification_status
+        self.email_verified = email_verified
 
     def is_coach(self) -> bool:
         """코치 이상 권한인지"""
@@ -140,11 +144,28 @@ async def get_current_club_member(request: Request) -> ServiceMemberContext:
                 supabase = get_supabase_client()
                 member_response = supabase.table("members").select(
                     "id, organization_id, club_role, full_name, player_id, "
-                    "guardian_member_id, email, member_type"
+                    "guardian_member_id, email, member_type, "
+                    "verification_status, email_verified, admin_role"
                 ).eq("id", payload["member_id"]).single().execute()
 
                 if member_response.data:
                     member = member_response.data
+
+                    # super_admin은 클럽 소속/역할 없이도 최고 권한으로 접근
+                    if member.get("admin_role") == "super_admin":
+                        return ServiceMemberContext(
+                            member_id=member["id"],
+                            organization_id=member.get("organization_id"),
+                            club_role=ClubRole.owner,  # 최고 권한 부여
+                            full_name=member["full_name"],
+                            player_id=member.get("player_id"),
+                            guardian_member_id=member.get("guardian_member_id"),
+                            email=member.get("email"),
+                            member_type=member.get("member_type"),
+                            verification_status=member.get("verification_status"),
+                            email_verified=member.get("email_verified", False),
+                        )
+
                     if not member.get("organization_id"):
                         raise HTTPException(
                             status_code=status.HTTP_403_FORBIDDEN,
@@ -164,6 +185,8 @@ async def get_current_club_member(request: Request) -> ServiceMemberContext:
                         guardian_member_id=member.get("guardian_member_id"),
                         email=member.get("email"),
                         member_type=member.get("member_type"),
+                        verification_status=member.get("verification_status"),
+                        email_verified=member.get("email_verified", False),
                     )
             except HTTPException:
                 raise
@@ -189,7 +212,8 @@ async def get_current_club_member(request: Request) -> ServiceMemberContext:
             user_id = user_response.user.id
             member_response = supabase.table("members").select(
                 "id, organization_id, club_role, full_name, player_id, "
-                "guardian_member_id, email, member_type"
+                "guardian_member_id, email, member_type, "
+                "verification_status, email_verified"
             ).eq("supabase_auth_id", user_id).single().execute()
 
             if not member_response.data:
@@ -219,6 +243,8 @@ async def get_current_club_member(request: Request) -> ServiceMemberContext:
                 guardian_member_id=member.get("guardian_member_id"),
                 email=member.get("email"),
                 member_type=member.get("member_type"),
+                verification_status=member.get("verification_status"),
+                email_verified=member.get("email_verified", False),
             )
 
         except HTTPException:
@@ -283,3 +309,40 @@ def require_roles(allowed_roles: List[ClubRole]):
             )
         return member
     return _check
+
+
+def require_verified(
+    member: ServiceMemberContext = Depends(get_current_club_member),
+) -> ServiceMemberContext:
+    """사진 인증 완료 회원만 (verification_status == verified)"""
+    if member.verification_status != MemberVerificationStatus.VERIFIED.value:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="본인 인증이 필요합니다",
+        )
+    return member
+
+
+def require_email_verified(
+    member: ServiceMemberContext = Depends(get_current_club_member),
+) -> ServiceMemberContext:
+    """이메일 인증 완료 회원만"""
+    if not member.email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="이메일 인증이 필요합니다",
+        )
+    return member
+
+
+def require_director(
+    member: ServiceMemberContext = Depends(get_current_club_member),
+) -> ServiceMemberContext:
+    """감독급 이상 권한 필요 (club_director, school_director)"""
+    director_types = [MemberType.CLUB_DIRECTOR.value, MemberType.SCHOOL_DIRECTOR.value]
+    if member.member_type not in director_types:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="감독 권한이 필요합니다",
+        )
+    return member

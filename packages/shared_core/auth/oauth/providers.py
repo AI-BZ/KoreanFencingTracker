@@ -33,6 +33,14 @@ OAUTH_PROVIDERS = {
         "userinfo_url": "https://api.twitter.com/2/users/me",
         "scopes": ["tweet.read", "users.read"],
     },
+    "line": {
+        "enabled": False,
+        "region_restriction": None,
+        "authorize_url": "https://access.line.me/oauth2/v2.1/authorize",
+        "token_url": "https://api.line.me/oauth2/v2.1/token",
+        "userinfo_url": "https://api.line.me/v2/profile",
+        "scopes": ["profile", "openid"],
+    },
 }
 
 
