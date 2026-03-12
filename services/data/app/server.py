@@ -7,7 +7,6 @@ Korean Fencing Tracker - FastAPI 웹 서버
 데이터 파이프라인: 4단계 검증 시스템
 """
 import os
-import json
 import re
 from contextlib import asynccontextmanager
 from datetime import date, datetime
@@ -151,7 +150,6 @@ load_dotenv()
 
 # 프로젝트 루트
 PROJECT_ROOT = Path(__file__).parent.parent
-DATA_DIR = PROJECT_ROOT / "data"
 STATIC_DIR = PROJECT_ROOT / "static"
 TEMPLATES_DIR = PROJECT_ROOT / "templates"
 
