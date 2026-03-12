@@ -1,0 +1,104 @@
+{% extends "admin/layout.html" %}
+
+{% block title %}감사 로그{% endblock %}
+
+{% block content %}
+<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+    <h2 style="font-size:1.25rem; font-weight:700;">감사 로그</h2>
+    <span style="font-size:0.85rem; color:var(--gray-500);">{{ logs|length }}건 표시</span>
+</div>
+
+<!-- Filters -->
+<form method="GET" action="/account/admin/logs" class="search-bar">
+    <select name="action">
+        <option value="">전체 행동</option>
+        <option value="approve" {% if action_filter == 'approve' %}selected{% endif %}>승인</option>
+        <option value="reject" {% if action_filter == 'reject' %}selected{% endif %}>거부</option>
+        <option value="update_member" {% if action_filter == 'update_member' %}selected{% endif %}>회원 수정</option>
+        <option value="suspend_member" {% if action_filter == 'suspend_member' %}selected{% endif %}>정지</option>
+        <option value="unsuspend_member" {% if action_filter == 'unsuspend_member' %}selected{% endif %}>정지 해제</option>
+        <option value="add_note" {% if action_filter == 'add_note' %}selected{% endif %}>노트 추가</option>
+    </select>
+    <select name="target_type">
+        <option value="">전체 대상</option>
+        <option value="member" {% if target_type_filter == 'member' %}selected{% endif %}>회원</option>
+        <option value="verification" {% if target_type_filter == 'verification' %}selected{% endif %}>본인인증</option>
+        <option value="player_claim" {% if target_type_filter == 'player_claim' %}selected{% endif %}>선수 Claim</option>
+        <option value="org_claim" {% if target_type_filter == 'org_claim' %}selected{% endif %}>조직 Claim</option>
+    </select>
+    <input type="date" name="date_from" value="{{ date_from or '' }}" placeholder="시작일">
+    <input type="date" name="date_to" value="{{ date_to or '' }}" placeholder="종료일">
+    <button type="submit" class="btn btn-primary">검색</button>
+</form>
+
+<!-- Logs Table -->
+<div class="card" style="padding:0; overflow-x:auto;">
+    <table>
+        <thead>
+            <tr>
+                <th style="width:160px;">시간</th>
+                <th>관리자</th>
+                <th>행동</th>
+                <th>대상 유형</th>
+                <th>대상 ID</th>
+                <th>상세</th>
+                <th>IP</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for log in logs %}
+            <tr>
+                <td style="font-size:0.8rem; color:var(--gray-500); white-space:nowrap;">
+                    {{ (log.created_at or '')[:19] | replace('T', ' ') }}
+                </td>
+                <td style="font-size:0.85rem;">{{ log.admin_name or (log.admin_id[:8] if log.admin_id else '-') }}</td>
+                <td>
+                    {% if log.action == 'approve' %}
+                        <span class="status-badge status-approved">승인</span>
+                    {% elif log.action == 'reject' %}
+                        <span class="status-badge status-rejected">거부</span>
+                    {% elif log.action == 'suspend_member' %}
+                        <span class="status-badge status-suspended">정지</span>
+                    {% elif log.action == 'unsuspend_member' %}
+                        <span class="status-badge status-active">정지해제</span>
+                    {% elif log.action == 'update_member' %}
+                        <span class="status-badge" style="background:var(--primary-light); color:var(--primary);">수정</span>
+                    {% elif log.action == 'add_note' %}
+                        <span class="status-badge" style="background:var(--gray-100); color:var(--gray-600);">노트</span>
+                    {% else %}
+                        <span class="status-badge" style="background:var(--gray-100); color:var(--gray-600);">{{ log.action }}</span>
+                    {% endif %}
+                </td>
+                <td style="font-size:0.85rem;">{{ log.target_type }}</td>
+                <td style="font-size:0.8rem; font-family:monospace; color:var(--gray-500);">
+                    {% if log.target_id %}
+                        {% if log.target_type == 'member' %}
+                            <a href="/account/admin/members/{{ log.target_id }}">{{ log.target_id[:8] }}...</a>
+                        {% else %}
+                            {{ log.target_id[:12] }}{% if log.target_id|length > 12 %}...{% endif %}
+                        {% endif %}
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                <td style="font-size:0.8rem; color:var(--gray-500); max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                    {% if log.details %}
+                        {% set detail_dict = log.details if log.details is mapping else {} %}
+                        {% if detail_dict.get('reason') %}{{ detail_dict['reason'] }}
+                        {% elif detail_dict.get('content_preview') %}{{ detail_dict['content_preview'][:50] }}
+                        {% else %}{{ log.details|string|truncate(50) }}
+                        {% endif %}
+                    {% else %}-{% endif %}
+                </td>
+                <td style="font-size:0.75rem; color:var(--gray-400); font-family:monospace;">{{ log.ip_address or '-' }}</td>
+            </tr>
+            {% endfor %}
+            {% if not logs %}
+            <tr>
+                <td colspan="7" class="empty-state">감사 로그가 없습니다</td>
+            </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

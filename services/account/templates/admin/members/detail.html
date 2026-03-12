@@ -1,0 +1,303 @@
+{% extends "admin/layout.html" %}
+
+{% block title %}회원 상세 - {{ member.full_name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .detail-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 24px;
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+    .detail-header h2 { font-size: 1.25rem; font-weight: 700; }
+    .detail-header .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .detail-tabs {
+        display: flex;
+        gap: 0;
+        border-bottom: 1px solid var(--gray-200);
+        margin-bottom: 20px;
+    }
+    .detail-tabs a {
+        padding: 10px 16px;
+        font-size: 0.85rem;
+        color: var(--gray-500);
+        border-bottom: 2px solid transparent;
+    }
+    .detail-tabs a:hover { color: var(--gray-800); text-decoration: none; }
+    .detail-tabs a.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+    .detail-section { display: none; }
+    .detail-section.active { display: block; }
+    .info-grid {
+        display: grid;
+        grid-template-columns: 140px 1fr;
+        gap: 8px 16px;
+        font-size: 0.875rem;
+    }
+    .info-grid dt { color: var(--gray-500); font-weight: 500; }
+    .info-grid dd { color: var(--gray-800); }
+    .note-form { display: flex; gap: 8px; margin-top: 12px; }
+    .note-form textarea { flex: 1; padding: 8px; border: 1px solid var(--gray-300); border-radius: 6px; font-size: 0.85rem; resize: vertical; min-height: 60px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="detail-header">
+    <div>
+        <h2>{{ member.full_name or '-' }}</h2>
+        <span style="font-size:0.85rem; color:var(--gray-500);">
+            {{ member.masked_email }}
+            {% if member.nickname %} &middot; @{{ member.nickname }}{% endif %}
+            &middot; ID: {{ member.id[:8] }}...
+        </span>
+    </div>
+    <div class="actions">
+        {% if member.member_status != 'suspended' %}
+        <form method="POST" action="/account/admin/members/{{ member.id }}/suspend" style="display:inline;">
+            <input type="hidden" name="reason" value="">
+            <button type="submit" class="btn btn-danger btn-sm" onclick="var r=prompt('정지 사유를 입력하세요');if(!r)return false;this.form.querySelector('[name=reason]').value=r;">정지</button>
+        </form>
+        {% else %}
+        <form method="POST" action="/account/admin/members/{{ member.id }}/unsuspend" style="display:inline;">
+            <button type="submit" class="btn btn-success btn-sm">정지 해제</button>
+        </form>
+        {% endif %}
+        <a href="/account/admin/members" class="btn btn-sm">목록으로</a>
+    </div>
+</div>
+
+<!-- Tabs -->
+<div class="detail-tabs">
+    <a href="#profile" class="tab-link active" data-tab="profile">프로필</a>
+    <a href="#verification" class="tab-link" data-tab="verification">인증</a>
+    <a href="#subscriptions" class="tab-link" data-tab="subscriptions">구독</a>
+    <a href="#claims" class="tab-link" data-tab="claims">Claim</a>
+    <a href="#notes" class="tab-link" data-tab="notes">노트
+        {% if notes %}<span class="badge" style="background:var(--gray-300); color:var(--gray-700); font-size:0.65rem; padding:1px 5px; border-radius:8px; margin-left:4px;">{{ notes|length }}</span>{% endif %}
+    </a>
+</div>
+
+<!-- Profile Tab -->
+<div id="profile" class="detail-section active">
+    <div class="grid-2">
+        <div class="card">
+            <div class="card-header">기본 정보</div>
+            <dl class="info-grid">
+                <dt>이름</dt><dd>{{ member.full_name or '-' }}</dd>
+                <dt>닉네임</dt><dd>{{ member.nickname or '-' }}</dd>
+                <dt>이메일</dt><dd>{{ member.masked_email }} {% if member.email_verified %}<span class="status-badge status-approved">인증됨</span>{% else %}<span class="status-badge status-pending">미인증</span>{% endif %}</dd>
+                <dt>전화번호</dt><dd>{{ member.masked_phone or '-' }}</dd>
+                <dt>생년월일</dt><dd>{{ member.birth_date or '-' }}</dd>
+                <dt>국가 코드</dt><dd>{{ member.phone_country_code or '-' }}</dd>
+            </dl>
+        </div>
+        <div class="card">
+            <div class="card-header">계정 정보</div>
+            <dl class="info-grid">
+                <dt>회원 유형</dt><dd><span class="status-badge" style="background:var(--gray-100); color:var(--gray-600);">{{ member.member_type or '-' }}</span></dd>
+                <dt>인증 상태</dt><dd><span class="status-badge status-{{ member.verification_status or 'pending' }}">{{ member.verification_status or 'pending' }}</span></dd>
+                <dt>인증 등급</dt><dd>Tier {{ member.verification_tier or 0 }}</dd>
+                <dt>계정 상태</dt><dd><span class="status-badge status-{{ member.member_status or 'active' }}">{{ member.member_status or 'active' }}</span></dd>
+                <dt>관리자 역할</dt><dd>{{ member.admin_role or '-' }}</dd>
+                <dt>가입일</dt><dd>{{ (member.created_at or '')[:10] }}</dd>
+                <dt>선수 연결</dt><dd>{% if member.player_id %}Player #{{ member.player_id }}{% else %}-{% endif %}</dd>
+                <dt>소속 조직</dt><dd>{% if member.organization_id %}Org #{{ member.organization_id }}{% else %}-{% endif %}</dd>
+            </dl>
+        </div>
+    </div>
+
+    <!-- Quick Edit -->
+    <div class="card" style="margin-top:16px;">
+        <div class="card-header">정보 수정</div>
+        <form method="POST" action="/account/admin/members/{{ member.id }}" style="display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end;">
+            <input type="hidden" name="_method" value="PATCH">
+            <div>
+                <label style="font-size:0.8rem; color:var(--gray-500); display:block; margin-bottom:4px;">관리자 역할</label>
+                <select name="admin_role" style="padding:8px; border:1px solid var(--gray-300); border-radius:6px; font-size:0.85rem;">
+                    <option value="" {% if not member.admin_role %}selected{% endif %}>없음</option>
+                    <option value="super_admin" {% if member.admin_role == 'super_admin' %}selected{% endif %}>Super Admin</option>
+                    <option value="service_admin" {% if member.admin_role == 'service_admin' %}selected{% endif %}>Service Admin</option>
+                    <option value="moderator" {% if member.admin_role == 'moderator' %}selected{% endif %}>Moderator</option>
+                    <option value="support" {% if member.admin_role == 'support' %}selected{% endif %}>Support</option>
+                </select>
+            </div>
+            <div>
+                <label style="font-size:0.8rem; color:var(--gray-500); display:block; margin-bottom:4px;">회원 유형</label>
+                <select name="member_type" style="padding:8px; border:1px solid var(--gray-300); border-radius:6px; font-size:0.85rem;">
+                    <option value="general" {% if member.member_type == 'general' %}selected{% endif %}>일반</option>
+                    <option value="player" {% if member.member_type == 'player' %}selected{% endif %}>선수</option>
+                    <option value="player_parent" {% if member.member_type == 'player_parent' %}selected{% endif %}>학부모</option>
+                    <option value="club_coach" {% if member.member_type == 'club_coach' %}selected{% endif %}>클럽 코치</option>
+                    <option value="club_director" {% if member.member_type == 'club_director' %}selected{% endif %}>클럽 감독</option>
+                    <option value="school_coach" {% if member.member_type == 'school_coach' %}selected{% endif %}>학교 코치</option>
+                    <option value="school_director" {% if member.member_type == 'school_director' %}selected{% endif %}>학교 감독</option>
+                </select>
+            </div>
+            <div>
+                <label style="font-size:0.8rem; color:var(--gray-500); display:block; margin-bottom:4px;">인증 등급</label>
+                <select name="verification_tier" style="padding:8px; border:1px solid var(--gray-300); border-radius:6px; font-size:0.85rem;">
+                    <option value="0" {% if member.verification_tier == 0 %}selected{% endif %}>0</option>
+                    <option value="1" {% if member.verification_tier == 1 %}selected{% endif %}>1</option>
+                    <option value="2" {% if member.verification_tier == 2 %}selected{% endif %}>2</option>
+                    <option value="3" {% if member.verification_tier == 3 %}selected{% endif %}>3</option>
+                    <option value="4" {% if member.verification_tier == 4 %}selected{% endif %}>4</option>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm">저장</button>
+        </form>
+    </div>
+</div>
+
+<!-- Verification Tab -->
+<div id="verification" class="detail-section">
+    <div class="card">
+        <div class="card-header">인증 이력</div>
+        {% if verifications %}
+        <table>
+            <thead>
+                <tr><th>유형</th><th>상태</th><th>AI 신뢰도</th><th>제출일</th><th>처리일</th></tr>
+            </thead>
+            <tbody>
+                {% for v in verifications %}
+                <tr>
+                    <td>{{ v.verification_type or '-' }}</td>
+                    <td><span class="status-badge status-{{ v.status }}">{{ v.status }}</span></td>
+                    <td>{{ v.ai_confidence or '-' }}</td>
+                    <td style="font-size:0.8rem;">{{ (v.submitted_at or v.created_at or '')[:16] | replace('T', ' ') }}</td>
+                    <td style="font-size:0.8rem;">{{ (v.processed_at or v.reviewed_at or '')[:16] | replace('T', ' ') if (v.processed_at or v.reviewed_at) else '-' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty-state">인증 이력이 없습니다</div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Subscriptions Tab -->
+<div id="subscriptions" class="detail-section">
+    <div class="card">
+        <div class="card-header">구독 현황</div>
+        {% if subscriptions %}
+        <table>
+            <thead>
+                <tr><th>서비스</th><th>등급</th><th>상태</th><th>시작일</th></tr>
+            </thead>
+            <tbody>
+                {% for s in subscriptions %}
+                <tr>
+                    <td style="font-weight:600;">{{ s.service_id }}</td>
+                    <td><span class="status-badge" style="background:var(--primary-light); color:var(--primary);">{{ s.tier }}</span></td>
+                    <td><span class="status-badge status-{{ s.status }}">{{ s.status }}</span></td>
+                    <td style="font-size:0.8rem;">{{ (s.created_at or '')[:10] }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty-state">구독 정보가 없습니다</div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Claims Tab -->
+<div id="claims" class="detail-section">
+    <div class="grid-2">
+        <div class="card">
+            <div class="card-header">선수 Claim</div>
+            {% if player_claims %}
+            <table>
+                <thead>
+                    <tr><th>선수</th><th>점수</th><th>상태</th><th>일시</th></tr>
+                </thead>
+                <tbody>
+                    {% for c in player_claims %}
+                    <tr>
+                        <td>Player #{{ c.player_id }}</td>
+                        <td>{{ c.confidence_score or '-' }}</td>
+                        <td><span class="status-badge status-{{ c.status }}">{{ c.status }}</span></td>
+                        <td style="font-size:0.8rem;">{{ (c.created_at or '')[:10] }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty-state">선수 Claim 없음</div>
+            {% endif %}
+        </div>
+        <div class="card">
+            <div class="card-header">조직 Claim</div>
+            {% if org_claims %}
+            <table>
+                <thead>
+                    <tr><th>조직</th><th>유형</th><th>상태</th><th>일시</th></tr>
+                </thead>
+                <tbody>
+                    {% for c in org_claims %}
+                    <tr>
+                        <td>Org #{{ c.organization_id }}</td>
+                        <td>{{ c.claim_type }}</td>
+                        <td><span class="status-badge status-{{ c.status }}">{{ c.status }}</span></td>
+                        <td style="font-size:0.8rem;">{{ (c.created_at or '')[:10] }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty-state">조직 Claim 없음</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Notes Tab -->
+<div id="notes" class="detail-section">
+    <div class="card">
+        <div class="card-header">관리 노트</div>
+        {% if notes %}
+        {% for note in notes %}
+        <div style="padding:12px 0; border-bottom:1px solid var(--gray-100);">
+            <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                <span style="font-size:0.8rem; font-weight:600; color:var(--gray-600);">{{ note.admin_name or note.admin_id[:8] }}</span>
+                <span style="font-size:0.75rem; color:var(--gray-400);">{{ (note.created_at or '')[:16] | replace('T', ' ') }}</span>
+            </div>
+            <div style="font-size:0.875rem; color:var(--gray-700); white-space:pre-wrap;">{{ note.content }}</div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="empty-state" style="padding:20px;">노트가 없습니다</div>
+        {% endif %}
+
+        <!-- Add note form -->
+        <form method="POST" action="/account/admin/members/{{ member.id }}/notes" class="note-form">
+            <textarea name="content" placeholder="관리 노트를 작성하세요..." required></textarea>
+            <button type="submit" class="btn btn-primary btn-sm" style="align-self:flex-end;">추가</button>
+        </form>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.querySelectorAll('.tab-link').forEach(link => {
+    link.addEventListener('click', function(e) {
+        e.preventDefault();
+        document.querySelectorAll('.tab-link').forEach(l => l.classList.remove('active'));
+        document.querySelectorAll('.detail-section').forEach(s => s.classList.remove('active'));
+        this.classList.add('active');
+        document.getElementById(this.dataset.tab).classList.add('active');
+        history.replaceState(null, '', this.href);
+    });
+});
+// Auto-select tab from hash
+if (window.location.hash) {
+    const tab = window.location.hash.slice(1);
+    const link = document.querySelector(`.tab-link[data-tab="${tab}"]`);
+    if (link) link.click();
+}
+</script>
+{% endblock %}

@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if success %}결제 완료{% else %}결제 취소{% endif %} - FencingMind
+{% endblock %}
+
+{% block head %}
+<style>
+    .result-container {
+        max-width: 500px;
+        margin: 80px auto;
+        padding: 40px 24px;
+        text-align: center;
+    }
+    .result-icon {
+        font-size: 3rem;
+        margin-bottom: 16px;
+    }
+    .result-title {
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin-bottom: 8px;
+    }
+    .result-desc {
+        color: #666;
+        margin-bottom: 24px;
+    }
+    .btn {
+        display: inline-block;
+        padding: 10px 24px;
+        border-radius: 6px;
+        font-size: 0.9rem;
+        font-weight: 500;
+        text-decoration: none;
+        background: #3182ce;
+        color: #fff;
+    }
+    .btn:hover { background: #2b6cb0; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="result-container">
+    {% if success %}
+        <div class="result-icon">&#10003;</div>
+        <div class="result-title">결제가 완료되었습니다</div>
+        <div class="result-desc">
+            구독이 활성화되었습니다. 대시보드에서 확인해주세요.
+        </div>
+    {% else %}
+        <div class="result-icon">&#10007;</div>
+        <div class="result-title">결제가 취소되었습니다</div>
+        <div class="result-desc">
+            언제든지 다시 시도하실 수 있습니다.
+        </div>
+    {% endif %}
+    <a href="/account/dashboard" class="btn">대시보드로 이동</a>
+</div>
+{% endblock %}

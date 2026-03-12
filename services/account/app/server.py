@@ -13,6 +13,11 @@ from .auth.router import router as auth_router
 from .profile.router import router as profile_router
 from .verification.router import router as verification_router
 from .subscriptions.router import router as subscriptions_router
+from .payments.router import router as payments_router
+from .dashboard.router import router as dashboard_router
+from .admin.router import router as admin_router
+from .messenger.router import router as messenger_router
+from .legal.router import router as legal_router
 
 SERVICE_DIR = Path(__file__).parent.parent
 TEMPLATES_DIR = SERVICE_DIR / "templates"
@@ -28,12 +33,14 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        "https://account.fencingmind.ai",
         "https://data.fencingmind.ai",
         "https://club.fencingmind.ai",
         "https://community.fencingmind.ai",
         "https://shop.fencingmind.ai",
         "https://blog.fencingmind.ai",
         "https://analytics.fencingmind.ai",
+        "http://localhost:70",  # account dev
         "http://localhost:71",  # data dev
         "http://localhost:72",  # club dev
         "http://localhost:73",  # community dev
@@ -58,6 +65,11 @@ app.include_router(auth_router)
 app.include_router(profile_router, prefix="/account")
 app.include_router(verification_router, prefix="/account")
 app.include_router(subscriptions_router, prefix="/account")
+app.include_router(payments_router)     # /account/checkout/*, /account/webhooks/*, /account/portal
+app.include_router(dashboard_router)    # /account/dashboard
+app.include_router(admin_router)        # /account/admin/*
+app.include_router(messenger_router)    # /account/messenger/*
+app.include_router(legal_router)        # /legal/terms, /legal/privacy, /terms, /privacy
 
 
 @app.get("/health")

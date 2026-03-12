@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+
+{% block title %}이메일 인증 - FencingMind{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+    <div class="auth-card verify-card">
+        <div class="verify-icon">
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#3182ce" stroke-width="1.5">
+                <rect x="2" y="4" width="20" height="16" rx="2"/>
+                <path d="M22 4L12 13L2 4"/>
+            </svg>
+        </div>
+
+        <h1>이메일을 확인해주세요</h1>
+
+        <p class="verify-message">
+            {% if email %}
+            <strong>{{ email }}</strong>로<br>
+            {% endif %}
+            인증 메일을 보냈습니다.<br>
+            메일함을 확인해주세요.
+        </p>
+
+        <div class="verify-steps">
+            <div class="step">
+                <span class="step-num">1</span>
+                <span>메일함에서 FencingMind 인증 메일을 찾아주세요</span>
+            </div>
+            <div class="step">
+                <span class="step-num">2</span>
+                <span>"이메일 인증하기" 버튼을 클릭해주세요</span>
+            </div>
+            <div class="step">
+                <span class="step-num">3</span>
+                <span>인증이 완료되면 자동으로 이동합니다</span>
+            </div>
+        </div>
+
+        <div class="verify-help">
+            <p>메일이 오지 않았나요?</p>
+            <ul>
+                <li>스팸/정크 메일함을 확인해주세요</li>
+                <li>이메일 주소가 올바른지 확인해주세요</li>
+            </ul>
+            <form action="/auth/resend-verification" method="POST" style="margin-top: 1rem;">
+                <button type="submit" class="resend-btn">인증 메일 재발송</button>
+            </form>
+        </div>
+
+        <a href="/auth/login" class="back-link">로그인 페이지로 돌아가기</a>
+    </div>
+</div>
+
+<style>
+.auth-container {
+    min-height: 80vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+}
+
+.verify-card {
+    max-width: 480px;
+    text-align: center;
+}
+
+.auth-card {
+    background: var(--card-bg, #fff);
+    border-radius: 16px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.1);
+    padding: 2.5rem;
+    width: 100%;
+}
+
+.verify-icon {
+    margin-bottom: 1.5rem;
+}
+
+.verify-card h1 {
+    font-size: 1.4rem;
+    margin-bottom: 1rem;
+    color: var(--text-primary, #333);
+}
+
+.verify-message {
+    color: var(--text-secondary, #666);
+    font-size: 1rem;
+    line-height: 1.6;
+    margin-bottom: 2rem;
+}
+
+.verify-steps {
+    text-align: left;
+    margin-bottom: 2rem;
+}
+
+.step {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+    font-size: 0.9rem;
+    color: #555;
+}
+
+.step-num {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: #ebf8ff;
+    color: #3182ce;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+}
+
+.verify-help {
+    background: #f7fafc;
+    border-radius: 8px;
+    padding: 1.25rem;
+    margin-bottom: 1.5rem;
+    text-align: left;
+}
+
+.verify-help p {
+    font-size: 0.9rem;
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+    color: #555;
+}
+
+.verify-help ul {
+    font-size: 0.85rem;
+    color: #777;
+    padding-left: 1.25rem;
+    margin: 0;
+}
+
+.verify-help li {
+    margin-bottom: 0.25rem;
+}
+
+.resend-btn {
+    width: 100%;
+    padding: 0.75rem;
+    background: transparent;
+    border: 1px solid var(--primary-color, #3182ce);
+    color: var(--primary-color, #3182ce);
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.resend-btn:hover {
+    background: #ebf8ff;
+}
+
+.back-link {
+    color: var(--text-secondary, #888);
+    text-decoration: none;
+    font-size: 0.85rem;
+}
+
+.back-link:hover {
+    text-decoration: underline;
+}
+</style>
+{% endblock %}

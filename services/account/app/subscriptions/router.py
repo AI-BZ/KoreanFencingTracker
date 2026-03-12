@@ -4,6 +4,7 @@
 member_services 테이블 CRUD - 회원의 서비스 구독 관리
 """
 from datetime import datetime, timezone
+from typing import List, Optional, Union
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from loguru import logger
@@ -16,14 +17,14 @@ from shared_core.auth.models import MemberServiceCreate, MemberServiceResponse
 router = APIRouter(prefix="/services", tags=["subscriptions"])
 
 
-def _require_member(member: dict | None) -> dict:
+def _require_member(member: Optional[dict]) -> dict:
     """인증된 회원 필수 - None이면 401"""
     if not member:
         raise HTTPException(status_code=401, detail="로그인이 필요합니다")
     return member
 
 
-@router.get("", response_model=list[MemberServiceResponse])
+@router.get("", response_model=List[MemberServiceResponse])
 async def list_subscriptions(request: Request):
     """내 서비스 구독 목록 조회"""
     member = _require_member(await get_current_member(request))

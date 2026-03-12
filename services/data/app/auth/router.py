@@ -19,7 +19,7 @@ from shared_core.auth.models import MemberResponse
 
 router = APIRouter(prefix="/auth", tags=["auth-shim"])
 
-ACCOUNT_URL = os.getenv("ACCOUNT_SERVICE_URL", "http://localhost:70")
+ACCOUNT_URL = os.getenv("ACCOUNT_SERVICE_URL", "https://account.fencingmind.ai")
 
 
 @router.get("/login")

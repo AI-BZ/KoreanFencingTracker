@@ -167,6 +167,106 @@ class GeminiVerifier:
                 rejection_reason=f"응답 파싱 오류: {str(e)}"
             )
 
+    async def verify_brn_image(self, image_data: bytes) -> Optional[dict]:
+        """
+        사업자등록증 이미지를 Gemini API로 분석하여 정보 추출
+
+        Returns:
+            dict: {
+                "business_registration_number": "XXX-XX-XXXXX",
+                "business_name": "...",
+                "representative_name": "...",
+                "opening_date": "YYYYMMDD",
+                "confidence": 0.0-1.0,
+                ...
+            }
+        """
+        if not self.api_key:
+            logger.error("GEMINI_API_KEY가 설정되지 않았습니다")
+            return None
+
+        try:
+            image_base64 = base64.b64encode(image_data).decode("utf-8")
+            mime_type = self._detect_mime_type(image_data)
+
+            prompt = VERIFICATION_PROMPTS.get("business_registration")
+            if not prompt:
+                logger.error("business_registration prompt not found")
+                return None
+
+            result = await self._call_gemini_api(image_base64, mime_type, prompt)
+
+            # Parse the result - for BRN we need the raw dict, not GeminiVerificationResult
+            if result and result.confidence > 0:
+                # Re-parse from the original text to get BRN-specific fields
+                # The _call_gemini_api returns GeminiVerificationResult which doesn't have BRN fields
+                # So we call directly and parse JSON
+                return await self._call_gemini_brn(image_base64, mime_type, prompt)
+
+            return None
+
+        except Exception as e:
+            logger.exception(f"BRN OCR 오류: {e}")
+            return None
+
+    async def _call_gemini_brn(
+        self, image_base64: str, mime_type: str, prompt: str
+    ) -> Optional[dict]:
+        """Gemini API를 호출하여 BRN 정보 추출"""
+        url = f"{self.base_url}/models/{self.model}:generateContent"
+
+        payload = {
+            "contents": [
+                {
+                    "parts": [
+                        {
+                            "inline_data": {
+                                "mime_type": mime_type,
+                                "data": image_base64
+                            }
+                        },
+                        {"text": prompt}
+                    ]
+                }
+            ],
+            "generationConfig": {
+                "temperature": 0.1,
+                "topK": 1,
+                "topP": 1,
+                "maxOutputTokens": 1024,
+            }
+        }
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                url, json=payload, params={"key": self.api_key}
+            )
+
+            if response.status_code != 200:
+                logger.error(f"Gemini BRN API 오류: {response.status_code}")
+                return None
+
+            data = response.json()
+
+            try:
+                text_response = data["candidates"][0]["content"]["parts"][0]["text"]
+            except (KeyError, IndexError):
+                logger.error("Gemini BRN 응답 파싱 오류")
+                return None
+
+            # Parse JSON from response
+            try:
+                json_match = re.search(r'```(?:json)?\s*([\s\S]*?)```', text_response)
+                if json_match:
+                    json_str = json_match.group(1).strip()
+                else:
+                    json_str = text_response.strip()
+
+                return json.loads(json_str)
+            except json.JSONDecodeError as e:
+                logger.error(f"BRN JSON 파싱 오류: {e}")
+                return None
+
     def _detect_mime_type(self, image_data: bytes) -> str:
         """이미지 데이터에서 MIME 타입 추측"""
         if image_data[:8] == b'\x89PNG\r\n\x1a\n':

@@ -23,6 +23,16 @@
 </head>
 <body>
     {% block content %}{% endblock %}
+
+    <footer style="text-align:center; padding:24px 16px; margin-top:40px; border-top:1px solid #e2e8f0; font-size:0.8rem; color:#999;">
+        <div>
+            <a href="/legal/terms" style="color:#666; text-decoration:none;">이용약관</a> |
+            <a href="/legal/privacy" style="color:#666; text-decoration:none;">개인정보처리방침</a> |
+            <a href="mailto:privacy@fencingmind.ai" style="color:#666; text-decoration:none;">개인정보 문의</a>
+        </div>
+        <div style="margin-top:4px;">&copy; 2024-2026 FencingMind LLC</div>
+    </footer>
+
     {% block scripts %}{% endblock %}
 </body>
 </html>

@@ -115,3 +115,46 @@ async def link_guardian(
     }).eq("id", str(data.minor_member_id)).execute()
 
     return {"success": True, "message": "보호자 연결이 완료되었습니다"}
+
+
+@router.post("/me/delete-request")
+async def request_account_deletion(request: Request):
+    """계정 삭제 요청 (30일 유예)"""
+    member = await get_current_member(request)
+    if not member:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다")
+
+    from datetime import datetime, timedelta
+    from app.config import get_account_settings
+
+    settings = get_account_settings()
+    now = datetime.utcnow()
+    scheduled = now + timedelta(days=settings.ACCOUNT_DELETION_GRACE_DAYS)
+
+    supabase = get_supabase()
+    supabase.table("members").update({
+        "deletion_requested_at": now.isoformat(),
+        "deletion_scheduled_at": scheduled.isoformat(),
+    }).eq("id", member["id"]).execute()
+
+    return {
+        "success": True,
+        "message": f"계정 삭제가 예약되었습니다. {settings.ACCOUNT_DELETION_GRACE_DAYS}일 이내에 취소할 수 있습니다.",
+        "deletion_scheduled_at": scheduled.isoformat(),
+    }
+
+
+@router.post("/me/cancel-deletion")
+async def cancel_account_deletion(request: Request):
+    """계정 삭제 취소"""
+    member = await get_current_member(request)
+    if not member:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다")
+
+    supabase = get_supabase()
+    supabase.table("members").update({
+        "deletion_requested_at": None,
+        "deletion_scheduled_at": None,
+    }).eq("id", member["id"]).execute()
+
+    return {"success": True, "message": "계정 삭제가 취소되었습니다."}

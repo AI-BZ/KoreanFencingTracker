@@ -16,8 +16,12 @@ from shared_core.auth.jwt import get_current_member
 from shared_core.db.client import get_supabase_client
 
 from .processor import VerificationProcessor
+from .claims import router as claims_router
 
 router = APIRouter(prefix="/verification", tags=["verification"])
+
+# Include claims sub-routes (player-search, player-claim, org-claim)
+router.include_router(claims_router)
 
 _templates = Jinja2Templates(directory=str(Path(__file__).parent.parent.parent / "templates"))
 
