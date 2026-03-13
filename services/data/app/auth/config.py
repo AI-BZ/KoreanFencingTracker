@@ -1,53 +1,41 @@
 """
-Auth Config - OAuth 및 인증 설정
+Auth Config - data 서비스 인증 설정
+
+공유 설정은 shared_core에서 re-export.
+Gemini/Verification 설정은 data 서비스 전용으로 잔류.
 """
 import os
 from typing import Optional, List
 from pydantic_settings import SettingsConfigDict, BaseSettings
 from functools import lru_cache
 
+# === 공유 설정 re-export ===
+from shared_core.auth.config import SharedAuthSettings, get_shared_auth_settings
+from shared_core.auth.oauth.providers import (
+    OAUTH_PROVIDERS,
+    get_available_providers,
+    get_promotional_providers,
+)
 
-class AuthSettings(BaseSettings):
-    """인증 관련 설정"""
 
-    # Supabase
-    SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
-    SUPABASE_KEY: str = os.getenv("SUPABASE_KEY", "")
-    SUPABASE_SERVICE_KEY: str = os.getenv("SUPABASE_SERVICE_KEY", "")
+class AuthSettings(SharedAuthSettings):
+    """
+    data 서비스 인증 설정
 
-    # JWT
-    JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
-    JWT_ALGORITHM: str = "HS256"
-    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24시간
+    SharedAuthSettings를 상속하여 Gemini/Verification 전용 설정 추가.
+    """
 
-    # Kakao OAuth
-    KAKAO_CLIENT_ID: str = os.getenv("KAKAO_CLIENT_ID", "")
-    KAKAO_CLIENT_SECRET: str = os.getenv("KAKAO_CLIENT_SECRET", "")
-    KAKAO_REDIRECT_URI: str = os.getenv("KAKAO_REDIRECT_URI", "http://localhost:71/auth/callback/kakao")
-
-    # Google OAuth
-    GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
-    GOOGLE_CLIENT_SECRET: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
-    GOOGLE_REDIRECT_URI: str = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:71/auth/callback/google")
-
-    # X (Twitter) OAuth
-    X_CLIENT_ID: str = os.getenv("X_CLIENT_ID", "")
-    X_CLIENT_SECRET: str = os.getenv("X_CLIENT_SECRET", "")
-    X_REDIRECT_URI: str = os.getenv("X_REDIRECT_URI", "http://localhost:71/auth/callback/x")
-
-    # Gemini API
+    # Gemini API (data 서비스 전용)
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
-    GEMINI_MODEL: str = "gemini-2.0-flash-exp"  # 최신 모델
+    GEMINI_MODEL: str = "gemini-2.0-flash-exp"
 
     # IP Geolocation (선택사항)
     IP_GEOLOCATION_API_KEY: str = os.getenv("IP_GEOLOCATION_API_KEY", "")
 
-    # Cookie
-    COOKIE_DOMAIN: Optional[str] = os.getenv("COOKIE_DOMAIN")  # .fencingmind.ai (prod) or None (dev)
+    # 인증 설정 (Gemini 자동 승인/거부 임계값)
+    VERIFICATION_AUTO_APPROVE_THRESHOLD: float = 0.85
+    VERIFICATION_AUTO_REJECT_THRESHOLD: float = 0.60
 
-    # 인증 설정
-    VERIFICATION_AUTO_APPROVE_THRESHOLD: float = 0.85  # 자동 승인 신뢰도
-    VERIFICATION_AUTO_REJECT_THRESHOLD: float = 0.60   # 자동 거부 신뢰도
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
@@ -56,85 +44,7 @@ def get_auth_settings() -> AuthSettings:
     return AuthSettings()
 
 
-# OAuth Provider 설정
-OAUTH_PROVIDERS = {
-    "kakao": {
-        "enabled": True,
-        "region_restriction": "KR",  # 한국만
-        "authorize_url": "https://kauth.kakao.com/oauth/authorize",
-        "token_url": "https://kauth.kakao.com/oauth/token",
-        "userinfo_url": "https://kapi.kakao.com/v2/user/me",
-        "scopes": ["profile_nickname"],  # account_email은 카카오 앱에서 동의항목 설정 필요
-    },
-    "google": {
-        "enabled": True,
-        "region_restriction": None,  # 전세계
-        "authorize_url": "https://accounts.google.com/o/oauth2/v2/auth",
-        "token_url": "https://oauth2.googleapis.com/token",
-        "userinfo_url": "https://www.googleapis.com/oauth2/v2/userinfo",
-        "scopes": ["openid", "email", "profile"],
-    },
-    "x": {
-        "enabled": True,
-        "region_restriction": None,
-        "promotional_only": True,  # 홍보용만
-        "authorize_url": "https://twitter.com/i/oauth2/authorize",
-        "token_url": "https://api.twitter.com/2/oauth2/token",
-        "userinfo_url": "https://api.twitter.com/2/users/me",
-        "scopes": ["tweet.read", "users.read"],
-    },
-}
-
-
-def get_available_providers(country_code: Optional[str] = None) -> List[str]:
-    """
-    국가 코드에 따라 사용 가능한 OAuth 제공자 목록 반환
-
-    Args:
-        country_code: ISO 2글자 국가 코드 (예: KR, US, JP)
-
-    Returns:
-        사용 가능한 provider 목록
-    """
-    providers = []
-
-    for provider, config in OAUTH_PROVIDERS.items():
-        if not config.get("enabled", False):
-            continue
-
-        # 홍보용만인 경우 제외 (로그인용 목록에서)
-        if config.get("promotional_only", False):
-            continue
-
-        # 지역 제한 확인
-        region = config.get("region_restriction")
-        if region and country_code and country_code != region:
-            continue
-
-        providers.append(provider)
-
-    # 한국은 카카오 우선
-    if country_code == "KR" and "kakao" in providers:
-        providers.remove("kakao")
-        providers.insert(0, "kakao")
-
-    return providers
-
-
-def get_promotional_providers() -> List[str]:
-    """
-    홍보용 연동 가능한 OAuth 제공자 목록 반환
-
-    Returns:
-        홍보용 provider 목록 (예: x)
-    """
-    return [
-        provider for provider, config in OAUTH_PROVIDERS.items()
-        if config.get("enabled", False) and config.get("promotional_only", False)
-    ]
-
-
-# Gemini API 프롬프트
+# Gemini API 프롬프트 (data 서비스 전용)
 VERIFICATION_PROMPTS = {
     "mask_photo": """
 이 이미지는 펜싱 마스크와 함께 찍은 본인 인증 사진입니다.
