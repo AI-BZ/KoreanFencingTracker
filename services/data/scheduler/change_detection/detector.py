@@ -296,16 +296,30 @@ class ChangeDetector:
                     });
                 }
 
-                // DE 대진표
-                const tournamentDiv = document.querySelector('#tournament_container');
+                // DE 대진표 - 여러 구조 지원
+                // 1) #tournament_container (래퍼 div)
+                // 2) #A_table (구형 DE 테이블)
+                // 3) .tournament_table (신형 - 국가대표 선발전 등)
+                const tournamentDiv = document.querySelector('#tournament_container')
+                    || document.querySelector('#A_table')
+                    || document.querySelector('.tournament_table');
                 if (tournamentDiv) {
                     const cells = tournamentDiv.querySelectorAll('td');
                     result.deCells = cells.length;
 
-                    // 완료된 경기 (점수 패턴)
+                    // 완료된 경기 (점수 패턴 - td 내 텍스트)
                     cells.forEach(cell => {
                         const text = cell.innerText;
                         if (/\\d+\\s*[-:]\\s*\\d+/.test(text)) {
+                            result.deCompleted++;
+                        }
+                    });
+
+                    // .tournament_table의 .user_box 요소도 카운트 (score 속성)
+                    const userBoxes = tournamentDiv.querySelectorAll('.user_box[score]');
+                    userBoxes.forEach(box => {
+                        const score = parseInt(box.getAttribute('score')) || 0;
+                        if (score > 0) {
                             result.deCompleted++;
                         }
                     });

@@ -2,7 +2,7 @@
 스마트 스크래핑 스케줄러
 
 이벤트 기반 스크래핑 시스템:
-1. 대회 공고 감지 (주 1회) - 새 대회 발견 시 DB 등록
+1. 대회 공고 감지 (매일) - 새 대회 발견 시 DB 등록
 2. 이벤트 기반 스크래핑:
    - 대회 1주일 전: 준비 스크래핑 (참가자 명단)
    - 대회 당일: 스텔스 모드 스크래핑 (30분 간격, 사람처럼)
@@ -32,7 +32,8 @@ class FencingScheduler:
     스마트 펜싱 데이터 스케줄러
 
     스케줄:
-    - 대회 공고 감지: 매주 월요일 09:00
+    - 대회 공고 감지: 매일 09:00
+    - Pool 대진표: 30분 간격 (D-1/D-day 대회만, 중복 방지)
     - 🔥 변경 감지 스크래핑: 5분 간격 (대회 진행 중, 변경된 종목만)
     - 스텔스 스크래핑: 30분 간격 (대회 진행 중, 백업)
     - 최종 결과 수집: 매일 06:00 (어제 종료된 대회)
@@ -57,26 +58,27 @@ class FencingScheduler:
 
     def setup(self):
         """스케줄러 설정"""
-        # 1. 대회 공고 감지 - 매주 월요일 09:00
+        # 1. 대회 공고 감지 - 매일 09:00
         self.scheduler.add_job(
             self._run_competition_detection,
-            CronTrigger(day_of_week="mon", hour=9, minute=0),
-            id="weekly_competition_detection",
-            name="Weekly Competition Detection",
+            CronTrigger(hour=9, minute=0),
+            id="daily_competition_detection",
+            name="Daily Competition Detection",
             replace_existing=True
         )
-        logger.info("📅 매주 월요일 09:00 대회 공고 감지 스케줄 등록")
+        logger.info("📅 매일 09:00 대회 공고 감지 스케줄 등록")
 
-        # 2. Pool 대진표 사전 스크래핑 - 매일 07:00
-        #    (내일 시작 또는 오늘 시작 대회의 Pool 대진표)
+        # 2. Pool 대진표 사전 스크래핑 - 30분 간격 (매시 0분, 30분)
+        #    D-1 또는 D-day 대회가 있을 때만 실제 스크래핑
+        #    이미 풀 데이터가 있으면 스킵 (중복 방지)
         self.scheduler.add_job(
             self._run_pre_competition_scraping,
-            CronTrigger(hour=7, minute=0),
-            id="daily_pre_competition",
-            name="Daily Pre-Competition Pool Brackets",
+            CronTrigger(minute="0,30"),
+            id="pre_competition_check",
+            name="Pre-Competition Pool Check (30min)",
             replace_existing=True
         )
-        logger.info("📋 매일 07:00 대진표 사전 스크래핑 스케줄 등록")
+        logger.info("📋 30분 간격 대진표 사전 스크래핑 스케줄 등록 (중복 방지 포함)")
 
         # 3. 🔥 변경 감지 기반 스크래핑 - 5분 간격 (핵심 기능)
         #    협회 사이트 상태 지문 캡처 → 변경된 종목만 선택적 스크래핑
@@ -122,6 +124,29 @@ class FencingScheduler:
         )
         logger.info("👤 매일 07:30 선수 데이터 자동 업데이트 스케줄 등록")
 
+        # 7. 예정 대회 종목/참가자 사전 수집 - 매일 10:00, 15:00
+        #    D-7 ~ D-1 대회의 종목 목록 확인 + 참가자 명단 수집
+        self.scheduler.add_job(
+            self._run_upcoming_preparation,
+            CronTrigger(hour="10,15", minute=0),
+            id="upcoming_preparation",
+            name="📋 Upcoming Competition Preparation",
+            replace_existing=True
+        )
+        logger.info("📋 매일 10:00/15:00 예정 대회 종목/참가자 사전 수집 등록")
+
+        # 8. 📡 미래 대회 모니터링 - 매일 11:00, 18:00
+        #    모든 미래 대회(start_date > today)에 대해 경량 API로 종목+참가자 변경 감시
+        #    D-7 이전 공백 해소 (기존 upcoming_preparation은 D-7만 커버)
+        self.scheduler.add_job(
+            self._run_future_competition_monitoring,
+            CronTrigger(hour="11,18", minute=0),
+            id="future_competition_monitoring",
+            name="📡 Future Competition Monitoring",
+            replace_existing=True
+        )
+        logger.info("📡 매일 11:00/18:00 미래 대회 모니터링 등록 (경량 API)")
+
     async def _run_competition_detection(self):
         """대회 공고 감지 실행"""
         if self._is_running:
@@ -129,7 +154,7 @@ class FencingScheduler:
             return
 
         self._is_running = True
-        logger.info("=== 주간 대회 공고 감지 시작 ===")
+        logger.info("=== 대회 공고 감지 시작 ===")
 
         try:
             from scheduler.competition_detector import CompetitionDetector
@@ -144,6 +169,10 @@ class FencingScheduler:
                 logger.info(f"🆕 {result['detected']}개 새 대회 발견!")
                 for comp in self._detected_competitions:
                     logger.info(f"   - {comp['name']} ({comp['start_date']})")
+
+                # 신규 대회 초기 수집 후 서버 캐시 새로고침
+                if result.get("initial_events_created", 0) > 0:
+                    await self._refresh_server_cache()
             else:
                 logger.info("새 대회 없음")
 
@@ -155,13 +184,14 @@ class FencingScheduler:
             self._is_running = False
 
     async def _run_pre_competition_scraping(self):
-        """대회 전 Pool 대진표 스크래핑 (매일 07:00)"""
-        if self._is_running:
-            logger.warning("다른 작업 진행 중, 대진표 스크래핑 스킵")
-            return
+        """대회 전 Pool 대진표 스크래핑 (30분 간격, 중복 방지)
 
-        self._is_running = True
-        logger.info("=== Pool 대진표 사전 스크래핑 시작 ===")
+        D-1 또는 D-day 대회가 있을 때만 실행.
+        이미 풀 데이터가 DB에 있는 대회는 스킵.
+        """
+        if self._is_running:
+            logger.debug("다른 작업 진행 중, 대진표 스크래핑 스킵")
+            return
 
         try:
             from scheduler.competition_detector import EventBasedScraper
@@ -170,13 +200,33 @@ class FencingScheduler:
             comps = await scraper.get_competitions_to_scrape()
 
             pre_comps = comps.get("pre_competition", [])
-            if pre_comps:
-                logger.info(f"📋 {len(pre_comps)}개 대회 대진표 수집")
-                result = await scraper.scrape_pre_competition(pre_comps)
-                self._last_stats["pre_competition"] = result
-                logger.info(f"✅ 대진표 스크래핑 완료: {result.get('total_events', 0)}개 종목")
-            else:
-                logger.info("수집할 대진표 없음 (내일/오늘 시작 대회 없음)")
+            if not pre_comps:
+                logger.debug("📋 수집할 대진표 없음 (내일/오늘 시작 대회 없음)")
+                return
+
+            # 이미 풀 데이터가 있는 대회 제외
+            comps_to_scrape = []
+            for comp in pre_comps:
+                if not await self._has_pool_data(comp, scraper):
+                    comps_to_scrape.append(comp)
+                else:
+                    logger.debug(f"📋 풀 대진표 이미 수집됨: {comp.get('comp_name', 'Unknown')}")
+
+            if not comps_to_scrape:
+                logger.debug("📋 모든 대회 풀 대진표 이미 수집됨")
+                return
+
+            # 실제 스크래핑 실행
+            self._is_running = True
+            logger.info(f"=== Pool 대진표 사전 스크래핑 시작: {len(comps_to_scrape)}개 대회 ===")
+
+            result = await scraper.scrape_pre_competition(comps_to_scrape)
+            self._last_stats["pre_competition"] = result
+            logger.info(f"✅ 대진표 스크래핑 완료: {result.get('total_events', 0)}개 종목")
+
+            # 성공 시 서버 캐시 새로고침
+            if result.get("total_events", 0) > 0:
+                await scraper._refresh_server_cache()
 
         except ImportError as e:
             logger.error(f"스크래퍼 import 오류: {e}")
@@ -184,6 +234,46 @@ class FencingScheduler:
             logger.error(f"대진표 스크래핑 오류: {e}")
         finally:
             self._is_running = False
+
+    async def _has_pool_data(self, comp: dict, scraper) -> bool:
+        """대회의 풀 대진표가 이미 DB에 있는지 확인
+
+        Args:
+            comp: 대회 정보 (id 또는 comp_idx 포함)
+            scraper: EventBasedScraper 인스턴스 (DB 접근용)
+
+        Returns:
+            True if pool_rounds data exists for any event in this competition
+        """
+        try:
+            db = scraper.db
+            if not db:
+                return False
+
+            comp_id = comp.get("id")
+            if not comp_id:
+                return False
+
+            # 해당 대회의 이벤트 중 pool_rounds가 있는지 확인
+            events = db.table("events").select(
+                "id, raw_data"
+            ).eq(
+                "competition_id", comp_id
+            ).execute()
+
+            if not events.data:
+                return False
+
+            for event in events.data:
+                raw_data = event.get("raw_data") or {}
+                pool_rounds = raw_data.get("pool_rounds")
+                if pool_rounds and len(pool_rounds) > 0:
+                    return True
+
+            return False
+        except Exception as e:
+            logger.warning(f"풀 데이터 확인 오류: {e}")
+            return False
 
     async def _run_change_detection_scraping(self):
         """
@@ -498,15 +588,132 @@ class FencingScheduler:
         finally:
             self._is_running = False
 
+    async def _run_upcoming_preparation(self):
+        """
+        예정 대회 종목/참가자 사전 수집 (D-7 ~ D-1)
+
+        1. 7일 이내 시작 대회 중 이벤트가 없는 대회 → 종목 목록 스크래핑
+        2. 이벤트가 있는 대회 중 참가자 미수집 종목 → 참가자 명단 수집
+        """
+        if self._is_running:
+            logger.debug("다른 작업 진행 중, 예정 대회 준비 스킵")
+            return
+
+        self._is_running = True
+        logger.info("=== 📋 예정 대회 종목/참가자 사전 수집 시작 ===")
+
+        try:
+            from scheduler.competition_detector import EventBasedScraper
+
+            scraper = EventBasedScraper()
+            comps = await scraper.get_competitions_to_scrape()
+            upcoming = comps.get("upcoming", [])
+
+            if not upcoming:
+                logger.debug("📋 7일 이내 시작 대회 없음")
+                return
+
+            total_events_created = 0
+            total_participants_fetched = 0
+
+            for comp in upcoming:
+                comp_name = comp.get("comp_name", "Unknown")
+                comp_idx = comp.get("comp_idx")
+                comp_id = comp.get("id")
+
+                if not comp_idx or not comp_id:
+                    continue
+
+                logger.info(f"📋 예정 대회 준비: {comp_name} (시작: {comp.get('start_date')})")
+
+                # 1단계: 이벤트가 없으면 종목 목록 스크래핑으로 생성
+                events = scraper.db.table("events").select("id, event_name, sub_event_cd, raw_data").eq(
+                    "competition_id", comp_id
+                ).execute()
+
+                if not events.data:
+                    logger.info(f"  📋 종목 없음 → 종목 목록 스크래핑 (경량)")
+                    result = await scraper._scrape_competition_direct(comp, scrape_type="events_only")
+                    events_created = result.get("events_saved", 0)
+                    total_events_created += events_created
+                    logger.info(f"  ✅ {events_created}개 종목 생성")
+
+                # 2단계: 참가자 미수집 종목에 대해 참가자 수집
+                await scraper._fetch_participants(comp)
+                total_participants_fetched += 1
+
+            self._last_stats["upcoming_preparation"] = {
+                "competitions_checked": len(upcoming),
+                "events_created": total_events_created,
+                "checked_at": datetime.now().isoformat(),
+            }
+
+            if total_events_created > 0:
+                logger.info(f"📋 예정 대회 준비 완료: {total_events_created}개 종목 생성")
+                await self._refresh_server_cache()
+            else:
+                logger.info("📋 예정 대회 준비 완료 (새 종목 없음)")
+
+        except ImportError as e:
+            logger.error(f"예정 대회 준비 import 오류: {e}")
+        except Exception as e:
+            logger.error(f"예정 대회 준비 오류: {e}")
+        finally:
+            self._is_running = False
+
+    async def _run_future_competition_monitoring(self):
+        """
+        📡 미래 대회 모니터링 (매일 11:00, 18:00)
+
+        모든 미래 대회(start_date > today)에 대해 경량 HTTP API로:
+        - 종목 없는 대회 → 종목 목록 수집
+        - 종목 있는 대회 → 참가자 변경 감지 및 업데이트
+
+        기존 upcoming_preparation(D-7)과 달리:
+        - 감지 직후 ~ 대회 시작까지 전 기간 커버
+        - Playwright 없이 HTTP API만 사용 (경량)
+        """
+        if self._is_running:
+            logger.debug("다른 작업 진행 중, 미래 대회 모니터링 스킵")
+            return
+
+        self._is_running = True
+        logger.info("=== 📡 미래 대회 모니터링 시작 ===")
+
+        try:
+            from scheduler.competition_detector import EventBasedScraper
+
+            scraper = EventBasedScraper()
+            result = await scraper.monitor_future_competitions()
+
+            self._last_stats["future_monitoring"] = result
+
+            # 변경 발생 시 서버 캐시 새로고침
+            events_created = result.get("events_created", 0)
+            participants_updated = result.get("participants_updated", 0)
+
+            if events_created > 0 or participants_updated > 0:
+                await self._refresh_server_cache()
+
+        except ImportError as e:
+            logger.error(f"📡 모니터링 모듈 import 오류: {e}")
+        except Exception as e:
+            logger.error(f"📡 미래 대회 모니터링 오류: {e}")
+        finally:
+            self._is_running = False
+
     async def _refresh_server_cache(self):
         """서버 캐시 및 identity_resolver 새로고침"""
         try:
             import httpx
 
+            # 서버 포트 자동 감지 (환경변수 또는 기본값)
+            import os
+            server_port = os.getenv("SERVER_PORT", "9071")
             logger.info("🔄 서버 캐시 새로고침 요청...")
             async with httpx.AsyncClient() as client:
                 response = await client.post(
-                    "http://localhost:71/api/refresh-data",
+                    f"http://localhost:{server_port}/api/refresh-data",
                     timeout=60.0
                 )
                 if response.status_code == 200:
@@ -525,13 +732,15 @@ class FencingScheduler:
         self.setup()
         self.scheduler.start()
         logger.info("🚀 스마트 스케줄러 시작됨")
-        logger.info("   - 대회 감지: 매주 월요일 09:00")
-        logger.info("   - Pool 대진표: 매일 07:00 (대회 전날/당일)")
+        logger.info("   - 최종 결과: 매일 06:00")
+        logger.info("   - 👤 선수 데이터 업데이트: 매일 07:30")
+        logger.info("   - 대회 감지: 매일 09:00 (→ 신규 대회 즉시 종목+참가자 수집)")
+        logger.info("   - 📋 예정 대회 준비: 매일 10:00/15:00 (D-7, Playwright)")
+        logger.info("   - 📡 미래 대회 모니터링: 매일 11:00/18:00 (전체, 경량 API)")
+        logger.info("   - Pool 대진표: 30분 간격 (D-1/D-day 대회만, 중복 방지)")
         logger.info(f"   - 🔥 변경 감지 스크래핑: 5분 간격 (메인) "
                    f"({stealth_config.active_hours_start}:00~{stealth_config.active_hours_end}:00)")
         logger.info(f"   - 🥷 스텔스 스크래핑: 30분 간격 (백업)")
-        logger.info("   - 최종 결과: 매일 06:00")
-        logger.info("   - 👤 선수 데이터 업데이트: 매일 07:30")
 
     def stop(self):
         """스케줄러 중지"""
@@ -563,13 +772,15 @@ class FencingScheduler:
             "change_detection_stats": change_detection_stats,
             "jobs": jobs,
             "schedule": {
-                "detection": "매주 월요일 09:00",
-                "pre_competition": "매일 07:00 (대회 전날/당일 대진표)",
+                "final_results": "매일 06:00",
+                "player_updates": "👤 매일 07:30 (선수 데이터 자동 업데이트)",
+                "detection": "매일 09:00 (→ 신규 대회 즉시 종목+참가자 수집)",
+                "upcoming_preparation": "📋 매일 10:00/15:00 (D-7 예정 대회, Playwright)",
+                "future_monitoring": "📡 매일 11:00/18:00 (모든 미래 대회, 경량 API)",
+                "pre_competition": "30분 간격 (D-1/D-day 대회만, 중복 방지)",
                 "change_detection": f"🔥 5분 간격 (메인) "
                                    f"({stealth_config.active_hours_start}:00~{stealth_config.active_hours_end}:00)",
                 "stealth_scraping": f"🥷 30분 간격 (백업)",
-                "final_results": "매일 06:00",
-                "player_updates": "👤 매일 07:30 (선수 데이터 자동 업데이트)",
             }
         }
 
@@ -578,12 +789,14 @@ class FencingScheduler:
 
         Args:
             task_type:
-                - "detect": 대회 공고 감지
+                - "detect": 대회 공고 감지 (→ 신규 대회 즉시 종목+참가자 수집)
                 - "pre": Pool 대진표 사전 스크래핑
                 - "change": 🔥 변경 감지 기반 스크래핑 (권장)
                 - "scrape": 스텔스 스크래핑 (백업)
                 - "final": 최종 결과 수집
                 - "players": 👤 선수 데이터 자동 업데이트
+                - "upcoming": 📋 예정 대회 종목/참가자 사전 수집 (D-7)
+                - "monitor": 📡 미래 대회 모니터링 (전체, 경량 API)
                 - "all": 전체 실행
 
         Returns:
@@ -635,7 +848,23 @@ class FencingScheduler:
                 "stats": self._last_stats.get("player_updates", {})
             }
 
-        valid_types = ["detect", "pre", "change", "scrape", "final", "players", "all"]
+        if task_type in ["upcoming", "all"]:
+            # 📋 예정 대회 종목/참가자 사전 수집
+            await self._run_upcoming_preparation()
+            results["upcoming_preparation"] = {
+                "completed": True,
+                "stats": self._last_stats.get("upcoming_preparation", {})
+            }
+
+        if task_type in ["monitor", "all"]:
+            # 📡 미래 대회 모니터링 (전체, 경량 API)
+            await self._run_future_competition_monitoring()
+            results["future_monitoring"] = {
+                "completed": True,
+                "stats": self._last_stats.get("future_monitoring", {})
+            }
+
+        valid_types = ["detect", "pre", "change", "scrape", "final", "players", "upcoming", "monitor", "all"]
         if task_type not in valid_types:
             return {"error": f"Unknown task type: {task_type}. Valid types: {valid_types}"}
 
