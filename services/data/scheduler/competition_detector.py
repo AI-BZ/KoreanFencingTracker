@@ -906,10 +906,10 @@ class EventBasedScraper:
         return result
 
     async def _fetch_events_lightweight(self, comp: Dict) -> int:
-        """경량 종목 수집 (Playwright 없이 HTTP API만 사용)
+        """종목 수집 (Playwright로 KFF 웹사이트의 SELECT 요소에서 추출)
 
-        KFF API(SUB_EVENT_LIST_CNT)로 종목 목록을 가져와 DB에 upsert.
-        이미 종목이 있으면 새로운 종목만 추가.
+        KFF API(SUB_EVENT_LIST_CNT)는 종목 수만 반환하고 리스트는 안 주므로,
+        Playwright로 대회 페이지를 열어 <select> 요소에서 종목 목록을 추출한다.
 
         Args:
             comp: 대회 정보 (comp_idx, id 필수)
@@ -917,8 +917,6 @@ class EventBasedScraper:
         Returns:
             생성/업데이트된 종목 수
         """
-        import json as json_module
-
         comp_idx = comp.get("comp_idx")
         comp_id = comp.get("id")
         comp_name = comp.get("comp_name", "Unknown")
@@ -926,44 +924,32 @@ class EventBasedScraper:
         if not comp_idx or not comp_id or not self.db:
             return 0
 
+        if not PLAYWRIGHT_AVAILABLE:
+            logger.warning(f"📡 {comp_name}: Playwright 미설치, 종목 수집 불가")
+            return 0
+
         try:
-            from scraper.client import KFFClient
-            from scraper.config import Endpoints
+            from scraper.full_scraper import KFFFullScraper
 
-            async with KFFClient() as client:
-                response = await client._post(Endpoints.SUB_EVENT_LIST_CNT, {"eventCd": comp_idx})
+            async with KFFFullScraper(headless=True) as scraper:
+                events = await scraper.get_events_direct(comp_idx)
 
-            # 응답 파싱 — KFF API는 종목이 없으면 빈 문자열이나 dict를 반환할 수 있음
-            try:
-                json_data = json_module.loads(response)
-            except (json_module.JSONDecodeError, TypeError):
-                logger.debug(f"📡 {comp_name}: 종목 API 응답 파싱 불가")
-                return 0
-
-            if not isinstance(json_data, list) or not json_data:
-                logger.debug(f"📡 {comp_name}: 종목 없음 (API 응답: {type(json_data).__name__})")
+            if not events:
+                logger.debug(f"📡 {comp_name}: 종목 없음 (Playwright)")
                 return 0
 
             events_saved = 0
-            for item in json_data:
-                if not isinstance(item, dict):
-                    continue
-                sub_event_cd = item.get("subEventCd")
-                event_name = item.get("subEventNm", "")
-                if not sub_event_cd:
-                    continue
-
+            for event in events:
                 try:
-                    parsed = self._parse_event_name(event_name)
                     event_data = {
                         "competition_id": comp_id,
                         "event_cd": comp_idx,
-                        "sub_event_cd": sub_event_cd,
-                        "event_name": event_name,
-                        "weapon": parsed["weapon"],
-                        "gender": parsed["gender"],
-                        "age_group": parsed["age_group"],
-                        "category": parsed["event_type"],
+                        "sub_event_cd": event.sub_event_cd,
+                        "event_name": event.name,
+                        "weapon": getattr(event, "weapon", ""),
+                        "gender": getattr(event, "gender", ""),
+                        "age_group": getattr(event, "age_group", ""),
+                        "category": getattr(event, "event_type", "개인"),
                         "raw_data": {},
                     }
                     result = self.db.table("events").upsert(
@@ -973,7 +959,7 @@ class EventBasedScraper:
                     if result.data:
                         events_saved += 1
                 except Exception as e:
-                    logger.warning(f"  종목 저장 오류 ({event_name}): {e}")
+                    logger.warning(f"  종목 저장 오류 ({event.name}): {e}")
 
             # event_count 업데이트
             if events_saved > 0:
@@ -981,12 +967,12 @@ class EventBasedScraper:
                     "event_count": events_saved,
                     "updated_at": datetime.now().isoformat(),
                 }).eq("id", comp_id).execute()
-                logger.info(f"📡 {comp_name}: {events_saved}개 종목 수집 (경량 API)")
+                logger.info(f"📡 {comp_name}: {events_saved}개 종목 수집 (Playwright)")
 
             return events_saved
 
         except Exception as e:
-            logger.warning(f"📡 경량 종목 수집 오류 ({comp_name}): {e}")
+            logger.warning(f"📡 종목 수집 오류 ({comp_name}): {e}")
             return 0
 
     @staticmethod
