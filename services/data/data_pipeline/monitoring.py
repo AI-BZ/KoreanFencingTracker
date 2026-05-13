@@ -224,9 +224,73 @@ class DataQualityMonitor:
             logger.warning(f"알림 저장 실패: {e}")
     
     def _send_alert_notification(self, alert: Alert) -> None:
-        """알림 발송 (추후 확장: 카카오톡, 슬랙 등)"""
-        # TODO: 외부 알림 시스템 연동
-        pass
+        """알림 발송 — Discord Webhook 연동"""
+        try:
+            from app.discord_notify import send_alert as _send_discord
+            import asyncio
+
+            severity_map = {
+                AlertSeverity.CRITICAL: "critical",
+                AlertSeverity.ERROR: "error",
+                AlertSeverity.WARNING: "warning",
+                AlertSeverity.INFO: "info",
+            }
+            discord_severity = severity_map.get(alert.severity, "info")
+
+            fields = []
+            if alert.metric:
+                fields.append({
+                    "name": "메트릭",
+                    "value": alert.metric.metric_type.value,
+                    "inline": True,
+                })
+                fields.append({
+                    "name": "현재값",
+                    "value": str(round(alert.metric.value, 4)),
+                    "inline": True,
+                })
+                fields.append({
+                    "name": "기준값",
+                    "value": str(alert.metric.threshold),
+                    "inline": True,
+                })
+
+            # 이미 이벤트 루프 안에 있으면 동기 전송 사용
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+
+            if loop and loop.is_running():
+                # 이벤트 루프 내부 — 동기 전송 사용
+                from app.discord_notify import _send_webhook_sync, SEVERITY_COLORS, SEVERITY_ICONS
+                from datetime import datetime as _dt
+
+                color = SEVERITY_COLORS.get(discord_severity, SEVERITY_COLORS["info"])
+                icon = SEVERITY_ICONS.get(discord_severity, "📢")
+                embed = {
+                    "title": f"{icon} {alert.title}",
+                    "description": alert.message[:4096],
+                    "color": color,
+                    "timestamp": _dt.utcnow().isoformat(),
+                    "footer": {"text": "FencingMind DataQualityMonitor"},
+                }
+                if fields:
+                    embed["fields"] = [
+                        {"name": f["name"], "value": str(f["value"])[:1024], "inline": f.get("inline", True)}
+                        for f in fields[:25]
+                    ]
+                _send_webhook_sync({"embeds": [embed]})
+            else:
+                # 이벤트 루프 없음 — asyncio.run 사용
+                asyncio.run(_send_discord(
+                    severity=discord_severity,
+                    title=alert.title,
+                    message=alert.message,
+                    fields=fields if fields else None,
+                ))
+        except Exception as e:
+            logger.debug(f"Discord 알림 발송 실패 (무시): {e}")
     
     # ==================== 품질 점검 ====================
     

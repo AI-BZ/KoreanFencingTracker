@@ -37,6 +37,8 @@ class FencingScheduler:
     - 🔥 변경 감지 스크래핑: 5분 간격 (대회 진행 중, 변경된 종목만)
     - 스텔스 스크래핑: 30분 간격 (대회 진행 중, 백업)
     - 최종 결과 수집: 매일 06:00 (어제 종료된 대회)
+    - 🛡️ Data Guardian 건강 점검: 매일 22:00
+    - 📊 Data Guardian 주간 리포트: 매주 월요일 08:00
     """
 
     def __init__(self):
@@ -146,6 +148,26 @@ class FencingScheduler:
             replace_existing=True
         )
         logger.info("📡 매일 11:00/18:00 미래 대회 모니터링 등록 (경량 API)")
+
+        # 9. 🛡️ Data Guardian 건강 점검 - 매일 22:00
+        self.scheduler.add_job(
+            self._run_guardian_health_check,
+            CronTrigger(hour=22, minute=0),
+            id="guardian_daily_health",
+            name="🛡️ Data Guardian Daily Health Check",
+            replace_existing=True
+        )
+        logger.info("🛡️ 매일 22:00 Data Guardian 건강 점검 등록")
+
+        # 10. 📊 Data Guardian 주간 리포트 - 매주 월요일 08:00
+        self.scheduler.add_job(
+            self._run_guardian_weekly_report,
+            CronTrigger(day_of_week="mon", hour=8, minute=0),
+            id="guardian_weekly_report",
+            name="📊 Data Guardian Weekly Report",
+            replace_existing=True
+        )
+        logger.info("📊 매주 월요일 08:00 Data Guardian 주간 리포트 등록")
 
     async def _run_competition_detection(self):
         """대회 공고 감지 실행"""
@@ -392,6 +414,15 @@ class FencingScheduler:
                 if total_scraped_events > 0:
                     await scraper._refresh_server_cache()
 
+                    # 🛡️ 스크래핑 후 자동 검증 (변경 감지)
+                    comp_names = ", ".join(
+                        c.get("comp_name", "") for c in ongoing_comps[:3]
+                    )
+                    await self._run_guardian_post_scrape(
+                        comp_name=f"변경감지: {comp_names}",
+                        events_count=total_scraped_events,
+                    )
+
         except ImportError as e:
             logger.error(f"🔥 변경 감지 모듈 import 오류: {e}")
         except Exception as e:
@@ -525,6 +556,13 @@ class FencingScheduler:
                 logger.info(f"🏁 {len(just_ended)}개 종료 대회 최종 결과 수집")
                 result = await scraper.scrape_just_ended(just_ended)
                 self._last_stats["just_ended"] = result
+
+                # 🛡️ 스크래핑 후 자동 검증
+                for comp in just_ended:
+                    await self._run_guardian_post_scrape(
+                        comp_name=comp.get("comp_name", ""),
+                        events_count=result.get("events_saved", 0),
+                    )
             else:
                 logger.debug("어제 종료된 대회 없음")
 
@@ -702,6 +740,60 @@ class FencingScheduler:
         finally:
             self._is_running = False
 
+    # ==================== Data Guardian 연동 ====================
+
+    async def _run_guardian_health_check(self):
+        """🛡️ Data Guardian 건강 점검 (매일 22:00)"""
+        logger.info("=== 🛡️ Data Guardian 건강 점검 시작 ===")
+        try:
+            from app.data_guardian import get_guardian
+            guardian = get_guardian()
+            result = await guardian.daily_health_check()
+            health = result.get("health_status", "unknown")
+            logger.info(f"🛡️ 건강 점검 완료: {health}")
+            self._last_stats["guardian_health"] = result
+        except ImportError as e:
+            logger.error(f"🛡️ Data Guardian import 오류: {e}")
+        except Exception as e:
+            logger.error(f"🛡️ 건강 점검 오류: {e}")
+
+    async def _run_guardian_weekly_report(self):
+        """📊 Data Guardian 주간 리포트 (매주 월요일 08:00)"""
+        logger.info("=== 📊 Data Guardian 주간 리포트 시작 ===")
+        try:
+            from app.data_guardian import get_guardian
+            guardian = get_guardian()
+            result = await guardian.weekly_report()
+            logger.info(
+                f"📊 주간 리포트 완료: "
+                f"검증 {result.get('validation_runs', 0)}회, "
+                f"ERROR {result.get('total_errors', 0)}건"
+            )
+            self._last_stats["guardian_weekly"] = result
+        except ImportError as e:
+            logger.error(f"📊 Data Guardian import 오류: {e}")
+        except Exception as e:
+            logger.error(f"📊 주간 리포트 오류: {e}")
+
+    async def _run_guardian_post_scrape(self, comp_name: str = "", events_count: int = 0):
+        """🛡️ 스크래핑 후 자동 검증 (post-scrape hook)"""
+        try:
+            from app.data_guardian import get_guardian
+            guardian = get_guardian()
+            result = await guardian.post_scrape_validation(
+                comp_name=comp_name,
+                events_count=events_count,
+            )
+            errors = result.get("errors", 0)
+            if errors > 0:
+                logger.warning(f"🛡️ 스크래핑 후 검증: {comp_name} — ERROR {errors}건")
+            else:
+                logger.info(f"🛡️ 스크래핑 후 검증: {comp_name} — 이상 없음")
+        except ImportError:
+            pass  # guardian 미설치 시 무시
+        except Exception as e:
+            logger.debug(f"🛡️ post-scrape 검증 오류 (무시): {e}")
+
     async def _refresh_server_cache(self):
         """서버 캐시 및 identity_resolver 새로고침"""
         try:
@@ -741,6 +833,8 @@ class FencingScheduler:
         logger.info(f"   - 🔥 변경 감지 스크래핑: 5분 간격 (메인) "
                    f"({stealth_config.active_hours_start}:00~{stealth_config.active_hours_end}:00)")
         logger.info(f"   - 🥷 스텔스 스크래핑: 30분 간격 (백업)")
+        logger.info("   - 🛡️ Data Guardian 건강 점검: 매일 22:00")
+        logger.info("   - 📊 Data Guardian 주간 리포트: 매주 월요일 08:00")
 
     def stop(self):
         """스케줄러 중지"""
@@ -781,6 +875,8 @@ class FencingScheduler:
                 "change_detection": f"🔥 5분 간격 (메인) "
                                    f"({stealth_config.active_hours_start}:00~{stealth_config.active_hours_end}:00)",
                 "stealth_scraping": f"🥷 30분 간격 (백업)",
+                "guardian_health": "🛡️ 매일 22:00 (Data Guardian 건강 점검)",
+                "guardian_weekly": "📊 매주 월요일 08:00 (Data Guardian 주간 리포트)",
             }
         }
 
@@ -797,6 +893,9 @@ class FencingScheduler:
                 - "players": 👤 선수 데이터 자동 업데이트
                 - "upcoming": 📋 예정 대회 종목/참가자 사전 수집 (D-7)
                 - "monitor": 📡 미래 대회 모니터링 (전체, 경량 API)
+                - "validate": 🛡️ Data Guardian 데이터 검증
+                - "health": 🛡️ Data Guardian 건강 점검
+                - "report": 📊 Data Guardian 주간 리포트
                 - "all": 전체 실행
 
         Returns:
@@ -864,7 +963,36 @@ class FencingScheduler:
                 "stats": self._last_stats.get("future_monitoring", {})
             }
 
-        valid_types = ["detect", "pre", "change", "scrape", "final", "players", "upcoming", "monitor", "all"]
+        if task_type in ["validate"]:
+            # 🛡️ Data Guardian 데이터 검증
+            try:
+                from app.data_guardian import get_guardian
+                guardian = get_guardian()
+                result = await guardian.run_full_validation()
+                results["guardian_validate"] = {"completed": True, "stats": result}
+            except Exception as e:
+                results["guardian_validate"] = {"completed": False, "error": str(e)}
+
+        if task_type in ["health", "all"]:
+            # 🛡️ Data Guardian 건강 점검
+            await self._run_guardian_health_check()
+            results["guardian_health"] = {
+                "completed": True,
+                "stats": self._last_stats.get("guardian_health", {})
+            }
+
+        if task_type in ["report"]:
+            # 📊 Data Guardian 주간 리포트
+            await self._run_guardian_weekly_report()
+            results["guardian_weekly"] = {
+                "completed": True,
+                "stats": self._last_stats.get("guardian_weekly", {})
+            }
+
+        valid_types = [
+            "detect", "pre", "change", "scrape", "final", "players",
+            "upcoming", "monitor", "validate", "health", "report", "all",
+        ]
         if task_type not in valid_types:
             return {"error": f"Unknown task type: {task_type}. Valid types: {valid_types}"}
 
