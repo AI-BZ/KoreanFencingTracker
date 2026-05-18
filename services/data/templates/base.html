@@ -3,7 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}{{ i18n.common.site.title|default('Korean Fencing Tracker') }}{% endblock %}</title>
+    <title>{% block title %}FencingMind Tracker{% endblock %}</title>
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="/static/images/logo/favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/images/logo/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/images/logo/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/images/logo/apple-touch-icon.png">
 
     <!-- SEO: hreflang for multi-language support -->
     {% if alternate_urls %}
@@ -22,6 +28,33 @@
     <link rel="stylesheet" href="/static/css/dark-theme.css?v=20250113">
     <link rel="stylesheet" href="/static/css/components.css?v=20250113">
     {% block extra_css %}{% endblock %}
+    <style>
+    .lang-switcher { position: relative; }
+    .lang-current { background: transparent; border: 1px solid rgba(255,255,255,0.3); color: white; padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+    .lang-dropdown { display: none; position: absolute; right: 0; top: 100%; margin-top: 4px; background: #1a1a2e; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; min-width: 140px; z-index: 1000; overflow: hidden; }
+    .lang-dropdown.show { display: block; }
+    .lang-option { display: block; padding: 8px 16px; color: #ccc; text-decoration: none; font-size: 13px; transition: background 0.2s; }
+    .lang-option:hover { background: rgba(255,255,255,0.1); color: white; }
+    .lang-option.active { color: #6c5ce7; font-weight: 600; }
+    </style>
+    <script>
+    window.__t = {{ _js_t|default({})|tojson }};
+    window.__comp_names = {{ _js_comp_names|default({})|tojson }};
+    function _t(text) { return window.__t[text] || text; }
+    function _tr_comp(name) { return window.__comp_names[name] || name; }
+    function _tr_event(name) {
+        if (!name) return name;
+        var g={'여':_t('여')||"Women's",'남':_t('남')||"Men's",'혼성':_t('혼성')||'Mixed'};
+        var l={'초':_t('초등학교')||'Elementary','중':_t('중학교')||'Middle School','고':_t('고등학교')||'High School','대':_t('대학교')||'University','실':_t('실업팀')||'Professional','일':_t('일반부')||'Open'};
+        var w={'플뢰레':_t('플뢰레')||'Foil','에뻬':_t('에페')||'Epee','에페':_t('에페')||'Epee','사브르':_t('사브르')||'Sabre'};
+        var tp={'개':_t('개인전')||'Individual','단':_t('단체전')||'Team'};
+        var m=name.match(/^(여|남|혼성)(초|중|고|대|실|일)\s+(플뢰레|에뻬|에페|사브르)\((\S)\)/);
+        if(m) return (g[m[1]]||m[1])+' '+(l[m[2]]||m[2])+' '+(w[m[3]]||m[3])+' '+(tp[m[4]]||m[4]);
+        var m2=name.match(/^(여자|남자)\s+(플뢰레|에뻬|에페|사브르)\((개인|단체)\)/);
+        if(m2){var gk=m2[1][0];return (g[gk]||m2[1])+' '+(w[m2[2]]||m2[2])+' '+(m2[3]==='개인'?tp['개']:tp['단']);}
+        return name;
+    }
+    </script>
 </head>
 <body>
     <!-- Parallax Background Container -->
@@ -37,25 +70,29 @@
                      class="logo-img">
             </a>
             <div class="auth-nav" id="authNav">
-                <a href="https://account.fencingmind.ai/auth/login?redirect_url={{ request.url | urlencode }}" class="auth-btn login-btn" id="loginBtn">{{ i18n.common.nav.login|default('Login') }}</a>
+                <a href="https://account.fencingmind.ai/auth/login?redirect_url={{ request.url | urlencode }}" class="auth-btn login-btn" id="loginBtn" onclick="localStorage.setItem('fencingmind_login_redirect', window.location.href)">{{ _t('로그인') }}</a>
             </div>
             <div class="nav-links">
-                <a href="/{{ lang|default('ko') }}/">{{ i18n.common.nav.search|default('Search') }}</a>
-                <a href="/{{ lang|default('ko') }}/rankings">{{ i18n.common.nav.rankings|default('Ranking') }}</a>
-                <a href="/{{ lang|default('ko') }}/fencinglab">{{ i18n.common.nav.fencinglab|default('FencingLab') }}</a>
+                <a href="/{{ lang|default('ko') }}/">{{ _t('검색') }}</a>
+                <a href="/{{ lang|default('ko') }}/competitions">{{ _t('대회 목록') }}</a>
+                <a href="/{{ lang|default('ko') }}/rankings">{{ _t('랭킹') }}</a>
+                <a href="/selection/kkumnamu/summary">{{ _t('선발 포인트') }}</a>
+                <a href="/{{ lang|default('ko') }}/fencinglab">FencingLab</a>
             </div>
             <div class="search-box">
-                <input type="text" id="global-search" placeholder="{{ i18n.common.search.placeholder|default('Search player or team...') }}">
+                <input type="text" id="global-search" placeholder="{{ _t('선수 또는 팀 검색...') }}">
             </div>
             <!-- Language Switcher -->
             <div class="lang-switcher">
-                {% for switch_lang in supported_langs|default(['ko', 'en']) %}
-                <a href="/{{ switch_lang }}{{ request.url.path|replace('/' ~ lang, '')|default('/') }}"
-                   class="lang-btn {% if switch_lang == lang %}active{% endif %}"
-                   title="{{ switch_lang|upper }}">
-                    {{ switch_lang|upper }}
-                </a>
-                {% endfor %}
+                <button class="lang-current" id="langToggle">{{ lang|upper }}</button>
+                <div class="lang-dropdown" id="langDropdown">
+                    {% for switch_lang in supported_langs|default(['ko', 'en']) %}
+                    <a href="/{{ switch_lang }}{{ request.url.path|replace('/' ~ lang, '')|default('/') }}"
+                       class="lang-option {% if switch_lang == lang %}active{% endif %}">
+                        {{ lang_names[switch_lang]|default(switch_lang|upper) }}
+                    </a>
+                    {% endfor %}
+                </div>
             </div>
         </div>
     </nav>
@@ -66,8 +103,9 @@
 
     <footer class="footer">
         <div class="container">
-            <p>{{ i18n.common.footer.copyright|default('FencingMind Tracker') }} &copy; 2024-2025</p>
-            <p>{{ i18n.common.footer.data_source|default('데이터 출처') }}: <a href="https://fencing.sports.or.kr" target="_blank">KFF</a></p>
+            <p>FencingMind Tracker &copy; 2024-2025</p>
+            <p>{{ _t("데이터 출처") }}: <a href="https://fencing.sports.or.kr" target="_blank">KFF</a></p>
+            <p class="footer-disclaimer">{{ _t("본 서비스의 데이터는 자동 수집(스크래핑) 기반이며, 공식 기록과 다를 수 있습니다. 참고용으로만 활용해 주세요. 오류 발견 시 제보해 주시면 확인 후 수정하겠습니다.") }}</p>
         </div>
     </footer>
 
@@ -105,28 +143,46 @@
         updateParallax();
     })();
 
-    // 로그인 상태 확인 (2초 타임아웃 - account 서비스 미응답 시 빠르게 포기)
+    // 로그인 상태 확인 (자체 /auth/me 사용 - 쿠키 기반 JWT 검증)
     document.addEventListener('DOMContentLoaded', async function() {
         try {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 2000);
-            const response = await fetch('https://account.fencingmind.ai/auth/me', {
-                credentials: 'include',
+            const response = await fetch('/auth/me', {
+                credentials: 'same-origin',
                 signal: controller.signal,
             });
             clearTimeout(timeoutId);
             if (response.ok) {
                 const member = await response.json();
+                document.body.classList.add('authenticated');
                 const authNav = document.getElementById('authNav');
                 authNav.innerHTML = `
                     <a href="https://account.fencingmind.ai/auth/verification" class="auth-btn profile-btn">
                         ${member.display_name || member.full_name[0]}
                     </a>
                 `;
+                // 로그인 완료 후 원래 페이지로 복귀
+                const redirectUrl = localStorage.getItem('fencingmind_login_redirect');
+                if (redirectUrl) {
+                    localStorage.removeItem('fencingmind_login_redirect');
+                    if (redirectUrl !== window.location.href) {
+                        window.location.href = redirectUrl;
+                    }
+                }
             }
         } catch (e) {
-            // 로그인 안됨 또는 account 서비스 미응답 - 기본 상태 유지
+            // 로그인 안됨 - 기본 상태 유지
         }
+    });
+    </script>
+    <script>
+    document.getElementById('langToggle')?.addEventListener('click', function(e) {
+        e.stopPropagation();
+        document.getElementById('langDropdown').classList.toggle('show');
+    });
+    document.addEventListener('click', function() {
+        document.getElementById('langDropdown')?.classList.remove('show');
     });
     </script>
     {% block extra_js %}{% endblock %}

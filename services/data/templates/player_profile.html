@@ -135,19 +135,25 @@
         {% if access_level == "guest" %}
         <!-- Guest: 최근 3건 실제 데이터 노출 + 나머지 blur -->
         <div class="guest-preview-section">
+            {% set in_progress_records = player.records|selectattr('is_in_progress', 'defined')|selectattr('is_in_progress')|list %}
+            {% if in_progress_records|length > 0 %}
+            <div class="info-notice">
+                {{ _t("진행 중인 대회") }} {{ in_progress_records|length }}{{ _t("건의 결과가 포함되어 있습니다. 대회 종료 후 최종 데이터가 업데이트됩니다.") }}
+            </div>
+            {% endif %}
             <h4>{{ i18n.common.gate.recent_results|default('최근 대회 성적') }}</h4>
             {% for record in player.records[:3] %}
             <div class="result-card" style="pointer-events: auto;">
                 <div class="result-card-header">
                     <div class="result-info">
                         <div class="result-date">{{ record.competition_date }}</div>
-                        <div class="result-tournament">{{ record.competition_name }}</div>
-                        <div class="result-event">{{ record.event_name }}</div>
+                        <div class="result-tournament">{{ tr_comp(record.competition_name) }}</div>
+                        <div class="result-event">{{ tr_event(record.event_name) }}</div>
                     </div>
                     <div class="result-stats">
-                        <div class="result-place {% if record.rank == 1 %}gold{% elif record.rank == 2 %}silver{% elif record.rank == 3 %}bronze{% endif %}">
-                            {% if record.rank == 1 %}🥇{% elif record.rank == 2 %}🥈{% elif record.rank == 3 %}🥉{% else %}{{ record.rank or '-' }}{% endif %}
-                            {% if record.total_participants %}/{{ record.total_participants }}{% endif %}
+                        <div class="result-place {% if record.is_in_progress %}in-progress{% elif record.eliminated_in_pool %}pool-eliminated{% elif record.rank == 1 %}gold{% elif record.rank == 2 %}silver{% elif record.rank == 3 %}bronze{% endif %}">
+                            {% if record.is_in_progress %}{{ _t("진행 중") }}{% elif record.eliminated_in_pool %}P{{ record.pool_rank or '' }}{% elif record.rank == 1 %}🥇{% elif record.rank == 2 %}🥈{% elif record.rank == 3 %}🥉{% else %}{{ record.rank or '-' }}{% endif %}
+                            {% if record.total_participants and not record.is_in_progress %}/{{ record.total_participants }}{% endif %}
                         </div>
                     </div>
                 </div>
@@ -174,10 +180,17 @@
             </div>
             <div class="gate-overlay">
                 <p class="gate-preview-text">{{ i18n.common.gate.summary_preview|default('로그인하면 전체 통계, 메달 분석, 무기별 성적을 확인할 수 있습니다.') }}</p>
-                <a href="{{ login_url }}" class="gate-cta-btn">{{ i18n.common.gate.login_cta|default('로그인하여 전체 보기') }}</a>
+                <a href="{{ login_url }}" class="gate-cta-btn" onclick="localStorage.setItem('fencingmind_login_redirect', window.location.href)">{{ i18n.common.gate.login_cta|default('로그인하여 전체 보기') }}</a>
             </div>
         </div>
         {% else %}
+        <!-- In-progress competition notice -->
+        {% set in_progress_records = player.records|selectattr('is_in_progress', 'defined')|selectattr('is_in_progress')|list %}
+        {% if in_progress_records|length > 0 %}
+        <div class="info-notice">
+            {{ _t("진행 중인 대회") }} {{ in_progress_records|length }}{{ _t("건의 결과가 포함되어 있습니다. 대회 종료 후 최종 데이터가 업데이트됩니다.") }}
+        </div>
+        {% endif %}
         <!-- Section 1: Hero Stats Bar -->
         <div class="hero-stats-bar">
             <div class="hero-stat-card">
@@ -323,7 +336,53 @@
                 {% endif %}
             </div>
         </div>
+
     {% endif %}{# end guest/member gate for summary #}
+
+        <!-- 선발 포인트 카드 (해당 선수만 표시 - 접근 등급 무관) -->
+        {% if player.selection_points %}
+        <div class="selection-points-card">
+            <h4>{{ _t("선발 포인트") }}</h4>
+            {% if player.selection_points.kkumnamu %}
+            {% set kk = player.selection_points.kkumnamu %}
+            <div class="sel-card-section">
+                <div class="sel-card-header">
+                    <span class="sel-card-title">{{ _t("꿈나무") }} ({{ kk.school_year }}{{ _t("학년도") }})</span>
+                    <span class="sel-card-rank">{{ _t("순위:") }} {{ kk.rank }}/{{ kk.total_participants }}</span>
+                </div>
+                <div class="sel-card-total">{{ _t("총점:") }} <strong>{{ kk.total_points|int }}{{ _t("점") }}</strong></div>
+                <div class="sel-card-breakdown">
+                    {% for item in kk.breakdown %}
+                    <div class="sel-breakdown-row">
+                        <span class="sel-comp-label">{{ item.comp_label }}</span>
+                        <span class="sel-comp-pts">{{ item.points|int }}{{ _t("점") }} ({{ item.rank }}{{ _t("위") }})</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                <a href="/selection/kkumnamu?year={{ kk.school_year }}&weapon={{ kk.weapon }}&gender={{ kk.gender }}" class="sel-card-link">{{ _t("전체 순위 보기 →") }}</a>
+            </div>
+            {% endif %}
+            {% if player.selection_points.national_team %}
+            {% set nt = player.selection_points.national_team %}
+            <div class="sel-card-section">
+                <div class="sel-card-header">
+                    <span class="sel-card-title">{{ _t("청소년 대표 선발") }} ({{ nt.season_year }}{{ _t("시즌") }})</span>
+                    <span class="sel-card-rank">{{ _t("순위:") }} {{ nt.rank }}/{{ nt.total_participants }}</span>
+                </div>
+                <div class="sel-card-total">{{ _t("총점:") }} <strong>{{ nt.total_points|int }}{{ _t("점") }}</strong></div>
+                <div class="sel-card-breakdown">
+                    {% for item in nt.breakdown %}
+                    <div class="sel-breakdown-row">
+                        <span class="sel-comp-label">{{ item.comp_label }}</span>
+                        <span class="sel-comp-pts">{{ item.points|int }}{{ _t("점") }} ({{ item.rank }}{{ _t("위") }})</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                <a href="/selection/national-team?year={{ nt.season_year }}&weapon={{ nt.weapon }}&gender={{ nt.gender }}" class="sel-card-link">{{ _t("전체 순위 보기 →") }}</a>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
     </div>
 
     <!-- Medal Detail JavaScript -->
@@ -360,7 +419,7 @@
                 filtered.forEach(function(r, i) {
                     var rankLabel = r.rank === 1 ? 'Winner' : r.rank === 2 ? 'Runner-up' : r.rank === 3 ? 'Bronze' : 'Top ' + r.rank;
                     var link = r.sub_event_cd ? '/event/' + r.event_cd + '/' + r.sub_event_cd : '#';
-                    html += '<li><a href="' + link + '">' + r.competition_name + ' - ' + r.event_name + '</a> <span class="medal-rank-label">' + rankLabel + '</span></li>';
+                    html += '<li><a href="' + link + '">' + _tr_comp(r.competition_name) + ' - ' + _tr_event(r.event_name) + '</a> <span class="medal-rank-label">' + rankLabel + '</span></li>';
                 });
                 html += '</ul>';
                 panel.innerHTML = html;
@@ -377,13 +436,13 @@
         <div class="access-gate">
             <div class="blurred-content">
                 <table class="records-table" style="width:100%;">
-                    <thead><tr><th>날짜</th><th>대회</th><th>종목</th><th>순위</th></tr></thead>
+                    <thead><tr><th>{{ _t("날짜") }}</th><th>{{ _t("대회") }}</th><th>{{ _t("종목") }}</th><th>{{ _t("순위") }}</th></tr></thead>
                     <tbody>
-                        <tr><td>2025-11-07</td><td>전국남녀종목별선수권대회</td><td>남자 플뢰레 일반부</td><td>8강</td></tr>
-                        <tr><td>2025-10-24</td><td>회장배 전국펜싱대회</td><td>남자 플뢰레 중등부</td><td>16강</td></tr>
-                        <tr><td>2025-09-06</td><td>전국체전 최종선발전</td><td>남자 플뢰레</td><td>4강</td></tr>
-                        <tr><td>2025-07-19</td><td>전국소년체전</td><td>남자 플뢰레</td><td>우승</td></tr>
-                        <tr><td>2025-04-19</td><td>제44회 대한펜싱협회장배</td><td>남자 플뢰레 중등부</td><td>준우승</td></tr>
+                        <tr><td>2025-11-07</td><td>{{ _t("전국남녀종목별선수권대회") }}</td><td>{{ _t("남자 플뢰레 일반부") }}</td><td>{{ _t("8강") }}</td></tr>
+                        <tr><td>2025-10-24</td><td>{{ _t("회장배 전국펜싱대회") }}</td><td>{{ _t("남자 플뢰레 중등부") }}</td><td>{{ _t("16강") }}</td></tr>
+                        <tr><td>2025-09-06</td><td>{{ _t("전국체전 최종선발전") }}</td><td>{{ _t("남자 플뢰레") }}</td><td>{{ _t("4강") }}</td></tr>
+                        <tr><td>2025-07-19</td><td>{{ _t("전국소년체전") }}</td><td>{{ _t("남자 플뢰레") }}</td><td>{{ _t("우승") }}</td></tr>
+                        <tr><td>2025-04-19</td><td>{{ _t("제44회 대한펜싱협회장배") }}</td><td>{{ _t("남자 플뢰레 중등부") }}</td><td>{{ _t("준우승") }}</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -396,7 +455,7 @@
                         <li>{{ i18n.common.gate.history_f3|default('상세 경기 결과 (Pool/DE)') }}</li>
                     </ul>
                 </div>
-                <a href="{{ login_url }}" class="gate-cta-btn">{{ i18n.common.gate.login_cta|default('로그인하여 전체 보기') }}</a>
+                <a href="{{ login_url }}" class="gate-cta-btn" onclick="localStorage.setItem('fencingmind_login_redirect', window.location.href)">{{ i18n.common.gate.login_cta|default('로그인하여 전체 보기') }}</a>
             </div>
         </div>
         {% else %}
@@ -434,13 +493,13 @@
                 <div class="result-card-header" onclick="toggleResultDetail(this)">
                     <div class="result-info">
                         <div class="result-date">{{ record.competition_date }}</div>
-                        <div class="result-tournament">{{ record.competition_name }}</div>
-                        <div class="result-event">{{ record.event_name }}</div>
+                        <div class="result-tournament">{{ tr_comp(record.competition_name) }}</div>
+                        <div class="result-event">{{ tr_event(record.event_name) }}</div>
                     </div>
                     <div class="result-stats">
-                        <div class="result-place {% if record.rank == 1 %}gold{% elif record.rank == 2 %}silver{% elif record.rank == 3 %}bronze{% endif %}">
-                            {% if record.rank == 1 %}🥇{% elif record.rank == 2 %}🥈{% elif record.rank == 3 %}🥉{% else %}{{ record.rank or '-' }}{% endif %}
-                            {% if record.total_participants %}/{{ record.total_participants }}{% endif %}
+                        <div class="result-place {% if record.is_in_progress %}in-progress{% elif record.eliminated_in_pool %}pool-eliminated{% elif record.rank == 1 %}gold{% elif record.rank == 2 %}silver{% elif record.rank == 3 %}bronze{% endif %}">
+                            {% if record.is_in_progress %}{{ _t("진행 중") }}{% elif record.eliminated_in_pool %}P{{ record.pool_rank or '' }}{% elif record.rank == 1 %}🥇{% elif record.rank == 2 %}🥈{% elif record.rank == 3 %}🥉{% else %}{{ record.rank or '-' }}{% endif %}
+                            {% if record.total_participants and not record.is_in_progress %}/{{ record.total_participants }}{% endif %}
                         </div>
                         {% if record.rating_earned %}
                         <div class="result-rating">{{ record.rating_earned }}</div>
@@ -522,7 +581,7 @@
                         <div class="tournament-progress">
                             {% for round in record.tournament_path %}
                             <span class="progress-step {% if round.completed %}completed{% endif %} {% if round.current %}current{% endif %} {% if round.is_bye %}bye{% endif %}">
-                                {{ round.name }}{% if round.is_bye %}<small>(부전승)</small>{% endif %}
+                                {{ round.name }}{% if round.is_bye %}<small>({{ _t("부전승") }})</small>{% endif %}
                             </span>
                             {% if not loop.last %}<span class="progress-arrow">→</span>{% endif %}
                             {% endfor %}
@@ -530,9 +589,9 @@
                         <div class="bout-detail-list">
                             {% for bout in record.tournament_bouts %}
                             <div class="bout-detail-item {% if bout.is_bye %}bye-bout{% endif %}">
-                                <span style="min-width: 60px; color: var(--primary-color); font-weight: 500;">{{ bout.round_name }}{% if bout.de_phase == 'qualifying' %}<small class="de-phase-label qualifying">예선</small>{% endif %}</span>
+                                <span style="min-width: 60px; color: var(--primary-color); font-weight: 500;">{{ bout.round_name }}{% if bout.de_phase == 'qualifying' %}<small class="de-phase-label qualifying">{{ _t("예선") }}</small>{% endif %}</span>
                                 <div class="bout-opponent">
-                                    <div class="bout-opponent-name">{% if bout.is_bye %}부전승{% else %}vs <a href="/player/{{ bout.opponent_name|urlencode }}?team={{ bout.opponent_team|urlencode }}" class="player-link">{{ bout.opponent_name }}</a>{% endif %}</div>
+                                    <div class="bout-opponent-name">{% if bout.is_bye %}{{ _t("부전승") }}{% else %}vs <a href="/player/{{ bout.opponent_name|urlencode }}?team={{ bout.opponent_team|urlencode }}" class="player-link">{{ bout.opponent_name }}</a>{% endif %}</div>
                                     <div class="bout-opponent-team">{% if bout.opponent_team %}<a href="/search?q={{ bout.opponent_team|urlencode }}" class="team-link">{{ bout.opponent_team }}</a>{% endif %}</div>
                                 </div>
                                 {% if bout.is_bye %}
@@ -564,19 +623,19 @@
         <div class="access-gate">
             <div class="blurred-content">
                 <div style="padding:1.5rem;">
-                    <h4 style="margin-bottom:1rem;">라운드별 성적</h4>
+                    <h4 style="margin-bottom:1rem;">{{ _t("라운드별 성적") }}</h4>
                     <div style="display:flex;gap:1rem;flex-wrap:wrap;">
                         <div class="stat-card" style="flex:1;min-width:120px;padding:1rem;text-align:center;">
                             <div style="font-size:1.5rem;font-weight:700;">72.4%</div>
-                            <div style="font-size:0.85rem;color:var(--text-light);">Pool 승률</div>
+                            <div style="font-size:0.85rem;color:var(--text-light);">{{ _t("Pool 승률") }}</div>
                         </div>
                         <div class="stat-card" style="flex:1;min-width:120px;padding:1rem;text-align:center;">
                             <div style="font-size:1.5rem;font-weight:700;">58.3%</div>
-                            <div style="font-size:0.85rem;color:var(--text-light);">DE 승률</div>
+                            <div style="font-size:0.85rem;color:var(--text-light);">{{ _t("DE 승률") }}</div>
                         </div>
                         <div class="stat-card" style="flex:1;min-width:120px;padding:1rem;text-align:center;">
                             <div style="font-size:1.5rem;font-weight:700;">4.2</div>
-                            <div style="font-size:0.85rem;color:var(--text-light);">평균 실점</div>
+                            <div style="font-size:0.85rem;color:var(--text-light);">{{ _t("평균 실점") }}</div>
                         </div>
                     </div>
                 </div>
@@ -590,7 +649,7 @@
                         <li>{{ i18n.common.gate.strength_f3|default('무기별 통계') }}</li>
                     </ul>
                 </div>
-                <a href="{{ login_url }}" class="gate-cta-btn">{{ i18n.common.gate.login_cta|default('로그인하여 전체 보기') }}</a>
+                <a href="{{ login_url }}" class="gate-cta-btn" onclick="localStorage.setItem('fencingmind_login_redirect', window.location.href)">{{ i18n.common.gate.login_cta|default('로그인하여 전체 보기') }}</a>
             </div>
         </div>
         {% else %}
@@ -618,172 +677,37 @@
         <div class="stat-card-large">
             <h4>{{ i18n.common.player.win_rate_by_stage|default('Win Rate by Stage') }}</h4>
 
-            <!-- Date Range Filter - Video Editor Style Slider -->
+            <!-- Year Filter Pills -->
             {% set available_years = player.available_years|default([]) %}
+            {% set selected_years = player.selected_years|default([]) %}
             {% if available_years|length > 0 %}
-            <div class="date-range-filter" id="strengthDateFilter">
-                <div class="range-slider-container">
-                    <div class="range-slider-labels">
-                        {% for year in available_years %}
-                        <span class="year-label" data-year="{{ year }}">{{ year }}</span>
-                        {% endfor %}
-                    </div>
-                    <div class="range-slider-track" id="rangeSliderTrack">
-                        <div class="range-slider-selected" id="rangeSliderSelected"></div>
-                        <div class="range-slider-handle left" id="rangeHandleLeft" data-handle="left"></div>
-                        <div class="range-slider-handle right" id="rangeHandleRight" data-handle="right"></div>
-                    </div>
-                    <div class="range-slider-values">
-                        <span class="range-value-start" id="rangeValueStart">{{ available_years|first }}</span>
-                        <span class="range-value-separator">~</span>
-                        <span class="range-value-end" id="rangeValueEnd">{{ available_years|last }}</span>
-                        <button type="button" class="range-apply-btn" id="rangeApplyBtn">적용</button>
-                        <button type="button" class="range-reset-btn" id="rangeResetBtn">초기화</button>
-                    </div>
-                </div>
+            <div class="year-filter-pills" id="strengthYearFilter">
+                {% for year in available_years %}
+                <button type="button" class="year-pill{% if year in selected_years %} active{% endif %}" data-year="{{ year }}">{{ year }}</button>
+                {% endfor %}
             </div>
             <script>
             (function() {
-                const availableYears = {{ available_years | tojson }};
-                const track = document.getElementById('rangeSliderTrack');
-                const selected = document.getElementById('rangeSliderSelected');
-                const handleLeft = document.getElementById('rangeHandleLeft');
-                const handleRight = document.getElementById('rangeHandleRight');
-                const valueStart = document.getElementById('rangeValueStart');
-                const valueEnd = document.getElementById('rangeValueEnd');
-
-                if (!track || availableYears.length === 0) return;
-
-                let startIndex = 0;
-                let endIndex = availableYears.length - 1;
-                let isDragging = null;
-
-                // URL 파라미터에서 초기값 설정
-                const urlParams = new URLSearchParams(window.location.search);
-                const strengthStart = urlParams.get('strength_start');
-                const strengthEnd = urlParams.get('strength_end');
-                if (strengthStart) {
-                    const startYear = parseInt(strengthStart.split('-')[0]);
-                    const idx = availableYears.indexOf(startYear);
-                    if (idx !== -1) startIndex = idx;
-                }
-                if (strengthEnd) {
-                    const endYear = parseInt(strengthEnd.split('-')[0]);
-                    const idx = availableYears.indexOf(endYear);
-                    if (idx !== -1) endIndex = idx;
-                }
-
-                function updateSlider() {
-                    const totalSteps = availableYears.length - 1;
-                    const leftPercent = (startIndex / totalSteps) * 100;
-                    const rightPercent = (endIndex / totalSteps) * 100;
-
-                    handleLeft.style.left = leftPercent + '%';
-                    handleRight.style.left = rightPercent + '%';
-                    selected.style.left = leftPercent + '%';
-                    selected.style.width = (rightPercent - leftPercent) + '%';
-
-                    valueStart.textContent = availableYears[startIndex];
-                    valueEnd.textContent = availableYears[endIndex];
-
-                    // 연도 레이블 하이라이트
-                    document.querySelectorAll('.year-label').forEach((label, i) => {
-                        if (i >= startIndex && i <= endIndex) {
-                            label.classList.add('in-range');
+                const pills = document.querySelectorAll('#strengthYearFilter .year-pill');
+                pills.forEach(function(pill) {
+                    pill.addEventListener('click', function() {
+                        pill.classList.toggle('active');
+                        var selected = [];
+                        document.querySelectorAll('#strengthYearFilter .year-pill.active').forEach(function(p) {
+                            selected.push(p.dataset.year);
+                        });
+                        var url = new URL(window.location.href);
+                        if (selected.length > 0) {
+                            url.searchParams.set('strength_years', selected.join(','));
                         } else {
-                            label.classList.remove('in-range');
+                            url.searchParams.delete('strength_years');
                         }
+                        url.searchParams.delete('strength_start');
+                        url.searchParams.delete('strength_end');
+                        url.searchParams.set('tab', 'strength');
+                        window.location.href = url.toString();
                     });
-                }
-
-                function getIndexFromPosition(clientX) {
-                    const rect = track.getBoundingClientRect();
-                    const percent = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-                    return Math.round(percent * (availableYears.length - 1));
-                }
-
-                function onMouseDown(e) {
-                    e.preventDefault();
-                    isDragging = e.target.dataset.handle;
-                    document.addEventListener('mousemove', onMouseMove);
-                    document.addEventListener('mouseup', onMouseUp);
-                    document.addEventListener('touchmove', onTouchMove);
-                    document.addEventListener('touchend', onMouseUp);
-                }
-
-                function onMouseMove(e) {
-                    if (!isDragging) return;
-                    const newIndex = getIndexFromPosition(e.clientX);
-
-                    if (isDragging === 'left') {
-                        startIndex = Math.min(newIndex, endIndex);
-                    } else {
-                        endIndex = Math.max(newIndex, startIndex);
-                    }
-                    updateSlider();
-                }
-
-                function onTouchMove(e) {
-                    if (!isDragging || !e.touches[0]) return;
-                    const newIndex = getIndexFromPosition(e.touches[0].clientX);
-
-                    if (isDragging === 'left') {
-                        startIndex = Math.min(newIndex, endIndex);
-                    } else {
-                        endIndex = Math.max(newIndex, startIndex);
-                    }
-                    updateSlider();
-                }
-
-                function onMouseUp() {
-                    isDragging = null;
-                    document.removeEventListener('mousemove', onMouseMove);
-                    document.removeEventListener('mouseup', onMouseUp);
-                    document.removeEventListener('touchmove', onTouchMove);
-                    document.removeEventListener('touchend', onMouseUp);
-                }
-
-                handleLeft.addEventListener('mousedown', onMouseDown);
-                handleRight.addEventListener('mousedown', onMouseDown);
-                handleLeft.addEventListener('touchstart', onMouseDown);
-                handleRight.addEventListener('touchstart', onMouseDown);
-
-                // 트랙 클릭으로 이동
-                track.addEventListener('click', function(e) {
-                    if (e.target === handleLeft || e.target === handleRight) return;
-                    const newIndex = getIndexFromPosition(e.clientX);
-                    // 가까운 핸들 이동
-                    if (Math.abs(newIndex - startIndex) < Math.abs(newIndex - endIndex)) {
-                        startIndex = Math.min(newIndex, endIndex);
-                    } else {
-                        endIndex = Math.max(newIndex, startIndex);
-                    }
-                    updateSlider();
                 });
-
-                // 적용 버튼
-                document.getElementById('rangeApplyBtn').addEventListener('click', function() {
-                    const startYear = availableYears[startIndex];
-                    const endYear = availableYears[endIndex];
-                    const url = new URL(window.location.href);
-                    url.searchParams.set('strength_start', startYear + '-01');
-                    url.searchParams.set('strength_end', endYear + '-12');
-                    window.location.href = url.toString();
-                });
-
-                // 초기화 버튼
-                document.getElementById('rangeResetBtn').addEventListener('click', function() {
-                    startIndex = 0;
-                    endIndex = availableYears.length - 1;
-                    updateSlider();
-                    const url = new URL(window.location.href);
-                    url.searchParams.delete('strength_start');
-                    url.searchParams.delete('strength_end');
-                    window.location.href = url.toString();
-                });
-
-                // 초기 렌더링
-                updateSlider();
             })();
             </script>
             {% endif %}
@@ -796,7 +720,7 @@
                 {% if player.round_stats.pool.wins > 0 or player.round_stats.pool.losses > 0 %}
                 {% set pool_total = player.round_stats.pool.wins + player.round_stats.pool.losses %}
                 <div class="stage-winrate-row">
-                    <div class="stage-label">Pool <span class="stage-count">{{ pool_total }}회</span></div>
+                    <div class="stage-label">Pool <span class="stage-count">{{ pool_total }}{{ _t("회") }}</span></div>
                     <div class="stage-bar-container">
                         <div class="stage-bar {{ rate_class(player.round_stats.pool.rate) }}" style="width: {{ player.round_stats.pool.rate }}%"></div>
                     </div>
@@ -811,7 +735,7 @@
                 {% if player.round_stats.t32_and_below.wins > 0 or player.round_stats.t32_and_below.losses > 0 %}
                 {% set t32_total = player.round_stats.t32_and_below.wins + player.round_stats.t32_and_below.losses %}
                 <div class="stage-winrate-row">
-                    <div class="stage-label">~32{{ i18n.common.player.round|default('R') }} <span class="stage-count">{{ t32_total }}회</span></div>
+                    <div class="stage-label">~32{{ i18n.common.player.round|default('R') }} <span class="stage-count">{{ t32_total }}{{ _t("회") }}</span></div>
                     <div class="stage-bar-container">
                         <div class="stage-bar {{ rate_class(player.round_stats.t32_and_below.rate) }}" style="width: {{ player.round_stats.t32_and_below.rate }}%"></div>
                     </div>
@@ -826,7 +750,7 @@
                 {% if player.round_stats.t16.wins > 0 or player.round_stats.t16.losses > 0 %}
                 {% set t16_total = player.round_stats.t16.wins + player.round_stats.t16.losses %}
                 <div class="stage-winrate-row">
-                    <div class="stage-label">16{{ i18n.common.player.round|default('R') }} <span class="stage-count">{{ t16_total }}회</span></div>
+                    <div class="stage-label">16{{ i18n.common.player.round|default('R') }} <span class="stage-count">{{ t16_total }}{{ _t("회") }}</span></div>
                     <div class="stage-bar-container">
                         <div class="stage-bar {{ rate_class(player.round_stats.t16.rate) }}" style="width: {{ player.round_stats.t16.rate }}%"></div>
                     </div>
@@ -841,7 +765,7 @@
                 {% if player.round_stats.t8.wins > 0 or player.round_stats.t8.losses > 0 %}
                 {% set t8_total = player.round_stats.t8.wins + player.round_stats.t8.losses %}
                 <div class="stage-winrate-row">
-                    <div class="stage-label">8{{ i18n.common.player.round|default('R') }} <span class="stage-count">{{ t8_total }}회</span></div>
+                    <div class="stage-label">8{{ i18n.common.player.round|default('R') }} <span class="stage-count">{{ t8_total }}{{ _t("회") }}</span></div>
                     <div class="stage-bar-container">
                         <div class="stage-bar {{ rate_class(player.round_stats.t8.rate) }}" style="width: {{ player.round_stats.t8.rate }}%"></div>
                     </div>
@@ -856,7 +780,7 @@
                 {% if player.round_stats.semifinal.wins > 0 or player.round_stats.semifinal.losses > 0 %}
                 {% set sf_total = player.round_stats.semifinal.wins + player.round_stats.semifinal.losses %}
                 <div class="stage-winrate-row">
-                    <div class="stage-label">{{ i18n.common.player.semifinal|default('SF') }} <span class="stage-count">{{ sf_total }}회</span></div>
+                    <div class="stage-label">{{ i18n.common.player.semifinal|default('SF') }} <span class="stage-count">{{ sf_total }}{{ _t("회") }}</span></div>
                     <div class="stage-bar-container">
                         <div class="stage-bar {{ rate_class(player.round_stats.semifinal.rate) }}" style="width: {{ player.round_stats.semifinal.rate }}%"></div>
                     </div>
@@ -871,7 +795,7 @@
                 {% if player.round_stats.final.wins > 0 or player.round_stats.final.losses > 0 %}
                 {% set final_total = player.round_stats.final.wins + player.round_stats.final.losses %}
                 <div class="stage-winrate-row">
-                    <div class="stage-label">{{ i18n.common.player.final_round|default('Final') }} <span class="stage-count">{{ final_total }}회</span></div>
+                    <div class="stage-label">{{ i18n.common.player.final_round|default('Final') }} <span class="stage-count">{{ final_total }}{{ _t("회") }}</span></div>
                     <div class="stage-bar-container">
                         <div class="stage-bar final-bar" style="width: {{ player.round_stats.final.rate }}%"></div>
                     </div>
@@ -957,8 +881,8 @@
                 </div>
             </div>
             <div class="gate-overlay">
-                <p>선수 인증하면 상대 전적을 볼 수 있습니다</p>
-                <a href="{{ verify_url }}" class="gate-cta-btn">선수 인증하기</a>
+                <p>{{ _t("선수 인증하면 상대 전적을 볼 수 있습니다") }}</p>
+                <a href="{{ verify_url }}" class="gate-cta-btn">{{ _t("선수 인증하기") }}</a>
             </div>
         </div>
         {% endif %}{# end verified gate for H2H #}
@@ -982,8 +906,8 @@
                 </div>
             </div>
             <div class="gate-overlay">
-                <p>선수 인증하면 FencingLab 분석을 이용할 수 있습니다</p>
-                <a href="{{ verify_url }}" class="gate-cta-btn">선수 인증하기</a>
+                <p>{{ _t("선수 인증하면 FencingLab 분석을 이용할 수 있습니다") }}</p>
+                <a href="{{ verify_url }}" class="gate-cta-btn">{{ _t("선수 인증하기") }}</a>
             </div>
         </div>
         {% else %}
@@ -1003,7 +927,7 @@
                         <li>{{ i18n.common.gate.analysis_f3|default('성장 추세 그래프') }}</li>
                     </ul>
                 </div>
-                <a href="{{ login_url }}" class="gate-cta-btn">{{ i18n.common.gate.login_cta|default('로그인하여 전체 보기') }}</a>
+                <a href="{{ login_url }}" class="gate-cta-btn" onclick="localStorage.setItem('fencingmind_login_redirect', window.location.href)">{{ i18n.common.gate.login_cta|default('로그인하여 전체 보기') }}</a>
             </div>
         </div>
         {% endif %}
@@ -1055,6 +979,21 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
         document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
     });
 });
+
+// Restore active tab from URL param
+(function() {
+    const tabParam = new URLSearchParams(window.location.search).get('tab');
+    if (tabParam) {
+        const tabBtn = document.querySelector('.tab-btn[data-tab="' + tabParam + '"]');
+        const tabContent = document.getElementById('tab-' + tabParam);
+        if (tabBtn && tabContent) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            tabBtn.classList.add('active');
+            tabContent.classList.add('active');
+        }
+    }
+})();
 
 // Toggle result detail
 function toggleResultDetail(header) {

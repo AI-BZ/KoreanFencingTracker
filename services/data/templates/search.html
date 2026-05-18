@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}검색 - Korean Fencing Tracker{% endblock %}
+{% block title %}{{ _t("검색") }} - Korean Fencing Tracker{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -338,21 +338,21 @@
 {% block content %}
 <div class="container">
     <section class="search-section">
-        <h1>선수/소속 검색</h1>
+        <h1>{{ _t("선수/소속 검색") }}</h1>
 
         <div class="search-form">
             <div class="search-input-wrapper">
-                <input type="text" id="search-query" placeholder="선수 이름 또는 소속(클럽, 학교) 검색..." value="{{ query }}" autocomplete="off">
+                <input type="text" id="search-query" placeholder="{{ _t('선수 이름 또는 소속(클럽, 학교) 검색...') }}" value="{{ query }}" autocomplete="off">
                 <div class="autocomplete-dropdown" id="autocomplete-dropdown"></div>
             </div>
-            <button onclick="performSearch()" class="btn btn-primary">검색</button>
+            <button onclick="performSearch()" class="btn btn-primary">{{ _t("검색") }}</button>
         </div>
 
         <div class="search-results" id="search-results">
             {% if query %}
-            <p class="searching">검색 중...</p>
+            <p class="searching">{{ _t("검색 중...") }}</p>
             {% else %}
-            <p class="search-hint">선수 이름이나 소속(클럽, 학교 등)을 입력하세요</p>
+            <p class="search-hint">{{ _t("선수 이름이나 소속(클럽, 학교 등)을 입력하세요") }}</p>
             {% endif %}
         </div>
     </section>
@@ -400,7 +400,7 @@
         selectedIndex = -1;
 
         if (results.length === 0) {
-            dropdown.innerHTML = '<div class="autocomplete-no-results">검색 결과 없음</div>';
+            dropdown.innerHTML = '<div class="autocomplete-no-results">' + _t('검색 결과 없음') + '</div>';
             showAutocomplete();
             return;
         }
@@ -408,7 +408,7 @@
         let html = '';
         results.slice(0, 10).forEach((r, index) => {
             const isHomonym = r.has_disambiguation;
-            const homonymBadge = isHomonym ? '<span class="homonym-badge">동명이인</span>' : '';
+            const homonymBadge = isHomonym ? '<span class="homonym-badge">' + _t('동명이인') + '</span>' : '';
             const nameEn = r.name_en ? `<span class="name-en">${r.name_en}</span>` : '';
 
             const weapons = (r.weapons || []).map(w =>
@@ -416,7 +416,7 @@
             ).join('');
 
             const teamDisplay = r.blurred
-                ? '<span class="blurred-text">소속 정보</span>'
+                ? '<span class="blurred-text">' + _t('소속 정보') + '</span>'
                 : (r.current_team || r.teams?.join(', ') || '-');
 
             html += `
@@ -431,14 +431,14 @@
                     <div class="autocomplete-team">${teamDisplay}</div>
                     <div class="autocomplete-meta">
                         ${weapons}
-                        <span>${r.record_count}회 출전</span>
+                        <span>${r.record_count}${_t('회 출전')}</span>
                     </div>
                 </div>
             `;
         });
 
         if (results.length > 10) {
-            html += `<div class="autocomplete-no-results">외 ${results.length - 10}명... Enter로 전체 검색</div>`;
+            html += '<div class="autocomplete-no-results">' + _t('외') + ' ' + (results.length - 10) + _t('명... Enter로 전체 검색') + '</div>';
         }
 
         dropdown.innerHTML = html;
@@ -472,7 +472,7 @@
         }
 
         const dropdown = document.getElementById('autocomplete-dropdown');
-        dropdown.innerHTML = '<div class="autocomplete-loading">검색 중...</div>';
+        dropdown.innerHTML = '<div class="autocomplete-loading">' + _t('검색 중...') + '</div>';
         showAutocomplete();
 
         try {
@@ -480,7 +480,7 @@
             const data = await response.json();
             renderAutocomplete(data.results);
         } catch (error) {
-            dropdown.innerHTML = '<div class="autocomplete-no-results">검색 실패</div>';
+            dropdown.innerHTML = '<div class="autocomplete-no-results">' + _t('검색 실패') + '</div>';
             console.error(error);
         }
     }
@@ -494,28 +494,28 @@
         hideAutocomplete();
         const query = document.getElementById('search-query').value.trim();
         if (query.length < 2) {
-            alert('2글자 이상 입력하세요');
+            alert(_t('2글자 이상 입력하세요'));
             return;
         }
 
         const resultsDiv = document.getElementById('search-results');
-        resultsDiv.innerHTML = '<p class="searching">검색 중...</p>';
+        resultsDiv.innerHTML = '<p class="searching">' + _t('검색 중...') + '</p>';
 
         try {
             const response = await fetch(`/api/players/search?q=${encodeURIComponent(query)}`);
             const data = await response.json();
 
             if (data.results.length === 0) {
-                resultsDiv.innerHTML = '<p class="no-results">검색 결과가 없습니다</p>';
+                resultsDiv.innerHTML = '<p class="no-results">' + _t('검색 결과가 없습니다') + '</p>';
                 return;
             }
 
-            let html = `<p class="result-count">${data.total}명의 선수</p>`;
+            let html = '<p class="result-count">' + data.total + _t('명의 선수') + '</p>';
 
             data.results.forEach(r => {
                 const hasDisambiguation = r.has_disambiguation;
                 const disambiguationBadge = hasDisambiguation
-                    ? '<span class="disambiguation-badge">⚠ 동명이인</span>'
+                    ? '<span class="disambiguation-badge">⚠ ' + _t('동명이인') + '</span>'
                     : '';
                 const nameEn = r.name_en ? `<span class="name-en-tag">${r.name_en}</span>` : '';
 
@@ -536,14 +536,14 @@
 
                     teamHistoryHtml = `
                         <div class="team-history">
-                            <div class="team-history-title">소속 이력</div>
+                            <div class="team-history-title">${_t('소속 이력')}</div>
                             <div class="team-history-list">${teamItems}</div>
                         </div>
                     `;
                 }
 
                 const cardTeamDisplay = r.blurred
-                    ? '<span class="blurred-text">소속 정보</span>'
+                    ? '<span class="blurred-text">' + _t('소속 정보') + '</span>'
                     : (r.current_team || r.teams?.join(', ') || '-');
 
                 const cardTeamHistory = r.blurred ? '' : teamHistoryHtml;
@@ -562,7 +562,7 @@
                             <div class="player-stats">
                                 <div class="stat-item">
                                     <div class="stat-value">${r.record_count}</div>
-                                    <div class="stat-label">출전</div>
+                                    <div class="stat-label">${_t('출전')}</div>
                                 </div>
                             </div>
                         </div>
@@ -578,16 +578,16 @@
             if (data.requires_login && data.has_more) {
                 html += `
                     <div class="search-login-gate">
-                        <p>총 <strong>${data.total}명</strong>의 선수 중 ${data.results.length}명만 표시됩니다</p>
-                        <p>로그인하면 전체 검색 결과를 볼 수 있습니다</p>
-                        <a href="/auth/login" class="gate-cta-btn">로그인 / 회원가입</a>
+                        <p>${_t('총')} <strong>${data.total}${_t('명')}</strong>${_t('의 선수 중')} ${data.results.length}${_t('명만 표시됩니다')}</p>
+                        <p>${_t('로그인하면 전체 검색 결과를 볼 수 있습니다')}</p>
+                        <a href="/auth/login" class="gate-cta-btn" onclick="localStorage.setItem('fencingmind_login_redirect', window.location.href)">${_t('로그인 / 회원가입')}</a>
                     </div>
                 `;
             }
 
             resultsDiv.innerHTML = html;
         } catch (error) {
-            resultsDiv.innerHTML = '<p class="error">검색 실패</p>';
+            resultsDiv.innerHTML = '<p class="error">' + _t('검색 실패') + '</p>';
             console.error(error);
         }
     }

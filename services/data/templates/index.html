@@ -718,6 +718,17 @@
         </div>
     </div>
 
+    <!-- Selection/꿈나무 선발 배너 -->
+    <div style="background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%); padding: 2rem; border-radius: 12px; margin: 2rem 0; text-align: center;">
+        <div style="color: white;">
+            <h3 style="margin-bottom: 0.5rem; font-size: 1.5rem;">🏆 {{ _t("꿈나무 선발 포인트") }}</h3>
+            <p style="margin-bottom: 1.5rem; opacity: 0.9;">{{ _t("중1 기간 대회 성적으로 꿈나무 선발 포인트를 확인하세요") }}</p>
+            <a href="/selection/kkumnamu/summary" style="display: inline-block; background: white; color: #e67e22; padding: 0.75rem 2rem; border-radius: 25px; text-decoration: none; font-weight: 600; transition: transform 0.2s;">
+                {{ _t("선발 포인트 확인하기") }} →
+            </a>
+        </div>
+    </div>
+
     <!-- Event Selection -->
     <div class="filter-section">
         <h3>{{ i18n.common.home.event_selection|default('Event Selection') }}</h3>
@@ -1042,8 +1053,8 @@ async function loadEvents() {
         cardsDiv.innerHTML = data.events.map(event => `
             <div class="event-card" onclick="location.href='/competition/${event.event_cd}?event=${event.sub_event_cd}'" style="cursor: pointer;">
                 <div class="event-info">
-                    <div class="event-name">${event.name}</div>
-                    <div class="event-meta">${event.competition_name}</div>
+                    <div class="event-name">${_tr_event(event.name)}</div>
+                    <div class="event-meta">${_tr_comp(event.competition_name)}</div>
                     <div class="event-tags">
                         ${event.weapon ? `<span class="tag tag-weapon">${WEAPON_DISPLAY[event.weapon] || event.weapon}</span>` : ''}
                         ${event.gender ? `<span class="tag tag-gender">${GENDER_DISPLAY[event.gender] || event.gender}</span>` : ''}
@@ -1076,7 +1087,7 @@ async function loadCompetitions() {
         listDiv.innerHTML = data.competitions.map(comp => `
             <div class="competition-item" onclick="location.href='/competition/${comp.event_cd}'">
                 <div>
-                    <strong>${comp.name}</strong>
+                    <strong>${_tr_comp(comp.name)}</strong>
                     <div style="font-size: 0.85rem; color: #666;">${comp.event_count} ${i18n.table.event}</div>
                 </div>
                 <div style="text-align: right; color: #666;">
@@ -1272,7 +1283,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                 <a href="/competition/${comp.comp_idx || comp.event_cd}" class="live-card">
                     <div class="live-card-icon">🏆</div>
                     <div class="live-card-info">
-                        <h4>${comp.name}</h4>
+                        <h4>${_tr_comp(comp.name)}</h4>
                         <p>Day ${comp.day_number}/${comp.total_days} ${comp.venue ? '• ' + comp.venue : ''}</p>
                     </div>
                     <div class="live-card-status">
@@ -1295,7 +1306,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                         </svg>
                     </div>
                     <div class="upcoming-card-info">
-                        <h4>${comp.name}</h4>
+                        <h4>${_tr_comp(comp.name)}</h4>
                         <p>${comp.venue || ''}</p>
                     </div>
                     <div class="upcoming-card-status">
@@ -1325,32 +1336,39 @@ async function loadUpcomingCompetitions() {
 
         // 이미 live API에서 표시된 대회 제외하고 추가 표시
         if (data.upcoming && data.upcoming.length > 0) {
-            const existingHtml = upcomingCards.innerHTML;
+            // live API에서 이미 카드가 렌더링됐는지 확인 (a 태그 유무로 판별)
+            const hasExistingCards = upcomingCards.querySelector('.upcoming-card') !== null;
             const additionalComps = data.upcoming.filter(comp => comp.days_until > 7);
 
-            if (additionalComps.length > 0 || existingHtml === '') {
+            if (additionalComps.length > 0 || !hasExistingCards) {
                 upcomingBanner.style.display = 'block';
 
-                if (existingHtml === '') {
-                    upcomingCards.innerHTML = data.upcoming.slice(0, 5).map(comp => `
-                        <a href="/competition/${comp.comp_idx || comp.event_cd}" class="upcoming-card">
-                            <div class="upcoming-card-icon">
-                                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                    <rect x="3" y="4" width="18" height="18" rx="2"/>
-                                    <path d="M16 2v4M8 2v4M3 10h18"/>
-                                    <path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/>
-                                </svg>
-                            </div>
-                            <div class="upcoming-card-info">
-                                <h4>${comp.name}</h4>
-                                <p>${comp.venue || ''}</p>
-                            </div>
-                            <div class="upcoming-card-status">
-                                <span class="status">${comp.days_until === 0 ? 'TODAY' : 'D-' + comp.days_until}</span>
-                                <div class="date">${formatDateRange(comp.start_date, comp.end_date)}</div>
-                            </div>
-                        </a>
-                    `).join('');
+                // 기존 카드 없으면 전체 렌더링, 있으면 7일 초과분만 추가
+                const compsToRender = hasExistingCards ? additionalComps : data.upcoming.slice(0, 5);
+                const newHtml = compsToRender.map(comp => `
+                    <a href="/competition/${comp.comp_idx || comp.event_cd}" class="upcoming-card">
+                        <div class="upcoming-card-icon">
+                            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <rect x="3" y="4" width="18" height="18" rx="2"/>
+                                <path d="M16 2v4M8 2v4M3 10h18"/>
+                                <path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/>
+                            </svg>
+                        </div>
+                        <div class="upcoming-card-info">
+                            <h4>${_tr_comp(comp.name)}</h4>
+                            <p>${comp.venue || ''}</p>
+                        </div>
+                        <div class="upcoming-card-status">
+                            <span class="status">${comp.days_until === 0 ? 'TODAY' : 'D-' + comp.days_until}</span>
+                            <div class="date">${formatDateRange(comp.start_date, comp.end_date)}</div>
+                        </div>
+                    </a>
+                `).join('');
+
+                if (hasExistingCards) {
+                    upcomingCards.innerHTML += newHtml;
+                } else {
+                    upcomingCards.innerHTML = newHtml;
                 }
             }
         }

@@ -1,53 +1,74 @@
 {% extends "base.html" %}
 
-{% block title %}{{ competition.competition.name }} - Korean Fencing Tracker{% endblock %}
+{% block title %}{{ tr_comp(competition.competition.name) }} - Korean Fencing Tracker{% endblock %}
 
 {% block content %}
 <div class="container">
     <nav class="breadcrumb">
-        <a href="/">대회 목록</a> &gt;
-        <span>{{ competition.competition.name }}</span>
+        <a href="/">{{ _t("대회 목록") }}</a> &gt;
+        <span>{{ tr_comp(competition.competition.name) }}</span>
     </nav>
 
     <section class="competition-header">
-        <h1>{{ competition.competition.name }}</h1>
+        <h1>{{ tr_comp(competition.competition.name) }}</h1>
         <div class="competition-meta">
             <span class="meta-item">
-                <strong>기간:</strong>
+                <strong>{{ _t("기간") }}:</strong>
                 {{ competition.competition.start_date or '-' }}
                 {% if competition.competition.end_date and competition.competition.end_date != competition.competition.start_date %}
                 ~ {{ competition.competition.end_date }}
                 {% endif %}
             </span>
             <span class="meta-item">
-                <strong>상태:</strong>
+                <strong>{{ _t("상태") }}:</strong>
                 <span class="status-badge">{{ competition.competition.status or '-' }}</span>
             </span>
             <span class="meta-item">
-                <strong>이벤트:</strong> {{ competition.events | length }}개
+                <strong>{{ _t("이벤트") }}:</strong> {{ competition.events | length }}{{ _t("개") }}
             </span>
+            {% if comp_stats and comp_stats.total_players %}
+            <span class="meta-item">
+                <strong>{{ _t("총 참가") }}:</strong> {{ "{:,}".format(comp_stats.total_players) }}{{ _t("명") }}
+            </span>
+            <span class="meta-item">
+                <strong>{{ _t("총 소속") }}:</strong> {{ "{:,}".format(comp_stats.total_teams) }}{{ _t("개") }}
+            </span>
+            {% endif %}
         </div>
     </section>
+
+    {% if comp_stats and comp_stats.total_players %}
+    <section class="comp-stats-section">
+        <details>
+            <summary class="comp-stats-toggle">
+                <span class="stats-title">{{ _t("대회 통계") }}</span>
+                <span class="stats-hint">{{ _t("참가자 분포, 지역별/무기별 현황 보기") }}</span>
+            </summary>
+            <div class="comp-stats-body" id="comp-stats-body"></div>
+        </details>
+    </section>
+    <script id="comp-stats-data" type="application/json">{{ comp_stats | tojson }}</script>
+    {% endif %}
 
     <!-- Player Search in Competition with Autocomplete -->
     <section class="comp-player-search-section">
         <div class="search-header">
-            <h3>선수 검색</h3>
-            <span class="search-hint">대회 내 모든 종목에서 선수를 검색합니다</span>
+            <h3>{{ _t("선수 검색") }}</h3>
+            <span class="search-hint">{{ _t("대회 내 모든 종목에서 선수를 검색합니다") }}</span>
         </div>
         <div class="search-box">
             <div class="autocomplete-container" id="comp-autocomplete-container">
                 <input type="text"
                        id="comp-player-search"
-                       placeholder="선수 이름 또는 소속으로 검색..."
+                       placeholder="{{ _t('선수 이름 또는 소속으로 검색...') }}"
                        autocomplete="off">
             </div>
-            <button type="button" id="comp-search-btn">검색</button>
-            <button type="button" id="comp-clear-search-btn" style="display:none">해제</button>
+            <button type="button" id="comp-search-btn">{{ _t("검색") }}</button>
+            <button type="button" id="comp-clear-search-btn" style="display:none">{{ _t("해제") }}</button>
         </div>
         <div id="comp-search-result" class="search-result-panel" style="display:none">
             <div class="result-header">
-                <span class="result-title">검색 결과</span>
+                <span class="result-title">{{ _t("검색 결과") }}</span>
                 <span class="result-count"></span>
             </div>
             <div class="result-content"></div>
@@ -55,12 +76,12 @@
     </section>
 
     <section class="events-section">
-        <h2>이벤트 목록</h2>
+        <h2>{{ _t("이벤트 목록") }}</h2>
         <div class="events-grid">
             {% for event in competition.events %}
             <a href="/competition/{{ competition.competition.event_cd }}?event={{ event.sub_event_cd }}" class="event-card-link">
                 <div class="event-card" data-sub-event="{{ event.sub_event_cd }}">
-                    <div class="event-name">{{ event.name }}</div>
+                    <div class="event-name">{{ tr_event(event.name) }}</div>
                     <div class="event-details">
                         {% if event.weapon %}<span class="weapon-tag">{{ event.weapon }}</span>{% endif %}
                         {% if event.gender %}<span class="gender-tag">{{ event.gender }}</span>{% endif %}
@@ -73,14 +94,43 @@
                         {% if event.pool_rounds %}
                         <span class="stat-badge">📋 {{ event.pool_rounds|length }}풀</span>
                         {% endif %}
+                        {% if not event.final_rankings and not event.pool_rounds and event.participants %}
+                        <span class="stat-badge participants-badge">👤 {{ event.participants|length }}명</span>
+                        {% endif %}
                     </div>
                 </div>
             </a>
             {% else %}
-            <p class="no-data">이벤트 정보가 없습니다</p>
+            <p class="no-data">{{ _t("이벤트 정보가 없습니다") }}</p>
             {% endfor %}
         </div>
     </section>
+
+    <!-- 참가 선수 명단 섹션 -->
+    {% set individual_events_with_participants = [] %}
+    {% for event in competition.events %}
+        {% if event.participants and event.event_type != '단체' %}
+            {% if individual_events_with_participants.append(event) %}{% endif %}
+        {% endif %}
+    {% endfor %}
+
+    {% if individual_events_with_participants %}
+    <section class="participants-section">
+        <h2>{{ _t("참가 선수 명단") }}</h2>
+        <div class="participants-controls">
+            <select id="participant-event-select">
+                {% for event in individual_events_with_participants %}
+                <option value="{{ loop.index0 }}">{{ tr_event(event.name) }} ({{ event.participants|length }}{{ _t("명") }})</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div id="participants-list" class="participants-list"></div>
+    </section>
+
+    <script id="participants-data" type="application/json">
+    {{ individual_events_with_participants | map(attribute='participants') | list | tojson }}
+    </script>
+    {% endif %}
 
 </div>
 
@@ -449,6 +499,249 @@ tr.qualified:hover {
 tr.eliminated:hover {
     background: #fee2e2;
 }
+
+/* =====================================================
+   PARTICIPANTS SECTION
+   ===================================================== */
+.participants-section {
+    margin: 2rem 0;
+    padding: 1.5rem;
+    background: var(--bg-card, rgba(18, 18, 26, 0.85));
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-radius: 14px;
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+}
+
+.participants-section h2 {
+    margin: 0 0 1rem 0;
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--text-primary, #fff);
+}
+
+.participants-controls {
+    margin-bottom: 1.25rem;
+}
+
+.participants-controls select {
+    width: 100%;
+    max-width: 400px;
+    padding: 12px 16px;
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+    border-radius: 10px;
+    font-size: 0.95rem;
+    background: var(--bg-secondary, rgba(26, 26, 37, 0.9));
+    color: var(--text-primary, #fff);
+    font-family: inherit;
+    cursor: pointer;
+    transition: border-color 0.3s ease;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b6b7b' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 14px center;
+    padding-right: 40px;
+}
+
+.participants-controls select:focus {
+    outline: none;
+    border-color: var(--accent-primary, #c9302c);
+    box-shadow: 0 0 0 3px rgba(201, 48, 44, 0.15);
+}
+
+.participants-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.team-group {
+    background: var(--bg-secondary, rgba(26, 26, 37, 0.9));
+    border-radius: 10px;
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.06));
+    overflow: hidden;
+}
+
+.team-group-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 16px;
+    background: rgba(255, 255, 255, 0.03);
+    border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.06));
+}
+
+.team-group-name {
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--text-primary, #fff);
+}
+
+.team-group-count {
+    font-size: 0.8rem;
+    color: var(--accent-gold, #d4a574);
+    font-weight: 600;
+    background: rgba(212, 165, 116, 0.1);
+    padding: 3px 10px;
+    border-radius: 12px;
+}
+
+.team-group-players {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px 16px;
+}
+
+.player-chip {
+    display: inline-block;
+    padding: 5px 12px;
+    background: var(--bg-card, rgba(18, 18, 26, 0.85));
+    color: var(--text-secondary, #b0b0c0);
+    border-radius: 8px;
+    font-size: 0.85rem;
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.06));
+    transition: all 0.2s ease;
+}
+
+.player-chip:hover {
+    color: var(--text-primary, #fff);
+    border-color: var(--accent-primary, #c9302c);
+    transform: translateY(-1px);
+}
+
+.player-chip a {
+    color: inherit;
+    text-decoration: none;
+}
+
+.player-chip a:hover {
+    text-decoration: underline;
+}
+
+.participants-summary {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 1rem;
+    padding: 10px 16px;
+    background: var(--bg-secondary, rgba(26, 26, 37, 0.9));
+    border-radius: 10px;
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.06));
+    font-size: 0.85rem;
+    color: var(--text-muted, #6b6b7b);
+    flex-wrap: wrap;
+}
+
+.participants-summary strong {
+    color: var(--text-primary, #fff);
+}
+
+.participants-badge {
+    background: rgba(99, 102, 241, 0.15) !important;
+    color: #818cf8 !important;
+    border: 1px solid rgba(99, 102, 241, 0.3) !important;
+}
+
+@media (max-width: 768px) {
+    .participants-controls select {
+        max-width: 100%;
+    }
+
+    .team-group-players {
+        gap: 6px;
+        padding: 10px 12px;
+    }
+
+    .player-chip {
+        font-size: 0.8rem;
+        padding: 4px 10px;
+    }
+
+    .participants-summary {
+        flex-direction: column;
+        gap: 4px;
+    }
+}
+
+/* Competition Stats Section */
+.comp-stats-section {
+    margin: 1rem 0;
+}
+.comp-stats-toggle {
+    cursor: pointer;
+    padding: 12px 18px;
+    background: var(--bg-card, rgba(18, 18, 26, 0.85));
+    border-radius: 12px;
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text-primary, #fff);
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.comp-stats-toggle::-webkit-details-marker { display: none; }
+.comp-stats-toggle::before {
+    content: '▶';
+    font-size: 0.7rem;
+    flex-shrink: 0;
+    display: inline-block;
+    transition: transform 0.2s;
+}
+details[open] > .comp-stats-toggle::before {
+    transform: rotate(90deg);
+}
+details[open] > .comp-stats-toggle {
+    border-radius: 12px 12px 0 0;
+    border-bottom: none;
+}
+.stats-title {
+    flex-shrink: 0;
+}
+.stats-hint {
+    font-size: 0.75rem;
+    font-weight: 400;
+    color: rgba(255, 255, 255, 0.45);
+    margin-left: auto;
+}
+details[open] > .comp-stats-toggle .stats-hint {
+    display: none;
+}
+.comp-stats-body {
+    padding: 16px 18px;
+    background: var(--bg-card, rgba(18, 18, 26, 0.85));
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+    border-top: none;
+    border-radius: 0 0 12px 12px;
+    font-size: 0.82rem;
+    color: rgba(255, 255, 255, 0.85);
+    line-height: 1.7;
+    word-break: break-all;
+}
+.comp-stats-body .stat-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+.comp-stats-body .stat-table td {
+    padding: 5px 0;
+    vertical-align: top;
+}
+.comp-stats-body .stat-table td:first-child {
+    width: 90px;
+    flex-shrink: 0;
+    color: var(--accent-gold, #d4a574);
+    font-weight: 700;
+    white-space: nowrap;
+    padding-right: 10px;
+}
+.comp-stats-body .stat-table td:last-child {
+    color: rgba(255, 255, 255, 0.85);
+}
+.comp-stats-body .stat-table tr + tr td {
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
 </style>
 
 <script src="/static/js/player-search.js"></script>
@@ -523,7 +816,7 @@ async function searchCompPlayer() {
     const resultCount = resultPanel.querySelector('.result-count');
 
     // Show loading state
-    resultContent.innerHTML = '<p style="text-align:center;color:var(--text-muted, #6b6b7b);padding:1rem;">검색 중...</p>';
+    resultContent.innerHTML = '<p style="text-align:center;color:var(--text-muted, #6b6b7b);padding:1rem;">' + _t('검색 중...') + '</p>';
     resultPanel.style.display = 'block';
 
     try {
@@ -533,7 +826,7 @@ async function searchCompPlayer() {
         const data = await response.json();
 
         if (data.results.length === 0) {
-            resultContent.innerHTML = '<p style="text-align:center;color:var(--text-muted, #6b6b7b);padding:1rem;">검색 결과가 없습니다</p>';
+            resultContent.innerHTML = '<p style="text-align:center;color:var(--text-muted, #6b6b7b);padding:1rem;">' + _t('검색 결과가 없습니다') + '</p>';
             resultCount.textContent = '0건';
         } else {
             resultCount.textContent = `${data.results.length}건`;
@@ -591,12 +884,12 @@ async function searchCompPlayer() {
                                 <div class="name">${p.name}</div>
                                 <div class="team">${p.team || '-'}</div>
                             </div>
-                            <span class="event-badge">${r.event_name}</span>
+                            <span class="event-badge">${_tr_event(r.event_name)}</span>
                         </div>
                         <div class="info-grid">
                             <div class="info-item">
-                                <div class="info-label">종목</div>
-                                <div class="info-value" style="font-size: 0.75rem;">${r.event_name}</div>
+                                <div class="info-label">${_t('종목')}</div>
+                                <div class="info-value" style="font-size: 0.75rem;">${_tr_event(r.event_name)}</div>
                             </div>
                             <div class="info-item">
                                 <div class="info-label">Pool</div>
@@ -607,7 +900,7 @@ async function searchCompPlayer() {
                                 <div class="info-value" style="font-size: 0.75rem;">${deDisplay}</div>
                             </div>
                             <div class="info-item">
-                                <div class="info-label">최종순위</div>
+                                <div class="info-label">${_t('최종순위')}</div>
                                 <div class="info-value">${finalDisplay}</div>
                             </div>
                         </div>
@@ -620,7 +913,7 @@ async function searchCompPlayer() {
 
     } catch (error) {
         console.error('Search error:', error);
-        resultContent.innerHTML = '<p style="text-align:center;color:#f87171;padding:1rem;">검색 중 오류가 발생했습니다</p>';
+        resultContent.innerHTML = '<p style="text-align:center;color:#f87171;padding:1rem;">' + _t('검색 중 오류가 발생했습니다') + '</p>';
     }
 }
 
@@ -638,5 +931,159 @@ function navigateToEventWithPlayer(subEventCd, playerName) {
     const url = `/competition/${EVENT_CD}?event=${subEventCd}&highlight=${encodeURIComponent(playerName)}`;
     window.location.href = url;
 }
+
+// ==========================================
+// Participants List (참가 선수 명단)
+// ==========================================
+(function() {
+    const dataEl = document.getElementById('participants-data');
+    if (!dataEl) return;
+
+    const allParticipants = JSON.parse(dataEl.textContent);
+    const select = document.getElementById('participant-event-select');
+    const listContainer = document.getElementById('participants-list');
+
+    function renderParticipants(eventIdx) {
+        const participants = allParticipants[eventIdx] || [];
+        if (!participants.length) {
+            listContainer.innerHTML = '<p style="text-align:center;color:var(--text-muted,#6b6b7b);padding:1rem;">' + _t('참가 선수 정보가 없습니다') + '</p>';
+            return;
+        }
+
+        // 소속별 그룹핑
+        const teamMap = {};
+        for (const p of participants) {
+            const team = (p.team || _t('소속 미상')).trim();
+            if (!teamMap[team]) teamMap[team] = [];
+            teamMap[team].push(p.name || p.num || '');
+        }
+
+        // 팀명 정렬 (가나다순), 소속 미상은 맨 뒤
+        const teamNames = Object.keys(teamMap).sort((a, b) => {
+            if (a === '소속 미상') return 1;
+            if (b === '소속 미상') return -1;
+            return a.localeCompare(b, 'ko');
+        });
+
+        const totalPlayers = participants.length;
+        const totalTeams = teamNames.length;
+
+        let html = `<div class="participants-summary">
+            <span>총 <strong>${totalPlayers}명</strong></span>
+            <span><strong>${totalTeams}개</strong> 소속</span>
+        </div>`;
+
+        for (const team of teamNames) {
+            const players = teamMap[team];
+            const encodedTeam = encodeURIComponent(team);
+            html += `<div class="team-group">
+                <div class="team-group-header">
+                    <span class="team-group-name">${team}</span>
+                    <span class="team-group-count">${players.length}명</span>
+                </div>
+                <div class="team-group-players">
+                    ${players.map(name => `<span class="player-chip"><a href="/player/${encodeURIComponent(name)}?team=${encodedTeam}">${name}</a></span>`).join('')}
+                </div>
+            </div>`;
+        }
+
+        listContainer.innerHTML = html;
+    }
+
+    select.addEventListener('change', function() {
+        renderParticipants(parseInt(this.value));
+    });
+
+    // 초기 렌더링
+    renderParticipants(0);
+})();
+
+// Competition Stats Rendering
+(function() {
+    const el = document.getElementById('comp-stats-data');
+    const body = document.getElementById('comp-stats-body');
+    if (!el || !body) return;
+
+    const stats = JSON.parse(el.textContent);
+    if (!stats || !stats.total_players) return;
+
+    const orgTypeLabels = {
+        high: _t('고등학교'), middle: _t('중학교'), university: _t('대학교'),
+        professional: _t('실업팀'), club: _t('클럽'), association: _t('협회/연맹'),
+        elementary: _t('초등학교'), '기타': _t('기타')
+    };
+    const schoolLabels = {M: _t('중학교'), H: _t('고등학교'), E: _t('초등학교'), P: _t('일반부')};
+    const weaponNames = {foil: _t('플뢰레'), epee: _t('에페'), sabre: _t('사브르')};
+
+    function fmtGrades(grades, prefix) {
+        const order = ['3G', '2G', '1G', '?'];
+        return order.filter(k => grades[k]).map(k => {
+            if (k === '?') return '?' + grades[k];
+            return prefix + k + grades[k];
+        }).join(',');
+    }
+
+    let rows = [];
+
+    // 소속 유형별 (org_type)
+    const otEntries = Object.entries(stats.by_org_type || {})
+        .filter(([t]) => t !== '기타')
+        .sort((a, b) => b[1] - a[1]);
+    if (otEntries.length > 0) {
+        const parts = otEntries.map(([t, cnt]) =>
+            (orgTypeLabels[t] || t) + ' ' + cnt + '명'
+        );
+        const etcCount = (stats.by_org_type || {})['기타'] || 0;
+        if (etcCount > 0) parts.push('기타 ' + etcCount + '명');
+        rows.push([_t('소속 유형'), parts.join(', ')]);
+    }
+
+    // 학교별 (이벤트 분류 기반)
+    const schoolEntries = Object.entries(stats.by_school || {})
+        .sort((a, b) => b[1].count - a[1].count);
+    if (schoolEntries.length > 1 || (schoolEntries.length === 1 && schoolEntries[0][0] !== 'P')) {
+        const parts = schoolEntries.map(([st, info]) => {
+            const label = schoolLabels[st] || st;
+            return label + ' ' + info.count + '명(' + fmtGrades(info.grades, st) + ')';
+        });
+        rows.push([_t('종별'), parts.join(', ')]);
+    }
+
+    // 지역별
+    const provEntries = Object.entries(stats.by_province || {})
+        .filter(([p]) => p !== '미확인')
+        .sort((a, b) => b[1].count - a[1].count);
+    if (provEntries.length > 0) {
+        const parts = provEntries.map(([prov, info]) => {
+            let s = prov + ' ' + info.count;
+            const cityEntries = Object.entries(info.cities || {}).sort((a, b) => b[1].count - a[1].count);
+            if (cityEntries.length > 0) {
+                const cityParts = cityEntries.map(([c, ci]) => c + ' ' + ci.count);
+                s += '(' + cityParts.join(', ') + ')';
+            }
+            return s;
+        });
+        rows.push([_t('지역별'), parts.join(', ')]);
+    }
+
+    // 무기별
+    const weaponEntries = Object.entries(stats.by_weapon || {});
+    if (weaponEntries.length > 0) {
+        const parts = weaponEntries.map(([w, cats]) => {
+            const catStr = cats.map(c => c.category + c.count).join(',');
+            return (weaponNames[w] || w) + '(' + catStr + ')';
+        });
+        rows.push([_t('무기별'), parts.join(' | ')]);
+    }
+
+    if (rows.length > 0) {
+        let html = '<table class="stat-table">';
+        for (const [label, value] of rows) {
+            html += '<tr><td>' + label + '</td><td>' + value + '</td></tr>';
+        }
+        html += '</table>';
+        body.innerHTML = html;
+    }
+})();
 </script>
 {% endblock %}

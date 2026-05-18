@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="selection-page">
+        <!-- 비공식 안내 배너 -->
+        <div class="selection-unofficial-notice">
+            ⚠️ {{ _t("본 순위는 공개된 대회 결과를 기반으로 추정한 비공식 자료입니다. 실제 선발 결과와 다를 수 있습니다.") }}
+        </div>
+
+        <div class="selection-header">
+            <h1>{{ _t("꿈나무 선발 포인트") }}</h1>
+            <p class="selection-desc">{{ _t("중1 기간 4개 대상 대회 성적 합산 → 중2 초 종목·성별별 %s명 선발")|format(selection_count) }}</p>
+            <div class="selection-nav-tabs">
+                <a href="/selection/kkumnamu/summary" class="sel-nav-tab active">{{ _t("꿈나무") }}</a>
+                <a href="/selection/national-team/summary" class="sel-nav-tab">{{ _t("청소년 대표") }}</a>
+            </div>
+        </div>
+
+        <!-- 로그인 안내 -->
+        <div class="auth-login-prompt" id="selectionAuthPrompt">
+            🔒 {{ _t("선수 이름과 소속은 로그인 후 확인할 수 있습니다.") }}
+            <a href="https://account.fencingmind.ai/auth/login?redirect_url={{ request.url | urlencode }}" onclick="localStorage.setItem('fencingmind_login_redirect', window.location.href)">{{ _t("로그인") }}</a>
+        </div>
+
+        <!-- 연도 탭 -->
+        <div class="year-tab-bar">
+            {% for ys in year_summaries %}
+            <button class="year-tab {% if loop.first %}active{% endif %}" data-year="{{ ys.school_year }}" onclick="selectYear({{ ys.school_year }})">
+                {{ _t("%s학년도")|format(ys.school_year) }}
+            </button>
+            {% endfor %}
+        </div>
+
+        <!-- 연도별 콘텐츠 -->
+        {% for ys in year_summaries %}
+        <div class="year-content {% if loop.first %}active{% endif %}" id="year-{{ ys.school_year }}">
+            <h2 class="year-title">{{ _t("%s학년도 예상 선발 명단")|format(ys.school_year) }}</h2>
+
+            <div class="selection-grid">
+                {% for cat in ys.categories %}
+                <div class="selection-card">
+                    <div class="card-header">
+                        <span class="card-weapon">{{ cat.weapon_kr }}</span>
+                        <span class="card-gender">{{ cat.gender }}</span>
+                        <span class="card-count">{{ _t("%s명 참가")|format(cat.total) }}</span>
+                    </div>
+
+                    {% if cat.selected %}
+                    <table class="card-table">
+                        <tbody>
+                            {% for p in cat.selected %}
+                            <tr class="{% if p.rank <= selection_count %}in-selection{% endif %}">
+                                <td class="ct-rank">
+                                    <span class="ct-rank-badge">{{ p.rank }}</span>
+                                </td>
+                                <td class="ct-name">
+                                    <span class="auth-protected"><a href="/selection/kkumnamu?year={{ ys.school_year }}&weapon={{ cat.weapon }}&gender={{ cat.gender }}" class="ct-player-link">{{ p.name }}</a></span>
+                                </td>
+                                <td class="ct-team"><span class="auth-protected">{{ p.team }}</span></td>
+                                <td class="ct-pts">{{ _t("%s점")|format(p.total_points|int) }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% else %}
+                    <div class="card-no-data">{{ _t("데이터 없음") }}</div>
+                    {% endif %}
+
+                    <div class="card-footer">
+                        <a href="/selection/kkumnamu?year={{ ys.school_year }}&weapon={{ cat.weapon }}&gender={{ cat.gender }}" class="card-detail-link">{{ _t("상세 보기 →") }}</a>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function selectYear(year) {
+    // 탭 활성화
+    document.querySelectorAll('.year-tab').forEach(t => t.classList.remove('active'));
+    document.querySelector(`.year-tab[data-year="${year}"]`).classList.add('active');
+    // 콘텐츠 표시
+    document.querySelectorAll('.year-content').forEach(c => c.classList.remove('active'));
+    document.getElementById(`year-${year}`).classList.add('active');
+}
+</script>
+{% endblock %}
