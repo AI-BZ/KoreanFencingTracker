@@ -14,7 +14,11 @@ yt-dlp>=2024.1.0
 # Optional: OCR fallback
 # pytesseract>=0.3.10
 
-# Optional: ML (Phase 2)
-# ultralytics>=8.0.0  # YOLO11-Pose
-# transformers>=4.35.0  # VideoMAE
-# torch>=2.1.0
+# ML - Phase 2
+ultralytics>=8.4.0        # YOLO11-Pose (17-joint tracking)
+transformers>=5.0.0       # VideoMAE (action classification)
+torch>=2.1.0
+
+# Testing
+pytest>=9.0.0
+pytest-cov>=7.0.0
