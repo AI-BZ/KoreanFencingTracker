@@ -1,0 +1,296 @@
+{% extends "base.html" %}
+
+{% block title %}분석 리포트 - FencingMind Analytics{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+    <!-- Match Summary Header -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 mb-8">
+        <div class="flex flex-col lg:flex-row items-center justify-between gap-6">
+            <div class="flex items-center gap-8">
+                <!-- Score Display -->
+                <div class="flex items-center gap-4">
+                    <div class="text-center">
+                        <p class="text-xs font-medium text-blue-600 uppercase tracking-wider mb-1">Left</p>
+                        <p class="text-5xl font-bold text-blue-600">{{ report.summary.final_score.split('-')[0] }}</p>
+                    </div>
+                    <span class="text-3xl font-light text-gray-300">:</span>
+                    <div class="text-center">
+                        <p class="text-xs font-medium text-red-600 uppercase tracking-wider mb-1">Right</p>
+                        <p class="text-5xl font-bold text-red-600">{{ report.summary.final_score.split('-')[1] }}</p>
+                    </div>
+                </div>
+
+                <!-- Match Info -->
+                <div class="flex flex-wrap gap-3">
+                    {% if report.summary.weapon %}
+                    <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium
+                                 {% if report.summary.weapon == 'foil' %}bg-blue-100 text-blue-800
+                                 {% elif report.summary.weapon == 'epee' %}bg-purple-100 text-purple-800
+                                 {% elif report.summary.weapon == 'sabre' %}bg-orange-100 text-orange-800
+                                 {% endif %}">
+                        {% if report.summary.weapon == 'foil' %}플뢰레
+                        {% elif report.summary.weapon == 'epee' %}에페
+                        {% elif report.summary.weapon == 'sabre' %}사브르
+                        {% endif %}
+                    </span>
+                    {% endif %}
+                    {% if report.summary.match_duration %}
+                    <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-700">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        {{ report.summary.match_duration }}
+                    </span>
+                    {% endif %}
+                    <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-700">
+                        터치 {{ report.summary.total_touches }}회
+                    </span>
+                </div>
+            </div>
+
+            <!-- Analysis Metadata -->
+            <div class="text-right text-xs text-gray-400 space-y-1">
+                <p>Phase {{ report.meta.phase }} Analysis</p>
+                <p>Pose: {{ report.meta.pose_model }}</p>
+                <p>Action: {{ report.meta.action_model }}</p>
+                {% if report.meta.source_type %}
+                <p>Source: {{ report.meta.source_type }}</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Score Timeline -->
+    {% if report.touches %}
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-8">
+        <h2 class="text-lg font-bold text-gray-900 mb-4">스코어 타임라인</h2>
+        <div class="relative" style="height: 300px;">
+            <canvas id="score-timeline-chart"></canvas>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Touch-by-Touch Detail -->
+    {% if report.touches %}
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden mb-8">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-lg font-bold text-gray-900">터치별 상세</h2>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">#</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">시간</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">득점자</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">스코어</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">동작</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">신뢰도</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">설명</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                    {% for touch in report.touches %}
+                    <tr class="{% if touch.scorer == 'left' %}bg-blue-50/50{% elif touch.scorer == 'right' %}bg-red-50/50{% endif %}
+                               hover:bg-gray-50 transition-colors">
+                        <td class="px-4 py-3 text-sm font-medium text-gray-900">{{ touch.touch_number }}</td>
+                        <td class="px-4 py-3 text-sm text-gray-600">{{ touch.match_time }}</td>
+                        <td class="px-4 py-3">
+                            {% if touch.scorer == 'left' %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">Left</span>
+                            {% elif touch.scorer == 'right' %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">Right</span>
+                            {% else %}
+                            <span class="text-sm text-gray-400">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-3 text-sm font-mono font-semibold text-gray-900">{{ touch.score_after }}</td>
+                        <td class="px-4 py-3 text-sm text-gray-700">{{ touch.action_scorer | default('-') }}</td>
+                        <td class="px-4 py-3">
+                            {% if touch.action_confidence %}
+                            <div class="flex items-center gap-2">
+                                <div class="w-16 bg-gray-200 rounded-full h-1.5">
+                                    <div class="h-1.5 rounded-full
+                                                {% if touch.action_confidence >= 0.7 %}bg-green-500
+                                                {% elif touch.action_confidence >= 0.4 %}bg-yellow-500
+                                                {% else %}bg-red-500{% endif %}"
+                                         style="width: {{ (touch.action_confidence * 100) | int }}%"></div>
+                                </div>
+                                <span class="text-xs text-gray-500">{{ "%.0f" | format(touch.action_confidence * 100) }}%</span>
+                            </div>
+                            {% else %}
+                            <span class="text-sm text-gray-400">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-3 text-sm text-gray-600 max-w-xs truncate">{{ touch.description | default('-') }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Fencer Stats (Two Columns) -->
+    {% if report.left_fencer or report.right_fencer %}
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <!-- Left Fencer -->
+        {% if report.left_fencer %}
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-3 h-3 rounded-full bg-blue-500"></div>
+                <h3 class="text-lg font-bold text-gray-900">Left 선수</h3>
+            </div>
+            <div class="grid grid-cols-2 gap-4 mb-6">
+                <div class="bg-blue-50 rounded-xl p-4 text-center">
+                    <p class="text-2xl font-bold text-blue-700">{{ report.left_fencer.total_touches_scored }}</p>
+                    <p class="text-xs text-blue-600 mt-1">득점</p>
+                </div>
+                <div class="bg-gray-50 rounded-xl p-4 text-center">
+                    <p class="text-2xl font-bold text-gray-700">{{ report.left_fencer.total_touches_conceded }}</p>
+                    <p class="text-xs text-gray-500 mt-1">실점</p>
+                </div>
+            </div>
+            {% if report.left_fencer.most_common_action %}
+            <p class="text-sm text-gray-600 mb-4">
+                주요 동작: <span class="font-semibold">{{ report.left_fencer.most_common_action }}</span>
+                ({{ "%.0f" | format(report.left_fencer.most_common_action_pct) }}%)
+            </p>
+            {% endif %}
+            {% if report.left_fencer.action_distribution %}
+            <div class="relative" style="height: 200px;">
+                <canvas id="left-action-chart"></canvas>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- Right Fencer -->
+        {% if report.right_fencer %}
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-3 h-3 rounded-full bg-red-500"></div>
+                <h3 class="text-lg font-bold text-gray-900">Right 선수</h3>
+            </div>
+            <div class="grid grid-cols-2 gap-4 mb-6">
+                <div class="bg-red-50 rounded-xl p-4 text-center">
+                    <p class="text-2xl font-bold text-red-700">{{ report.right_fencer.total_touches_scored }}</p>
+                    <p class="text-xs text-red-600 mt-1">득점</p>
+                </div>
+                <div class="bg-gray-50 rounded-xl p-4 text-center">
+                    <p class="text-2xl font-bold text-gray-700">{{ report.right_fencer.total_touches_conceded }}</p>
+                    <p class="text-xs text-gray-500 mt-1">실점</p>
+                </div>
+            </div>
+            {% if report.right_fencer.most_common_action %}
+            <p class="text-sm text-gray-600 mb-4">
+                주요 동작: <span class="font-semibold">{{ report.right_fencer.most_common_action }}</span>
+                ({{ "%.0f" | format(report.right_fencer.most_common_action_pct) }}%)
+            </p>
+            {% endif %}
+            {% if report.right_fencer.action_distribution %}
+            <div class="relative" style="height: 200px;">
+                <canvas id="right-action-chart"></canvas>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Coaching Insights -->
+    {% if report.insights %}
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-8">
+        <h2 class="text-lg font-bold text-gray-900 mb-4">코칭 인사이트</h2>
+        <div class="space-y-4">
+            {% for insight in report.insights %}
+            <div class="flex gap-4 p-4 rounded-xl
+                        {% if insight.severity == 'warning' %}bg-yellow-50 border border-yellow-200
+                        {% elif insight.severity == 'suggestion' %}bg-green-50 border border-green-200
+                        {% else %}bg-blue-50 border border-blue-200{% endif %}">
+                <div class="flex-shrink-0 mt-0.5">
+                    {% if insight.severity == 'warning' %}
+                    <svg class="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                    </svg>
+                    {% elif insight.severity == 'suggestion' %}
+                    <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                    </svg>
+                    {% else %}
+                    <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    {% endif %}
+                </div>
+                <div class="flex-1">
+                    <p class="text-sm font-medium
+                              {% if insight.severity == 'warning' %}text-yellow-800
+                              {% elif insight.severity == 'suggestion' %}text-green-800
+                              {% else %}text-blue-800{% endif %}">
+                        {{ insight.message }}
+                    </p>
+                    <p class="text-xs mt-1
+                              {% if insight.severity == 'warning' %}text-yellow-600
+                              {% elif insight.severity == 'suggestion' %}text-green-600
+                              {% else %}text-blue-600{% endif %}">
+                        {{ insight.evidence }}
+                    </p>
+                    <span class="inline-block mt-2 text-xs px-2 py-0.5 rounded bg-white/60
+                                 {% if insight.severity == 'warning' %}text-yellow-700
+                                 {% elif insight.severity == 'suggestion' %}text-green-700
+                                 {% else %}text-blue-700{% endif %}">
+                        {{ insight.target }} &middot; {{ insight.category }}
+                    </span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Action Buttons -->
+    <div class="flex flex-wrap gap-3 justify-center">
+        <button onclick="window.print()"
+                class="px-5 py-2.5 bg-brand-600 text-white text-sm font-medium rounded-lg
+                       hover:bg-brand-700 transition-colors flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            </svg>
+            PDF 다운로드
+        </button>
+        <button id="share-btn"
+                class="px-5 py-2.5 bg-white text-gray-700 text-sm font-medium rounded-lg border border-gray-300
+                       hover:bg-gray-50 transition-colors flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/>
+            </svg>
+            공유 링크 생성
+        </button>
+        <a href="/dashboard"
+           class="px-5 py-2.5 bg-white text-gray-700 text-sm font-medium rounded-lg border border-gray-300
+                  hover:bg-gray-50 transition-colors flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M11 17l-5-5m0 0l5-5m-5 5h12"/>
+            </svg>
+            목록으로
+        </a>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const REPORT_DATA = {{ report_json | safe }};
+</script>
+<script src="/static/js/report.js"></script>
+{% endblock %}

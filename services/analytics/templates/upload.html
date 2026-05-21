@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+
+{% block title %}경기 영상 분석 - FencingMind Analytics{% endblock %}
+
+{% block nav_upload %}text-brand-600 bg-brand-50{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    <div class="text-center mb-10">
+        <h1 class="text-3xl font-bold text-gray-900">경기 영상 분석</h1>
+        <p class="mt-3 text-gray-500">펜싱 경기 영상을 업로드하면 AI가 자동으로 분석합니다.</p>
+    </div>
+
+    <form id="upload-form" class="space-y-8">
+        <!-- Drag & Drop Area -->
+        <div id="drop-zone"
+             class="drop-zone relative border-2 border-dashed border-gray-300 rounded-2xl p-12
+                    text-center cursor-pointer transition-all
+                    hover:border-brand-400 hover:bg-brand-50/30">
+            <input type="file" id="file-input" accept=".mp4,.avi,.mov" class="hidden">
+            <div id="drop-zone-content">
+                <svg class="mx-auto h-16 w-16 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                          d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                </svg>
+                <p class="mt-4 text-lg font-medium text-gray-700">
+                    영상 파일을 드래그하거나 클릭하여 선택하세요
+                </p>
+                <p class="mt-2 text-sm text-gray-400">
+                    MP4, AVI, MOV 지원 (최대 500MB)
+                </p>
+            </div>
+            <div id="file-info" class="hidden">
+                <svg class="mx-auto h-12 w-12 text-brand-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                </svg>
+                <p id="file-name" class="mt-3 text-lg font-medium text-gray-900"></p>
+                <p id="file-size" class="mt-1 text-sm text-gray-500"></p>
+                <button type="button" id="remove-file"
+                        class="mt-3 text-sm text-red-500 hover:text-red-700 underline">
+                    파일 제거
+                </button>
+            </div>
+        </div>
+
+        <!-- Progress Bar -->
+        <div id="progress-section" class="hidden">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-sm font-medium text-gray-700">업로드 중...</span>
+                <span id="progress-pct" class="text-sm font-medium text-brand-600">0%</span>
+            </div>
+            <div class="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
+                <div id="progress-bar"
+                     class="bg-brand-600 h-2.5 rounded-full transition-all duration-300"
+                     style="width: 0%"></div>
+            </div>
+        </div>
+
+        <!-- Options -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <div>
+                <label for="source-type" class="block text-sm font-medium text-gray-700 mb-2">
+                    촬영 유형
+                </label>
+                <select id="source-type" name="source_type"
+                        class="w-full rounded-lg border-gray-300 shadow-sm
+                               focus:border-brand-500 focus:ring-brand-500
+                               bg-white px-4 py-2.5 border text-sm">
+                    <option value="coach">코치 촬영</option>
+                    <option value="parent">학부모 촬영</option>
+                    <option value="player">선수 촬영</option>
+                    <option value="tv_broadcast">TV 중계</option>
+                </select>
+            </div>
+            <div>
+                <label for="weapon" class="block text-sm font-medium text-gray-700 mb-2">
+                    종목
+                </label>
+                <select id="weapon" name="weapon"
+                        class="w-full rounded-lg border-gray-300 shadow-sm
+                               focus:border-brand-500 focus:ring-brand-500
+                               bg-white px-4 py-2.5 border text-sm">
+                    <option value="foil">플뢰레 (Foil)</option>
+                    <option value="epee">에페 (Epee)</option>
+                    <option value="sabre">사브르 (Sabre)</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Submit -->
+        <div class="flex justify-center">
+            <button type="submit" id="upload-btn" disabled
+                    class="px-8 py-3 bg-brand-600 text-white font-semibold rounded-xl
+                           shadow-sm hover:bg-brand-700 focus:outline-none focus:ring-2
+                           focus:ring-offset-2 focus:ring-brand-500 transition-colors
+                           disabled:opacity-50 disabled:cursor-not-allowed">
+                분석 시작
+            </button>
+        </div>
+    </form>
+
+    <!-- Upload Complete Message -->
+    <div id="upload-success" class="hidden mt-8">
+        <div class="bg-green-50 border border-green-200 rounded-xl p-6 text-center">
+            <svg class="mx-auto h-12 w-12 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <h3 class="mt-3 text-lg font-semibold text-green-800">업로드 완료</h3>
+            <p class="mt-1 text-sm text-green-600">분석이 시작되었습니다. 대시보드에서 진행 상황을 확인하세요.</p>
+            <a href="/dashboard"
+               class="inline-block mt-4 px-6 py-2.5 bg-green-600 text-white font-medium rounded-lg
+                      hover:bg-green-700 transition-colors">
+                대시보드로 이동
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/upload.js"></script>
+{% endblock %}
