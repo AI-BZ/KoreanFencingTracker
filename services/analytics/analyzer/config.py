@@ -1,11 +1,12 @@
 """
 Configuration constants for the fencing video analyzer.
 
-Extracted from fencing_analyzer_v3.py — all threshold values,
-HSV ranges, and tuning parameters.
+Phase 1: HSV ranges, thresholds, 7-segment patterns
+Phase 2: Device, YOLO11-Pose, VideoMAE, integration settings
 """
 
 import numpy as np
+from pathlib import Path
 
 
 # --- LED Lamp Detection (HSV ranges) ---
@@ -104,3 +105,63 @@ CLOCK_BRIGHTNESS_THRESHOLD = 180
 
 # Colon detection: aspect ratio below this is a colon
 COLON_ASPECT_THRESHOLD = 0.3
+
+
+# ==================================================================
+# Phase 2: Pose Estimation + Action Recognition
+# ==================================================================
+
+# --- Device ---
+DEVICE_PREFERENCE = "mps"  # Apple Silicon GPU; fallback: cuda > cpu
+
+# --- YOLO11-Pose ---
+_ML_DIR = Path(__file__).resolve().parent.parent / "ml"
+POSE_MODEL_PATH = _ML_DIR / "models" / "yolo11n-pose.pt"
+POSE_CONFIDENCE_THRESHOLD = 0.5
+POSE_KEYPOINT_CONFIDENCE = 0.3
+POSE_MAX_PERSONS = 2
+POSE_IMGSZ = 640
+
+# --- VideoMAE (Action Classification) ---
+ACTION_MODEL_NAME = "MCG-NJU/videomae-base-finetuned-kinetics"
+ACTION_FINETUNED_PATH = None  # Set to Path when FACTS fine-tuned model is ready
+ACTION_WINDOW_SIZE = 16  # frames per clip
+ACTION_STRIDE = 8  # sliding window stride
+ACTION_CONFIDENCE_THRESHOLD = 0.4
+ACTION_LABEL_MAP = {
+    0: "attack_left",
+    1: "attack_right",
+    2: "riposte_left",
+    3: "riposte_right",
+    4: "counter_attack_left",
+    5: "counter_attack_right",
+    6: "remise_left",
+    7: "remise_right",
+}
+ACTION_LABEL_MAP_KR = {
+    "attack": "공격",
+    "riposte": "리포스트",
+    "parry": "파리",
+    "lunge": "런지",
+    "fleche": "플레쉬",
+    "retreat": "후퇴",
+    "advance": "전진",
+    "counter_attack": "콘트르아탁",
+    "remise": "르미즈",
+}
+
+# FACTS direction-encoded label → (FencingAction value, direction)
+FACTS_TO_ACTION = {
+    "attack_left": ("attack", "left"),
+    "attack_right": ("attack", "right"),
+    "riposte_left": ("riposte", "left"),
+    "riposte_right": ("riposte", "right"),
+    "counter_attack_left": ("counter_attack", "left"),
+    "counter_attack_right": ("counter_attack", "right"),
+    "remise_left": ("remise", "left"),
+    "remise_right": ("remise", "right"),
+}
+
+# --- Integrated Analysis (2-pass enrichment) ---
+ENRICHED_POSE_WINDOW_BEFORE = 30  # frames before scoring event
+ENRICHED_POSE_WINDOW_AFTER = 15  # frames after scoring event
