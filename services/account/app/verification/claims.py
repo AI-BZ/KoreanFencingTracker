@@ -25,6 +25,8 @@ from shared_core.db.client import get_supabase_client
 from ..config import get_account_settings, VERIFICATION_PROMPTS
 from .processor import GeminiVerifier
 from .brn import validate_brn_checkdigit, verify_business_registration_nts
+from .ai_report import AIVerificationReporter
+from .notification_service import VerificationNotificationService
 
 router = APIRouter(tags=["claims"])
 
@@ -43,6 +45,15 @@ class OrgClaimRequest(BaseModel):
     """조직 Claim 요청"""
     organization_id: int
     claim_type: str = "director"  # director, head_coach, representative
+
+
+class ParentClaimRequest(BaseModel):
+    """학부모 Claim 요청"""
+    child_name: str
+    child_birth_year: Optional[int] = None
+    child_team_name: Optional[str] = None
+    child_gender: Optional[str] = None
+    relationship_type: str = "father"  # father/mother/legal_guardian/grandparent/other
 
 
 # =============================================
@@ -64,7 +75,7 @@ def calculate_claim_confidence(member: dict, player: dict) -> float:
 
     # Name match (0.35)
     member_name = (member.get("full_name") or "").strip()
-    player_name = (player.get("name") or "").strip()
+    player_name = (player.get("player_name") or player.get("name") or "").strip()
     if member_name and player_name:
         # Exact match
         if member_name == player_name:
@@ -149,9 +160,8 @@ async def search_players_for_claim(
 
     # Build query - search players table
     query = supabase.table("players").select(
-        "id, name, team_name, birth_year, gender, weapon, "
-        "competition_count, last_competition_date"
-    ).ilike("name", f"%{name.strip()}%")
+        "id, player_name, team_name, birth_year"
+    ).ilike("player_name", f"%{name.strip()}%")
 
     if birth_year:
         query = query.eq("birth_year", birth_year)
@@ -176,13 +186,9 @@ async def search_players_for_claim(
         confidence = calculate_claim_confidence(member, player)
         candidates.append({
             "player_id": player["id"],
-            "name": player.get("name"),
+            "name": player.get("player_name"),
             "team_name": player.get("team_name"),
             "birth_year": player.get("birth_year"),
-            "gender": player.get("gender"),
-            "weapon": player.get("weapon"),
-            "competition_count": player.get("competition_count"),
-            "last_competition_date": player.get("last_competition_date"),
             "confidence": confidence,
         })
 
@@ -253,11 +259,12 @@ async def submit_player_claim(
     confidence = calculate_claim_confidence(member, player)
 
     # Build evidence
+    p_name = player.get("player_name") or player.get("name") or ""
     evidence = {
         "member_name": member.get("full_name"),
-        "player_name": player.get("name"),
+        "player_name": p_name,
         "confidence_breakdown": {
-            "name_match": member.get("full_name") == player.get("name"),
+            "name_match": member.get("full_name") == p_name,
             "birth_year_match": (
                 str(member.get("birth_date", ""))[:4] == str(player.get("birth_year", ""))
                 if member.get("birth_date") and player.get("birth_year") else False
@@ -310,6 +317,19 @@ async def submit_player_claim(
     # If auto-approved, update members.player_id and verification_tier
     if status == "approved":
         await _link_player_to_member(supabase, member["id"], claim.player_id)
+
+    # Notify admins for non-auto-approved claims
+    if status == "pending":
+        try:
+            notifier = VerificationNotificationService()
+            await notifier.notify_admin_new_request(
+                request_type="player_claim",
+                item_id=claim_record["id"],
+                summary=f"{member.get('full_name', '회원')} → 선수 #{claim.player_id} ({p_name}), 매칭: {confidence:.0%}",
+                member_name=member.get("full_name"),
+            )
+        except Exception as ne:
+            logger.warning(f"Admin notification failed: {ne}")
 
     return {
         "claim_id": claim_record["id"],
@@ -457,6 +477,20 @@ async def submit_org_claim(
             supabase, claim_record["id"], member["id"], organization_id
         )
 
+    # Notify admins for non-auto-verified claims
+    if claim_record["status"] == "pending":
+        try:
+            notifier = VerificationNotificationService()
+            org_name = org_result.data.get("name", "") if org_result.data else ""
+            await notifier.notify_admin_new_request(
+                request_type="org_claim",
+                item_id=claim_record["id"],
+                summary=f"{member.get('full_name', '회원')} → 조직: {org_name} (#{organization_id}), 역할: {claim_type}",
+                member_name=member.get("full_name"),
+            )
+        except Exception as ne:
+            logger.warning(f"Admin notification failed: {ne}")
+
     return {
         "claim_id": claim_record["id"],
         "status": claim_record["status"],
@@ -477,6 +511,219 @@ async def get_org_claim_status(request: Request):
     claims = supabase.table("organization_claims").select("*").eq(
         "member_id", member["id"]
     ).order("created_at", desc=True).limit(5).execute()
+
+    return {"claims": claims.data or []}
+
+
+# =============================================
+# Parent Claim Endpoints
+# =============================================
+
+@router.get("/parent-claim/search-child")
+async def search_child_for_parent_claim(
+    request: Request,
+    name: str,
+    birth_year: Optional[int] = None,
+    team: Optional[str] = None,
+):
+    """
+    학부모 Claim용 자녀(선수) 검색
+
+    GET /account/verification/parent-claim/search-child?name=홍길동&birth_year=2012
+    """
+    member = await get_current_member(request)
+    if not member:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다")
+
+    if not name or len(name.strip()) < 2:
+        raise HTTPException(status_code=400, detail="이름은 2자 이상이어야 합니다")
+
+    supabase = get_supabase_client()
+
+    query = supabase.table("players").select(
+        "id, player_name, team_name, birth_year"
+    ).ilike("player_name", f"%{name.strip()}%")
+
+    if birth_year:
+        query = query.eq("birth_year", birth_year)
+    if team:
+        query = query.ilike("team_name", f"%{team.strip()}%")
+
+    query = query.limit(20)
+
+    try:
+        result = query.execute()
+    except Exception as e:
+        logger.error(f"Child search error: {e}")
+        raise HTTPException(status_code=500, detail="선수 검색 중 오류가 발생했습니다")
+
+    candidates = []
+    for player in (result.data or []):
+        candidates.append({
+            "player_id": player["id"],
+            "name": player.get("player_name"),
+            "team_name": player.get("team_name"),
+            "birth_year": player.get("birth_year"),
+        })
+
+    return {"candidates": candidates, "total": len(candidates)}
+
+
+@router.post("/parent-claim")
+async def submit_parent_claim(
+    request: Request,
+    claim: ParentClaimRequest,
+):
+    """
+    학부모 Claim 제출
+
+    POST /account/verification/parent-claim
+    Body: { "child_name": "홍길동", "child_birth_year": 2012, ... }
+
+    AI 추론 리포트 생성 후 관리자 승인 큐에 등록.
+    학부모 Claim은 confidence와 관계없이 반드시 관리자 최종 승인 필요.
+    """
+    member = await get_current_member(request)
+    if not member:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다")
+
+    if not claim.child_name or len(claim.child_name.strip()) < 2:
+        raise HTTPException(status_code=400, detail="자녀 이름은 2자 이상이어야 합니다")
+
+    if claim.relationship_type not in ("father", "mother", "legal_guardian", "grandparent", "other"):
+        raise HTTPException(status_code=400, detail="유효하지 않은 관계 유형입니다")
+
+    supabase = get_supabase_client()
+
+    # Check for duplicate claim
+    try:
+        existing = supabase.table("parent_claims").select("id, status").eq(
+            "member_id", member["id"]
+        ).eq("child_name", claim.child_name.strip()).execute()
+
+        if existing.data:
+            existing_claim = existing.data[0]
+            if existing_claim["status"] in ("pending", "ai_reviewed", "approved"):
+                raise HTTPException(
+                    status_code=409,
+                    detail="이미 이 자녀에 대한 인증 요청이 존재합니다."
+                )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Duplicate check error: {e}")
+
+    # Search for matching players
+    query = supabase.table("players").select(
+        "id, player_name, team_name, birth_year"
+    ).ilike("player_name", f"%{claim.child_name.strip()}%")
+
+    if claim.child_birth_year:
+        query = query.eq("birth_year", claim.child_birth_year)
+    if claim.child_team_name:
+        query = query.ilike("team_name", f"%{claim.child_team_name.strip()}%")
+
+    query = query.limit(10)
+
+    try:
+        search_result = query.execute()
+    except Exception as e:
+        logger.error(f"Player search for parent claim: {e}")
+        search_result = type("R", (), {"data": []})()
+
+    matched_candidates = search_result.data or []
+    matched_player_id = matched_candidates[0]["id"] if matched_candidates else None
+
+    # Generate AI report
+    reporter = AIVerificationReporter()
+    ai_report = await reporter.generate_parent_claim_report(
+        parent_member=member,
+        child_name=claim.child_name.strip(),
+        child_birth_year=claim.child_birth_year,
+        child_team_name=claim.child_team_name,
+        child_gender=claim.child_gender,
+        relationship_type=claim.relationship_type,
+        matched_candidates=matched_candidates,
+    )
+
+    # Create parent_claims record
+    claim_data = {
+        "member_id": member["id"],
+        "child_name": claim.child_name.strip(),
+        "child_birth_year": claim.child_birth_year,
+        "child_team_name": claim.child_team_name,
+        "child_gender": claim.child_gender,
+        "relationship_type": claim.relationship_type,
+        "matched_player_id": matched_player_id,
+        "ai_confidence": ai_report.get("confidence", 0.0),
+        "ai_report": json.dumps(ai_report, ensure_ascii=False),
+        "ai_processed_at": datetime.utcnow().isoformat(),
+        "status": "ai_reviewed",
+    }
+
+    try:
+        result = supabase.table("parent_claims").insert(claim_data).execute()
+    except Exception as e:
+        logger.error(f"Parent claim insert error: {e}")
+        if "unique" in str(e).lower() or "duplicate" in str(e).lower():
+            raise HTTPException(
+                status_code=409,
+                detail="이미 이 자녀에 대한 인증 요청이 존재합니다."
+            )
+        raise HTTPException(status_code=500, detail="인증 요청 생성 중 오류가 발생했습니다")
+
+    if not result.data:
+        raise HTTPException(status_code=500, detail="인증 요청 생성 중 오류가 발생했습니다")
+
+    claim_record = result.data[0]
+
+    # Save AI report to verification_ai_reports
+    await reporter.save_report(
+        target_type="parent_claim",
+        target_id=claim_record["id"],
+        report=ai_report,
+    )
+
+    # Notify admins
+    notifier = VerificationNotificationService()
+    await notifier.notify_admin_new_request(
+        request_type="parent_claim",
+        item_id=claim_record["id"],
+        summary=f"{member.get('full_name', '회원')} → 자녀: {claim.child_name} ({claim.relationship_type}), AI 신뢰도: {ai_report.get('confidence', 0):.0%}",
+        member_name=member.get("full_name"),
+    )
+
+    relationship_labels = {
+        "father": "부", "mother": "모", "legal_guardian": "법정대리인",
+        "grandparent": "조부모", "other": "기타",
+    }
+
+    return {
+        "claim_id": claim_record["id"],
+        "status": "ai_reviewed",
+        "ai_confidence": ai_report.get("confidence", 0.0),
+        "ai_recommendation": ai_report.get("recommendation", "manual_review"),
+        "matched_player_id": matched_player_id,
+        "message": f"학부모 인증 요청이 접수되었습니다 ({relationship_labels.get(claim.relationship_type, claim.relationship_type)}). 관리자 검토 후 승인됩니다.",
+    }
+
+
+@router.get("/parent-claim/status")
+async def get_parent_claim_status(request: Request):
+    """현재 회원의 학부모 Claim 상태 조회"""
+    member = await get_current_member(request)
+    if not member:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다")
+
+    supabase = get_supabase_client()
+
+    claims = supabase.table("parent_claims").select(
+        "id, child_name, child_birth_year, child_team_name, "
+        "relationship_type, matched_player_id, ai_confidence, "
+        "status, reviewer_notes, created_at, reviewed_at"
+    ).eq(
+        "member_id", member["id"]
+    ).order("created_at", desc=True).limit(10).execute()
 
     return {"claims": claims.data or []}
 

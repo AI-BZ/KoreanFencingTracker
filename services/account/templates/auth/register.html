@@ -894,18 +894,17 @@ function _renderPlayerResults(data, containerId, selectFn) {
         return;
     }
     container.innerHTML = data.results.map(p => {
+        const pName = p.player_name || p.name || '';
         const detail = [
             p.team_name || '',
             p.birth_year ? p.birth_year + '년생' : '',
-            p.weapon || '',
-            p.competition_count ? '대회 ' + p.competition_count + '회' : '',
         ].filter(Boolean).join(' · ');
         return `<div class="search-result-item">
             <div class="result-info">
-                <span class="result-name">${_esc(p.name)}</span>
+                <span class="result-name">${_esc(pName)}</span>
                 <div class="result-detail">${_esc(detail)}</div>
             </div>
-            <button type="button" class="result-select-btn" onclick="${selectFn}(${p.id}, '${_esc(p.name)}', '${_esc(p.team_name || '')}', ${p.birth_year || 'null'})">선택</button>
+            <button type="button" class="result-select-btn" onclick="${selectFn}(${p.id}, '${_esc(pName)}', '${_esc(p.team_name || '')}', ${p.birth_year || 'null'})">선택</button>
         </div>`;
     }).join('');
 }
@@ -998,7 +997,8 @@ async function searchOrgs() {
         const orgTypeLabels = { club: '클럽', middle_school: '중학교', high_school: '고등학교', university: '대학교', business: '실업팀' };
         container.innerHTML = data.results.map(o => {
             const typeLabel = orgTypeLabels[o.org_type] || o.org_type || '';
-            const detail = [typeLabel, o.region || ''].filter(Boolean).join(' · ');
+            const region = [o.province || '', o.city || ''].filter(Boolean).join(' ');
+            const detail = [typeLabel, region].filter(Boolean).join(' · ');
             return `<div class="search-result-item">
                 <div class="result-info">
                     <span class="result-name">${_esc(o.name)}</span>

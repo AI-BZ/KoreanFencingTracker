@@ -131,16 +131,13 @@ async def public_player_search(
 
     supabase = get_supabase()
     query = supabase.table("players").select(
-        "id, name, team_name, birth_year, gender, weapon, "
-        "competition_count, last_competition_date"
-    ).ilike("name", f"%{name.strip()}%")
+        "id, player_name, team_name, birth_year"
+    ).ilike("player_name", f"%{name.strip()}%")
 
     if birth_year:
         query = query.eq("birth_year", birth_year)
     if team:
         query = query.ilike("team_name", f"%{team.strip()}%")
-    if weapon:
-        query = query.eq("weapon", weapon)
 
     query = query.limit(15)
 
@@ -169,9 +166,8 @@ async def public_child_search(
 
     supabase = get_supabase()
     query = supabase.table("players").select(
-        "id, name, team_name, birth_year, gender, weapon, "
-        "competition_count, last_competition_date"
-    ).ilike("name", f"%{name.strip()}%")
+        "id, player_name, team_name, birth_year"
+    ).ilike("player_name", f"%{name.strip()}%")
 
     if birth_year:
         query = query.eq("birth_year", birth_year)
@@ -203,7 +199,7 @@ async def public_org_search(
 
     supabase = get_supabase()
     query = supabase.table("organizations").select(
-        "id, name, org_type, region"
+        "id, name, org_type, province, city"
     ).ilike("name", f"%{name.strip()}%").limit(15)
 
     try:
@@ -697,10 +693,11 @@ async def _create_registration_claims(
                 else:
                     status = "pending"
 
+                p_name = player.get("player_name") or player.get("name") or ""
                 evidence = {
                     "source": "registration_form",
                     "member_name": member.get("full_name"),
-                    "player_name": player.get("name"),
+                    "player_name": p_name,
                 }
 
                 claim_data = {
@@ -726,7 +723,7 @@ async def _create_registration_claims(
                             item_id=claim_result.data[0]["id"],
                             summary=(
                                 f"[가입시] {member.get('full_name', '회원')} → "
-                                f"선수 #{selected_player_id} ({player.get('name', '')}), "
+                                f"선수 #{selected_player_id} ({p_name}), "
                                 f"매칭: {confidence:.0%}"
                             ),
                             member_name=member.get("full_name"),
