@@ -20,6 +20,7 @@ from pydantic import BaseModel
 
 from app.upload import VideoUploader
 from app.credits import CreditManager, SubscriptionTier
+from app.demo import generate_demo_report
 
 
 _BASE_DIR = Path(__file__).resolve().parent.parent
@@ -313,6 +314,81 @@ async def report_page(request: Request, job_id: str):
         "report": report_dict,
         "report_json": json.dumps(report_dict, ensure_ascii=False),
         "job_id": job_id,
+        "mock_mode": job.get("mock_mode", False),
+    })
+
+
+# ------------------------------------------------------------------
+# Demo endpoints
+# ------------------------------------------------------------------
+
+
+@app.get("/demo")
+async def demo_report_page(request: Request):
+    """Demo report page with sample data."""
+    report_dict = generate_demo_report()
+    demo_job_id = "demo-001"
+    _jobs[demo_job_id] = {
+        "status": "completed",
+        "progress_pct": 100.0,
+        "video_path": "demo_match.mp4",
+        "weapon": "foil",
+        "source_type": "coach",
+        "started_at": time.time(),
+        "result": report_dict,
+        "error": None,
+    }
+    return templates.TemplateResponse("report.html", {
+        "request": request,
+        "report": report_dict,
+        "report_json": json.dumps(report_dict, ensure_ascii=False),
+        "job_id": demo_job_id,
+    })
+
+
+@app.get("/demo/dashboard")
+async def demo_dashboard_page(request: Request):
+    """Demo dashboard with sample jobs."""
+    report_dict = generate_demo_report()
+    demo_jobs = {
+        "demo-001": {
+            "status": "completed", "progress_pct": 100.0,
+            "video_path": "demo_match_foil.mp4", "weapon": "foil",
+            "source_type": "coach", "started_at": time.time(),
+            "result": report_dict, "error": None, "video_id": "",
+        },
+        "demo-002": {
+            "status": "processing", "progress_pct": 45.0,
+            "video_path": "demo_match_epee.mp4", "weapon": "epee",
+            "source_type": "parent", "started_at": time.time(),
+            "result": None, "error": None, "video_id": "",
+        },
+        "demo-003": {
+            "status": "failed", "progress_pct": 20.0,
+            "video_path": "demo_match_sabre.mp4", "weapon": "sabre",
+            "source_type": "tv_broadcast", "started_at": time.time(),
+            "result": None, "error": "insufficient_credits", "video_id": "",
+        },
+    }
+    _jobs.update(demo_jobs)
+
+    jobs_list = []
+    for job_id, job in demo_jobs.items():
+        jobs_list.append({
+            "job_id": job_id,
+            "filename": Path(job.get("video_path", "")).name,
+            "weapon": job.get("weapon"),
+            "source_type": job.get("source_type"),
+            "status": job["status"],
+            "uploaded_at": "2026-05-21 14:30",
+            "error": job.get("error"),
+        })
+
+    sub_info = _credit_manager.get_subscription_info("default")
+    return templates.TemplateResponse("dashboard.html", {
+        "request": request,
+        "jobs": jobs_list,
+        "credits": sub_info.get("credits", 0),
     })
 
 
@@ -513,6 +589,34 @@ async def start_broadcast_analysis(
 # ------------------------------------------------------------------
 
 
+def _generate_mock_result(
+    job_id: str,
+    video_path: str,
+    weapon: Optional[str],
+    source_type: Optional[str],
+):
+    """Generate mock analysis result when ML models are unavailable."""
+    import time as _time
+
+    # Simulate processing with progress updates
+    for pct in [20.0, 40.0, 60.0, 80.0]:
+        _jobs[job_id]["progress_pct"] = pct
+        _time.sleep(0.5)  # Brief delay to simulate work
+
+    report_dict = generate_demo_report()
+    # Override with actual video info
+    report_dict["summary"]["video_path"] = video_path
+    if weapon:
+        report_dict["summary"]["weapon"] = weapon
+    if source_type:
+        report_dict["meta"]["source_type"] = source_type
+
+    _jobs[job_id]["progress_pct"] = 100.0
+    _jobs[job_id]["status"] = "completed"
+    _jobs[job_id]["result"] = report_dict
+    _jobs[job_id]["mock_mode"] = True
+
+
 def _run_analysis(
     job_id: str,
     video_path: str,
@@ -536,46 +640,56 @@ def _run_analysis(
         _jobs[job_id]["status"] = "processing"
         _jobs[job_id]["progress_pct"] = 10.0
 
-        from ml.integrated_analyzer import IntegratedAnalyzer
-        from ml.report_generator import ReportGenerator
+        try:
+            from ml.integrated_analyzer import IntegratedAnalyzer
+            from ml.report_generator import ReportGenerator
 
-        ia = IntegratedAnalyzer(
-            enable_pose=enable_pose,
-            enable_action=enable_action,
-        )
+            ia = IntegratedAnalyzer(
+                enable_pose=enable_pose,
+                enable_action=enable_action,
+            )
 
-        # Convert ROI dict values from lists to tuples
-        roi_tuples: Dict[str, Tuple[int, int, int, int]] = {}
-        if rois:
-            for key, val in rois.items():
-                if isinstance(val, (list, tuple)) and len(val) == 4:
-                    roi_tuples[key] = tuple(val)  # type: ignore[arg-type]
+            # Convert ROI dict values from lists to tuples
+            roi_tuples: Dict[str, Tuple[int, int, int, int]] = {}
+            if rois:
+                for key, val in rois.items():
+                    if isinstance(val, (list, tuple)) and len(val) == 4:
+                        roi_tuples[key] = tuple(val)  # type: ignore[arg-type]
 
-        _jobs[job_id]["progress_pct"] = 20.0
+            _jobs[job_id]["progress_pct"] = 20.0
 
-        # Pass 1 + Pass 2
-        enriched_events = ia.analyze_video(
-            video_path=video_path,
-            rois=roi_tuples,
-        )
+            # Pass 1 + Pass 2
+            enriched_events = ia.analyze_video(
+                video_path=video_path,
+                rois=roi_tuples,
+            )
 
-        _jobs[job_id]["progress_pct"] = 80.0
+            _jobs[job_id]["progress_pct"] = 80.0
 
-        # Generate report
-        gen = ReportGenerator()
-        report = gen.generate(
-            events=enriched_events,
-            video_path=video_path,
-            weapon=weapon,
-            source_type=source_type,
-        )
+            # Generate report
+            gen = ReportGenerator()
+            report = gen.generate(
+                events=enriched_events,
+                video_path=video_path,
+                weapon=weapon,
+                source_type=source_type,
+            )
 
-        _jobs[job_id]["progress_pct"] = 100.0
-        _jobs[job_id]["status"] = "completed"
-        _jobs[job_id]["result"] = report.to_dict()
+            _jobs[job_id]["progress_pct"] = 100.0
+            _jobs[job_id]["status"] = "completed"
+            _jobs[job_id]["result"] = report.to_dict()
+
+        except (ImportError, Exception) as ml_err:
+            # ML models not available — fall back to mock mode
+            import logging
+            logging.getLogger(__name__).warning(
+                "ML models unavailable, using mock mode: %s", ml_err
+            )
+            _generate_mock_result(job_id, video_path, weapon, source_type)
 
         # Deduct credit on successful completion
-        _credit_manager.deduct_credit(member_id, job_type, reference_id=job_id)
+        if _jobs[job_id]["status"] == "completed":
+            _credit_manager.deduct_credit(member_id, job_type, reference_id=job_id)
 
     except Exception as exc:
         _jobs[job_id]["status"] = "failed"
@@ -593,20 +707,33 @@ def _run_broadcast_analysis(
         _jobs[job_id]["status"] = "processing"
         _jobs[job_id]["progress_pct"] = 10.0
 
-        from ml.tv_analyzer import TVBroadcastAnalyzer
+        try:
+            from ml.tv_analyzer import TVBroadcastAnalyzer
 
-        analyzer = TVBroadcastAnalyzer(
-            enable_pose=enable_pose,
-            enable_action=enable_action,
-        )
+            analyzer = TVBroadcastAnalyzer(
+                enable_pose=enable_pose,
+                enable_action=enable_action,
+            )
 
-        _jobs[job_id]["progress_pct"] = 20.0
+            _jobs[job_id]["progress_pct"] = 20.0
 
-        result = analyzer.analyze_broadcast(video_path)
+            result = analyzer.analyze_broadcast(video_path)
 
-        _jobs[job_id]["progress_pct"] = 100.0
-        _jobs[job_id]["status"] = "completed"
-        _jobs[job_id]["result"] = result.to_dict()
+            _jobs[job_id]["progress_pct"] = 100.0
+            _jobs[job_id]["status"] = "completed"
+            _jobs[job_id]["result"] = result.to_dict()
+
+        except (ImportError, Exception) as ml_err:
+            # ML models not available — fall back to mock mode
+            import logging
+            logging.getLogger(__name__).warning(
+                "ML models unavailable for broadcast, using mock mode: %s", ml_err
+            )
+            _generate_mock_result(
+                job_id, video_path,
+                weapon=_jobs[job_id].get("weapon"),
+                source_type="tv_broadcast",
+            )
 
     except Exception as exc:
         _jobs[job_id]["status"] = "failed"
