@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 
-{% block title %}회원가입 - FencingMind{% endblock %}
+{% block title %}{{ i18n.auth.register.page_title|default('회원가입 - FencingMind') }}{% endblock %}
 
 {% block content %}
 <div class="auth-container">
     <div class="auth-card register-card">
         <div class="auth-header">
-            <h1>회원가입</h1>
-            <p>FencingMind에 오신 것을 환영합니다</p>
+            <h1>{{ i18n.auth.register.title|default('회원가입') }}</h1>
+            <p>{{ i18n.auth.register.subtitle|default('FencingMind에 오신 것을 환영합니다') }}</p>
         </div>
 
         <form action="/auth/register" method="POST" class="register-form" id="registerForm">
@@ -15,21 +15,21 @@
 
             <!-- 이름 -->
             <div class="form-group">
-                <label for="full_name">이름 <span class="required">*</span></label>
+                <label for="full_name">{{ i18n.auth.register.name_label|default('이름') }} <span class="required">*</span></label>
                 <input
                     type="text"
                     id="full_name"
                     name="full_name"
                     required
-                    placeholder="실명을 입력하세요"
+                    placeholder="{{ i18n.auth.register.name_placeholder|default('실명을 입력하세요') }}"
                     value="{{ pending.name if pending and pending.name and pending.name != 'None' else '' }}"
                 >
-                <p class="form-hint">협회 등록 이름과 동일해야 인증이 가능합니다</p>
+                <p class="form-hint">{{ i18n.auth.register.name_hint|default('협회 등록 이름과 동일해야 인증이 가능합니다') }}</p>
             </div>
 
             <!-- 닉네임 -->
             <div class="form-group">
-                <label for="nickname">닉네임 <span class="required">*</span></label>
+                <label for="nickname">{{ i18n.auth.register.nickname_label|default('닉네임') }} <span class="required">*</span></label>
                 <div class="nickname-group">
                     <span class="nickname-at">@</span>
                     <input
@@ -40,33 +40,33 @@
                         minlength="3"
                         maxlength="20"
                         pattern="[a-zA-Z0-9_]{3,20}"
-                        placeholder="fencer_park"
+                        placeholder="{{ i18n.auth.register.nickname_placeholder|default('fencer_park') }}"
                         autocomplete="off"
                         class="nickname-input"
                     >
                     <span id="nicknameStatus" class="nickname-status"></span>
                 </div>
-                <p class="form-hint">영문, 숫자, 밑줄(_)만 사용 가능 (3~20자). 서비스 내 고유 ID로 사용됩니다</p>
+                <p class="form-hint">{{ i18n.auth.register.nickname_hint|default('영문, 숫자, 밑줄(_)만 사용 가능 (3~20자). 서비스 내 고유 ID로 사용됩니다') }}</p>
             </div>
 
             <!-- 이메일 -->
             <div class="form-group">
-                <label for="email">이메일 <span class="required">*</span></label>
+                <label for="email">{{ i18n.auth.register.email_label|default('이메일') }} <span class="required">*</span></label>
                 <input
                     type="email"
                     id="email"
                     name="email"
                     required
-                    placeholder="example@email.com"
+                    placeholder="{{ i18n.auth.register.email_placeholder|default('example@email.com') }}"
                     value="{{ pending.email if pending and pending.email and pending.email != 'None' else '' }}"
                     {{ 'readonly' if pending and pending.email and pending.email != 'None' else '' }}
                 >
-                <p class="form-hint">인증 메일이 발송됩니다</p>
+                <p class="form-hint">{{ i18n.auth.register.email_hint|default('인증 메일이 발송됩니다') }}</p>
             </div>
 
             <!-- 연락처 (국제 전화번호) -->
             <div class="form-group">
-                <label for="phone">연락처 <span class="optional">(선택)</span></label>
+                <label for="phone">{{ i18n.auth.register.phone_label|default('연락처') }} <span class="optional">({{ i18n.common.labels.optional|default('선택') }})</span></label>
                 <div class="phone-group">
                     <select id="phone_country_code" name="phone_country_code" class="country-code-select">
                         <option value="+82">🇰🇷 +82</option>
@@ -88,49 +88,131 @@
                         type="tel"
                         id="phone"
                         name="phone"
-                        placeholder="01012345678"
+                        placeholder="{{ i18n.auth.register.phone_placeholder|default('01012345678') }}"
                         pattern="[0-9]*"
                         inputmode="numeric"
                         class="phone-input"
                     >
                 </div>
-                <p class="form-hint">숫자만 입력 (- 없이)</p>
+                <p class="form-hint">{{ i18n.auth.register.phone_hint|default('숫자만 입력 (- 없이)') }}</p>
             </div>
 
             <!-- 생년월일 -->
             <div class="form-group">
-                <label for="birth_date">생년월일 <span class="optional">(선택)</span></label>
+                <label for="birth_date">{{ i18n.auth.register.birth_date_label|default('생년월일') }} <span class="optional">({{ i18n.common.labels.optional|default('선택') }})</span></label>
                 <input
                     type="date"
                     id="birth_date"
                     name="birth_date"
                 >
                 <p class="form-hint minor-warning" style="display: none;">
-                    14세 미만 선수는 보호자(부모회원)를 통해 등록해야 합니다
+                    {{ i18n.auth.register.minor_warning|default('14세 미만 선수는 보호자(부모회원)를 통해 등록해야 합니다') }}
                 </p>
             </div>
 
             <!-- 회원 유형 -->
             <div class="form-group">
-                <label for="member_type">회원 유형 <span class="required">*</span></label>
+                <label for="member_type">{{ i18n.auth.register.member_type_label|default('회원 유형') }} <span class="required">*</span></label>
                 <select id="member_type" name="member_type" required>
                     {% for mt in member_types %}
                     <option value="{{ mt.value }}" {{ 'selected' if mt.value == 'general' else '' }}>{{ mt.label }}</option>
                     {% endfor %}
                 </select>
                 <div class="verification-notice" id="verificationNotice" style="display: none;">
-                    <p>선수/코치/감독/학부모 회원은 가입 후 본인 인증이 필요합니다</p>
+                    <p>{{ i18n.auth.register.verification_notice|default('선수/코치/감독/학부모 회원은 가입 후 본인 인증이 필요합니다') }}</p>
                 </div>
-                <p class="form-hint">일반회원으로 가입 후 언제든 변경 가능합니다</p>
+                <p class="form-hint">{{ i18n.auth.register.member_type_hint|default('일반회원으로 가입 후 언제든 변경 가능합니다') }}</p>
+            </div>
+
+            <!-- Hidden fields for claim data -->
+            <input type="hidden" name="selected_player_id" id="selectedPlayerId" value="">
+            <input type="hidden" name="selected_org_id" id="selectedOrgId" value="">
+            <input type="hidden" name="selected_child_player_id" id="selectedChildPlayerId" value="">
+            <input type="hidden" name="selected_child_name" id="selectedChildName" value="">
+            <input type="hidden" name="selected_child_birth_year" id="selectedChildBirthYear" value="">
+            <input type="hidden" name="selected_child_team" id="selectedChildTeam" value="">
+
+            <!-- 선수 검색 패널 (member_type == player) -->
+            <div class="search-panel" id="playerSearchPanel" style="display: none;">
+                <h3>본인 선수 데이터 연결</h3>
+                <p class="form-hint">대회 참가 기록에서 본인을 찾아 연결하면 선수 인증이 빨라집니다. (선택사항)</p>
+                <div class="search-form-row">
+                    <input type="text" id="playerSearchName" placeholder="선수 이름" class="search-input">
+                    <input type="number" id="playerSearchBirthYear" placeholder="출생년도" class="search-input search-input-sm" min="1950" max="2025">
+                    <input type="text" id="playerSearchTeam" placeholder="소속팀" class="search-input">
+                    <button type="button" class="search-btn" onclick="searchPlayers()">검색</button>
+                </div>
+                <div id="playerSearchResults" class="search-results"></div>
+                <div id="playerSelected" class="selected-card" style="display: none;">
+                    <span class="selected-label">선택된 선수:</span>
+                    <span id="playerSelectedInfo"></span>
+                    <button type="button" class="deselect-btn" onclick="deselectPlayer()">&times;</button>
+                </div>
+            </div>
+
+            <!-- 자녀 선수 검색 패널 (member_type == player_parent) -->
+            <div class="search-panel" id="childSearchPanel" style="display: none;">
+                <h3>자녀 선수 데이터 연결</h3>
+                <p class="form-hint">대회 참가 기록에서 자녀를 찾아 연결하세요. 검색되지 않으면 가입 후 인증 페이지에서 직접 등록 가능합니다.</p>
+                <div class="search-form-row">
+                    <input type="text" id="childSearchName" placeholder="자녀 이름" class="search-input">
+                    <input type="number" id="childSearchBirthYear" placeholder="출생년도" class="search-input search-input-sm" min="2000" max="2025">
+                    <input type="text" id="childSearchTeam" placeholder="소속팀" class="search-input">
+                    <button type="button" class="search-btn" onclick="searchChildren()">검색</button>
+                </div>
+                <div id="childSearchResults" class="search-results"></div>
+                <div id="childSelected" class="selected-card" style="display: none;">
+                    <span class="selected-label">선택된 자녀:</span>
+                    <span id="childSelectedInfo"></span>
+                    <button type="button" class="deselect-btn" onclick="deselectChild()">&times;</button>
+                </div>
+            </div>
+
+            <!-- 조직 검색 패널 (member_type == club_*/school_*) -->
+            <div class="search-panel" id="orgSearchPanel" style="display: none;">
+                <h3>소속 조직 연결</h3>
+                <p class="form-hint">소속 클럽/학교를 검색하여 연결하세요. (선택사항)</p>
+                <div class="search-form-row">
+                    <input type="text" id="orgSearchName" placeholder="조직명 (예: 최병철펜싱클럽)" class="search-input" style="flex:1;">
+                    <button type="button" class="search-btn" onclick="searchOrgs()">검색</button>
+                </div>
+                <div id="orgSearchResults" class="search-results"></div>
+                <div id="orgSelected" class="selected-card" style="display: none;">
+                    <span class="selected-label">선택된 조직:</span>
+                    <span id="orgSelectedInfo"></span>
+                    <button type="button" class="deselect-btn" onclick="deselectOrg()">&times;</button>
+                </div>
+            </div>
+
+            <!-- 관심 서비스 선택 -->
+            <div class="services-section">
+                <h3>{{ i18n.auth.register.services_title|default('관심 서비스 선택') }}</h3>
+                <p class="form-hint">{{ i18n.auth.register.services_hint|default('어떤 서비스에 관심이 있으신가요? (복수 선택 가능)') }}</p>
+                {% for svc in available_services %}
+                <label class="service-item">
+                    <input
+                        type="checkbox"
+                        name="interested_services"
+                        value="{{ svc.service_key }}"
+                        {{ 'checked' if svc.service_key == 'data' else '' }}
+                        {{ 'disabled' if not svc.is_active else '' }}
+                    >
+                    <span class="service-label">
+                        {{ svc.icon|safe }} {{ svc.display_name }}
+                        {% if not svc.is_active %}<span class="service-badge">{{ i18n.auth.register.service_coming_soon|default('준비 중') }}</span>{% endif %}
+                    </span>
+                    <span class="service-desc">{{ svc.description }}</span>
+                </label>
+                {% endfor %}
             </div>
 
             <!-- 동의 항목 -->
             <div class="consent-section">
-                <h3>동의 항목</h3>
+                <h3>{{ i18n.auth.register.consent_title|default('동의 항목') }}</h3>
 
                 <label class="consent-item select-all">
                     <input type="checkbox" id="selectAll">
-                    <span><strong>전체 동의</strong></span>
+                    <span><strong>{{ i18n.auth.register.consent_select_all|default('전체 동의') }}</strong></span>
                 </label>
 
                 <div class="consent-divider"></div>
@@ -138,31 +220,31 @@
                 <!-- 필수 -->
                 <label class="consent-item">
                     <input type="checkbox" name="terms_consent" value="true" required class="consent-required">
-                    <span>[필수] 이용약관에 동의합니다</span>
-                    <a href="/legal/terms" target="_blank">보기</a>
+                    <span>{{ i18n.auth.register.consent_terms|default('[필수] 이용약관에 동의합니다') }}</span>
+                    <a href="/legal/terms" target="_blank">{{ i18n.auth.register.detail_view|default('보기') }}</a>
                 </label>
 
                 <label class="consent-item">
                     <input type="checkbox" name="privacy_consent" value="true" required class="consent-required">
-                    <span>[필수] 개인정보 수집/이용에 동의합니다</span>
-                    <a href="/legal/privacy" target="_blank">보기</a>
+                    <span>{{ i18n.auth.register.consent_privacy|default('[필수] 개인정보 수집/이용에 동의합니다') }}</span>
+                    <a href="/legal/privacy" target="_blank">{{ i18n.auth.register.detail_view|default('보기') }}</a>
                 </label>
                 <div class="consent-detail">
-                    수집 항목: 이름, 이메일, 닉네임, 회원유형, OAuth 프로필<br>
-                    수집 목적: 서비스 제공, 회원 관리<br>
-                    보유 기간: 탈퇴 후 30일
+                    {{ i18n.auth.register.consent_privacy_detail_items|default('수집 항목: 이름, 이메일, 닉네임, 회원유형, OAuth 프로필') }}<br>
+                    {{ i18n.auth.register.consent_privacy_detail_purpose|default('수집 목적: 서비스 제공, 회원 관리') }}<br>
+                    {{ i18n.auth.register.consent_privacy_detail_retention|default('보유 기간: 탈퇴 후 30일') }}
                 </div>
 
                 <label class="consent-item">
                     <input type="checkbox" name="overseas_consent" value="true" required class="consent-required">
-                    <span>[필수] 해외 서버 저장을 위한 개인정보 국외이전에 동의합니다</span>
-                    <a href="/legal/privacy#overseas" target="_blank">상세보기</a>
+                    <span>{{ i18n.auth.register.consent_overseas|default('[필수] 해외 서버 저장을 위한 개인정보 국외이전에 동의합니다') }}</span>
+                    <a href="/legal/privacy#overseas" target="_blank">{{ i18n.auth.register.detail_view_more|default('상세보기') }}</a>
                 </label>
                 <div class="consent-detail">
-                    저장 목적: 서비스 데이터베이스 운영<br>
-                    저장 국가: 미국<br>
-                    저장 항목: 회원 정보 전체<br>
-                    <em>※ 서비스 운영 목적으로만 사용되며, 제3자에게 판매되지 않습니다</em>
+                    {{ i18n.auth.register.consent_overseas_detail_purpose|default('저장 목적: 서비스 데이터베이스 운영') }}<br>
+                    {{ i18n.auth.register.consent_overseas_detail_country|default('저장 국가: 미국') }}<br>
+                    {{ i18n.auth.register.consent_overseas_detail_items|default('저장 항목: 회원 정보 전체') }}<br>
+                    <em>※ {{ i18n.auth.register.consent_overseas_detail_note|default('서비스 운영 목적으로만 사용되며, 제3자에게 판매되지 않습니다') }}</em>
                 </div>
 
                 <div class="consent-divider"></div>
@@ -170,28 +252,28 @@
                 <!-- 선택 -->
                 <label class="consent-item">
                     <input type="checkbox" name="optional_privacy_consent" value="true" class="consent-optional" id="optionalPrivacy">
-                    <span>[선택] 추가 개인정보 수집에 동의합니다</span>
+                    <span>{{ i18n.auth.register.consent_optional_privacy|default('[선택] 추가 개인정보 수집에 동의합니다') }}</span>
                 </label>
                 <div class="consent-detail">
-                    수집 항목: 전화번호, 생년월일<br>
-                    수집 목적: 본인확인, 연령 확인<br>
-                    보유 기간: 탈퇴 후 30일<br>
-                    <em>※ 동의하지 않아도 서비스 이용 가능</em>
+                    {{ i18n.auth.register.consent_optional_detail_items|default('수집 항목: 전화번호, 생년월일') }}<br>
+                    {{ i18n.auth.register.consent_optional_detail_purpose|default('수집 목적: 본인확인, 연령 확인') }}<br>
+                    {{ i18n.auth.register.consent_optional_detail_retention|default('보유 기간: 탈퇴 후 30일') }}<br>
+                    <em>※ {{ i18n.auth.register.consent_optional_detail_note|default('동의하지 않아도 서비스 이용 가능') }}</em>
                 </div>
 
                 <label class="consent-item">
                     <input type="checkbox" name="marketing_consent" class="consent-optional">
-                    <span>[선택] 마케팅 정보 수신에 동의합니다</span>
+                    <span>{{ i18n.auth.register.consent_marketing|default('[선택] 마케팅 정보 수신에 동의합니다') }}</span>
                 </label>
 
                 <label class="consent-item">
                     <input type="checkbox" name="promotional_consent" class="consent-optional">
-                    <span>[선택] 홍보용 SNS 연동에 동의합니다</span>
+                    <span>{{ i18n.auth.register.consent_promotional|default('[선택] 홍보용 SNS 연동에 동의합니다') }}</span>
                 </label>
             </div>
 
             <button type="submit" class="submit-btn" id="submitBtn">
-                가입하기
+                {{ i18n.auth.register.submit_btn|default('가입하기') }}
             </button>
         </form>
     </div>
@@ -360,6 +442,65 @@
     font-weight: 500;
 }
 
+/* Services section */
+.services-section {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid #eee;
+}
+
+.services-section h3 {
+    font-size: 0.95rem;
+    margin-bottom: 0.5rem;
+}
+
+.service-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+    margin-bottom: 0.75rem;
+    cursor: pointer;
+    flex-wrap: wrap;
+}
+
+.service-item input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.service-item input[type="checkbox"]:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.service-label {
+    font-weight: 500;
+    flex-shrink: 0;
+}
+
+.service-desc {
+    font-size: 0.8rem;
+    color: #888;
+    width: 100%;
+    padding-left: 1.75rem;
+    margin-top: -0.25rem;
+}
+
+.service-badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    background: #fef3c7;
+    color: #92400e;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-weight: normal;
+    vertical-align: middle;
+}
+
 /* Consent section */
 .consent-section {
     margin-top: 1rem;
@@ -448,6 +589,116 @@
     background: #ccc;
     cursor: not-allowed;
 }
+
+/* Search panels */
+.search-panel {
+    margin-top: 0.5rem;
+    padding: 1rem;
+    background: #f7fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+}
+.search-panel h3 {
+    font-size: 0.95rem;
+    margin-bottom: 0.25rem;
+}
+.search-form-row {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+    flex-wrap: wrap;
+}
+.search-input {
+    padding: 0.6rem 0.75rem;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    flex: 1;
+    min-width: 0;
+}
+.search-input-sm {
+    max-width: 110px;
+    flex: 0 0 auto;
+}
+.search-input:focus {
+    outline: none;
+    border-color: var(--primary-color, #3182ce);
+}
+.search-btn {
+    padding: 0.6rem 1rem;
+    background: var(--primary-color, #3182ce);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.search-btn:hover { background: #2c5282; }
+.search-btn:disabled { background: #a0aec0; cursor: not-allowed; }
+.search-results {
+    margin-top: 0.75rem;
+    max-height: 240px;
+    overflow-y: auto;
+}
+.search-results .no-results {
+    text-align: center;
+    color: #999;
+    font-size: 0.85rem;
+    padding: 1rem 0;
+}
+.search-result-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.6rem 0.75rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    margin-bottom: 0.4rem;
+    background: #fff;
+    font-size: 0.85rem;
+    gap: 0.5rem;
+}
+.search-result-item:hover { border-color: var(--primary-color, #3182ce); }
+.result-info { flex: 1; min-width: 0; }
+.result-info .result-name { font-weight: 600; }
+.result-info .result-detail { color: #718096; font-size: 0.8rem; }
+.result-select-btn {
+    padding: 0.3rem 0.75rem;
+    background: #ebf8ff;
+    color: #2b6cb0;
+    border: 1px solid #bee3f8;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.result-select-btn:hover { background: #bee3f8; }
+.selected-card {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+    padding: 0.6rem 0.75rem;
+    background: #f0fff4;
+    border: 1px solid #c6f6d5;
+    border-radius: 6px;
+    font-size: 0.85rem;
+}
+.selected-label { font-weight: 600; color: #276749; white-space: nowrap; }
+.deselect-btn {
+    margin-left: auto;
+    background: none;
+    border: none;
+    font-size: 1.2rem;
+    color: #999;
+    cursor: pointer;
+    padding: 0 0.25rem;
+    flex-shrink: 0;
+}
+.deselect-btn:hover { color: #e53e3e; }
 </style>
 
 <script>
@@ -488,6 +739,29 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     birthInput.addEventListener('change', checkMinor);
+
+    // Search panels
+    const playerSearchPanel = document.getElementById('playerSearchPanel');
+    const childSearchPanel = document.getElementById('childSearchPanel');
+    const orgSearchPanel = document.getElementById('orgSearchPanel');
+
+    function updateSearchPanels(type) {
+        playerSearchPanel.style.display = 'none';
+        childSearchPanel.style.display = 'none';
+        orgSearchPanel.style.display = 'none';
+
+        if (type === 'player') {
+            playerSearchPanel.style.display = 'block';
+            // Auto-fill player search name from full_name
+            const fn = document.getElementById('full_name').value.trim();
+            if (fn) document.getElementById('playerSearchName').value = fn;
+        } else if (type === 'player_parent') {
+            childSearchPanel.style.display = 'block';
+        } else if (['club_coach', 'club_director', 'school_coach', 'school_director'].includes(type)) {
+            orgSearchPanel.style.display = 'block';
+        }
+    }
+
     memberTypeSelect.addEventListener('change', function() {
         checkMinor();
         // Show verification notice for non-general types
@@ -496,6 +770,7 @@ document.addEventListener('DOMContentLoaded', function() {
         } else {
             verificationNotice.style.display = 'none';
         }
+        updateSearchPanels(this.value);
     });
 
     // Select All consent
@@ -544,13 +819,13 @@ document.addEventListener('DOMContentLoaded', function() {
         const val = this.value;
 
         if (val.length < 3) {
-            nicknameStatus.textContent = val.length > 0 ? '3자 이상' : '';
+            nicknameStatus.textContent = val.length > 0 ? '{{ i18n.auth.register.nickname_min_length|default("3자 이상") }}' : '';
             nicknameStatus.className = 'nickname-status taken';
             nicknameAvailable = false;
             return;
         }
 
-        nicknameStatus.textContent = '확인 중...';
+        nicknameStatus.textContent = '{{ i18n.auth.register.nickname_checking|default("확인 중...") }}';
         nicknameStatus.className = 'nickname-status checking';
 
         nicknameTimer = setTimeout(async () => {
@@ -559,11 +834,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 const data = await res.json();
                 if (nicknameInput.value === val) {
                     if (data.available) {
-                        nicknameStatus.textContent = '사용 가능';
+                        nicknameStatus.textContent = '{{ i18n.auth.register.nickname_available|default("사용 가능") }}';
                         nicknameStatus.className = 'nickname-status available';
                         nicknameAvailable = true;
                     } else {
-                        nicknameStatus.textContent = data.reason || '사용 불가';
+                        nicknameStatus.textContent = data.reason || '{{ i18n.auth.register.nickname_unavailable|default("사용 불가") }}';
                         nicknameStatus.className = 'nickname-status taken';
                         nicknameAvailable = false;
                     }
@@ -576,7 +851,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // Phone: strip non-digits on input
-    const phoneInput = document.getElementById('phone');
     phoneInput.addEventListener('input', function() {
         this.value = this.value.replace(/[^0-9]/g, '');
     });
@@ -586,7 +860,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Check nickname
         if (!nicknameAvailable) {
             e.preventDefault();
-            alert('사용 가능한 닉네임을 입력해주세요.');
+            alert('{{ i18n.auth.register_js.nickname_alert|default("사용 가능한 닉네임을 입력해주세요.") }}');
             nicknameInput.focus();
             return;
         }
@@ -594,7 +868,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Check email is not "None"
         if (emailInput.value.toLowerCase() === 'none' || !emailInput.value.trim()) {
             e.preventDefault();
-            alert('이메일을 입력해주세요.');
+            alert('{{ i18n.auth.register_js.email_alert|default("이메일을 입력해주세요.") }}');
             emailInput.focus();
             return;
         }
@@ -602,11 +876,152 @@ document.addEventListener('DOMContentLoaded', function() {
         // Phone validation (if filled)
         if (phoneInput.value && !/^\d{8,15}$/.test(phoneInput.value)) {
             e.preventDefault();
-            alert('연락처는 숫자 8~15자리만 입력 가능합니다.');
+            alert('{{ i18n.auth.register_js.phone_alert|default("연락처는 숫자 8~15자리만 입력 가능합니다.") }}');
             phoneInput.focus();
             return;
         }
     });
 });
+
+// =============================================
+// Search panel AJAX functions (outside DOMContentLoaded — they use onclick)
+// =============================================
+
+function _renderPlayerResults(data, containerId, selectFn) {
+    const container = document.getElementById(containerId);
+    if (!data.results || data.results.length === 0) {
+        container.innerHTML = '<div class="no-results">검색 결과가 없습니다. 가입 후 인증 페이지에서 직접 등록 가능합니다.</div>';
+        return;
+    }
+    container.innerHTML = data.results.map(p => {
+        const detail = [
+            p.team_name || '',
+            p.birth_year ? p.birth_year + '년생' : '',
+            p.weapon || '',
+            p.competition_count ? '대회 ' + p.competition_count + '회' : '',
+        ].filter(Boolean).join(' · ');
+        return `<div class="search-result-item">
+            <div class="result-info">
+                <span class="result-name">${_esc(p.name)}</span>
+                <div class="result-detail">${_esc(detail)}</div>
+            </div>
+            <button type="button" class="result-select-btn" onclick="${selectFn}(${p.id}, '${_esc(p.name)}', '${_esc(p.team_name || '')}', ${p.birth_year || 'null'})">선택</button>
+        </div>`;
+    }).join('');
+}
+
+function _esc(s) {
+    if (!s) return '';
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML.replace(/'/g, '&#39;').replace(/"/g, '&quot;');
+}
+
+// --- Player search ---
+async function searchPlayers() {
+    const name = document.getElementById('playerSearchName').value.trim();
+    if (name.length < 2) { alert('이름을 2자 이상 입력하세요.'); return; }
+    const params = new URLSearchParams({ name });
+    const by = document.getElementById('playerSearchBirthYear').value;
+    const team = document.getElementById('playerSearchTeam').value.trim();
+    if (by) params.set('birth_year', by);
+    if (team) params.set('team', team);
+    try {
+        const res = await fetch('/auth/public/player-search?' + params);
+        const data = await res.json();
+        _renderPlayerResults(data, 'playerSearchResults', 'selectPlayer');
+    } catch (e) { alert('검색 중 오류가 발생했습니다.'); }
+}
+
+function selectPlayer(id, name, team, birthYear) {
+    document.getElementById('selectedPlayerId').value = id;
+    document.getElementById('playerSelected').style.display = 'flex';
+    const detail = [name, team, birthYear ? birthYear + '년생' : ''].filter(Boolean).join(' · ');
+    document.getElementById('playerSelectedInfo').textContent = detail;
+    document.getElementById('playerSearchResults').innerHTML = '';
+}
+
+function deselectPlayer() {
+    document.getElementById('selectedPlayerId').value = '';
+    document.getElementById('playerSelected').style.display = 'none';
+    document.getElementById('playerSelectedInfo').textContent = '';
+}
+
+// --- Child search ---
+async function searchChildren() {
+    const name = document.getElementById('childSearchName').value.trim();
+    if (name.length < 2) { alert('이름을 2자 이상 입력하세요.'); return; }
+    const params = new URLSearchParams({ name });
+    const by = document.getElementById('childSearchBirthYear').value;
+    const team = document.getElementById('childSearchTeam').value.trim();
+    if (by) params.set('birth_year', by);
+    if (team) params.set('team', team);
+    try {
+        const res = await fetch('/auth/public/child-search?' + params);
+        const data = await res.json();
+        _renderPlayerResults(data, 'childSearchResults', 'selectChild');
+    } catch (e) { alert('검색 중 오류가 발생했습니다.'); }
+}
+
+function selectChild(id, name, team, birthYear) {
+    document.getElementById('selectedChildPlayerId').value = id;
+    document.getElementById('selectedChildName').value = name;
+    document.getElementById('selectedChildBirthYear').value = birthYear || '';
+    document.getElementById('selectedChildTeam').value = team;
+    document.getElementById('childSelected').style.display = 'flex';
+    const detail = [name, team, birthYear ? birthYear + '년생' : ''].filter(Boolean).join(' · ');
+    document.getElementById('childSelectedInfo').textContent = detail;
+    document.getElementById('childSearchResults').innerHTML = '';
+}
+
+function deselectChild() {
+    document.getElementById('selectedChildPlayerId').value = '';
+    document.getElementById('selectedChildName').value = '';
+    document.getElementById('selectedChildBirthYear').value = '';
+    document.getElementById('selectedChildTeam').value = '';
+    document.getElementById('childSelected').style.display = 'none';
+    document.getElementById('childSelectedInfo').textContent = '';
+}
+
+// --- Org search ---
+async function searchOrgs() {
+    const name = document.getElementById('orgSearchName').value.trim();
+    if (name.length < 2) { alert('조직명을 2자 이상 입력하세요.'); return; }
+    try {
+        const res = await fetch('/auth/public/org-search?name=' + encodeURIComponent(name));
+        const data = await res.json();
+        const container = document.getElementById('orgSearchResults');
+        if (!data.results || data.results.length === 0) {
+            container.innerHTML = '<div class="no-results">검색 결과가 없습니다.</div>';
+            return;
+        }
+        const orgTypeLabels = { club: '클럽', middle_school: '중학교', high_school: '고등학교', university: '대학교', business: '실업팀' };
+        container.innerHTML = data.results.map(o => {
+            const typeLabel = orgTypeLabels[o.org_type] || o.org_type || '';
+            const detail = [typeLabel, o.region || ''].filter(Boolean).join(' · ');
+            return `<div class="search-result-item">
+                <div class="result-info">
+                    <span class="result-name">${_esc(o.name)}</span>
+                    <div class="result-detail">${_esc(detail)}</div>
+                </div>
+                <button type="button" class="result-select-btn" onclick="selectOrg(${o.id}, '${_esc(o.name)}', '${_esc(typeLabel)}')">선택</button>
+            </div>`;
+        }).join('');
+    } catch (e) { alert('검색 중 오류가 발생했습니다.'); }
+}
+
+function selectOrg(id, name, typeLabel) {
+    document.getElementById('selectedOrgId').value = id;
+    document.getElementById('orgSelected').style.display = 'flex';
+    const detail = [name, typeLabel].filter(Boolean).join(' · ');
+    document.getElementById('orgSelectedInfo').textContent = detail;
+    document.getElementById('orgSearchResults').innerHTML = '';
+}
+
+function deselectOrg() {
+    document.getElementById('selectedOrgId').value = '';
+    document.getElementById('orgSelected').style.display = 'none';
+    document.getElementById('orgSelectedInfo').textContent = '';
+}
 </script>
 {% endblock %}

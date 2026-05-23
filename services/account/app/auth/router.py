@@ -8,7 +8,7 @@ import os
 import json
 import secrets
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, List
 from pathlib import Path
 from urllib.parse import urlparse, quote
 
@@ -32,7 +32,11 @@ from shared_core.privacy.masking import mask_korean_name
 from shared_core.privacy.anonymize import is_minor
 from shared_core.email.service import EmailService
 from shared_core.utils.country import phone_to_country
+from shared_core.email.templates import SERVICE_DESCRIPTIONS
 from app.config import get_account_settings
+from app.i18n.middleware import create_language_context
+from app.verification.claims import calculate_claim_confidence, _link_player_to_member
+from app.verification.notification_service import VerificationNotificationService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -106,6 +110,112 @@ def _set_auth_cookies(response, access_token: str, email: str):
 
 
 # =============================================
+# 공개 검색 API (회원가입 폼에서 인증 없이 사용)
+# =============================================
+
+@router.get("/public/player-search")
+async def public_player_search(
+    name: str,
+    birth_year: Optional[int] = None,
+    team: Optional[str] = None,
+    weapon: Optional[str] = None,
+):
+    """
+    선수 검색 (공개 - 회원가입 폼 용)
+
+    GET /auth/public/player-search?name=홍길동&birth_year=2005
+    대회 공개 데이터이므로 인증 불필요.
+    """
+    if not name or len(name.strip()) < 2:
+        raise HTTPException(status_code=400, detail="이름은 2자 이상이어야 합니다")
+
+    supabase = get_supabase()
+    query = supabase.table("players").select(
+        "id, name, team_name, birth_year, gender, weapon, "
+        "competition_count, last_competition_date"
+    ).ilike("name", f"%{name.strip()}%")
+
+    if birth_year:
+        query = query.eq("birth_year", birth_year)
+    if team:
+        query = query.ilike("team_name", f"%{team.strip()}%")
+    if weapon:
+        query = query.eq("weapon", weapon)
+
+    query = query.limit(15)
+
+    try:
+        result = query.execute()
+    except Exception as e:
+        logger.error(f"Public player search error: {e}")
+        raise HTTPException(status_code=500, detail="검색 중 오류가 발생했습니다")
+
+    return {"results": result.data or [], "total": len(result.data or [])}
+
+
+@router.get("/public/child-search")
+async def public_child_search(
+    name: str,
+    birth_year: Optional[int] = None,
+    team: Optional[str] = None,
+):
+    """
+    자녀 선수 검색 (공개 - 부모회원 가입 폼 용)
+
+    GET /auth/public/child-search?name=홍길동&birth_year=2012
+    """
+    if not name or len(name.strip()) < 2:
+        raise HTTPException(status_code=400, detail="이름은 2자 이상이어야 합니다")
+
+    supabase = get_supabase()
+    query = supabase.table("players").select(
+        "id, name, team_name, birth_year, gender, weapon, "
+        "competition_count, last_competition_date"
+    ).ilike("name", f"%{name.strip()}%")
+
+    if birth_year:
+        query = query.eq("birth_year", birth_year)
+    if team:
+        query = query.ilike("team_name", f"%{team.strip()}%")
+
+    query = query.limit(15)
+
+    try:
+        result = query.execute()
+    except Exception as e:
+        logger.error(f"Public child search error: {e}")
+        raise HTTPException(status_code=500, detail="검색 중 오류가 발생했습니다")
+
+    return {"results": result.data or [], "total": len(result.data or [])}
+
+
+@router.get("/public/org-search")
+async def public_org_search(
+    name: str,
+):
+    """
+    조직 검색 (공개 - 코치/감독 가입 폼 용)
+
+    GET /auth/public/org-search?name=최병철
+    """
+    if not name or len(name.strip()) < 2:
+        raise HTTPException(status_code=400, detail="조직명은 2자 이상이어야 합니다")
+
+    supabase = get_supabase()
+    query = supabase.table("organizations").select(
+        "id, name, org_type, region"
+    ).ilike("name", f"%{name.strip()}%").limit(15)
+
+    try:
+        result = query.execute()
+    except Exception as e:
+        logger.error(f"Public org search error: {e}")
+        raise HTTPException(status_code=500, detail="검색 중 오류가 발생했습니다")
+
+    return {"results": result.data or [], "total": len(result.data or [])}
+
+
+# =============================================
 # 닉네임 중복 확인
 # =============================================
 
@@ -151,6 +261,7 @@ async def login_page(request: Request, redirect: Optional[str] = None):
     return _templates.TemplateResponse("auth/login.html", {
         "request": request,
         "redirect_url": redirect or "",
+        **create_language_context(request),
     })
 
 
@@ -234,15 +345,54 @@ async def oauth_callback(provider: str, code: str, state: str, request: Request)
 
     except Exception as e:
         logger.exception(f"OAuth 콜백 처리 오류: {e}")
+        i18n_ctx = create_language_context(request)
+        error_msg = i18n_ctx.get("i18n", {}).get("auth", {}).get("error", {}).get(
+            "default_message", "인증 처리 중 오류가 발생했습니다. 다시 시도해주세요."
+        )
         return _templates.TemplateResponse("auth/error.html", {
             "request": request,
-            "error_message": "인증 처리 중 오류가 발생했습니다. 다시 시도해주세요.",
+            "error_message": error_msg,
+            **i18n_ctx,
         }, status_code=500)
 
 
 # =============================================
 # 회원가입
 # =============================================
+
+def _get_available_services() -> list[dict]:
+    """서비스 목록 조회 (services 테이블 → fallback: SERVICE_DESCRIPTIONS)"""
+    try:
+        supabase = get_supabase()
+        result = supabase.table("services").select(
+            "id, name_ko, description, is_active, sort_order"
+        ).order("sort_order").execute()
+        if result.data:
+            return [
+                {
+                    "service_key": s["id"],
+                    "icon": SERVICE_DESCRIPTIONS.get(s["id"], {}).get("icon", ""),
+                    "display_name": s.get("name_ko") or s["id"],
+                    "description": s.get("description") or "",
+                    "is_active": s.get("is_active", False),
+                }
+                for s in result.data
+            ]
+    except Exception as e:
+        logger.debug(f"services 테이블 조회 실패, fallback 사용: {e}")
+
+    # Fallback: SERVICE_DESCRIPTIONS에서 생성
+    return [
+        {
+            "service_key": key,
+            "icon": svc["icon"],
+            "display_name": svc["name"],
+            "description": ", ".join(svc["features"][:2]),
+            "is_active": not svc.get("coming_soon", False),
+        }
+        for key, svc in SERVICE_DESCRIPTIONS.items()
+    ]
+
 
 @router.get("/register", response_class=HTMLResponse)
 async def register_page(request: Request, token: Optional[str] = None):
@@ -253,21 +403,28 @@ async def register_page(request: Request, token: Optional[str] = None):
         if not pending:
             raise HTTPException(status_code=400, detail="유효하지 않은 등록 토큰입니다")
 
+    available_services = _get_available_services()
+    i18n_ctx = create_language_context(request)
+    i18n_data = i18n_ctx.get("i18n", {})
+    mt = i18n_data.get("common", {}).get("member_types", {})
+
     return _templates.TemplateResponse(
         "auth/register.html",
         {
             "request": request,
             "token": token,
             "pending": pending,
+            "available_services": available_services,
             "member_types": [
-                {"value": "general", "label": "일반 회원"},
-                {"value": "player", "label": "선수회원"},
-                {"value": "player_parent", "label": "선수 부모회원"},
-                {"value": "club_coach", "label": "클럽 코치"},
-                {"value": "club_director", "label": "클럽 감독/대표"},
-                {"value": "school_coach", "label": "학교 코치"},
-                {"value": "school_director", "label": "학교 감독"},
+                {"value": "general", "label": mt.get("general", "일반 회원")},
+                {"value": "player", "label": mt.get("player", "선수회원")},
+                {"value": "player_parent", "label": mt.get("player_parent", "선수 부모회원")},
+                {"value": "club_coach", "label": mt.get("club_coach", "클럽 코치")},
+                {"value": "club_director", "label": mt.get("club_director", "클럽 감독/대표")},
+                {"value": "school_coach", "label": mt.get("school_coach", "학교 코치")},
+                {"value": "school_director", "label": mt.get("school_director", "학교 감독")},
             ],
+            **i18n_ctx,
         }
     )
 
@@ -283,6 +440,7 @@ async def register_member(
     phone_country_code: str = Form("+82"),
     birth_date: Optional[str] = Form(None),
     member_type: str = Form(...),
+    interested_services: List[str] = Form([]),
     # 동의 항목 (서버사이드 검증)
     terms_consent: bool = Form(False),
     privacy_consent: bool = Form(False),
@@ -290,6 +448,14 @@ async def register_member(
     optional_privacy_consent: bool = Form(False),
     marketing_consent: bool = Form(False),
     promotional_consent: bool = Form(False),
+    # 가입 시 선수/조직 선택 (선택사항 — Claim 자동 생성용)
+    # str로 받아서 수동 파싱 (hidden field의 빈 문자열 → None 변환)
+    selected_player_id: Optional[str] = Form(None),
+    selected_org_id: Optional[str] = Form(None),
+    selected_child_player_id: Optional[str] = Form(None),
+    selected_child_name: Optional[str] = Form(None),
+    selected_child_birth_year: Optional[str] = Form(None),
+    selected_child_team: Optional[str] = Form(None),
 ):
     """회원가입 처리"""
     # 필수 동의 검증
@@ -323,6 +489,22 @@ async def register_member(
             detail="14세 미만 선수는 보호자(부모회원)를 통해 등록해야 합니다"
         )
 
+    # Claim 파라미터 파싱 (빈 문자열 → None, 숫자 문자열 → int)
+    def _parse_int(v):
+        if not v or not str(v).strip():
+            return None
+        try:
+            return int(v)
+        except (ValueError, TypeError):
+            return None
+
+    parsed_player_id = _parse_int(selected_player_id)
+    parsed_org_id = _parse_int(selected_org_id)
+    parsed_child_player_id = _parse_int(selected_child_player_id)
+    parsed_child_name = selected_child_name.strip() if selected_child_name and selected_child_name.strip() else None
+    parsed_child_birth_year = _parse_int(selected_child_birth_year)
+    parsed_child_team = selected_child_team.strip() if selected_child_team and selected_child_team.strip() else None
+
     supabase = get_supabase()
 
     # 이메일 중복 확인
@@ -346,6 +528,19 @@ async def register_member(
         phone = None
         birth_date = None
 
+    # interested_services 검증: 유효한 서비스 키만 허용
+    valid_service_keys = set(SERVICE_DESCRIPTIONS.keys())
+    try:
+        svc_result = supabase.table("services").select("id").execute()
+        if svc_result.data:
+            valid_service_keys.update(s["id"] for s in svc_result.data)
+    except Exception:
+        pass
+    interested_services = [s for s in interested_services if s in valid_service_keys]
+    # data는 항상 포함
+    if "data" not in interested_services:
+        interested_services.insert(0, "data")
+
     member_data = {
         "full_name": full_name,
         "nickname": nickname,
@@ -355,6 +550,7 @@ async def register_member(
         "phone_country_code": phone_country_code,
         "birth_date": birth_date if birth_date else None,
         "member_type": member_type,
+        "interested_services": json.dumps(interested_services),
         "marketing_consent": marketing_consent,
         "promotional_consent": promotional_consent,
         "overseas_transfer_consent": True,
@@ -412,6 +608,34 @@ async def register_member(
 
     supabase.table("oauth_connections").insert(oauth_data).execute()
 
+    # 선택한 서비스별 free tier 구독 생성 (data는 DB trigger가 처리)
+    for svc_key in interested_services:
+        if svc_key == "data":
+            continue  # DB trigger가 자동 생성
+        try:
+            supabase.table("member_services").insert({
+                "member_id": member["id"],
+                "service_id": svc_key,
+                "tier": "free",
+            }).execute()
+        except Exception as e:
+            logger.debug(f"member_services 생성 실패 ({svc_key}): {e}")
+
+    # =============================================
+    # 가입 시 선택한 선수/조직 → 자동 Claim 생성
+    # =============================================
+    await _create_registration_claims(
+        supabase=supabase,
+        member=member,
+        member_type=member_type,
+        selected_player_id=parsed_player_id,
+        selected_org_id=parsed_org_id,
+        selected_child_player_id=parsed_child_player_id,
+        selected_child_name=parsed_child_name,
+        selected_child_birth_year=parsed_child_birth_year,
+        selected_child_team=parsed_child_team,
+    )
+
     # 토큰 생성
     access_token = create_access_token({
         "member_id": str(member["id"]),
@@ -433,6 +657,174 @@ async def register_member(
 
 
 # =============================================
+# 가입 시 자동 Claim 생성 (내부 헬퍼)
+# =============================================
+
+async def _create_registration_claims(
+    supabase,
+    member: dict,
+    member_type: str,
+    selected_player_id: Optional[int],
+    selected_org_id: Optional[int],
+    selected_child_player_id: Optional[int],
+    selected_child_name: Optional[str],
+    selected_child_birth_year: Optional[int],
+    selected_child_team: Optional[str],
+):
+    """
+    회원가입 시 선택한 선수/조직 정보로 Claim 자동 생성.
+    실패해도 가입은 정상 진행 (나중에 인증 페이지에서 재시도 가능).
+    """
+    settings = get_account_settings()
+
+    # 1) 선수회원 → player_claims
+    if member_type == "player" and selected_player_id:
+        try:
+            player_result = supabase.table("players").select("*").eq(
+                "id", selected_player_id
+            ).single().execute()
+
+            if player_result.data:
+                player = player_result.data
+                confidence = calculate_claim_confidence(member, player)
+
+                auto_approve = confidence >= settings.CLAIM_AUTO_APPROVE_THRESHOLD
+                auto_reject = confidence < settings.CLAIM_MANUAL_REVIEW_THRESHOLD
+                if auto_approve:
+                    status = "approved"
+                elif auto_reject:
+                    status = "rejected"
+                else:
+                    status = "pending"
+
+                evidence = {
+                    "source": "registration_form",
+                    "member_name": member.get("full_name"),
+                    "player_name": player.get("name"),
+                }
+
+                claim_data = {
+                    "member_id": member["id"],
+                    "player_id": selected_player_id,
+                    "confidence_score": confidence,
+                    "evidence": json.dumps(evidence),
+                    "status": status,
+                }
+                if status == "approved":
+                    claim_data["reviewed_at"] = datetime.utcnow().isoformat()
+
+                claim_result = supabase.table("player_claims").insert(claim_data).execute()
+
+                if status == "approved" and claim_result.data:
+                    await _link_player_to_member(supabase, member["id"], selected_player_id)
+
+                if status == "pending" and claim_result.data:
+                    try:
+                        notifier = VerificationNotificationService()
+                        await notifier.notify_admin_new_request(
+                            request_type="player_claim",
+                            item_id=claim_result.data[0]["id"],
+                            summary=(
+                                f"[가입시] {member.get('full_name', '회원')} → "
+                                f"선수 #{selected_player_id} ({player.get('name', '')}), "
+                                f"매칭: {confidence:.0%}"
+                            ),
+                            member_name=member.get("full_name"),
+                        )
+                    except Exception as ne:
+                        logger.warning(f"Registration player claim notification failed: {ne}")
+
+                logger.info(
+                    f"Registration player claim created: member={member['id']}, "
+                    f"player={selected_player_id}, confidence={confidence}, status={status}"
+                )
+        except Exception as e:
+            logger.warning(f"Registration player claim failed (non-fatal): {e}")
+
+    # 2) 부모회원 → parent_claims
+    elif member_type == "player_parent" and (selected_child_player_id or selected_child_name):
+        try:
+            claim_data = {
+                "member_id": member["id"],
+                "child_name": (selected_child_name or "").strip(),
+                "child_birth_year": selected_child_birth_year,
+                "child_team_name": selected_child_team,
+                "matched_player_id": selected_child_player_id,
+                "relationship_type": "parent",
+                "status": "pending",
+            }
+
+            claim_result = supabase.table("parent_claims").insert(claim_data).execute()
+
+            if claim_result.data:
+                try:
+                    notifier = VerificationNotificationService()
+                    await notifier.notify_admin_new_request(
+                        request_type="parent_claim",
+                        item_id=claim_result.data[0]["id"],
+                        summary=(
+                            f"[가입시] {member.get('full_name', '회원')} → "
+                            f"자녀: {selected_child_name or '미지정'}"
+                        ),
+                        member_name=member.get("full_name"),
+                    )
+                except Exception as ne:
+                    logger.warning(f"Registration parent claim notification failed: {ne}")
+
+            logger.info(
+                f"Registration parent claim created: member={member['id']}, "
+                f"child={selected_child_name}, player_id={selected_child_player_id}"
+            )
+        except Exception as e:
+            logger.warning(f"Registration parent claim failed (non-fatal): {e}")
+
+    # 3) 코치/감독 → organization_claims
+    elif member_type in ("club_coach", "club_director", "school_coach", "school_director") and selected_org_id:
+        try:
+            # claim_type 결정
+            if member_type in ("club_director", "school_director"):
+                claim_type = "director"
+            else:
+                claim_type = "head_coach"
+
+            claim_data = {
+                "member_id": member["id"],
+                "organization_id": selected_org_id,
+                "claim_type": claim_type,
+                "status": "pending",
+            }
+
+            claim_result = supabase.table("organization_claims").insert(claim_data).execute()
+
+            if claim_result.data:
+                try:
+                    org_result = supabase.table("organizations").select("name").eq(
+                        "id", selected_org_id
+                    ).single().execute()
+                    org_name = org_result.data.get("name", "") if org_result.data else ""
+
+                    notifier = VerificationNotificationService()
+                    await notifier.notify_admin_new_request(
+                        request_type="org_claim",
+                        item_id=claim_result.data[0]["id"],
+                        summary=(
+                            f"[가입시] {member.get('full_name', '회원')} → "
+                            f"조직: {org_name} (#{selected_org_id}), 역할: {claim_type}"
+                        ),
+                        member_name=member.get("full_name"),
+                    )
+                except Exception as ne:
+                    logger.warning(f"Registration org claim notification failed: {ne}")
+
+            logger.info(
+                f"Registration org claim created: member={member['id']}, "
+                f"org={selected_org_id}, type={claim_type}"
+            )
+        except Exception as e:
+            logger.warning(f"Registration org claim failed (non-fatal): {e}")
+
+
+# =============================================
 # 이메일 인증
 # =============================================
 
@@ -442,7 +834,42 @@ async def verify_email_sent_page(request: Request, email: str = ""):
     return _templates.TemplateResponse("auth/verify_email_sent.html", {
         "request": request,
         "email": email,
+        **create_language_context(request),
     })
+
+
+_NOTIFICATION_ICONS = {
+    "data": "\U0001f4ca",      # 📊
+    "club": "\U0001f3eb",      # 🏫
+    "community": "\U0001f4ac", # 💬
+    "shop": "\U0001f6d2",      # 🛒
+    "analytics": "\U0001f3af", # 🎯
+}
+
+
+def _send_welcome_notification(supabase, member_id: str, services: list[str]):
+    """환영 사이트 알림 생성"""
+    svc_names = []
+    for svc_key in services:
+        svc = SERVICE_DESCRIPTIONS.get(svc_key)
+        if svc and not svc.get("coming_soon"):
+            icon = _NOTIFICATION_ICONS.get(svc_key, "")
+            svc_names.append(f'{icon} {svc["name"]}')
+
+    if svc_names:
+        body = f"관심 서비스: {', '.join(svc_names)}\n\n시작하기: https://data.fencingmind.ai"
+    else:
+        body = "시작하기: https://data.fencingmind.ai"
+
+    try:
+        supabase.table("notifications").insert({
+            "recipient_id": member_id,
+            "title": "FencingMind에 오신 것을 환영합니다!",
+            "body": body,
+            "notification_type": "welcome",
+        }).execute()
+    except Exception as e:
+        logger.warning(f"환영 알림 생성 실패: {e}")
 
 
 @router.get("/verify-email")
@@ -452,7 +879,7 @@ async def verify_email(token: str):
 
     # Find member by verification token
     result = supabase.table("members").select(
-        "id, email, full_name, email_verification_expires_at"
+        "id, email, full_name, email_verification_expires_at, interested_services"
     ).eq("email_verification_token", token).execute()
 
     if not result.data:
@@ -474,8 +901,19 @@ async def verify_email(token: str):
         "email_verification_expires_at": None,
     }).eq("id", member["id"]).execute()
 
-    # Send welcome email
-    await get_email_service().send_welcome_email(member["email"], member["full_name"])
+    # Send personalized welcome email
+    interested = member.get("interested_services") or ["data"]
+    if isinstance(interested, str):
+        try:
+            interested = json.loads(interested)
+        except (json.JSONDecodeError, TypeError):
+            interested = ["data"]
+    await get_email_service().send_welcome_email(
+        member["email"], member["full_name"], services=interested,
+    )
+
+    # Create welcome notification
+    _send_welcome_notification(supabase, str(member["id"]), interested)
 
     # Redirect to data service after email verification
     return RedirectResponse(url="https://data.fencingmind.ai", status_code=303)
