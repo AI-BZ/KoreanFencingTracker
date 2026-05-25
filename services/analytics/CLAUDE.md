@@ -2,7 +2,9 @@
 
 **서브도메인:** analytics.fencingmind.ai
 **포트:** 76
-**상태:** Phase 3 구현 완료 (영상 유형별 분석 + FACTS 파인튜닝 파이프라인)
+**상태:** Phase 4a 구현 완료 (Web UI + 데모 모드 + 크레딧 시스템)
+**마지막 세션:** 2026-05-25
+**브랜치:** `feature/analytics/main`
 
 ---
 
@@ -29,8 +31,13 @@
 services/analytics/
 ├── app/
 │   ├── __init__.py
-│   ├── server.py                    # FastAPI 앱 (분석/브로드캐스트/품질체크/촬영가이드 엔드포인트)
-│   └── filming_guide.py             # 촬영 가이드 (유형별 권장사항, 한국어/영어) [Phase 3]
+│   ├── server.py                    # FastAPI 앱 (모든 엔드포인트 + 데모 모드) [Phase 4a]
+│   ├── filming_guide.py             # 촬영 가이드 (유형별 권장사항, 한국어/영어) [Phase 3]
+│   ├── demo.py                      # 데모 리포트 데이터 생성기 (샘플 플뢰레 5-3) [Phase 4a]
+│   ├── upload.py                    # 영상 업로드 처리 (파일 저장, 검증) [Phase 4a]
+│   ├── credits.py                   # 크레딧 시스템 (잔액/차감/충전, in-memory) [Phase 4a]
+│   ├── report_renderer.py           # HTML 리포트 렌더링 로직 [Phase 4a]
+│   └── pdf_exporter.py              # PDF 내보내기 스캐폴드 [Phase 4a]
 ├── analyzer/                        # v3 분석기 모듈 분리
 │   ├── __init__.py
 │   ├── models.py                    # Phase 1+2+3 데이터클래스 (REMISE, direction 추가)
@@ -65,23 +72,41 @@ services/analytics/
 │   └── models/
 │       ├── digit_templates.pkl      # v3 숫자 템플릿 데이터
 │       └── yolo11n-pose.pt          # YOLO11 Pose 모델
+├── templates/                       # Jinja2 HTML 템플릿 [Phase 4a]
+│   ├── base.html                    # 공통 레이아웃 (Tailwind CSS + Chart.js CDN)
+│   ├── upload.html                  # 영상 업로드 페이지
+│   ├── dashboard.html               # 분석 대시보드 (작업 목록, 크레딧 잔액)
+│   └── report.html                  # 분석 리포트 (스코어, 터치 테이블, 차트, 인사이트)
+├── static/                          # 정적 파일 [Phase 4a]
+│   ├── css/
+│   │   └── analytics.css            # 커스텀 스타일
+│   └── js/
+│       ├── upload.js                # 업로드 폼 인터랙션
+│       ├── dashboard.js             # 대시보드 폴링/갱신
+│       └── report.js                # 차트 렌더링 (Chart.js)
 ├── vendor/                          # 외부 참조 코드 (.gitignore)
 │   └── fencing-AI/                  # sholtodouglas/fencing-AI 클론
 ├── data/                            # 영상/클립 작업 디렉토리 (.gitignore)
 │   ├── raw/                         # 다운로드 원본
 │   ├── clips/                       # 추출된 클립
 │   └── labeled/                     # 라벨링 완료 (L/R/T 서브디렉토리)
-├── tests/                           # 171개 테스트
+├── tests/                           # 246개 테스트
+│   ├── conftest.py                  # pytest 설정 (경로, fixture)
 │   ├── test_analyzer.py             # Phase 1 모듈 임포트 + 유닛 (24)
 │   ├── test_pose_estimator.py       # 포즈 추정 (11)
-│   ├── test_action_classifier.py    # 행동 분류 + FACTS 매핑 (22)
+│   ├── test_action_classifier.py    # 행동 분류 + FACTS 매핑 (20)
 │   ├── test_integrated_analyzer.py  # 통합 분석 (15)
-│   ├── test_report.py               # 리포트 생성 (21)
-│   ├── test_training_pipeline.py    # 파인튜닝 파이프라인 + FACTS (31)
-│   ├── test_video_source.py         # 영상 유형 감지 (15)
+│   ├── test_report.py               # 리포트 생성 (17)
+│   ├── test_training_pipeline.py    # 파인튜닝 파이프라인 + FACTS (32)
+│   ├── test_video_source.py         # 영상 유형 감지 (17)
 │   ├── test_quality_gate.py         # 품질 게이트 (12)
-│   ├── test_filming_guide.py        # 촬영 가이드 (5)
-│   └── test_tv_analyzer.py          # TV 중계 분석 (15)
+│   ├── test_filming_guide.py        # 촬영 가이드 (8)
+│   ├── test_tv_analyzer.py          # TV 중계 분석 (15)
+│   ├── test_integration.py          # 통합 테스트 (HTTP 엔드포인트 39) [Phase 4a]
+│   ├── test_credits.py              # 크레딧 시스템 (14) [Phase 4a]
+│   ├── test_upload.py               # 업로드 처리 (7) [Phase 4a]
+│   ├── test_report_rendering.py     # 리포트 렌더링 (9) [Phase 4a]
+│   └── test_subscription.py         # 구독 시스템 (6) [Phase 4a]
 ├── requirements.txt
 ├── .gitignore
 └── CLAUDE.md                        # 이 파일
@@ -124,9 +149,11 @@ PYTHONPATH=. python3 -m uvicorn app.server:app --host 0.0.0.0 --port 76
 
 ---
 
-## DB 테이블 (Phase 3에서 생성 예정)
+## DB 테이블
 
-**이 서비스가 주인인 테이블:**
+**마이그레이션 파일:** `database/migrations/007_analytics_tables.sql` (스키마 준비 완료, Supabase 미적용)
+
+**이 서비스가 주인인 테이블 (8개):**
 - `analytics_videos` - 업로드된 영상
 - `analytics_analysis_jobs` - 분석 작업 큐
 - `analytics_analysis_results` - 분석 결과 (JSON)
@@ -134,6 +161,9 @@ PYTHONPATH=. python3 -m uvicorn app.server:app --host 0.0.0.0 --port 76
 - `analytics_player_metrics` - 선수별 메트릭
 - `analytics_bout_reports` - 경기 리포트
 - `analytics_credits` - 크레딧 잔액
+- `analytics_credit_transactions` - 크레딧 거래 내역
+
+**현재 상태:** 서버 내부 in-memory dict로 동작 (jobs, videos, credits). Phase 4b에서 Supabase 연결 예정.
 
 **공유 테이블 (참조만):**
 - `members` - 회원 (공유)
@@ -197,16 +227,36 @@ PYTHONPATH=. python3 -m uvicorn app.server:app --host 0.0.0.0 --port 76
   - `POST /api/analytics/analyze-broadcast` 엔드포인트
 - [x] **171개 테스트 전체 통과**
 
-### Phase 4: 서비스화 (예정)
+### Phase 4a: Web UI + 데모 모드 (완료 — 2026-05-25)
+- [x] 웹 UI 전체 구현 — Jinja2 + Tailwind CSS + Chart.js
+  - `templates/`: base.html, upload.html, dashboard.html, report.html
+  - `static/`: analytics.css, upload.js, dashboard.js, report.js
+- [x] 데모 모드 — 샘플 플뢰레 Pool bout 5-3, 데모 배너 표시
+  - `app/demo.py`: 8터치 샘플 데이터 생성기
+  - `/demo` (리포트), `/demo/dashboard` (대시보드) 엔드포인트
+- [x] 영상 업로드 API — `app/upload.py`, `/upload` 페이지
+- [x] 크레딧 시스템 — `app/credits.py` (in-memory, Supabase 미연결)
+- [x] 리포트 렌더링 — `app/report_renderer.py` (HTML 대시보드)
+- [x] PDF 내보내기 스캐폴드 — `app/pdf_exporter.py` (구조만)
+- [x] DB 마이그레이션 스키마 — `007_analytics_tables.sql` (8 테이블 + RLS)
+- [x] Mock fallback — ML 모델 미설치 시 데모 데이터로 자동 대체
+- [x] Jinja2 3.1.x + Python 3.14 캐시 버그 수정 (`cache_size=0`)
+- [x] Starlette 1.0 TemplateResponse 시그니처 호환 (`request` 첫 번째 인자)
+- [x] 통합 테스트 39개 (모든 HTTP 엔드포인트 + 데모 + API)
+- [x] **246개 테스트** 전체 (Phase 1-3: 171 + Phase 4a: 75)
+
+### Phase 4b: 서비스 연결 + AI 파인튜닝 (예정)
+- [ ] Supabase 연결 — in-memory → DB (analytics_* 8 테이블 적용)
+- [ ] 인증 연동 — members 테이블 + 크레딧 실제 결제
 - [ ] FACTS 데이터셋 확보 + 실제 파인튜닝 실행 (Mac Studio MPS)
-- [ ] 웹 UI (영상 업로드 + 분석 결과 대시보드)
-- [ ] DB 테이블 생성 (analytics_*)
-- [ ] 구독/크레딧 시스템
-- [ ] 리포트 렌더링 (HTML 대시보드 + PDF 내보내기)
 - [ ] 비디오 스트리밍/재생 + 포즈 오버레이 UI
-- [ ] 종목별 분석 로직 (Weapon-specific analyzer)
+- [ ] PDF 내보내기 실제 구현 (weasyprint 또는 reportlab)
+
+### Phase 5: 고도화 (예정)
+- [ ] 종목별 분석 로직 (Weapon-specific analyzer: foil/epee/sabre)
+- [ ] 풋워크/방어 동작 분류 (포즈 궤적 분석 — Layer 2)
 - [ ] 오디오 터치 감지 검토 (Allez Go 논문: 89.1% 정확도)
-- [ ] 풋워크/방어 동작 분류 (포즈 궤적 분석)
+- [ ] Active Learning — low-confidence 예측 수동 검수 큐
 
 ---
 
@@ -660,16 +710,81 @@ TV 중계나 선수 촬영은 Phase 1 이벤트가 없으므로 모든 프레임
 
 ## 기술 스택
 
-| 영역 | Phase 1 | Phase 2 | Phase 3 (현재) | Phase 4 예정 |
-|------|---------|---------|---------------|-------------|
-| 영상 처리 | OpenCV 4.x | 유지 | 유지 | + FFmpeg |
-| LED/점수 | 7-segment OCR | 유지 | 유지 | 유형별 최적화 |
-| 다운로드 | yt-dlp | 유지 | 유지 | 유지 |
-| 포즈 추정 | — | YOLO11-Pose | 유지 | 유지 |
-| 행동 인식 | — | VideoMAE (K400) | FACTS 8클래스 정렬 | FACTS 파인튜닝 실행 |
-| 영상 감지 | — | — | VideoSourceDetector | 유지 |
-| 품질 관리 | — | — | QualityGate | 유지 |
-| TV 분석 | — | — | TVBroadcastAnalyzer | 유지 |
-| 종목 분석 | — | Weapon enum | 유지 | 종목별 Analyzer |
-| 웹 프레임워크 | FastAPI | 유지 | 유지 | + Jinja2 |
-| GPU | — | Apple Metal (MPS) | 유지 | 파인튜닝도 MPS |
+| 영역 | Phase 1 | Phase 2 | Phase 3 | Phase 4a (현재) | Phase 4b 예정 |
+|------|---------|---------|---------|----------------|-------------|
+| 영상 처리 | OpenCV 4.x | 유지 | 유지 | 유지 | + FFmpeg |
+| LED/점수 | 7-segment OCR | 유지 | 유지 | 유지 | 유형별 최적화 |
+| 다운로드 | yt-dlp | 유지 | 유지 | 유지 | 유지 |
+| 포즈 추정 | — | YOLO11-Pose | 유지 | 유지 | 유지 |
+| 행동 인식 | — | VideoMAE (K400) | FACTS 8클래스 정렬 | Mock fallback | FACTS 파인튜닝 실행 |
+| 영상 감지 | — | — | VideoSourceDetector | 유지 | 유지 |
+| 품질 관리 | — | — | QualityGate | 유지 | 유지 |
+| TV 분석 | — | — | TVBroadcastAnalyzer | 유지 | 유지 |
+| 종목 분석 | — | Weapon enum | 유지 | 유지 | 종목별 Analyzer |
+| 웹 프레임워크 | FastAPI | 유지 | 유지 | + Jinja2/Tailwind/Chart.js | + Supabase 연결 |
+| DB | — | — | — | in-memory (스키마 준비) | Supabase 적용 |
+| GPU | — | Apple Metal (MPS) | 유지 | 유지 | 파인튜닝도 MPS |
+
+---
+
+## 세션 재개 가이드 (2026-05-25 기준)
+
+### 현재 상태 요약
+- **브랜치**: `feature/analytics/main`
+- **Phase 4a 완료**: Web UI + 데모 모드 + 크레딧 시스템 + 통합 테스트
+- **서버 실행 확인됨**: 모든 페이지 HTTP 200, 데모 콘텐츠 정상 렌더링
+- **테스트**: 246개 (integration 39개 전부 통과, ML의존 22개 numpy 미설치로 실패 — 기존 이슈)
+
+### 작동하는 것
+| 기능 | 상태 | 엔드포인트 |
+|------|------|-----------|
+| 서버 기동 | ✅ | `port 76` |
+| 데모 리포트 | ✅ | `GET /demo` — 플뢰레 5-3, 8터치, Chart.js, 코칭 인사이트 |
+| 데모 대시보드 | ✅ | `GET /demo/dashboard` — 3종목, 크레딧 잔액, 작업 상태 |
+| 영상 업로드 페이지 | ✅ | `GET /upload` |
+| 분석 대시보드 | ✅ | `GET /dashboard` |
+| Health/Status API | ✅ | `GET /health`, `GET /api/analytics/status` |
+| 촬영 가이드 API | ✅ | `GET /api/analytics/filming-guide` |
+| Mock fallback | ✅ | ML 미설치 시 자동으로 데모 데이터 반환 |
+
+### 스캐폴드 (구조만 있고 실제 동작 X)
+| 기능 | 이유 | 해결 방법 |
+|------|------|----------|
+| 실제 영상 분석 | VideoMAE가 모두 "unknown" 반환 | FACTS 파인튜닝 필요 |
+| DB 영속성 | in-memory dict 사용 중 | 007 마이그레이션 Supabase 적용 |
+| 크레딧 결제 | 메모리 잔액만, 결제 없음 | Stripe/토스 연동 필요 |
+| PDF 내보내기 | 함수 시그니처만 존재 | weasyprint/reportlab 구현 필요 |
+| 인증 | 없음, 공개 접근 | members 테이블 + JWT 연동 |
+
+### 핵심 블로커
+1. **FACTS 데이터셋 미확보** — 논문 저자 연락 또는 자체 수집 필요
+2. **numpy 미설치** (.venv) — ML 관련 22개 테스트 실패 원인 (데모/웹에는 영향 없음)
+3. **Supabase 마이그레이션 미적용** — `007_analytics_tables.sql` 준비됨, 적용 필요
+
+### 다음 세션 우선순위
+1. **Supabase 연결** — 007 마이그레이션 적용 → server.py의 in-memory를 DB로 교체
+2. **numpy/torch 설치** — `.venv`에 ML 의존성 설치 → 전체 테스트 통과
+3. **FACTS 데이터셋** — 확보 경로 결정 (논문 저자 / 자체 라벨링)
+4. **인증** — members 연동, 크레딧 실제 소유자 연결
+
+### 커밋 이력 (이 브랜치)
+```
+2837ff5 Fix Jinja2 template rendering on Python 3.14
+e9795e2 Add demo mode and integration tests for analytics web service
+6a17f02 Add analytics Phase 4: Web UI, upload API, credit system, report rendering, DB migration
+7cb88b4 Add analytics Phase 2-3: AI models, video source detection, TV analysis, FACTS pipeline
+79264a8 Set up unified test environment and Phase 2 dependencies
+2ab7054 Add analytics service Phase 1: v3 analyzer refactor + fencing-AI pipeline
+e0ec750 Refactor to monorepo structure for FencingMind multi-subdomain architecture
+```
+
+### 서버 실행 커맨드
+```bash
+cd /Users/gyejinpark/Documents/GitHub/FencingMind-analytics/services/analytics
+PYTHONPATH=. .venv/bin/python3 -m uvicorn app.server:app --host 0.0.0.0 --port 76
+# 브라우저: http://localhost:76/demo
+```
+
+### 알려진 호환성 이슈
+- **Python 3.14.4** + **Jinja2 3.1.x**: LRU 캐시 해싱 버그 → `cache_size=0`으로 해결됨
+- **Starlette 1.0.1**: TemplateResponse 시그니처 변경 → `(request, name, context)` 형식으로 수정됨
