@@ -6,12 +6,14 @@ Port: 76
 """
 
 import json
+import sys
 import uuid
 import time
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Tuple
 
+import jinja2
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Request, UploadFile, File, Form
 from fastapi.responses import JSONResponse, HTMLResponse, Response, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -32,8 +34,16 @@ app = FastAPI(
 )
 
 # Static files & Jinja2 templates
+# Jinja2 3.1.x has an LRU cache key hashing bug on Python 3.14+;
+# disable template caching to work around it until Jinja2 ships a fix.
 app.mount("/static", StaticFiles(directory=str(_BASE_DIR / "static")), name="static")
-templates = Jinja2Templates(directory=str(_BASE_DIR / "templates"))
+_cache_size = 0 if sys.version_info >= (3, 14) else 400
+_jinja_env = jinja2.Environment(
+    loader=jinja2.FileSystemLoader(str(_BASE_DIR / "templates")),
+    autoescape=jinja2.select_autoescape(),
+    cache_size=_cache_size,
+)
+templates = Jinja2Templates(env=_jinja_env)
 
 
 # ------------------------------------------------------------------
@@ -257,7 +267,7 @@ async def index():
 @app.get("/upload")
 async def upload_page(request: Request):
     """Video upload page."""
-    return templates.TemplateResponse("upload.html", {"request": request})
+    return templates.TemplateResponse(request, "upload.html")
 
 
 @app.get("/dashboard")
@@ -282,8 +292,7 @@ async def dashboard_page(request: Request):
     sub_info = _credit_manager.get_subscription_info("default")
     credits = sub_info.get("credits", 0)
 
-    return templates.TemplateResponse("dashboard.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "dashboard.html", {
         "jobs": jobs_list,
         "credits": credits,
     })
@@ -309,8 +318,7 @@ async def report_page(request: Request, job_id: str):
 
     report_dict = job["result"]
 
-    return templates.TemplateResponse("report.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "report.html", {
         "report": report_dict,
         "report_json": json.dumps(report_dict, ensure_ascii=False),
         "job_id": job_id,
@@ -338,8 +346,7 @@ async def demo_report_page(request: Request):
         "result": report_dict,
         "error": None,
     }
-    return templates.TemplateResponse("report.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "report.html", {
         "report": report_dict,
         "report_json": json.dumps(report_dict, ensure_ascii=False),
         "job_id": demo_job_id,
@@ -385,8 +392,7 @@ async def demo_dashboard_page(request: Request):
         })
 
     sub_info = _credit_manager.get_subscription_info("default")
-    return templates.TemplateResponse("dashboard.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "dashboard.html", {
         "jobs": jobs_list,
         "credits": sub_info.get("credits", 0),
     })
