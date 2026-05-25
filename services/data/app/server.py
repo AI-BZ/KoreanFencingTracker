@@ -57,7 +57,10 @@ from ranking.selection_points import (
 )
 
 # 선수 식별 시스템
-from app.player_identity import PlayerIdentityResolver, PlayerProfile as IdentityProfile
+from app.player_identity import PlayerIdentityResolver, PlayerProfile as IdentityProfile, is_team_event
+
+# 조직 유형 분류 (org_type audit)
+from app.organization_identity import detect_org_type, OrganizationType
 
 # DE 대진표 정규화 및 순위 계산
 from app.bracket_utils import normalize_bracket_data, NormalizedBracket, compute_full_final_rankings
@@ -588,9 +591,12 @@ _data_source: str = "supabase"  # 현재 데이터 소스 (Supabase 전용)
 _identity_resolver: Optional[PlayerIdentityResolver] = None  # 선수 식별 시스템
 _fencinglab_analyzer = None  # FencingLab 분석기 (지연 로딩)
 _org_region_cache: Dict[str, Dict[str, str]] = {}  # 조직명 → {province, city}
+_org_translation_cache: Dict[str, str] = {}  # 조직명(한국어) → 영문명 캐시
+_player_translation_cache: Dict[str, str] = {}  # 선수명(한국어) → 영문명 캐시
 _quality_monitor: Optional["DataQualityMonitor"] = None  # 데이터 품질 모니터
 _grade_estimator = None  # 학년 추정기
 _selection_calculator: Optional[SelectionPointCalculator] = None  # 선발 포인트 계산기
+_team_event_index: Dict[str, List[Dict]] = {}  # 조직명 → 단체전 결과 목록
 
 
 # ==================== Pydantic Models ====================
@@ -667,6 +673,11 @@ class PlayerProfile(BaseModel):
     stats: Dict[str, Any]
 
 
+class EnglishNameUpdate(BaseModel):
+    """영문명 수정 요청"""
+    english_name: str
+
+
 class CompetitionSummary(BaseModel):
     event_cd: str
     name: str
@@ -679,6 +690,20 @@ class CompetitionSummary(BaseModel):
 
 
 # ==================== i18n Helper Functions ====================
+
+def _translate_grade(grade: str, lang: str) -> str:
+    """학년 표기 번역 (예: '1학년' → 'Year 1')"""
+    if lang == 'ko' or not grade:
+        return grade
+    import re
+    m = re.match(r'(\d+)학년', grade)
+    if m:
+        return f"Year {m.group(1)}"
+    if grade == '미확인':
+        return {'en': 'Unknown', 'ja': '未確認', 'zh': '未确认',
+                'fr': 'Inconnu', 'it': 'Sconosciuto', 'tr': 'Bilinmiyor'}.get(lang, grade)
+    return grade
+
 
 def get_i18n_template_context(request: Request, lang: str = None) -> Dict[str, Any]:
     """
@@ -708,6 +733,9 @@ def get_i18n_template_context(request: Request, lang: str = None) -> Dict[str, A
         '_js_t': get_js_translations(lang),
         'tr_event': lambda name: translate_event_name(name, lang),
         'tr_comp': lambda name: translate_competition_name(name, lang),
+        'tr_team': lambda name: get_localized_org_name_sync(name, lang) if name else '',
+        'tr_player': lambda name: get_localized_player_name_sync(name, lang) if name else '',
+        'tr_grade': lambda grade: _translate_grade(grade, lang),
         '_js_comp_names': get_js_competition_names(lang, [c.get('competition', {}).get('name', '') for c in get_competitions()]) if lang != 'ko' else {},
     }
 
@@ -741,7 +769,7 @@ def get_localized_name(record: Dict, lang: str, name_field: str = "name") -> str
 
 def localize_player_data(player: Dict, lang: str) -> Dict:
     """
-    선수 데이터에 display_name 필드 추가.
+    선수 데이터에 display_name, display_team 필드 추가.
 
     Args:
         player: 선수 데이터 (player_name, team_name, translations 포함)
@@ -753,11 +781,71 @@ def localize_player_data(player: Dict, lang: str) -> Dict:
     result = dict(player)
     result['display_name'] = get_localized_name(player, lang, 'player_name')
 
-    # 팀명도 번역 (organization의 translations 사용)
-    # team_name은 직접 번역하지 않고 원본 유지 (org는 별도 처리 필요)
-    result['display_team'] = player.get('team_name', '')
+    # 팀명 번역: 캐시 → TranslationService fallback
+    team_name = player.get('team_name', '')
+    if lang == 'ko' or not team_name:
+        result['display_team'] = team_name
+    else:
+        result['display_team'] = get_localized_org_name_sync(team_name, lang)
 
     return result
+
+
+def get_localized_org_name_sync(org_name: str, lang: str) -> str:
+    """
+    동기식 조직명 번역 (캐시 → TranslationService fallback).
+
+    API 엔드포인트가 아닌 데이터 가공 레이어에서 사용.
+    """
+    if lang == 'ko' or not org_name:
+        return org_name
+
+    # 1. 인메모리 캐시 확인
+    cached = _org_translation_cache.get(org_name)
+    if cached:
+        return cached
+
+    # 2. TranslationService로 번역 생성
+    ts = get_ts()
+    translation = ts.translate_organization_name(org_name)
+    en_name = translation.get('en', {}).get('name', '')
+    if en_name:
+        _org_translation_cache[org_name] = en_name
+        return en_name
+
+    return org_name
+
+
+def get_localized_player_name_sync(player_name: str, lang: str) -> str:
+    """
+    동기식 선수명 번역 (캐시 → TranslationService fallback).
+
+    우선순위: ko 원본 → 캐시(DB 번역) → TranslationService 자동 로마자 → 원본
+    """
+    if lang == 'ko' or not player_name:
+        return player_name
+
+    # 이미 라틴 문자(영문) 이름이면 변환 불필요
+    if all(c.isascii() or c in ' -' for c in player_name):
+        return player_name
+
+    # 1. 인메모리 캐시 확인
+    cached = _player_translation_cache.get(player_name)
+    if cached:
+        return cached
+
+    # 2. TranslationService로 로마자 변환
+    try:
+        ts = get_ts()
+        translation = ts.translate_player_name(player_name)
+        en_name = translation.get('en', {}).get('name', '')
+        if en_name:
+            _player_translation_cache[player_name] = en_name
+            return en_name
+    except Exception as e:
+        logger.debug(f"선수명 번역 실패 ({player_name}): {e}")
+
+    return player_name
 
 
 async def get_localized_player_name(supabase: "Client", player_name: str, lang: str) -> str:
@@ -901,6 +989,122 @@ def build_org_region_cache() -> Dict[str, Dict[str, str]]:
     except Exception as e:
         logger.error(f"조직 지역 캐시 빌드 실패: {e}")
         return {}
+
+
+def audit_org_types():
+    """서버 시작 시 org_type 감사: 캐시의 org_type vs 분류 로직 비교, 불일치 로그"""
+    logger.info(f"org_type 감사 시작 (캐시 {len(_org_region_cache)}건)...")
+    if not _org_region_cache:
+        logger.warning("org_type 감사 건너뜀: _org_region_cache 비어있음")
+        return
+
+    # OrganizationType enum value → DB style string
+    _ORG_TYPE_TO_STR = {
+        "C": "club", "E": "elementary", "M": "middle", "H": "high",
+        "V": "university", "A": "professional", "N": "national", "X": "unknown",
+    }
+    # DB에는 association/international_school이 별도 타입으로 존재
+    # 분류 로직에서는 national/high로 매핑되므로 동치로 간주
+    _EQUIVALENT_TYPES = {"association": "national", "international_school": "high"}
+
+    mismatches = []
+    errors = []
+    for name, info in _org_region_cache.items():
+        cached_type = info.get("org_type", "")
+        if not cached_type:
+            continue
+
+        try:
+            detected = detect_org_type(name)
+            detected_str = _ORG_TYPE_TO_STR.get(detected.value, detected.value)
+        except Exception as e:
+            errors.append({"name": name, "error": str(e)})
+            continue
+
+        # detected=unknown은 자동분류 불가일 뿐 DB 오류가 아님 → 건너뜀
+        if detected_str == "unknown":
+            continue
+
+        # 동치 타입 정규화 후 비교
+        normalized_cached = _EQUIVALENT_TYPES.get(cached_type, cached_type)
+        if normalized_cached != detected_str:
+            mismatches.append({
+                "name": name,
+                "cached": cached_type,
+                "detected": detected_str,
+            })
+
+    if errors:
+        logger.error(f"org_type 감사 중 오류 {len(errors)}건:")
+        for e in errors[:5]:
+            logger.error(f"  {e['name']}: {e['error']}")
+
+    if mismatches:
+        logger.warning(
+            f"⚠️ org_type 불일치 {len(mismatches)}건 발견 (캐시 vs 분류 로직):"
+        )
+        for m in mismatches[:20]:  # 상위 20건만 로그
+            logger.warning(
+                f"  {m['name']}: DB={m['cached']} → should be {m['detected']}"
+            )
+        if len(mismatches) > 20:
+            logger.warning(f"  ... 외 {len(mismatches) - 20}건")
+    else:
+        logger.info("✅ org_type 감사 통과: 불일치 0건")
+
+
+def build_org_translation_cache():
+    """organizations 테이블의 translations에서 조직명→영문명 캐시 빌드"""
+    global _org_translation_cache
+    if not _supabase_client:
+        return
+
+    try:
+        result = _supabase_client.table("organizations").select(
+            "name, translations"
+        ).execute()
+
+        cache = {}
+        for org in (result.data or []):
+            name = org.get("name", "")
+            translations = org.get("translations")
+            if not name or not isinstance(translations, dict):
+                continue
+            en_data = translations.get("en", {})
+            if isinstance(en_data, dict) and en_data.get("name"):
+                cache[name] = en_data["name"]
+
+        _org_translation_cache = cache
+        logger.info(f"조직 번역 캐시 빌드: {len(cache)}개")
+    except Exception as e:
+        logger.error(f"조직 번역 캐시 빌드 실패: {e}")
+
+
+def build_player_translation_cache():
+    """players 테이블의 translations에서 선수명→영문명 캐시 빌드"""
+    global _player_translation_cache
+    if not _supabase_client:
+        return
+
+    try:
+        result = _supabase_client.table("players").select(
+            "player_name, translations"
+        ).execute()
+
+        cache = {}
+        for player in (result.data or []):
+            name = player.get("player_name", "")
+            translations = player.get("translations")
+            if not name or not isinstance(translations, dict):
+                continue
+            en_data = translations.get("en", {})
+            if isinstance(en_data, dict) and en_data.get("name"):
+                cache[name] = en_data["name"]
+
+        _player_translation_cache = cache
+        logger.info(f"선수 번역 캐시 빌드: {len(cache)}개")
+    except Exception as e:
+        logger.error(f"선수 번역 캐시 빌드 실패: {e}")
 
 
 def get_team_region_display(team_name: str) -> str:
@@ -1301,8 +1505,13 @@ def build_player_index():
         year = int(comp_date[:4]) if comp_date else 0
 
         for event in comp.get("events", []):
-            sub_event_cd = event.get("sub_event_cd", "")
             event_name = event.get("name", "")
+
+            # 단체전 이벤트는 선수 인덱스에서 제외 (팀명이 개인 선수로 등록되는 것 방지)
+            if is_team_event(event_name):
+                continue
+
+            sub_event_cd = event.get("sub_event_cd", "")
             age_group = event.get("age_group") or extract_age_group(event_name)
 
             # 참가자 수 계산 우선순위:
@@ -1574,8 +1783,13 @@ def build_competition_player_cache():
         players_list = []
 
         for event in comp.get("events", []):
-            sub_event_cd = event.get("sub_event_cd", "")
             event_name = event.get("name", "")
+
+            # 단체전 이벤트는 개인 선수 캐시에서 제외
+            if is_team_event(event_name):
+                continue
+
+            sub_event_cd = event.get("sub_event_cd", "")
 
             # Pool에서 선수 추출
             for pool in event.get("pool_rounds", []):
@@ -1615,6 +1829,53 @@ def build_competition_player_cache():
         _competition_player_cache[event_cd] = players_list
 
     logger.info(f"대회별 선수 캐시 구축 완료: {len(_competition_player_cache)}개 대회")
+
+
+def build_team_event_index():
+    """단체전 이벤트 인덱스 구축 (조직명 → 단체전 결과 목록)
+
+    단체전 final_rankings의 name 필드에는 팀명(학교/클럽명)이 저장되어 있음.
+    이를 조직(organization)별로 인덱싱하여 단체전 성적 조회에 활용.
+
+    단체전 DE 대진표 조사 결과 (Task A4):
+    - DE bracket의 bouts에는 팀 vs 팀 결과만 존재 (예: "개양중학교" vs "울산선발", 45-28)
+    - player1_name / player2_name에 조직명이 들어가며, 개별 선수 bout 데이터는 없음
+    - KFF 웹사이트 자체가 단체전의 개별 선수 경기를 제공하지 않으므로 스크래퍼도 수집 불가
+    - 따라서 현재는 final_rankings에서 팀 단위 결과(순위)만 추출하여 인덱싱
+    """
+    global _team_event_index
+    _team_event_index = defaultdict(list)
+
+    for comp in _data_cache.get("competitions", []):
+        comp_info = comp.get("competition", {})
+        comp_name = comp_info.get("name", "")
+        comp_date = comp_info.get("start_date", "")
+
+        for event in comp.get("events", []):
+            event_name = event.get("name", "")
+
+            if not is_team_event(event_name):
+                continue
+
+            weapon = event.get("weapon", "")
+            gender = event.get("gender", "")
+
+            for ranking in event.get("final_rankings", []):
+                org_name = (ranking.get("name") or "").strip()
+                if not org_name:
+                    continue
+
+                record = {
+                    "competition_name": comp_name,
+                    "date": comp_date,
+                    "event_name": event_name,
+                    "weapon": weapon,
+                    "gender": gender,
+                    "rank": ranking.get("rank"),
+                }
+                _team_event_index[org_name].append(record)
+
+    logger.info(f"단체전 인덱스 구축 완료: {len(_team_event_index)}개 조직")
 
 
 def build_filter_options():
@@ -1883,6 +2144,10 @@ def build_identity_resolver():
     global _identity_resolver
     _identity_resolver = PlayerIdentityResolver()
 
+    # 조직 지역 캐시 주입 (지역 인식 동명이인 분리)
+    if _org_region_cache:
+        _identity_resolver.set_org_region_cache(_org_region_cache)
+
     for comp_data in _data_cache.get("competitions", []):
         _identity_resolver.add_competition_data(comp_data)
 
@@ -1929,8 +2194,12 @@ def load_data():
     build_filter_options()
     build_player_index()
     build_competition_player_cache()  # 대회별 선수 캐시 (자동완성 최적화)
+    build_team_event_index()  # 단체전 조직별 결과 인덱스
+    build_org_region_cache()  # 조직→지역 캐시 (참가선수 탭 + 동명이인 지역 인식)
     build_identity_resolver()
-    build_org_region_cache()  # 조직→지역 캐시 (참가선수 탭)
+    audit_org_types()  # org_type 분류 로직 vs DB 불일치 감사
+    build_org_translation_cache()  # 조직→영문명 캐시 (i18n)
+    build_player_translation_cache()  # 선수→영문명 캐시 (i18n)
 
     # 학년 추정기 캐시 구축
     global _grade_estimator
@@ -1967,7 +2236,7 @@ def load_data():
         try:
             from app.data_validator import DataValidator
             logger.info("[DataValidator] 백그라운드 검증 시작...")
-            validator = DataValidator(get_competitions())
+            validator = DataValidator(get_competitions(), org_cache=_org_region_cache)
             issues = validator.validate_all()
             errors = [i for i in issues if i.severity == "ERROR"]
             warnings = [i for i in issues if i.severity == "WARNING"]
@@ -2360,6 +2629,7 @@ async def api_player_search(
     """
     q_lower = q.lower()
     matches = []
+    lang = getattr(request.state, 'lang', DEFAULT_LANGUAGE)
 
     # 선수 식별 시스템 사용
     if _identity_resolver:
@@ -2368,6 +2638,7 @@ async def api_player_search(
         for profile in search_results:
             matches.append({
                 "name": profile.name,
+                "display_name": get_localized_player_name_sync(profile.name, lang),
                 "name_en": profile.name_en,
                 "player_id": profile.player_id,
                 "teams": profile.teams,
@@ -2432,11 +2703,37 @@ async def api_player_search(
     # 기록 많은 순 정렬
     matches.sort(key=lambda x: x["record_count"], reverse=True)
 
+    # 단체전 결과 검색: 검색어와 매칭되는 조직의 단체전 결과 포함
+    team_event_results = []
+    for org_name, records in _team_event_index.items():
+        if q_lower in org_name.lower():
+            # 성별/무기별 그룹화
+            grouped: Dict[str, List[Dict]] = defaultdict(list)
+            for r in records:
+                key = f"{r['gender']}_{r['weapon']}"
+                grouped[key].append(r)
+
+            team_event_results.append({
+                "org_name": org_name,
+                "total_results": len(records),
+                "results": sorted(records, key=lambda x: x.get("date", ""), reverse=True),
+                "by_category": [
+                    {"category": k, "count": len(v)}
+                    for k, v in sorted(grouped.items())
+                ]
+            })
+    team_event_results.sort(key=lambda x: x["total_results"], reverse=True)
+
     # 접근 등급별 필터링: guest는 소속 정보 blur + 결과 수 제한
     access_level, _ = await get_access_level(request)
     total_count = len(matches)
     final_matches = matches[:limit]
-    response = {"results": final_matches, "total": total_count, "access_level": access_level}
+    response = {
+        "results": final_matches,
+        "total": total_count,
+        "access_level": access_level,
+        "team_events": team_event_results,
+    }
 
     if access_level == "guest":
         GUEST_SEARCH_LIMIT = 5
@@ -3249,13 +3546,29 @@ async def api_players_autocomplete(
 
     unique_suggestions.sort(key=lambda x: x["name"])
 
+    # i18n: 영문 표시 이름 추가
+    lang = getattr(request.state, 'lang', DEFAULT_LANGUAGE)
+    if lang != 'ko':
+        ts = get_translation_service()
+        for s in unique_suggestions:
+            # Translate player name
+            name_translation = ts.translate_player_name(s["name"])
+            en_name = name_translation.get("en", {}).get("name", "")
+            s["display_name"] = en_name if en_name else s["name"]
+            # Translate team name
+            team = s.get("team", "")
+            s["display_team"] = get_localized_org_name_sync(team, lang) if team else ""
+            # Update display
+            s["display"] = f"{s['display_name']} {s['display_team']}" if s["display_team"] else s["display_name"]
+
     # Guest: 소속 정보 blur
     access_level, _ = await get_access_level(request)
     final_suggestions = unique_suggestions[:limit]
     if access_level == "guest":
         for s in final_suggestions:
             s["team"] = None
-            s["display"] = s["name"]  # 이름만 표시
+            s["display_team"] = None
+            s["display"] = s.get("display_name", s["name"])  # 이름만 표시
             s["blurred"] = True
 
     return {
@@ -4334,7 +4647,9 @@ async def api_rankings(
     year: Optional[int] = Query(None, description="시즌 연도"),
     lang: str = Query("ko", description="언어 코드 (ko/en)"),
     page: int = Query(1, ge=1),
-    per_page: int = Query(50, ge=1, le=200)
+    per_page: int = Query(50, ge=1, le=200),
+    excl_national: bool = Query(False, description="전국체전/소년체전 제외"),
+    excl_selection: bool = Query(False, description="선발전 제외")
 ):
     """
     랭킹 조회 API
@@ -4379,7 +4694,9 @@ async def api_rankings(
         age_group=age_group if not is_national_team else None,  # NT는 모든 연령대 포함
         category=category,
         year=year,
-        national_team_only=is_national_team  # 국가대표 선발대회만 필터
+        national_team_only=is_national_team,  # 국가대표 선발대회만 필터
+        excl_national=excl_national,
+        excl_selection=excl_selection
     )
 
     # 접근 등급별 필터링: guest는 상위 10명 숨김
@@ -4432,8 +4749,8 @@ async def api_rankings(
     # 선수 이름과 팀명 번역 준비
     ranking_entries = []
     for r in page_rankings:
-        # 선수 이름 번역
-        display_name = await get_localized_player_name(_supabase_client, r.player_name, lang)
+        # 선수 이름 번역 (동기식 캐시 사용)
+        display_name = get_localized_player_name_sync(r.player_name, lang)
 
         # 팀 이름들 번역
         teams_to_use = r.teams
@@ -4449,7 +4766,7 @@ async def api_rankings(
 
         display_teams = []
         for team in teams_to_use:
-            display_team = await get_localized_org_name(_supabase_client, team, lang)
+            display_team = get_localized_org_name_sync(team, lang)
             display_teams.append(display_team)
 
         ranking_entries.append(RankingEntry(
@@ -5448,6 +5765,22 @@ def enrich_records_with_match_details(records: list, player_name: str) -> list:
     return enriched
 
 
+def _build_rank_chart_data(enriched_records: list) -> list:
+    """Build chart data for rank progression line chart (최근 20개 대회)"""
+    chart_data = []
+    for r in sorted(enriched_records, key=lambda x: x.get("competition_date", "")):
+        rank = r.get("rank")
+        if rank and rank <= 64 and not r.get("is_in_progress"):
+            chart_data.append({
+                "label": (r.get("competition_name") or "")[:15],
+                "date": r.get("competition_date", ""),
+                "event": r.get("event_name", ""),
+                "rank": rank,
+                "total": r.get("total_participants", 0),
+            })
+    return chart_data[-20:]
+
+
 @app.get("/player/{player_name}", response_class=HTMLResponse)
 async def player_page(
     request: Request,
@@ -5886,6 +6219,7 @@ async def player_page(
         "recent_period_label": recent_period_label,  # "2025~2026"
         "recent_event_count": recent_event_count,  # 최근 기간 대회 수
         "records_summary": records_summary,  # Summary 탭 메달 클릭용 경량 데이터
+        "chart_data": _build_rank_chart_data(enriched_records),
         "upcoming_events": [],
         "has_disambiguation": has_disambiguation,
         "other_profiles": other_profiles,
@@ -5949,6 +6283,86 @@ async def player_page_i18n(
     if lang not in SUPPORTED_LANGUAGES:
         raise HTTPException(status_code=404, detail="Not Found")
     return await player_page(request, player_name, id, team, strength_start, strength_end, strength_years)
+
+
+@app.get("/player/{player_name}/h2h/{opponent_name}", response_class=HTMLResponse)
+async def player_h2h_page(
+    request: Request,
+    player_name: str,
+    opponent_name: str,
+):
+    """Head-to-Head 전적 상세 페이지"""
+    # 선수 기록 조회
+    records = _player_index.get(player_name, [])
+    if not records:
+        raise HTTPException(status_code=404, detail="선수를 찾을 수 없습니다")
+
+    # 상대 전적 계산 (기존 함수 재사용)
+    all_h2h = calculate_head_to_head(player_name, records)
+    opponent_h2h = None
+    for h in all_h2h:
+        if h["name"] == opponent_name:
+            opponent_h2h = h
+            break
+
+    if not opponent_h2h:
+        raise HTTPException(status_code=404, detail="상대 전적을 찾을 수 없습니다")
+
+    # 총 득점 합산
+    my_total_score = 0
+    opp_total_score = 0
+    for m in opponent_h2h.get("matches", []):
+        score_parts = m.get("score", "0-0").split("-")
+        if len(score_parts) == 2:
+            try:
+                my_total_score += int(score_parts[0])
+                opp_total_score += int(score_parts[1])
+            except (ValueError, TypeError):
+                pass
+
+    # 선수 프로필 정보
+    player_team = ""
+    player_weapon = ""
+    if _identity_resolver:
+        profiles = _identity_resolver.get_players_by_name(player_name)
+        if profiles:
+            player_team = profiles[0].current_team or ""
+    opp_team = opponent_h2h.get("team", "")
+
+    h2h_data = {
+        "player_name": player_name,
+        "player_team": player_team,
+        "opponent_name": opponent_name,
+        "opponent_team": opp_team,
+        "wins": opponent_h2h["wins"],
+        "losses": opponent_h2h["losses"],
+        "total_matches": opponent_h2h["wins"] + opponent_h2h["losses"],
+        "win_rate": opponent_h2h.get("win_rate", 0),
+        "my_total_score": my_total_score,
+        "opp_total_score": opp_total_score,
+        "matches": sorted(opponent_h2h.get("matches", []), key=lambda x: x.get("date", ""), reverse=True),
+    }
+
+    context = {
+        "request": request,
+        "h2h": h2h_data,
+        "title": f"{player_name} vs {opponent_name} - Head to Head",
+        **get_i18n_template_context(request),
+    }
+    return templates.TemplateResponse("h2h.html", context)
+
+
+@app.get("/{lang}/player/{player_name}/h2h/{opponent_name}", response_class=HTMLResponse)
+async def player_h2h_page_i18n(
+    request: Request,
+    lang: str,
+    player_name: str,
+    opponent_name: str,
+):
+    """Language-prefixed H2H page - delegates to main"""
+    if lang not in SUPPORTED_LANGUAGES:
+        raise HTTPException(status_code=404, detail="Not Found")
+    return await player_h2h_page(request, player_name, opponent_name)
 
 
 def _extract_bout_player_info(bout: Dict) -> Dict:
@@ -6398,6 +6812,51 @@ async def competition_detail_page(request: Request, event_cd: str, event: Option
 
             # 언어 감지: request.state에서 가져옴 (미들웨어에서 설정)
             lang = getattr(request.state, 'lang', DEFAULT_LANGUAGE)
+
+            # i18n: 팀명 번역 맵 생성 (JS에서 사용)
+            team_translation_map = {}
+            if lang != 'ko':
+                all_teams = set()
+                for p in selected_event.get("participants", []):
+                    t = p.get("team", "")
+                    if t:
+                        all_teams.add(t)
+                for r in selected_event.get("final_rankings", []):
+                    t = r.get("team", "")
+                    if t:
+                        all_teams.add(t)
+                for pool in selected_event.get("pool_rounds", []):
+                    for r in pool.get("results", []):
+                        t = r.get("team", "")
+                        if t:
+                            all_teams.add(t)
+                for team in all_teams:
+                    en = get_localized_org_name_sync(team, lang)
+                    if en != team:
+                        team_translation_map[team] = en
+
+            # i18n: 선수명 번역 맵 생성 (JS에서 사용)
+            player_translation_map = {}
+            if lang != 'ko':
+                all_players = set()
+                for p in selected_event.get("participants", []):
+                    n = p.get("name", "")
+                    if n:
+                        all_players.add(n)
+                for r in selected_event.get("final_rankings", []):
+                    n = r.get("name", "")
+                    if n:
+                        all_players.add(n)
+                for pool in selected_event.get("pool_rounds", []):
+                    for r in pool.get("results", []):
+                        n = r.get("name", "")
+                        if n:
+                            all_players.add(n)
+                for player_name in all_players:
+                    en = get_localized_player_name_sync(player_name, lang)
+                    if en != player_name:
+                        player_translation_map[player_name] = en
+
             return templates.TemplateResponse("event_result.html", {
                 "request": request,
                 "competition": comp,
@@ -6405,6 +6864,8 @@ async def competition_detail_page(request: Request, event_cd: str, event: Option
                 "team_regions": team_regions,
                 "region_summary": region_summary,
                 "player_region_grade": player_region_grade,
+                "team_translation_map": team_translation_map,
+                "player_translation_map": player_translation_map,
                 **get_i18n_template_context(request, lang)
             })
 
@@ -6429,10 +6890,59 @@ async def competition_detail_page(request: Request, event_cd: str, event: Option
 
     # 언어 감지: request.state에서 가져옴 (미들웨어에서 설정)
     lang = getattr(request.state, 'lang', DEFAULT_LANGUAGE)
+
+    # i18n: 팀명 번역 맵 생성 (JS에서 사용)
+    team_translation_map = {}
+    if lang != 'ko':
+        all_teams = set()
+        for evt in comp.get("events", []):
+            for p in evt.get("participants", []):
+                t = p.get("team", "")
+                if t:
+                    all_teams.add(t)
+            for r in evt.get("final_rankings", []):
+                t = r.get("team", "")
+                if t:
+                    all_teams.add(t)
+            for pool in evt.get("pool_rounds", []):
+                for r in pool.get("results", []):
+                    t = r.get("team", "")
+                    if t:
+                        all_teams.add(t)
+        for team in all_teams:
+            en = get_localized_org_name_sync(team, lang)
+            if en != team:
+                team_translation_map[team] = en
+
+    # i18n: 선수명 번역 맵 생성 (JS에서 사용)
+    player_translation_map = {}
+    if lang != 'ko':
+        all_player_names = set()
+        for evt in comp.get("events", []):
+            for p in evt.get("participants", []):
+                n = p.get("name", "")
+                if n:
+                    all_player_names.add(n)
+            for r in evt.get("final_rankings", []):
+                n = r.get("name", "")
+                if n:
+                    all_player_names.add(n)
+            for pool in evt.get("pool_rounds", []):
+                for r in pool.get("results", []):
+                    n = r.get("name", "")
+                    if n:
+                        all_player_names.add(n)
+        for player_name in all_player_names:
+            en = get_localized_player_name_sync(player_name, lang)
+            if en != player_name:
+                player_translation_map[player_name] = en
+
     return templates.TemplateResponse("competition.html", {
         "request": request,
         "competition": comp,
         "comp_stats": comp_stats,
+        "team_translation_map": team_translation_map,
+        "player_translation_map": player_translation_map,
         **get_i18n_template_context(request, lang)
     })
 
@@ -6547,16 +7057,16 @@ async def fencinglab_tracked_players(
     # 각 선수에 대해 기본 통계 추가
     result = {}
     for club_name, players in all_players.items():
-        # 클럽명 번역
-        display_club = await get_localized_org_name(_supabase_client, club_name, lang) if _supabase_client else club_name
+        # 클럽명 번역 (동기식 캐시 사용)
+        display_club = get_localized_org_name_sync(club_name, lang)
 
         club_data = []
         for p in players:
             analytics = analyzer.analyze_player(p["name"], p["team"])
 
-            # 선수명, 팀명 번역
-            display_name = await get_localized_player_name(_supabase_client, p["name"], lang) if _supabase_client else p["name"]
-            display_team = await get_localized_org_name(_supabase_client, p["team"], lang) if _supabase_client else p["team"]
+            # 선수명, 팀명 번역 (동기식 캐시 사용)
+            display_name = get_localized_player_name_sync(p["name"], lang)
+            display_team = get_localized_org_name_sync(p["team"], lang)
 
             if analytics:
                 club_data.append({
@@ -7190,6 +7700,160 @@ async def selection_national_team_page(
     return templates.TemplateResponse("selection_national.html", context)
 
 
+# ==================== 선발 포인트 - 다국어 라우트 ====================
+
+@app.get("/{lang}/selection/kkumnamu/summary", response_class=HTMLResponse)
+async def selection_kkumnamu_summary_page_i18n(request: Request, lang: str):
+    """꿈나무 선발 요약 - 다국어"""
+    if lang not in SUPPORTED_LANGUAGES:
+        raise HTTPException(status_code=404)
+    return await selection_kkumnamu_summary_page(request)
+
+
+@app.get("/{lang}/selection/kkumnamu", response_class=HTMLResponse)
+async def selection_kkumnamu_page_i18n(
+    request: Request, lang: str,
+    year: int = 0, weapon: str = "foil", gender: str = "남",
+):
+    """꿈나무 선발 순위 - 다국어"""
+    if lang not in SUPPORTED_LANGUAGES:
+        raise HTTPException(status_code=404)
+    return await selection_kkumnamu_page(request, year, weapon, gender)
+
+
+@app.get("/{lang}/selection/national-team/summary", response_class=HTMLResponse)
+async def selection_national_team_summary_page_i18n(request: Request, lang: str):
+    """청소년 대표 선발 요약 - 다국어"""
+    if lang not in SUPPORTED_LANGUAGES:
+        raise HTTPException(status_code=404)
+    return await selection_national_team_summary_page(request)
+
+
+@app.get("/{lang}/selection/national-team", response_class=HTMLResponse)
+async def selection_national_team_page_i18n(
+    request: Request, lang: str,
+    year: int = 0, weapon: str = "foil", gender: str = "남",
+):
+    """청소년 대표 선발 순위 - 다국어"""
+    if lang not in SUPPORTED_LANGUAGES:
+        raise HTTPException(status_code=404)
+    return await selection_national_team_page(request, year, weapon, gender)
+
+
+# ==================== 영문명 수정 API ====================
+
+@app.put("/api/player/me/english-name")
+async def update_my_english_name(request: Request, body: EnglishNameUpdate):
+    """본인 영문명 수정 API (JWT 인증 필요, member.player_id로 선수 특정)"""
+    member = await get_current_member(request)
+    if not member:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다")
+
+    player_id = member.get("player_id")
+    if not player_id:
+        raise HTTPException(status_code=400, detail="연결된 선수 프로필이 없습니다")
+
+    english_name = body.english_name.strip()
+    if not english_name:
+        raise HTTPException(status_code=400, detail="영문명을 입력해주세요")
+
+    try:
+        # 선수 조회
+        result = _supabase_client.table("players").select(
+            "id, player_name, translations"
+        ).eq("id", player_id).limit(1).execute()
+
+        if not result.data:
+            raise HTTPException(status_code=404, detail="선수 프로필을 찾을 수 없습니다")
+
+        player = result.data[0]
+        player_name = player["player_name"]
+        translations = player.get("translations") or {}
+
+        # translations.en 업데이트
+        translations["en"] = {
+            **(translations.get("en", {})),
+            "name": english_name,
+            "verified": True,
+            "source": "self_verified",
+            "updated_at": datetime.utcnow().isoformat() + "Z",
+        }
+
+        _supabase_client.table("players").update(
+            {"translations": translations}
+        ).eq("id", player_id).execute()
+
+        # 캐시 즉시 갱신
+        _player_translation_cache[player_name] = english_name
+
+        return {"success": True, "player_name": player_name, "english_name": english_name}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"영문명 수정 실패: {e}")
+        raise HTTPException(status_code=500, detail="영문명 수정에 실패했습니다")
+
+
+@app.put("/api/player/{player_name}/english-name")
+async def update_player_english_name(request: Request, player_name: str, body: EnglishNameUpdate):
+    """관리자/코치 영문명 수정 API (admin/coach/head_coach/owner 권한 필요)"""
+    member = await get_current_member(request)
+    if not member:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다")
+
+    # 권한 확인: admin, coach, head_coach, owner만 허용
+    club_role = member.get("club_role", "")
+    member_type = member.get("member_type", "")
+    allowed_roles = {"admin", "coach", "head_coach", "owner"}
+    if club_role not in allowed_roles and member_type != "admin":
+        raise HTTPException(status_code=403, detail="영문명 수정 권한이 없습니다")
+
+    english_name = body.english_name.strip()
+    if not english_name:
+        raise HTTPException(status_code=400, detail="영문명을 입력해주세요")
+
+    try:
+        from urllib.parse import unquote
+        decoded_name = unquote(player_name)
+
+        # 선수 조회
+        result = _supabase_client.table("players").select(
+            "id, player_name, translations"
+        ).eq("player_name", decoded_name).limit(1).execute()
+
+        if not result.data:
+            raise HTTPException(status_code=404, detail=f"선수 '{decoded_name}'을 찾을 수 없습니다")
+
+        player = result.data[0]
+        translations = player.get("translations") or {}
+
+        # translations.en 업데이트
+        translations["en"] = {
+            **(translations.get("en", {})),
+            "name": english_name,
+            "verified": True,
+            "source": "admin_verified",
+            "verified_by": member.get("id"),
+            "updated_at": datetime.utcnow().isoformat() + "Z",
+        }
+
+        _supabase_client.table("players").update(
+            {"translations": translations}
+        ).eq("id", player["id"]).execute()
+
+        # 캐시 즉시 갱신
+        _player_translation_cache[decoded_name] = english_name
+
+        return {"success": True, "player_name": decoded_name, "english_name": english_name}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"영문명 수정 실패 ({player_name}): {e}")
+        raise HTTPException(status_code=500, detail="영문명 수정에 실패했습니다")
+
+
 # ==================== 데이터 새로고침 API ====================
 
 @app.post("/api/refresh-data")
@@ -7210,10 +7874,13 @@ async def refresh_data_cache():
         # 2. 선수 인덱스 및 캐시 재구축
         build_player_index()
         build_competition_player_cache()
+        build_team_event_index()
 
         # 3. identity_resolver 재구축 (핵심 - current_team 올바르게 반영)
+        build_org_region_cache()  # 지역 캐시 먼저 (resolver가 참조)
         build_identity_resolver()
-        build_org_region_cache()
+        build_org_translation_cache()
+        build_player_translation_cache()
 
         # 4. 학년 추정기 재구축
         global _grade_estimator
@@ -7299,7 +7966,7 @@ async def run_scheduler_now(task_type: str = "detect"):
 async def api_validate_data():
     """전체 데이터 무결성 검증"""
     from app.data_validator import DataValidator
-    validator = DataValidator(get_competitions())
+    validator = DataValidator(get_competitions(), org_cache=_org_region_cache)
     issues = validator.validate_all()
 
     errors = [i.to_dict() for i in issues if i.severity == "ERROR"]
@@ -7324,7 +7991,7 @@ async def api_validate_data():
 async def api_validate_player(player_name: str):
     """특정 선수 데이터 검증"""
     from app.data_validator import DataValidator
-    validator = DataValidator(get_competitions())
+    validator = DataValidator(get_competitions(), org_cache=_org_region_cache)
     issues = validator.validate_player(player_name)
 
     return {

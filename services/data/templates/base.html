@@ -76,7 +76,7 @@
                 <a href="/{{ lang|default('ko') }}/">{{ _t('검색') }}</a>
                 <a href="/{{ lang|default('ko') }}/competitions">{{ _t('대회 목록') }}</a>
                 <a href="/{{ lang|default('ko') }}/rankings">{{ _t('랭킹') }}</a>
-                <a href="/selection/kkumnamu/summary">{{ _t('선발 포인트') }}</a>
+                <a href="/{{ lang|default('ko') }}/selection/kkumnamu/summary">{{ _t('선발 포인트') }}</a>
                 <a href="/{{ lang|default('ko') }}/fencinglab">FencingLab</a>
             </div>
             <div class="search-box">
@@ -158,7 +158,7 @@
                 document.body.classList.add('authenticated');
                 const authNav = document.getElementById('authNav');
                 authNav.innerHTML = `
-                    <a href="https://account.fencingmind.ai/auth/verification" class="auth-btn profile-btn">
+                    <a href="https://account.fencingmind.ai/account/me" class="auth-btn profile-btn">
                         ${member.display_name || member.full_name[0]}
                     </a>
                 `;

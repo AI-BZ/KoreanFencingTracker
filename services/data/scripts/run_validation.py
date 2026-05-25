@@ -64,11 +64,41 @@ for cid, events in competitions_by_comp.items():
 
 print(f"검증 구조 구축 완료: {len(competitions)}개 대회")
 
+# Load org region cache for R19/R20
+print("조직 지역 캐시 로드 중...")
+_PROVINCE_SHORT = {
+    "서울특별시": "서울", "부산광역시": "부산", "대구광역시": "대구",
+    "인천광역시": "인천", "광주광역시": "광주", "대전광역시": "대전",
+    "울산광역시": "울산", "세종특별자치시": "세종",
+    "경기도": "경기", "강원도": "강원", "강원특별자치도": "강원",
+    "충청북도": "충북", "충청남도": "충남",
+    "전라북도": "전북", "전북특별자치도": "전북",
+    "전라남도": "전남", "경상북도": "경북", "경상남도": "경남",
+    "제주특별자치도": "제주",
+}
+org_resp = sb.table("organizations").select("name, province, road_address, org_type").execute()
+org_cache = {}
+for org in (org_resp.data or []):
+    name = org.get("name", "")
+    if not name:
+        continue
+    prov_raw = (org.get("province", "") or "").strip()
+    province = _PROVINCE_SHORT.get(prov_raw, prov_raw)
+    org_type = org.get("org_type", "") or ""
+    entry = {}
+    if province:
+        entry["province"] = province
+    if org_type:
+        entry["org_type"] = org_type
+    if entry:
+        org_cache[name] = entry
+print(f"  조직 {len(org_cache)}개 캐시됨")
+
 # Run validation
 from app.data_validator import DataValidator
 
 t1 = time.time()
-validator = DataValidator(competitions)
+validator = DataValidator(competitions, org_cache=org_cache)
 issues = validator.validate_all()
 t2 = time.time()
 
@@ -97,6 +127,14 @@ rule_descriptions = {
     "R10": "Gender inconsistency",
     "R11": "Age group regression",
     "R12": "3+ weapons (homonym suspect)",
+    "R13": "Same date, different team (homonym)",
+    "R14": "Same event, duplicate name",
+    "R15": "Bracket size inconsistency",
+    "R16": "Dual DE completeness",
+    "R17": "Final ranking vs DE winner mismatch",
+    "R19": "Event level vs org_type mismatch",
+    "R20": "Same school level, different province",
+    "R21": "3+ year activity gap, different team",
 }
 
 total = 0

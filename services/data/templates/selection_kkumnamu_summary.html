@@ -13,9 +13,12 @@
         <div class="selection-header">
             <h1>{{ _t("꿈나무 선발 포인트") }}</h1>
             <p class="selection-desc">{{ _t("중1 기간 4개 대상 대회 성적 합산 → 중2 초 종목·성별별 %s명 선발")|format(selection_count) }}</p>
+            {% if lang != 'ko' and _t("꿈나무 프로그램 설명") %}
+            <p class="selection-program-info">{{ _t("꿈나무 프로그램 설명") }}</p>
+            {% endif %}
             <div class="selection-nav-tabs">
-                <a href="/selection/kkumnamu/summary" class="sel-nav-tab active">{{ _t("꿈나무") }}</a>
-                <a href="/selection/national-team/summary" class="sel-nav-tab">{{ _t("청소년 대표") }}</a>
+                <a href="/{{ lang|default('ko') }}/selection/kkumnamu/summary" class="sel-nav-tab active">{{ _t("꿈나무") }}</a>
+                <a href="/{{ lang|default('ko') }}/selection/national-team/summary" class="sel-nav-tab">{{ _t("청소년 대표") }}</a>
             </div>
         </div>
 
@@ -43,8 +46,8 @@
                 {% for cat in ys.categories %}
                 <div class="selection-card">
                     <div class="card-header">
-                        <span class="card-weapon">{{ cat.weapon_kr }}</span>
-                        <span class="card-gender">{{ cat.gender }}</span>
+                        <span class="card-weapon">{{ _t(cat.weapon_kr) }}</span>
+                        <span class="card-gender">{{ _t(cat.gender) }}</span>
                         <span class="card-count">{{ _t("%s명 참가")|format(cat.total) }}</span>
                     </div>
 
@@ -57,9 +60,9 @@
                                     <span class="ct-rank-badge">{{ p.rank }}</span>
                                 </td>
                                 <td class="ct-name">
-                                    <span class="auth-protected"><a href="/selection/kkumnamu?year={{ ys.school_year }}&weapon={{ cat.weapon }}&gender={{ cat.gender }}" class="ct-player-link">{{ p.name }}</a></span>
+                                    <span class="auth-protected"><a href="/{{ lang|default('ko') }}/selection/kkumnamu?year={{ ys.school_year }}&weapon={{ cat.weapon }}&gender={{ cat.gender }}" class="ct-player-link">{{ tr_player(p.name) }}</a></span>
                                 </td>
-                                <td class="ct-team"><span class="auth-protected">{{ p.team }}</span></td>
+                                <td class="ct-team"><span class="auth-protected">{{ tr_team(p.team) }}</span></td>
                                 <td class="ct-pts">{{ _t("%s점")|format(p.total_points|int) }}</td>
                             </tr>
                             {% endfor %}
@@ -70,7 +73,7 @@
                     {% endif %}
 
                     <div class="card-footer">
-                        <a href="/selection/kkumnamu?year={{ ys.school_year }}&weapon={{ cat.weapon }}&gender={{ cat.gender }}" class="card-detail-link">{{ _t("상세 보기 →") }}</a>
+                        <a href="/{{ lang|default('ko') }}/selection/kkumnamu?year={{ ys.school_year }}&weapon={{ cat.weapon }}&gender={{ cat.gender }}" class="card-detail-link">{{ _t("상세 보기 →") }}</a>
                     </div>
                 </div>
                 {% endfor %}

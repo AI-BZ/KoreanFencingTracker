@@ -392,8 +392,9 @@ const FencingLab = {
         if (!container) return;
 
         const demo = await this.loadDemoData();
+        const fl = window.i18n?.fencinglab || {};
         if (!demo || !demo.demo_players || demo.demo_players.length === 0) {
-            container.innerHTML = '<p class="fl-text-secondary">데모 데이터를 불러올 수 없습니다.</p>';
+            container.innerHTML = `<p class="fl-text-secondary">${fl.cannot_load_data || '데모 데이터를 불러올 수 없습니다.'}</p>`;
             return;
         }
 
@@ -401,8 +402,8 @@ const FencingLab = {
             <div class="fl-demo-section">
                 <div class="fl-demo-title">
                     <h2>Fencing<span>Lab</span></h2>
-                    <p>실제 데이터 기반 선수 분석</p>
-                    <a href="/fencinglab" class="fl-demo-link">선수 분석 보기 →</a>
+                    <p>${fl.subtitle || '실제 데이터 기반 선수 분석'}</p>
+                    <a href="/fencinglab" class="fl-demo-link">${fl.view_analysis || '선수 분석 보기 →'}</a>
                 </div>
                 <div class="fl-demo-grid" id="demo-cards"></div>
             </div>
@@ -423,15 +424,15 @@ const FencingLab = {
                 <div class="fl-demo-stats">
                     <div class="fl-stat">
                         <span class="value">${player.total_matches}</span>
-                        <span class="label">경기</span>
+                        <span class="label">${fl.bouts || '경기'}</span>
                     </div>
                     <div class="fl-stat">
                         <span class="value ${player.win_rate >= 50 ? 'green' : ''}">${player.win_rate}%</span>
-                        <span class="label">승률</span>
+                        <span class="label">${fl.win_rate || '승률'}</span>
                     </div>
                     <div class="fl-stat">
                         <span class="value">${player.pool_win_rate}%</span>
-                        <span class="label">Pool</span>
+                        <span class="label">${fl.pool_rate || 'Pool'}</span>
                     </div>
                 </div>
                 <div class="fl-demo-badge ${player.clutch_grade.includes('강심장') ? 'strong' : ''}">

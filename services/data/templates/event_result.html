@@ -674,6 +674,8 @@ tr.player-highlighted td {
         <script id="event-team-regions-data" type="application/json">{{ team_regions | default({}) | tojson }}</script>
         <script id="event-region-summary-data" type="application/json">{{ region_summary | default({}) | tojson }}</script>
         <script id="event-player-region-grade-data" type="application/json">{{ player_region_grade | default({}) | tojson }}</script>
+        <script id="event-team-translation-data" type="application/json">{{ team_translation_map | default({}) | tojson }}</script>
+        <script id="event-player-translation-data" type="application/json">{{ player_translation_map | default({}) | tojson }}</script>
         {% else %}
         <div class="empty">
             <p>{{ _t("참가 선수 명단이 아직 등록되지 않았습니다") }}</p>
@@ -725,8 +727,8 @@ tr.player-highlighted td {
                     {% for player in event.pool_total_ranking %}
                     <tr>
                         <td class="rank">{{ player.rank }}</td>
-                        <td class="player-name"><a href="/player/{{ player.name|urlencode }}?team={{ player.team|urlencode }}" class="player-link">{{ player.name }}</a></td>
-                        <td><a href="/search?q={{ player.team|urlencode }}" class="team-link">{{ player.team }}</a></td>
+                        <td class="player-name"><a href="/player/{{ player.name|urlencode }}?team={{ player.team|urlencode }}" class="player-link">{{ tr_player(player.name) }}</a></td>
+                        <td><a href="/search?q={{ player.team|urlencode }}" class="team-link">{{ tr_team(player.team) }}</a></td>
                         {% if is_calculated %}
                         <td>{{ player.wins or 0 }}</td>
                         <td>{{ player.losses or 0 }}</td>
@@ -769,8 +771,8 @@ tr.player-highlighted td {
                     {% for player in pool.results|sort(attribute='rank') %}
                     <tr>
                         <td class="rank">{{ player.rank or '-' }}</td>
-                        <td class="player-name"><a href="/player/{{ player.name|urlencode }}?team={{ player.team|urlencode }}" class="player-link">{{ player.name }}</a></td>
-                        <td><a href="/search?q={{ player.team|urlencode }}" class="team-link">{{ player.team }}</a></td>
+                        <td class="player-name"><a href="/player/{{ player.name|urlencode }}?team={{ player.team|urlencode }}" class="player-link">{{ tr_player(player.name) }}</a></td>
+                        <td><a href="/search?q={{ player.team|urlencode }}" class="team-link">{{ tr_team(player.team) }}</a></td>
                         <td>{{ player.wins or 0 }}</td>
                         <td>{{ player.losses or 0 }}</td>
                         <td>{% if player.indicator > 0 %}+{% endif %}{{ player.indicator or 0 }}</td>
@@ -805,7 +807,7 @@ tr.player-highlighted td {
                             {% for player in pool.results %}
                             <tr>
                                 <td><strong>{{ loop.index }}</strong></td>
-                                <td class="player-col"><a href="/player/{{ player.name|urlencode }}?team={{ player.team|urlencode }}" class="player-link">{{ player.name }}</a></td>
+                                <td class="player-col"><a href="/player/{{ player.name|urlencode }}?team={{ player.team|urlencode }}" class="player-link">{{ tr_player(player.name) }}</a></td>
                                 {% for score in player.scores %}
                                     {% if score is none %}
                                     <td class="self">X</td>
@@ -896,8 +898,8 @@ tr.player-highlighted td {
                     {% if not loop.previtem or loop.previtem.seed != player.seed %}
                     <div class="seeding-item">
                         <span class="seeding-rank">{{ player.seed }}</span>
-                        <a href="/player/{{ player.name|urlencode }}?team={{ player.team|urlencode }}" class="seeding-name player-link">{{ player.name }}</a>
-                        <span class="seeding-team"><a href="/search?q={{ player.team|urlencode }}" class="team-link">{{ player.team }}</a></span>
+                        <a href="/player/{{ player.name|urlencode }}?team={{ player.team|urlencode }}" class="seeding-name player-link">{{ tr_player(player.name) }}</a>
+                        <span class="seeding-team"><a href="/search?q={{ player.team|urlencode }}" class="team-link">{{ tr_team(player.team) }}</a></span>
                     </div>
                     {% endif %}
                     {% endfor %}
@@ -1008,8 +1010,8 @@ tr.player-highlighted td {
                 <div class="podium-place second">
                     <div class="podium-medal">🥈</div>
                     <div class="podium-box">
-                        <div class="podium-name"><a href="/player/{{ silver.name|urlencode }}?team={{ silver.team|urlencode }}" class="player-link">{{ silver.name }}</a></div>
-                        <div class="podium-team"><a href="/search?q={{ silver.team|urlencode }}" class="team-link">{{ silver.team }}</a></div>
+                        <div class="podium-name"><a href="/player/{{ silver.name|urlencode }}?team={{ silver.team|urlencode }}" class="player-link">{{ tr_player(silver.name) }}</a></div>
+                        <div class="podium-team"><a href="/search?q={{ silver.team|urlencode }}" class="team-link">{{ tr_team(silver.team) }}</a></div>
                     </div>
                     <div class="podium-rank">{{ _t("2위") }}</div>
                 </div>
@@ -1019,8 +1021,8 @@ tr.player-highlighted td {
                 <div class="podium-place first">
                     <div class="podium-medal">🥇</div>
                     <div class="podium-box">
-                        <div class="podium-name"><a href="/player/{{ gold.name|urlencode }}?team={{ gold.team|urlencode }}" class="player-link">{{ gold.name }}</a></div>
-                        <div class="podium-team"><a href="/search?q={{ gold.team|urlencode }}" class="team-link">{{ gold.team }}</a></div>
+                        <div class="podium-name"><a href="/player/{{ gold.name|urlencode }}?team={{ gold.team|urlencode }}" class="player-link">{{ tr_player(gold.name) }}</a></div>
+                        <div class="podium-team"><a href="/search?q={{ gold.team|urlencode }}" class="team-link">{{ tr_team(gold.team) }}</a></div>
                     </div>
                     <div class="podium-rank">{{ _t("1위") }}</div>
                 </div>
@@ -1031,8 +1033,8 @@ tr.player-highlighted td {
                     <div class="podium-medal">🥉</div>
                     <div class="podium-box">
                         {% for bronze in bronzes %}
-                        <div class="podium-name"><a href="/player/{{ bronze.name|urlencode }}?team={{ bronze.team|urlencode }}" class="player-link">{{ bronze.name }}</a></div>
-                        <div class="podium-team"><a href="/search?q={{ bronze.team|urlencode }}" class="team-link">{{ bronze.team }}</a></div>
+                        <div class="podium-name"><a href="/player/{{ bronze.name|urlencode }}?team={{ bronze.team|urlencode }}" class="player-link">{{ tr_player(bronze.name) }}</a></div>
+                        <div class="podium-team"><a href="/search?q={{ bronze.team|urlencode }}" class="team-link">{{ tr_team(bronze.team) }}</a></div>
                         {% if not loop.last %}<hr style="margin: 8px 0; opacity: 0.3">{% endif %}
                         {% endfor %}
                     </div>
@@ -1061,9 +1063,9 @@ tr.player-highlighted td {
                         {% if ranking.rank == 1 %}🥇{% elif ranking.rank == 2 %}🥈{% elif ranking.rank == 3 %}🥉{% else %}{{ ranking.rank }}{% endif %}
                     </td>
                     <td class="name-cell">
-                        <a href="/player/{{ ranking.name|urlencode }}?team={{ ranking.team|urlencode }}" class="player-link">{{ ranking.name }}</a>
+                        <a href="/player/{{ ranking.name|urlencode }}?team={{ ranking.team|urlencode }}" class="player-link">{{ tr_player(ranking.name) }}</a>
                     </td>
-                    <td><a href="/search?q={{ ranking.team|urlencode }}" class="team-link">{{ ranking.team }}</a></td>
+                    <td><a href="/search?q={{ ranking.team|urlencode }}" class="team-link">{{ tr_team(ranking.team) }}</a></td>
                     <td class="place-cell">{{ ranking.rank }}/{{ total_participants }}</td>
                     <td class="points-cell">{% if ranking.points %}{{ "%.1f"|format(ranking.points) }}pt{% else %}-{% endif %}</td>
                 </tr>
@@ -1095,6 +1097,12 @@ tr.player-highlighted td {
 <script src="/static/js/player-search.js"></script>
 <script src="/static/js/dual-bracket.js"></script>
 <script>
+// Team name translation map (for i18n)
+const _teamTransMap = JSON.parse((document.getElementById('event-team-translation-data') || {}).textContent || '{}');
+function _tr_team(name) { return _teamTransMap[name] || name; }
+const _playerTransMap = JSON.parse((document.getElementById('event-player-translation-data') || {}).textContent || '{}');
+function _tr_player(name) { return _playerTransMap[name] || name; }
+
 // Tab switching
 document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -1197,15 +1205,19 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     // Helper: make team link with optional region
     function teamNameHtml(teamName) {
         const q = encodeURIComponent(teamName);
+        const displayName = _tr_team(teamName);
         const region = teamRegions[teamName] || '';
         const regionHtml = region ? ` <span class="team-region">(${region})</span>` : '';
-        return `<a href="/search?q=${q}">${teamName}</a>${regionHtml}`;
+        return `<a href="/search?q=${q}">${displayName}</a>${regionHtml}`;
     }
 
     // 팀별 그룹핑
     const teamMap = {};
+    const teamOriginalMap = {};  // displayTeam → originalTeam (for links)
     for (const p of participants) {
-        const team = (p.team || _t('소속 미상')).trim();
+        const rawTeam = (p.team || _t('소속 미상')).trim();
+        const team = _tr_team(rawTeam);
+        teamOriginalMap[team] = rawTeam;
         if (!teamMap[team]) teamMap[team] = [];
         teamMap[team].push({
             name: p.name || p.num || '',
@@ -1259,7 +1271,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
                     <div class="grade-label">${grade}</div>
                     <div class="team-group-players">
                         ${group.players.map(p =>
-                            `<span class="player-chip">${playerLink(p.name, p.name + `<span class="grade-badge ${badgeClass}">${p.grade}</span>`)}</span>`
+                            `<span class="player-chip">${playerLink(p.name, _tr_player(p.name) + `<span class="grade-badge ${badgeClass}">${p.grade}</span>`)}</span>`
                         ).join('')}
                     </div>
                 </div>`;
@@ -1282,7 +1294,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
                     <span class="team-group-count">${players.length}명</span>
                 </div>
                 <div class="team-group-players">
-                    ${players.map(p => `<span class="player-chip">${playerLink(p.name, p.name)}</span>`).join('')}
+                    ${players.map(p => `<span class="player-chip">${playerLink(p.name, _tr_player(p.name))}</span>`).join('')}
                 </div>
             </div>`;
         }
@@ -1507,8 +1519,8 @@ async function performSearch(query) {
 
                 return `
                     <div class="player-result-card" data-player-name="${p.name}" data-pool-number="${p.pool_number || ''}">
-                        <div class="name">${p.name}</div>
-                        <div class="team">${p.team || '-'}</div>
+                        <div class="name">${_tr_player(p.name)}</div>
+                        <div class="team">${_tr_team(p.team) || '-'}</div>
                         <div class="info-grid">
                             <div class="info-item">
                                 <div class="info-label">Pool</div>
@@ -1647,7 +1659,7 @@ function loadMyPlayer() {
     const savedPlayer = localStorage.getItem(MY_PLAYER_KEY);
     if (savedPlayer) {
         const player = JSON.parse(savedPlayer);
-        document.getElementById('my-player-name').textContent = player.name;
+        document.getElementById('my-player-name').textContent = _tr_player(player.name);
         document.getElementById('my-player-panel').style.display = 'block';
         // 자동 하이라이트 (설정된 경우)
         if (player.autoHighlight) {

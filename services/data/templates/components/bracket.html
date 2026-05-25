@@ -59,8 +59,8 @@
             {% for player in bracket.seeding %}
             <div class="seeding-item">
                 <span class="seeding-rank">{{ player.seed }}</span>
-                <a href="/player/{{ player.name|urlencode }}?team={{ player.team|urlencode }}" class="seeding-name player-link">{{ player.name }}</a>
-                <span class="seeding-team"><a href="/search?q={{ player.team|urlencode }}" class="team-link">{{ player.team }}</a></span>
+                <a href="/player/{{ player.name|urlencode }}?team={{ player.team|urlencode }}" class="seeding-name player-link">{{ tr_player(player.name) }}</a>
+                <span class="seeding-team"><a href="/search?q={{ player.team|urlencode }}" class="team-link">{{ tr_team(player.team) }}</a></span>
             </div>
             {% endfor %}
         </div>

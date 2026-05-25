@@ -87,8 +87,8 @@
             <div class="seeded-item" data-player-name="{{ player.name }}">
                 <span class="seeded-rank">[{{ player.seed }}]</span>
                 <a href="/player/{{ player.name|urlencode }}?team={{ player.team|urlencode }}"
-                   class="seeded-name player-link">{{ player.name }}</a>
-                <span class="seeded-team">{{ player.team }}</span>
+                   class="seeded-name player-link">{{ tr_player(player.name) }}</a>
+                <span class="seeded-team">{{ tr_team(player.team) }}</span>
                 <span class="seeded-badge">SEED</span>
             </div>
             {% endfor %}
@@ -160,8 +160,8 @@
                 <div class="qualifier-item" data-player-name="{{ player.name }}">
                     <span class="qualifier-seed">[{{ player.seed }}]</span>
                     <a href="/player/{{ player.name|urlencode }}?team={{ player.team|urlencode }}"
-                       class="qualifier-name player-link">{{ player.name }}</a>
-                    <span class="qualifier-team">{{ player.team }}</span>
+                       class="qualifier-name player-link">{{ tr_player(player.name) }}</a>
+                    <span class="qualifier-team">{{ tr_team(player.team) }}</span>
                     <span class="qualifier-badge">진출</span>
                 </div>
                 {% endfor %}

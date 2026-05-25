@@ -14,7 +14,10 @@ Dual DE 형식 (국가대표 선발전):
 from typing import Dict, List, Optional, Tuple, Any, Union
 from dataclasses import dataclass, asdict
 from collections import defaultdict
+import logging
 import re
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -846,6 +849,39 @@ def normalize_bracket_data(
         if not bracket_size or bracket_size > calculated_bracket_size:
             bracket_size = calculated_bracket_size
 
+    # bracket_size 하한 검증: 실제 bout 데이터가 bracket_size보다 큰 브래킷을 요구하는 경우
+    # 예: bracket_size=8인데 bout에 "64강" 라운드가 있으면 → bracket_size=64로 상향
+    # Dual DE Second DE에서 스크래퍼가 bracket_size를 잘못 저장한 경우 방어
+    if bracket_size and all_bouts:
+        # bout 라운드 이름에서 최소 필요 bracket_size 추론
+        # 라운드 이름 → 최소 bracket_size 매핑
+        round_to_min_bracket = {
+            '128강': 128, '64강': 64, '32강': 32, '16강': 16, '8강': 8,
+        }
+        min_bracket_from_bouts = bracket_size
+        for bout in all_bouts:
+            round_name = normalize_round_name(bout.round)
+            required = round_to_min_bracket.get(round_name, 0)
+            if required > min_bracket_from_bouts:
+                min_bracket_from_bouts = required
+        # bout_id에서도 라운드 추출하여 확인 (bout.round이 부정확할 수 있음)
+        for bout in all_bouts:
+            round_from_id = extract_round_from_bout_id(bout.bout_id)
+            if round_from_id:
+                required = round_to_min_bracket.get(round_from_id, 0)
+                if required > min_bracket_from_bouts:
+                    min_bracket_from_bouts = required
+
+        if min_bracket_from_bouts > bracket_size:
+            logger.warning(
+                "bracket_size 상향 조정: %d → %d (bout 데이터에 '%s' 등 큰 라운드 존재, "
+                "participant_count=%d)",
+                bracket_size, min_bracket_from_bouts,
+                get_starting_round(min_bracket_from_bouts),
+                participant_count
+            )
+            bracket_size = min_bracket_from_bouts
+
     # 시작 라운드
     starting_round = de_bracket.get('starting_round', '')
     if not starting_round and main_rounds:
@@ -1534,7 +1570,7 @@ def validate_bracket_vs_final_rankings(
                 f'결승 패자({final_loser})가 최종 2위({second_place})와 불일치'
             )
 
-    # 준결승 검증 (3위 공동)
+    # 준결승 검증 (공동 3위)
     semifinal_bouts = bracket.bouts_by_round.get('준결승', [])
     if semifinal_bouts:
         semifinal_losers = []
@@ -1566,13 +1602,13 @@ def compute_full_final_rankings(
     """
     DE 대진표 + Pool 결과에서 전체 최종 순위 계산
 
-    순위 결정 원칙 (펜싱 표준):
+    순위 결정 원칙 (KFF/FIE 표준 - 시드 기반 개별 순위):
     - 1위: 결승 승자
     - 2위: 결승 패자
-    - 3위 (공동): 준결승 패자 2명
-    - 5-8위 (공동): 8강 패자 4명
-    - 9-16위 (공동): 16강 패자 8명
-    - 17-32위 (공동): 32강 패자 16명
+    - 공동 3위: 준결승 패자 2명 (KFF/FIE 표준 - 3-4위전 없음, 동메달)
+    - 5~8위: 8강 패자 4명을 시드(pool 순위) 오름차순 → 5위, 6위, 7위, 8위
+    - 9~16위: 16강 패자 8명을 시드 오름차순 → 9위~16위
+    - 동일 패턴으로 32강(17~32위), 64강(33~64위), 128강(65~128위) 적용
     - 나머지: Pool 순위대로 (DE 진출 못한 선수들)
 
     Returns:
@@ -1590,20 +1626,31 @@ def compute_full_final_rankings(
     final_rankings = []
     assigned_players = set()
 
-    # 라운드별 패자 수집
+    # 라운드별 패자 수집 (시드 정보 포함, 시드 오름차순 정렬)
     def get_losers_from_round(round_name: str) -> List[Dict]:
-        """특정 라운드에서 진 선수들을 반환"""
+        """특정 라운드에서 진 선수들을 시드 오름차순으로 반환"""
         losers = []
         bouts = normalized.bouts_by_round.get(round_name, [])
         for bout in bouts:
             if bout.is_bye:
                 continue
-            # 패자 결정: 승자가 아닌 쪽
             if bout.winner_name:
-                loser_name = bout.player2_name if bout.winner_name == bout.player1_name else bout.player1_name
-                loser_team = bout.player2_team if bout.winner_name == bout.player1_name else bout.player1_team
+                if bout.winner_name == bout.player1_name:
+                    loser_name = bout.player2_name
+                    loser_team = bout.player2_team
+                    loser_seed = bout.player2_seed
+                else:
+                    loser_name = bout.player1_name
+                    loser_team = bout.player1_team
+                    loser_seed = bout.player1_seed
                 if loser_name and loser_name not in assigned_players:
-                    losers.append({"name": loser_name, "team": loser_team or ""})
+                    losers.append({
+                        "name": loser_name,
+                        "team": loser_team or "",
+                        "seed": loser_seed if loser_seed is not None else 9999
+                    })
+        # 시드 오름차순 정렬 (낮은 시드 = 더 높은 순위)
+        losers.sort(key=lambda x: x["seed"])
         return losers
 
     # 2. 결승에서 1, 2위 결정
@@ -1631,7 +1678,7 @@ def compute_full_final_rankings(
                 })
                 assigned_players.add(loser_name)
 
-    # 3. 준결승 패자 = 공동 3위
+    # 3. 준결승 패자 = 공동 3위 (KFF/FIE 표준: 3-4위전 없음, 동메달 2명)
     sf_losers = get_losers_from_round('준결승')
     for loser in sf_losers:
         if loser["name"] not in assigned_players:
@@ -1642,56 +1689,61 @@ def compute_full_final_rankings(
             })
             assigned_players.add(loser["name"])
 
-    # 4. 8강 패자 = 공동 5위
+    # 4. 8강 패자 → 5~8위 (시드 오름차순 개별 순위)
     qf_losers = get_losers_from_round('8강')
-    for loser in qf_losers:
+    rank_start = len(final_rankings) + 1
+    for i, loser in enumerate(qf_losers):
         if loser["name"] not in assigned_players:
             final_rankings.append({
-                "rank": 5,
+                "rank": rank_start + i,
                 "name": loser["name"],
                 "team": loser["team"]
             })
             assigned_players.add(loser["name"])
 
-    # 5. 16강 패자 = 공동 9위
+    # 5. 16강 패자 → 9~16위 (시드 오름차순 개별 순위)
     r16_losers = get_losers_from_round('16강')
-    for loser in r16_losers:
+    rank_start = len(final_rankings) + 1
+    for i, loser in enumerate(r16_losers):
         if loser["name"] not in assigned_players:
             final_rankings.append({
-                "rank": 9,
+                "rank": rank_start + i,
                 "name": loser["name"],
                 "team": loser["team"]
             })
             assigned_players.add(loser["name"])
 
-    # 6. 32강 패자 = 공동 17위
+    # 6. 32강 패자 → 17~32위 (시드 오름차순 개별 순위)
     r32_losers = get_losers_from_round('32강')
-    for loser in r32_losers:
+    rank_start = len(final_rankings) + 1
+    for i, loser in enumerate(r32_losers):
         if loser["name"] not in assigned_players:
             final_rankings.append({
-                "rank": 17,
+                "rank": rank_start + i,
                 "name": loser["name"],
                 "team": loser["team"]
             })
             assigned_players.add(loser["name"])
 
-    # 7. 64강 패자 = 공동 33위
+    # 7. 64강 패자 → 33~64위 (시드 오름차순 개별 순위)
     r64_losers = get_losers_from_round('64강')
-    for loser in r64_losers:
+    rank_start = len(final_rankings) + 1
+    for i, loser in enumerate(r64_losers):
         if loser["name"] not in assigned_players:
             final_rankings.append({
-                "rank": 33,
+                "rank": rank_start + i,
                 "name": loser["name"],
                 "team": loser["team"]
             })
             assigned_players.add(loser["name"])
 
-    # 8. 128강 패자 = 공동 65위
+    # 8. 128강 패자 → 65~128위 (시드 오름차순 개별 순위)
     r128_losers = get_losers_from_round('128강')
-    for loser in r128_losers:
+    rank_start = len(final_rankings) + 1
+    for i, loser in enumerate(r128_losers):
         if loser["name"] not in assigned_players:
             final_rankings.append({
-                "rank": 65,
+                "rank": rank_start + i,
                 "name": loser["name"],
                 "team": loser["team"]
             })
@@ -1788,7 +1840,7 @@ def normalize_dual_de_bracket_data(de_bracket: Dict) -> NormalizedDualDEBracket:
     # First DE는 128강 → 64강만 있고, 64강 승자가 Second DE로 진출
     # 32강 이후는 Second DE에서 진행되므로 First DE에서 제거
     if first_de:
-        second_de_starting = de_bracket.get('second_de', {}).get('starting_round', '64강')
+        second_de_starting = (de_bracket.get('second_de') or {}).get('starting_round', '64강')
         first_de_allowed_rounds = []
 
         # Second DE 시작 라운드까지 First DE에 포함 (동일 라운드 포함)

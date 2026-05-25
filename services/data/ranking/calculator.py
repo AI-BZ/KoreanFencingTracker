@@ -10,6 +10,7 @@ FIE + USA Fencing 방식을 참고한 랭킹 시스템
 """
 import json
 import re
+import warnings
 from datetime import datetime, date, timedelta
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass, field, asdict
@@ -517,28 +518,49 @@ def calculate_points_legacy(
 # =====================================================
 
 class RankingCalculator:
-    """펜싱 랭킹 계산기"""
+    """펜싱 랭킹 계산기
+
+    런타임(서버)에서는 load_from_data()만 사용합니다.
+    Supabase에서 로드한 데이터 딕셔너리를 전달하세요.
+    """
 
     def __init__(self, data_file: str = None):
         self.results: List[PlayerResult] = []
         self.data = None
 
         if data_file:
+            warnings.warn(
+                "data_file 파라미터는 deprecated입니다. "
+                "load_from_data()를 사용하세요. (CLI 전용으로만 유지)",
+                DeprecationWarning,
+                stacklevel=2,
+            )
             self.load_data(data_file)
 
     def load_data(self, data_file: str):
-        """JSON 데이터 로드"""
+        """[DEPRECATED / CLI 전용] JSON 파일에서 데이터 로드
+
+        ⚠️ 서버 런타임에서는 사용 금지 — load_from_data()를 사용하세요.
+        이 메서드는 CLI(main())에서 오프라인 랭킹 계산 용도로만 유지됩니다.
+        """
+        warnings.warn(
+            "load_data()는 deprecated입니다. "
+            "서버에서는 load_from_data()를 사용하세요.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         with open(data_file, "r", encoding="utf-8") as f:
             self.data = json.load(f)
 
         self._extract_results()
-        logger.info(f"데이터 로드 완료: {len(self.results)}개 결과")
+        logger.info(f"[CLI] JSON 데이터 로드 완료: {len(self.results)}개 결과")
 
     def load_from_data(self, data: dict):
-        """메모리 데이터에서 로드 (Supabase 캐시용)
+        """Supabase 캐시 데이터에서 로드 (서버 런타임 전용)
 
         Args:
             data: {"competitions": [...], "meta": {...}} 형식의 데이터 딕셔너리
+                  (server.py의 load_data_from_supabase()가 생성)
         """
         self.data = data
         self._extract_results()
@@ -624,7 +646,9 @@ class RankingCalculator:
         year: int = None,
         best_n: int = 4,
         rolling_months: int = 12,
-        national_team_only: bool = False
+        national_team_only: bool = False,
+        excl_national: bool = False,
+        excl_selection: bool = False
     ) -> List[PlayerRanking]:
         """
         랭킹 계산
@@ -638,6 +662,8 @@ class RankingCalculator:
             best_n: 상위 N개 결과 합산
             rolling_months: 롤링 기간 (월)
             national_team_only: True면 국가대표 선발대회만 필터링
+            excl_national: True면 전국체전/소년체전 제외
+            excl_selection: True면 선발전 제외 (겸 국대선발은 제외하지 않음)
 
         Returns:
             랭킹 리스트
@@ -648,6 +674,16 @@ class RankingCalculator:
         # 국가대표 선발대회만 필터링
         if national_team_only:
             filtered = [r for r in filtered if '국가대표' in r.competition_name]
+
+        # 대회 제외 필터
+        if excl_national:
+            filtered = [r for r in filtered if not any(
+                kw in r.competition_name for kw in ("전국체육대회", "소년체육대회", "전국체전")
+            )]
+        if excl_selection:
+            filtered = [r for r in filtered if not (
+                "선발" in r.competition_name and "겸" not in r.competition_name
+            )]
 
         if weapon:
             filtered = [r for r in filtered if r.weapon == weapon]
@@ -789,7 +825,7 @@ class RankingCalculator:
         return all_rankings
 
     def export_rankings(self, output_file: str, year: int = None):
-        """랭킹 결과를 JSON으로 내보내기"""
+        """랭킹 결과를 JSON으로 내보내기 (CLI/배치 전용)"""
         all_rankings = self.get_all_rankings(year=year)
 
         export_data = {
@@ -845,10 +881,15 @@ class RankingCalculator:
 # =====================================================
 
 def main():
+    """CLI 전용 — 오프라인 JSON 파일에서 랭킹 계산.
+
+    서버 런타임에서는 이 함수를 사용하지 않습니다.
+    서버는 load_from_data()로 Supabase 캐시 데이터를 사용합니다.
+    """
     import argparse
 
-    parser = argparse.ArgumentParser(description="한국 펜싱 랭킹 계산기")
-    parser.add_argument("--data", type=str, default="data/fencing_full_data_v2.json", help="데이터 파일")
+    parser = argparse.ArgumentParser(description="한국 펜싱 랭킹 계산기 (CLI - JSON 기반)")
+    parser.add_argument("--data", type=str, default="data/fencing_full_data_v2.json", help="데이터 파일 (CLI 전용)")
     parser.add_argument("--output", type=str, default="data/rankings.json", help="출력 파일")
     parser.add_argument("--weapon", type=str, help="무기 (foil/epee/sabre)")
     parser.add_argument("--gender", type=str, help="성별 (남/여)")

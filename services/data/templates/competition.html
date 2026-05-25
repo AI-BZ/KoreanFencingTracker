@@ -89,13 +89,13 @@
                     </div>
                     <div class="event-stats">
                         {% if event.final_rankings %}
-                        <span class="stat-badge">🏆 {{ event.final_rankings|length }}명</span>
+                        <span class="stat-badge">🏆 {{ event.final_rankings|length }}{{ _t("명") }}</span>
                         {% endif %}
                         {% if event.pool_rounds %}
-                        <span class="stat-badge">📋 {{ event.pool_rounds|length }}풀</span>
+                        <span class="stat-badge">📋 {{ event.pool_rounds|length }}{{ _t("풀") }}</span>
                         {% endif %}
                         {% if not event.final_rankings and not event.pool_rounds and event.participants %}
-                        <span class="stat-badge participants-badge">👤 {{ event.participants|length }}명</span>
+                        <span class="stat-badge participants-badge">👤 {{ event.participants|length }}{{ _t("명") }}</span>
                         {% endif %}
                     </div>
                 </div>
@@ -749,6 +749,13 @@ details[open] > .comp-stats-toggle .stats-hint {
 // Competition Event Code
 const EVENT_CD = "{{ competition.competition.event_cd }}";
 
+// i18n: Team name translation map (Korean → localized)
+const _teamMap = {{ team_translation_map | default({}) | tojson }};
+function _tr_team(name) { return _teamMap[name] || name; }
+// i18n: Player name translation map (Korean → romanized)
+const _playerMap = {{ player_translation_map | default({}) | tojson }};
+function _tr_player(name) { return _playerMap[name] || name; }
+
 // Initialize autocomplete for competition-wide player search
 let compPlayerSearch = null;
 
@@ -821,15 +828,15 @@ async function searchCompPlayer() {
 
     try {
         const response = await fetch(`/api/competition/${EVENT_CD}/players/search?q=${encodeURIComponent(query)}`);
-        if (!response.ok) throw new Error('검색 실패');
+        if (!response.ok) throw new Error(_t('검색 실패'));
 
         const data = await response.json();
 
         if (data.results.length === 0) {
             resultContent.innerHTML = '<p style="text-align:center;color:var(--text-muted, #6b6b7b);padding:1rem;">' + _t('검색 결과가 없습니다') + '</p>';
-            resultCount.textContent = '0건';
+            resultCount.textContent = '0' + _t('건');
         } else {
-            resultCount.textContent = `${data.results.length}건`;
+            resultCount.textContent = `${data.results.length}${_t('건')}`;
             resultContent.innerHTML = data.results.map(r => {
                 const p = r.player;
 
@@ -838,7 +845,7 @@ async function searchCompPlayer() {
                 if (p.pool_number) {
                     poolDisplay = `Pool ${p.pool_number}`;
                     if (p.pool_rank && typeof p.pool_rank === 'number' && p.pool_rank > 0) {
-                        poolDisplay += ` (${p.pool_rank}위)`;
+                        poolDisplay += ` (${p.pool_rank}${_t('위')})`;
                     }
                 }
 
@@ -863,7 +870,7 @@ async function searchCompPlayer() {
                             const score = m.score ? ` ${m.score}` : '';
                             return `${m.round}(L ${m.opponent}${score})`;
                         } else {
-                            return `${m.round}(vs ${m.opponent || '대기'})`;
+                            return `${m.round}(vs ${m.opponent || _t('대기')})`;
                         }
                     }).join(' → ');
                 } else if (p.de_rounds && p.de_rounds.length > 0) {
@@ -874,15 +881,15 @@ async function searchCompPlayer() {
                 // 최종 순위
                 let finalDisplay = '-';
                 if (p.final_rank && typeof p.final_rank === 'number' && p.final_rank > 0) {
-                    finalDisplay = `${p.final_rank}위`;
+                    finalDisplay = `${p.final_rank}${_t('위')}`;
                 }
 
                 return `
                     <div class="comp-result-card clickable-card" onclick="navigateToEventWithPlayer('${r.sub_event_cd}', '${p.name.replace(/'/g, "\\'")}')">
                         <div class="card-header">
                             <div class="player-info">
-                                <div class="name">${p.name}</div>
-                                <div class="team">${p.team || '-'}</div>
+                                <div class="name">${_tr_player(p.name)}</div>
+                                <div class="team">${_tr_team(p.team) || '-'}</div>
                             </div>
                             <span class="event-badge">${_tr_event(r.event_name)}</span>
                         </div>
@@ -950,18 +957,21 @@ function navigateToEventWithPlayer(subEventCd, playerName) {
             return;
         }
 
-        // 소속별 그룹핑
+        // 소속별 그룹핑 (번역된 팀명으로 그룹)
         const teamMap = {};
+        const teamOriginal = {};  // display team → original team (for links)
         for (const p of participants) {
-            const team = (p.team || _t('소속 미상')).trim();
-            if (!teamMap[team]) teamMap[team] = [];
-            teamMap[team].push(p.name || p.num || '');
+            const rawTeam = (p.team || _t('소속 미상')).trim();
+            const displayTeam = _tr_team(rawTeam);
+            if (!teamMap[displayTeam]) { teamMap[displayTeam] = []; teamOriginal[displayTeam] = rawTeam; }
+            teamMap[displayTeam].push(p.name || p.num || '');
         }
 
         // 팀명 정렬 (가나다순), 소속 미상은 맨 뒤
+        const unknownTeam = _t('소속 미상');
         const teamNames = Object.keys(teamMap).sort((a, b) => {
-            if (a === '소속 미상') return 1;
-            if (b === '소속 미상') return -1;
+            if (a === unknownTeam) return 1;
+            if (b === unknownTeam) return -1;
             return a.localeCompare(b, 'ko');
         });
 
@@ -969,20 +979,21 @@ function navigateToEventWithPlayer(subEventCd, playerName) {
         const totalTeams = teamNames.length;
 
         let html = `<div class="participants-summary">
-            <span>총 <strong>${totalPlayers}명</strong></span>
-            <span><strong>${totalTeams}개</strong> 소속</span>
+            <span>${_t('총')} <strong>${totalPlayers}${_t('명')}</strong></span>
+            <span><strong>${totalTeams}${_t('개')}</strong> ${_t('소속')}</span>
         </div>`;
 
         for (const team of teamNames) {
             const players = teamMap[team];
-            const encodedTeam = encodeURIComponent(team);
+            const originalTeam = teamOriginal[team] || team;
+            const encodedTeam = encodeURIComponent(originalTeam);
             html += `<div class="team-group">
                 <div class="team-group-header">
                     <span class="team-group-name">${team}</span>
-                    <span class="team-group-count">${players.length}명</span>
+                    <span class="team-group-count">${players.length}${_t('명')}</span>
                 </div>
                 <div class="team-group-players">
-                    ${players.map(name => `<span class="player-chip"><a href="/player/${encodeURIComponent(name)}?team=${encodedTeam}">${name}</a></span>`).join('')}
+                    ${players.map(name => `<span class="player-chip"><a href="/player/${encodeURIComponent(name)}?team=${encodedTeam}">${_tr_player(name)}</a></span>`).join('')}
                 </div>
             </div>`;
         }
@@ -1031,10 +1042,10 @@ function navigateToEventWithPlayer(subEventCd, playerName) {
         .sort((a, b) => b[1] - a[1]);
     if (otEntries.length > 0) {
         const parts = otEntries.map(([t, cnt]) =>
-            (orgTypeLabels[t] || t) + ' ' + cnt + '명'
+            (orgTypeLabels[t] || t) + ' ' + cnt + _t('명')
         );
         const etcCount = (stats.by_org_type || {})['기타'] || 0;
-        if (etcCount > 0) parts.push('기타 ' + etcCount + '명');
+        if (etcCount > 0) parts.push(_t('기타') + ' ' + etcCount + _t('명'));
         rows.push([_t('소속 유형'), parts.join(', ')]);
     }
 
@@ -1044,7 +1055,7 @@ function navigateToEventWithPlayer(subEventCd, playerName) {
     if (schoolEntries.length > 1 || (schoolEntries.length === 1 && schoolEntries[0][0] !== 'P')) {
         const parts = schoolEntries.map(([st, info]) => {
             const label = schoolLabels[st] || st;
-            return label + ' ' + info.count + '명(' + fmtGrades(info.grades, st) + ')';
+            return label + ' ' + info.count + _t('명') + '(' + fmtGrades(info.grades, st) + ')';
         });
         rows.push([_t('종별'), parts.join(', ')]);
     }

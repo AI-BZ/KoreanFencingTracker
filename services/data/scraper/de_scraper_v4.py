@@ -142,13 +142,39 @@ class DualDEBracket:
     status: str = "pending"  # pending, first_de_in_progress, second_de_in_progress, completed
 
     def to_dict(self) -> Dict[str, Any]:
+        first_dict = self.first_de.to_dict() if self.first_de else None
+        second_dict = self.second_de.to_dict() if self.second_de else None
+
+        # full_bouts: first_de + second_de 합산 (top-level)
+        all_bouts = []
+        if first_dict and first_dict.get('bouts'):
+            all_bouts.extend(first_dict['bouts'])
+        if second_dict and second_dict.get('bouts'):
+            all_bouts.extend(second_dict['bouts'])
+
+        # participant_count: 모든 bout에서 unique 선수 수
+        player_names = set()
+        for b in all_bouts:
+            if b.get('player1_name'):
+                player_names.add(b['player1_name'])
+            if b.get('player2_name'):
+                player_names.add(b['player2_name'])
+
+        # champion: second_de에서 추출
+        champion = None
+        if self.second_de and self.second_de.champion:
+            champion = self.second_de.champion.to_dict()
+
         return {
             'format': self.format,
             'status': self.status,
+            'participant_count': len(player_names),
+            'champion': champion,
             'seeded_players': [p.to_dict() for p in self.seeded_players],
             'first_de_qualifiers': [p.to_dict() for p in self.first_de_qualifiers],
-            'first_de': self.first_de.to_dict() if self.first_de else None,
-            'second_de': self.second_de.to_dict() if self.second_de else None,
+            'first_de': first_dict,
+            'second_de': second_dict,
+            'full_bouts': all_bouts,
         }
 
 
@@ -188,6 +214,10 @@ class DEScraper:
 
         협회 사이트는 DE 진행 전에 "토너먼트가 진행중인 상태 입니다." 메시지를 표시합니다.
         이 경우 DE 데이터를 스크래핑하면 안 됩니다.
+
+        주의: .tournament_table 구조는 _has_tournament_table()에서 별도로 처리되므로
+        이 함수가 호출되는 시점에서는 #A_table 기반 구조만 확인하면 됨.
+        그러나 안전을 위해 .tournament_table도 체크하여 false positive를 방지.
         """
         in_progress = await self.page.evaluate("""
             () => {
@@ -197,13 +227,21 @@ class DEScraper:
                     return true;
                 }
 
-                // 방법 2: DE 테이블이 비어있는지 확인
-                const aTable = document.querySelector('#A_table');
-                if (!aTable) {
-                    return true;  // 테이블 자체가 없으면 진행 중
+                // 방법 2: .tournament_table이 있으면 진행 중이 아님
+                // (이 경로는 _has_tournament_table()에서 먼저 처리되어야 하지만 안전장치)
+                const tournamentTable = document.querySelector('.tournament_table .user_box');
+                if (tournamentTable) {
+                    return false;
                 }
 
-                // 방법 3: row01에 user_box가 없으면 데이터 없음
+                // 방법 3: #A_table 기반 구조 확인
+                const aTable = document.querySelector('#A_table');
+                if (!aTable) {
+                    // #A_table도 .tournament_table도 없으면 DE 구조 자체가 없음
+                    return true;
+                }
+
+                // 방법 4: row01에 user_box가 없으면 데이터 없음
                 const row01 = aTable.querySelector('td.row_table.row01');
                 if (!row01) {
                     return true;
@@ -318,6 +356,19 @@ class DEScraper:
             bracket.bracket_size = starting_size
             logger.info(f"DE 시작 라운드: {bracket.starting_round} ({starting_size}명)")
 
+            # 1.5. ★★★ 협회 페이지 첫번째 라운드 교차 검증 ★★★
+            verification = await self._verify_first_round_from_page(starting_size)
+            if not verification['verified'] and verification['corrected_round']:
+                corrected = verification['corrected_round']
+                logger.warning(
+                    f"🔧 일반 경로: 시작 라운드 교정 {starting_size}강 → {corrected}강"
+                )
+                starting_size = corrected
+                bracket.starting_round = self.SIZE_TO_ROUND_NAME.get(
+                    starting_size, f'{starting_size}강'
+                )
+                bracket.bracket_size = starting_size
+
             # 2. 필요한 탭 결정
             tabs_needed = self._get_tabs_needed(starting_size)
             logger.info(f"필요한 탭: {tabs_needed}")
@@ -349,12 +400,20 @@ class DEScraper:
             # 4. 중복 제거 및 병합
             deduplicated = self._deduplicate_matches(all_matches)
 
+            # 4.5. 빈 매치 필터링 (양쪽 모두 name=None인 placeholder 제거)
+            valid_matches = [
+                m for m in deduplicated
+                if (m.player1 and m.player1.name) or (m.player2 and m.player2.name)
+            ]
+            if len(valid_matches) < len(deduplicated):
+                logger.warning(f"빈 placeholder 매치 {len(deduplicated) - len(valid_matches)}개 제거")
+
             # 5. 유효성 검증으로 무효 경기 필터링
-            bracket.matches = self._filter_valid_matches(deduplicated)
+            bracket.matches = self._filter_valid_matches(valid_matches)
             logger.info(f"총 경기 수: {len(bracket.matches)} (중복제거 후 {len(deduplicated)}개에서 필터링)")
 
-            # 6. 우승자 확인
-            bracket.champion = await self._get_champion()
+            # 6. 우승자 확인 (DOM → 결승 bout fallback)
+            bracket.champion = await self._get_champion(matches=bracket.matches)
             if bracket.champion:
                 logger.info(f"우승자: {bracket.champion.name}")
 
@@ -765,8 +824,9 @@ class DEScraper:
 
         return valid_matches
 
-    async def _get_champion(self) -> Optional[DEPlayer]:
-        """우승자 정보 추출"""
+    async def _get_champion(self, matches: Optional[List[DEMatch]] = None) -> Optional[DEPlayer]:
+        """우승자 정보 추출 (DOM → 결승 bout fallback)"""
+        # 1차: DOM .row04 방식
         champion = await self.page.evaluate("""
             () => {
                 const aTable = document.querySelector('#A_table');
@@ -794,19 +854,205 @@ class DEScraper:
             }
         """)
 
-        if not champion or not champion.get('name'):
-            return None
+        if champion and champion.get('name'):
+            return DEPlayer(
+                seed=champion['seed'],
+                name=champion['name'],
+                team=None,  # 우승자 칸의 aff는 결승 점수
+                is_bye=False
+            )
 
-        return DEPlayer(
-            seed=champion['seed'],
-            name=champion['name'],
-            team=None,  # 우승자 칸의 aff는 결승 점수
-            is_bye=False
-        )
+        # 2차: 결승 bout에서 추론 (dual_de 등 DOM 비어있는 경우)
+        if matches:
+            final_matches = [
+                m for m in matches
+                if m.round_name in ('결승', 'Final', '1-2', '2강')
+            ]
+            if final_matches:
+                fm = final_matches[0]
+                # winner 직접 확인
+                if fm.winner:
+                    return fm.winner
+                # 점수 비교
+                s1 = fm.player1_score or 0
+                s2 = fm.player2_score or 0
+                try:
+                    s1_int = int(s1)
+                    s2_int = int(s2)
+                except (ValueError, TypeError):
+                    s1_int, s2_int = 0, 0
+                if s1_int > s2_int and s1_int > 0 and fm.player1:
+                    return fm.player1
+                elif s2_int > s1_int and s2_int > 0 and fm.player2:
+                    return fm.player2
+
+        return None
 
     # ========================================
     # .tournament_table 구조 파싱 (국가대표 선발전 등)
     # ========================================
+
+    async def _detect_tournament_table_tabs(self) -> List[tuple]:
+        """tournament_table 구조에서 실제 존재하는 탭 목록을 동적으로 감지
+
+        Returns:
+            List of (fn_param, tab_name) tuples, e.g. [(7, "128강전"), (5, "32강전"), (3, "8강전")]
+        """
+        import re
+
+        tab_texts = await self.page.evaluate("""
+            () => {
+                const tabs = document.querySelectorAll('.tab-tableau-wrap ul li');
+                return Array.from(tabs).map(t => t.textContent.trim());
+            }
+        """)
+
+        if not tab_texts:
+            # 탭 감지 실패 → 기본값 (32강전 + 8강전)
+            logger.warning("tournament_table: 탭 감지 실패 → 기본값 (32강전 + 8강전)")
+            return [(5, "32강전"), (3, "8강전")]
+
+        logger.debug(f"tournament_table: 감지된 탭 텍스트 = {tab_texts}")
+
+        # 탭 텍스트에서 라운드 크기 → fn_param 매핑
+        tabs = []
+        seen_params = set()
+        for text in tab_texts:
+            match = re.search(r'(\d+)강', text)
+            if match:
+                size = int(match.group(1))
+                fn_param = self.ROUND_TO_FN_PARAM.get(size)
+                if fn_param and fn_param not in seen_params:
+                    tabs.append((fn_param, text))
+                    seen_params.add(fn_param)
+            elif '준결승' in text:
+                fn_param = self.ROUND_TO_FN_PARAM.get(4)
+                if fn_param and fn_param not in seen_params:
+                    tabs.append((fn_param, text))
+                    seen_params.add(fn_param)
+            elif '결승' in text:
+                fn_param = self.ROUND_TO_FN_PARAM.get(2)
+                if fn_param and fn_param not in seen_params:
+                    tabs.append((fn_param, text))
+                    seen_params.add(fn_param)
+
+        if not tabs:
+            logger.warning("tournament_table: 탭 파싱 실패 → 기본값 (32강전 + 8강전)")
+            return [(5, "32강전"), (3, "8강전")]
+
+        # fn_param 내림차순 정렬 (큰 라운드부터 → 128강 → 64강 → 32강 → 8강)
+        tabs.sort(key=lambda x: x[0], reverse=True)
+        logger.info(f"tournament_table: 탭 {len(tabs)}개 감지: {[t[1] for t in tabs]}")
+        return tabs
+
+    async def _verify_first_round_from_page(self, detected_first_round: int) -> dict:
+        """협회 페이지에서 첫번째 라운드를 직접 읽어 우리 감지 결과와 교차 검증
+
+        두 가지 소스에서 검증:
+        1. 활성 탭 (li.on > a): 맨 왼쪽 첫번째 라운드 탭의 텍스트
+        2. #tournament_container 헤더 (thead td): 첫번째 라운드명 + 엘리미나시옹 디렉트
+
+        Returns:
+            dict: {
+                'tab_round': int or None,     # 탭에서 읽은 첫번째 라운드 크기
+                'header_round': int or None,  # 헤더에서 읽은 첫번째 라운드 크기
+                'detected_round': int,        # 우리가 감지한 첫번째 라운드
+                'verified': bool,             # 검증 통과 여부
+                'corrected_round': int or None  # 불일치 시 올바른 라운드
+            }
+        """
+        import re
+
+        result = {
+            'tab_round': None,
+            'header_round': None,
+            'detected_round': detected_first_round,
+            'verified': False,
+            'corrected_round': None
+        }
+
+        try:
+            # 소스 1: 첫번째 탭 (맨 왼쪽 = 가장 큰 라운드)
+            first_tab_text = await self.page.evaluate("""
+                () => {
+                    // 모든 탭을 읽어서 첫 번째(맨 왼쪽) 반환
+                    const tabs = document.querySelectorAll('.tab-tableau-wrap ul li');
+                    if (tabs.length > 0) {
+                        return tabs[0].textContent.trim();
+                    }
+                    return null;
+                }
+            """)
+
+            if first_tab_text:
+                m = re.search(r'(\d+)강', first_tab_text)
+                if m:
+                    result['tab_round'] = int(m.group(1))
+                elif '준결승' in first_tab_text:
+                    result['tab_round'] = 4
+                elif '결승' in first_tab_text:
+                    result['tab_round'] = 2
+                logger.debug(f"🔍 페이지 검증 - 첫번째 탭: '{first_tab_text}' → {result['tab_round']}")
+
+            # 소스 2: #tournament_container 헤더의 첫번째 컬럼 (thead td)
+            header_text = await self.page.evaluate("""
+                () => {
+                    // 방법 1: #tournament_container thead의 첫번째 td
+                    const headerCells = document.querySelectorAll(
+                        '#tournament_container table thead tr td'
+                    );
+                    if (headerCells.length > 0) {
+                        return headerCells[0].textContent.trim();
+                    }
+                    // 방법 2: .tournament_table 내의 헤더
+                    const ttHeaders = document.querySelectorAll(
+                        '.tournament_table table thead tr td'
+                    );
+                    if (ttHeaders.length > 0) {
+                        return ttHeaders[0].textContent.trim();
+                    }
+                    return null;
+                }
+            """)
+
+            if header_text:
+                m = re.search(r'(\d+)강', header_text)
+                if m:
+                    result['header_round'] = int(m.group(1))
+                elif '준결승' in header_text:
+                    result['header_round'] = 4
+                elif '결승' in header_text:
+                    result['header_round'] = 2
+                logger.debug(f"🔍 페이지 검증 - 브라켓 헤더: '{header_text}' → {result['header_round']}")
+
+        except Exception as e:
+            logger.warning(f"🔍 페이지 첫번째 라운드 검증 중 오류: {e}")
+
+        # 교차 검증
+        page_sources = [r for r in [result['tab_round'], result['header_round']] if r is not None]
+
+        if not page_sources:
+            # 페이지 소스를 읽지 못함 → 경고만 남기고 통과
+            logger.warning("🔍 페이지 검증: 페이지에서 첫번째 라운드를 읽지 못함 (검증 스킵)")
+            result['verified'] = True  # 검증 불가 → 일단 통과
+            return result
+
+        # 페이지 소스 중 가장 큰 값 = 실제 첫번째 라운드
+        page_first_round = max(page_sources)
+
+        if detected_first_round == page_first_round:
+            logger.info(f"✅ 페이지 검증 통과: 감지={detected_first_round}강, "
+                       f"탭={result['tab_round']}, 헤더={result['header_round']}")
+            result['verified'] = True
+        else:
+            logger.warning(
+                f"❌ 페이지 검증 실패: 우리 감지={detected_first_round}강, "
+                f"페이지 실제={page_first_round}강 "
+                f"(탭={result['tab_round']}, 헤더={result['header_round']})"
+            )
+            result['corrected_round'] = page_first_round
+
+        return result
 
     async def _has_tournament_table(self) -> bool:
         """페이지에 .tournament_table 구조가 있는지 확인"""
@@ -849,8 +1095,9 @@ class DEScraper:
                         isBye: name.toLowerCase().includes('bye') || name === ''
                     }};
 
-                    // 시드 목록 구축 (32강 또는 64강 데이터에서)
-                    if (!skipSeeding && (xpos === 64 || xpos === 32) && name && !seedingMap.has(seedNum)) {{
+                    // 시드 목록 구축 (가장 큰 xposition = 첫 라운드에서 수집)
+                    // 128강/64강/32강 등 모든 라운드에서 수집, seedNum 중복시 첫 번째 유지
+                    if (!skipSeeding && seedNum > 0 && name && !seedingMap.has(seedNum)) {{
                         seedingMap.set(seedNum, player);
                     }}
 
@@ -872,8 +1119,21 @@ class DEScraper:
                     if (match.red && match.green) {{
                         matchNum++;
                         const roundName = match.xposition + '강';
-                        const winner = match.red.isWinner ? match.red :
-                                      match.green.isWinner ? match.green : null;
+                        let winner = null;
+                        if (match.red.isWinner) {{
+                            winner = match.red;
+                        }} else if (match.green.isWinner) {{
+                            winner = match.green;
+                        }} else {{
+                            // Fallback: wingbn 미설정 시 점수로 승자 추론
+                            const redScore = parseInt(match.red.score) || 0;
+                            const greenScore = parseInt(match.green.score) || 0;
+                            if (redScore > greenScore && redScore > 0) {{
+                                winner = match.red;
+                            }} else if (greenScore > redScore && greenScore > 0) {{
+                                winner = match.green;
+                            }}
+                        }}
 
                         matches.push({{
                             match_id: sym,
@@ -918,18 +1178,15 @@ class DEScraper:
         - dir: UP/DOWN (대진표 위치)
 
         수정됨 (2025-01): 멀티 탭 지원 추가
-        - 32강전 탭에서 32강~8강 데이터 수집
-        - 8강전 탭에서 8강~결승 데이터 수집 (준결승, 결승 포함)
+        수정됨 (2026-03): 128강/64강 탭 동적 감지 (하드코딩 제거)
         """
         bracket = DEBracket()
 
         try:
-            # 멀티 탭 지원: 필요한 탭들을 순회하며 데이터 수집
-            # fnGetMatch(5)=32강전, fnGetMatch(3)=8강전
-            tabs_to_parse = [
-                (5, "32강전"),  # 32강, 16강, 8강, 4강 데이터
-                (3, "8강전"),   # 8강, 4강(준결승), 2강(결승), 우승자 데이터
-            ]
+            # 실제 존재하는 탭을 동적으로 감지
+            # fnGetMatch(7)=128강, (6)=64강, (5)=32강, (4)=16강, (3)=8강
+            tabs_to_parse = await self._detect_tournament_table_tabs()
+            logger.info(f"tournament_table: 감지된 탭 = {[(p, n) for p, n in tabs_to_parse]}")
 
             all_matches_data = []
             seeding_data = []
@@ -1027,6 +1284,100 @@ class DEScraper:
                 max_round = max(round_sizes)
                 bracket.bracket_size = max_round
                 bracket.starting_round = f'{max_round}강'
+
+            # ★★★ 협회 페이지 첫번째 라운드 교차 검증 ★★★
+            verification = await self._verify_first_round_from_page(bracket.bracket_size)
+            if not verification['verified'] and verification['corrected_round']:
+                corrected = verification['corrected_round']
+                logger.warning(
+                    f"🔧 첫번째 라운드 교정: {bracket.bracket_size}강 → {corrected}강 "
+                    f"(페이지 실제 값 기준)"
+                )
+                bracket.bracket_size = corrected
+                bracket.starting_round = f'{corrected}강'
+
+                # 교정된 라운드의 탭 데이터가 빠졌다면 추가 수집
+                corrected_fn = self.ROUND_TO_FN_PARAM.get(corrected)
+                parsed_fn_params = {p for p, _ in tabs_to_parse}
+                if corrected_fn and corrected_fn not in parsed_fn_params:
+                    logger.info(f"🔄 교정된 라운드 {corrected}강 탭 추가 수집 "
+                              f"(fnGetMatch({corrected_fn}))")
+                    await self.page.evaluate(f"fnGetMatch({corrected_fn})")
+                    await asyncio.sleep(2)
+
+                    box_count = await self.page.evaluate(
+                        "document.querySelectorAll('.user_box').length"
+                    )
+                    if box_count > 0:
+                        extra_data = await self._extract_tournament_table_data(
+                            skip_seeding=False
+                        )
+                        extra_matches = extra_data.get('matches', [])
+                        extra_seeding = extra_data.get('seeding', [])
+
+                        # 추가 경기 데이터 병합
+                        for em in extra_matches:
+                            mid = em.get('match_id')
+                            if mid and mid not in matches_by_id:
+                                matches_by_id[mid] = em
+                        matches_data = list(matches_by_id.values())
+
+                        # 시딩 데이터 교체 (더 큰 라운드의 시딩이 더 완전)
+                        if extra_seeding and len(extra_seeding) > len(seeding_data):
+                            logger.info(
+                                f"🔄 시딩 데이터 교체: {len(seeding_data)}명 → "
+                                f"{len(extra_seeding)}명 (교정 라운드에서)"
+                            )
+                            seeding_data = extra_seeding
+
+                        # 라운드 크기 재계산
+                        round_sizes = set(
+                            m['round_size'] for m in matches_data if m.get('round_size')
+                        )
+                        if round_sizes:
+                            max_round = max(round_sizes)
+                            bracket.bracket_size = max_round
+                            bracket.starting_round = f'{max_round}강'
+
+            # ★★★ bracket_size 최종 검증: bout 수 및 시딩 수 기반 ★★★
+            # 탭 감지나 페이지 검증이 실패하는 경우 (예: Second DE에서 탭이
+            # 8강전부터만 표시되어 bracket_size=8이 되지만 실제 64명 참가)
+            # 수집된 실제 데이터로 bracket_size를 보정
+            total_bouts = len(matches_data)
+            total_seeded = len(seeding_data)
+
+            if total_bouts > 0:
+                # Single elimination: n participants → n-1 bouts
+                min_participants_from_bouts = total_bouts + 1
+                min_bracket_from_bouts = 1
+                while min_bracket_from_bouts < min_participants_from_bouts:
+                    min_bracket_from_bouts *= 2
+
+                if min_bracket_from_bouts > bracket.bracket_size:
+                    logger.warning(
+                        f"🔧 bracket_size 보정 (bout 수 기반): "
+                        f"{bracket.bracket_size} → {min_bracket_from_bouts} "
+                        f"({total_bouts} bouts → 최소 {min_participants_from_bouts} participants)"
+                    )
+                    bracket.bracket_size = min_bracket_from_bouts
+                    bracket.starting_round = self.SIZE_TO_ROUND_NAME.get(
+                        min_bracket_from_bouts, f'{min_bracket_from_bouts}강'
+                    )
+
+            if total_seeded > bracket.bracket_size:
+                min_bracket_from_seeding = 1
+                while min_bracket_from_seeding < total_seeded:
+                    min_bracket_from_seeding *= 2
+
+                logger.warning(
+                    f"🔧 bracket_size 보정 (시딩 수 기반): "
+                    f"{bracket.bracket_size} → {min_bracket_from_seeding} "
+                    f"({total_seeded} seeded players)"
+                )
+                bracket.bracket_size = min_bracket_from_seeding
+                bracket.starting_round = self.SIZE_TO_ROUND_NAME.get(
+                    min_bracket_from_seeding, f'{min_bracket_from_seeding}강'
+                )
 
             # 경기 데이터 변환
             for m in matches_data:
@@ -1389,7 +1740,7 @@ class DEScraper:
         return seeded
 
     def _determine_dual_de_status(self, dual_bracket: DualDEBracket) -> str:
-        """Dual DE 전체 상태 결정"""
+        """Dual DE 전체 상태 결정 — 경기 데이터 기반 (champion 의존 X)"""
         first_de = dual_bracket.first_de
         second_de = dual_bracket.second_de
 
@@ -1397,28 +1748,35 @@ class DEScraper:
         if not first_de:
             return "pending"
 
-        # First DE 진행 중 (champion 없음)
-        if first_de.is_in_progress or not first_de.champion:
-            # 64강까지 완료되었는지 확인
-            has_64_matches = any(m.round_name == '64강' for m in first_de.matches)
-            has_all_64_winners = all(
-                m.winner is not None
-                for m in first_de.matches
-                if m.round_name == '64강'
-            )
-            if not has_64_matches or not has_all_64_winners:
-                return "first_de_in_progress"
-
-        # Second DE 없음 → first_de_in_progress (아직 시작 안 함)
-        if not second_de:
+        # First DE 완료 여부: 경기 데이터 기반
+        first_matches = first_de.matches or []
+        if not first_matches:
             return "first_de_in_progress"
 
-        # Second DE 진행 중
-        if second_de.is_in_progress or not second_de.champion:
+        first_non_bye = [m for m in first_matches if not m.is_bye_match]
+        first_all_winners = all(m.winner is not None for m in first_non_bye) if first_non_bye else False
+        if not first_all_winners:
+            return "first_de_in_progress"
+
+        # Second DE 없음 → first_de_complete
+        if not second_de:
+            return "first_de_complete"
+
+        # Second DE 완료 여부
+        second_matches = second_de.matches or []
+        if not second_matches:
             return "second_de_in_progress"
 
-        # 모두 완료
-        return "completed"
+        # 결승 완료 여부
+        final_matches = [m for m in second_matches if m.round_name in ('결승', 'Final', '1-2')]
+        if final_matches and final_matches[0].winner:
+            return "completed"
+
+        # champion이 있으면 completed
+        if second_de.champion:
+            return "completed"
+
+        return "second_de_in_progress"
 
 
 # 테스트 함수

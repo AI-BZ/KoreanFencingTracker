@@ -318,6 +318,21 @@ def post_process_de_bracket(bracket_data: Dict[str, Any]) -> Dict[str, Any]:
 
     seeding = bracket_data.get('seeding', [])
     if not seeding:
+        # seeding 없을 때 bout 내용도 검증 - 빈 placeholder bout 제거
+        bouts = bracket_data.get('bouts', [])
+        if bouts:
+            has_valid = False
+            for b in bouts:
+                p1_name = b.get('player1_name') or (b.get('player1', {}) or {}).get('name')
+                p2_name = b.get('player2_name') or (b.get('player2', {}) or {}).get('name')
+                if p1_name or p2_name:
+                    has_valid = True
+                    break
+            if not has_valid:
+                logger.warning(f"⚠️ seeding 없고 bout {len(bouts)}개 모두 빈 placeholder → bout 제거")
+                bracket_data['bouts'] = []
+                bracket_data['full_bouts'] = []
+                bracket_data['bouts_by_round'] = {}
         return bracket_data
 
     # 1. bracket_size 계산
@@ -393,6 +408,125 @@ def post_process_de_bracket(bracket_data: Dict[str, Any]) -> Dict[str, Any]:
 
     logger.debug(f"DE 후처리 완료: bracket_size={bracket_size}, starting_round={starting_round}, "
                 f"seeding={len(seeding)}명, bouts={len(all_bouts)}개")
+
+    # 7. ★★★ 시드 라운드 종합 검증 (Seed Round Verification System) ★★★
+    bracket_data = _verify_seed_round_integrity(bracket_data)
+
+    return bracket_data
+
+
+def _verify_seed_round_integrity(bracket_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    시드 라운드 종합 검증 시스템
+
+    스크래핑 후 DE 브라켓 데이터의 정합성을 검증하고 자동 수정:
+    1. bracket_size ↔ starting_round 일관성
+    2. participant_count ↔ 시딩 수 일관성
+    3. 경기 데이터에 나타나는 선수 vs 시딩 교차 검증
+    4. 라운드별 경기 수 검증
+    5. 시드 번호 연속성 검증
+    """
+    seeding = bracket_data.get('seeding', [])
+    bouts = bracket_data.get('bouts', [])
+    bouts_by_round = bracket_data.get('bouts_by_round', {})
+    bracket_size = bracket_data.get('bracket_size', 0)
+    starting_round = bracket_data.get('starting_round', '')
+    participant_count = bracket_data.get('participant_count', 0)
+
+    if bracket_size == 0 or not seeding:
+        return bracket_data
+
+    issues = []
+    auto_fixed = []
+
+    # ── 검증 1: bracket_size ↔ starting_round 일관성 ──
+    expected_starting_round = get_starting_round(bracket_size)
+    if starting_round and starting_round != expected_starting_round:
+        # bracket_size에서 계산한 starting_round와 불일치 → bracket_size 기준으로 수정
+        issues.append(
+            f"V1: starting_round 불일치: '{starting_round}' != expected '{expected_starting_round}' "
+            f"(bracket_size={bracket_size})"
+        )
+        bracket_data['starting_round'] = expected_starting_round
+        auto_fixed.append(f"V1: starting_round → '{expected_starting_round}'")
+
+    # ── 검증 2: participant_count ↔ 시딩 수 교차 검증 ──
+    actual_players_in_seeding = [s for s in seeding if s.get('name') and not s.get('is_bye')]
+    actual_count = len(actual_players_in_seeding)
+
+    if participant_count != actual_count and actual_count > 0:
+        issues.append(
+            f"V2: participant_count 불일치: {participant_count} != 시딩 실제 선수 {actual_count}명"
+        )
+        bracket_data['participant_count'] = actual_count
+        auto_fixed.append(f"V2: participant_count → {actual_count}")
+        participant_count = actual_count
+
+    # bracket_size가 participant_count보다 작으면 수정
+    correct_bracket_size = get_correct_bracket_size(participant_count)
+    if bracket_size < correct_bracket_size:
+        issues.append(
+            f"V2b: bracket_size({bracket_size}) < 필요 크기({correct_bracket_size}) "
+            f"for {participant_count}명"
+        )
+        bracket_data['bracket_size'] = correct_bracket_size
+        bracket_data['starting_round'] = get_starting_round(correct_bracket_size)
+        auto_fixed.append(f"V2b: bracket_size → {correct_bracket_size}")
+
+    # ── 검증 3: 경기 데이터의 선수 vs 시딩 교차 검증 ──
+    seeded_names = {s['name'] for s in actual_players_in_seeding}
+    players_in_bouts = set()
+    for b in bouts:
+        p1 = b.get('player1_name') or ''
+        p2 = b.get('player2_name') or ''
+        if p1 and not b.get('player1_is_bye', False):
+            players_in_bouts.add(p1)
+        if p2 and not b.get('player2_is_bye', False):
+            players_in_bouts.add(p2)
+
+    # 경기에 나타나지만 시딩에 없는 선수
+    missing_from_seeding = players_in_bouts - seeded_names
+    if missing_from_seeding and len(missing_from_seeding) > 2:
+        # 2명 이하는 이름 표기 차이일 수 있으므로 무시
+        issues.append(
+            f"V3: 경기에 존재하지만 시딩에 없는 선수 {len(missing_from_seeding)}명: "
+            f"{list(missing_from_seeding)[:5]}{'...' if len(missing_from_seeding) > 5 else ''}"
+        )
+
+    # ── 검증 4: 라운드별 경기 수 검증 ──
+    round_size_map = {
+        '128강': 64, '64강': 32, '32강': 16, '16강': 8,
+        '8강': 4, '준결승': 2, '결승': 1, '3-4위': 1
+    }
+    for round_name_key, round_bouts in bouts_by_round.items():
+        normalized_key = round_name_key.replace('전', '')
+        expected_count = round_size_map.get(normalized_key)
+        actual_bout_count = len(round_bouts)
+        if expected_count and actual_bout_count > expected_count:
+            issues.append(
+                f"V4: {round_name_key} 경기 수 초과: {actual_bout_count}개 > 예상 {expected_count}개"
+            )
+
+    # ── 검증 5: 시드 번호 연속성 (갭 탐지) ──
+    if actual_players_in_seeding:
+        seed_numbers = sorted([s.get('seed', 0) for s in actual_players_in_seeding if s.get('seed')])
+        if seed_numbers:
+            max_seed = seed_numbers[-1]
+            # 시드 번호가 bracket_size를 초과하면 문제
+            if max_seed > bracket_size:
+                issues.append(
+                    f"V5: 최대 시드 번호({max_seed}) > bracket_size({bracket_size})"
+                )
+
+    # ── 결과 로깅 ──
+    if issues:
+        for issue in issues:
+            logger.warning(f"🔍 시드검증: {issue}")
+        for fix in auto_fixed:
+            logger.info(f"🔧 시드검증 자동수정: {fix}")
+    else:
+        logger.debug(f"✅ 시드검증 통과: bracket_size={bracket_size}, "
+                     f"participants={participant_count}, bouts={len(bouts)}")
 
     return bracket_data
 
@@ -898,6 +1032,31 @@ class KFFFullScraper:
                 await de_tab.click(timeout=5000, force=True)
                 await page.wait_for_timeout(1000)
 
+                # Dual DE: Second DE로 전환하여 최종 순위 수집
+                # (기본값은 First DE이므로 Second DE 순위가 올바른 최종 순위)
+                try:
+                    has_dual_de_selector = await page.evaluate(
+                        "() => !!document.querySelector('select#schEtc01')"
+                    )
+                    if has_dual_de_selector:
+                        logger.info("🎯 Dual DE 감지 (경기결과 탭) - Second DE로 전환하여 최종 순위 수집")
+                        await page.evaluate("""
+                            () => {
+                                const selector = document.querySelector('select#schEtc01');
+                                if (selector && selector.options.length >= 2) {
+                                    selector.selectedIndex = 1;
+                                    if (typeof fnChangeRuls === 'function') {
+                                        fnChangeRuls();
+                                    } else {
+                                        selector.dispatchEvent(new Event('change', { bubbles: true }));
+                                    }
+                                }
+                            }
+                        """)
+                        await page.wait_for_timeout(2000)
+                except Exception as dual_de_err:
+                    logger.debug(f"Dual DE 전환 시도 중 오류 (무시): {dual_de_err}")
+
                 # 최종 순위 수집 (경기결과 탭의 엘리미나시옹디렉트 하위)
                 results["final_rankings"] = await self._parse_final_rankings_v2(page)
                 results["total_participants"] = len(results["final_rankings"])
@@ -1348,8 +1507,17 @@ class KFFFullScraper:
                         return rankings;
                     }
                 """)
-                all_rankings.extend(eliminated_rankings)
-                logger.debug(f"탈락자랭킹: {len(eliminated_rankings)}명")
+                # 중복 제거: 진출자와 동일 선수가 탈락자에도 나오면 제외
+                # (KFF에서 전원 진출 시 드롭다운 전환 후에도 같은 테이블 표시됨)
+                qualified_names = {r["name"] for r in qualified_rankings}
+                deduped_eliminated = [r for r in eliminated_rankings if r["name"] not in qualified_names]
+                all_rankings.extend(deduped_eliminated)
+                if len(deduped_eliminated) < len(eliminated_rankings):
+                    logger.info(
+                        f"탈락자랭킹 중복 제거: {len(eliminated_rankings)}명 → {len(deduped_eliminated)}명 "
+                        f"(진출자와 {len(eliminated_rankings) - len(deduped_eliminated)}명 중복)"
+                    )
+                logger.debug(f"탈락자랭킹: {len(deduped_eliminated)}명")
 
             except Exception as e:
                 logger.debug(f"탈락자랭킹 추출 오류 (무시): {e}")
@@ -1787,16 +1955,20 @@ class KFFFullScraper:
                     if (pageText.includes('토너먼트가 진행중인 상태')) {
                         return true;
                     }
-                    // DE 테이블이 없거나 데이터가 없으면 진행 중으로 간주
+                    // DE 테이블 존재 확인 - 여러 구조 지원
                     const aTable = document.querySelector('#A_table');
-                    if (!aTable) {
-                        // 구형 테이블 구조 확인
-                        const bracketTable = document.querySelector('table');
-                        if (!bracketTable || !bracketTable.textContent.includes('엘리미나시옹디렉트')) {
-                            return true;
-                        }
+                    const tournamentTable = document.querySelector('.tournament_table .user_box');
+                    const tournamentContainer = document.querySelector('#tournament_container');
+                    // 어떤 DE 구조라도 있으면 진행 중이 아님
+                    if (aTable || tournamentTable) {
+                        return false;
                     }
-                    return false;
+                    // 컨테이너만 있는 경우: 내부 데이터 확인
+                    if (tournamentContainer) {
+                        const cells = tournamentContainer.querySelectorAll('td');
+                        return cells.length < 5;  // 셀이 거의 없으면 아직 로딩 안됨
+                    }
+                    return true;
                 }
             """)
 
@@ -3261,6 +3433,9 @@ class KFFFullScraper:
             competitions = competitions[:limit]
 
         # 기존 데이터 로드 (resume 모드)
+        # NOTE: 이 JSON 로드는 스크래퍼 내부 체크포인트용입니다.
+        # 서버 런타임 데이터 소스가 아님 — 서버는 Supabase만 사용합니다.
+        # 스크래핑 중단 후 재개 시 이전 수집 결과를 이어받기 위한 용도입니다.
         if resume_file:
             try:
                 with open(resume_file, 'r', encoding='utf-8') as f:

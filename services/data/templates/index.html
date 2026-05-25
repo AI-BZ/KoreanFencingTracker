@@ -718,14 +718,25 @@
         </div>
     </div>
 
-    <!-- Selection/꿈나무 선발 배너 -->
-    <div style="background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%); padding: 2rem; border-radius: 12px; margin: 2rem 0; text-align: center;">
-        <div style="color: white;">
-            <h3 style="margin-bottom: 0.5rem; font-size: 1.5rem;">🏆 {{ _t("꿈나무 선발 포인트") }}</h3>
-            <p style="margin-bottom: 1.5rem; opacity: 0.9;">{{ _t("중1 기간 대회 성적으로 꿈나무 선발 포인트를 확인하세요") }}</p>
-            <a href="/selection/kkumnamu/summary" style="display: inline-block; background: white; color: #e67e22; padding: 0.75rem 2rem; border-radius: 25px; text-decoration: none; font-weight: 600; transition: transform 0.2s;">
-                {{ _t("선발 포인트 확인하기") }} →
-            </a>
+    <!-- Selection/꿈나무 + 청소년 대표 선발 배너 -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 2rem 0;">
+        <div style="background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%); padding: 2rem; border-radius: 12px; text-align: center;">
+            <div style="color: white;">
+                <h3 style="margin-bottom: 0.5rem; font-size: 1.3rem;">🌱 {{ _t("꿈나무 선발 포인트") }}</h3>
+                <p style="margin-bottom: 1.5rem; opacity: 0.9; font-size: 0.9rem;">{{ _t("중1 기간 대회 성적으로 꿈나무 선발 포인트를 확인하세요") }}</p>
+                <a href="/{{ lang|default('ko') }}/selection/kkumnamu/summary" style="display: inline-block; background: white; color: #e67e22; padding: 0.6rem 1.5rem; border-radius: 25px; text-decoration: none; font-weight: 600; font-size: 0.9rem;">
+                    {{ _t("선발 포인트 확인하기") }} →
+                </a>
+            </div>
+        </div>
+        <div style="background: linear-gradient(135deg, #2980b9 0%, #3498db 100%); padding: 2rem; border-radius: 12px; text-align: center;">
+            <div style="color: white;">
+                <h3 style="margin-bottom: 0.5rem; font-size: 1.3rem;">🏆 {{ _t("청소년 대표 선발 포인트") }}</h3>
+                <p style="margin-bottom: 1.5rem; opacity: 0.9; font-size: 0.9rem;">{{ _t("중2~고3 대회 성적으로 청소년 대표 선발 포인트를 확인하세요") }}</p>
+                <a href="/{{ lang|default('ko') }}/selection/national-team/summary" style="display: inline-block; background: white; color: #2980b9; padding: 0.6rem 1.5rem; border-radius: 25px; text-decoration: none; font-weight: 600; font-size: 0.9rem;">
+                    {{ _t("선발 포인트 확인하기") }} →
+                </a>
+            </div>
         </div>
     </div>
 
@@ -1228,7 +1239,7 @@ function setupEventListeners() {
                     suggestions.innerHTML = data.results.map(p => `
                         <div class="suggestion-item" onclick="goToPlayer('${p.name.replace(/'/g, "\\'")}')">
                             <div>
-                                <div class="suggestion-name">${p.name}</div>
+                                <div class="suggestion-name">${p.display_name || p.name}</div>
                                 <div class="suggestion-team">${p.teams.join(', ') || i18n.home.no_team}</div>
                             </div>
                             <span class="suggestion-count">${p.record_count} ${i18n.home.records}</span>
@@ -1394,6 +1405,27 @@ function formatDateRange(startDate, endDate) {
     return `${startMonth}.${startDay} - ${endMonth}.${endDay}`;
 }
 
+// FencingLab i18n setup
+window.i18n = {
+    fencinglab: {
+        subtitle: '{{ i18n.common.fencinglab.subtitle|default("실제 데이터 기반 선수 분석") }}',
+        view_analysis: '{{ i18n.common.fencinglab.view_analysis|default("선수 분석 보기 →") }}',
+        bouts: '{{ i18n.common.fencinglab.bouts|default("경기") }}',
+        win_rate: '{{ i18n.common.fencinglab.win_rate|default("승률") }}',
+        pool_rate: '{{ i18n.common.fencinglab.pool_rate|default("Pool") }}',
+        strong_heart: '{{ i18n.common.fencinglab.strong_heart|default("강심장") }}',
+        avg: '{{ i18n.common.fencinglab.avg|default("평균") }}',
+        total_bouts: '{{ i18n.common.fencinglab.total_bouts|default("총 경기") }}',
+        performance_by_type: '{{ i18n.common.fencinglab.performance_by_type|default("경기 유형별 성적") }}',
+        close_match_analysis: '{{ i18n.common.fencinglab.close_match_analysis|default("접전 분석 (1점차 경기)") }}',
+        avg_win_margin: '{{ i18n.common.fencinglab.avg_win_margin|default("평균 승리 점수차") }}',
+        avg_loss_margin: '{{ i18n.common.fencinglab.avg_loss_margin|default("평균 패배 점수차") }}',
+        match_ending_type: '{{ i18n.common.fencinglab.match_ending_type|default("경기 종료 유형") }}',
+        recent_matches: '{{ i18n.common.fencinglab.recent_matches|default("최근 경기 기록") }}',
+        cannot_load_data: '{{ i18n.common.fencinglab.cannot_load_data|default("데이터를 불러올 수 없습니다.") }}',
+    }
+};
+
 // FencingLab Demo Section
 document.addEventListener('DOMContentLoaded', function() {
     // Load Chart.js first
@@ -1402,7 +1434,7 @@ document.addEventListener('DOMContentLoaded', function() {
     script1.onload = function() {
         // Then load FencingLab
         const script2 = document.createElement('script');
-        script2.src = '/static/js/fencinglab.js';
+        script2.src = '/static/js/fencinglab.js?v=2';
         script2.onload = function() {
             // Render demo section
             if (window.FencingLab) {

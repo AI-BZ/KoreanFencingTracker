@@ -197,15 +197,14 @@ FencingMind/
 
 ### 서버 실행 방법
 ```bash
-# 프로젝트 루트에서 실행 (PYTHONPATH 설정 필수!)
-cd /Users/gyejinpark/Documents/GitHub/FencingCommunityDropShipping
+# 프로덕션 (launchd 관리 - 자동 시작/재시작, 포트 9071)
+# Cloudflare Tunnel → nginx:9090 → FastAPI:9071
+cd /Users/gyejinpark/Documents/GitHub/FencingMind-data/services/data
+bash scripts/fencingmind-server.sh restart
 
-# data 서비스 실행 (packages 경로 포함 필수!)
-PYTHONPATH="${PWD}:${PWD}/packages:${PWD}/services/data" python -m uvicorn services.data.app.server:app --host 0.0.0.0 --port 71
-
-# 또는 환경변수 export 후 실행
-export PYTHONPATH="${PWD}:${PWD}/packages:${PWD}/services/data"
-python -m uvicorn services.data.app.server:app --host 0.0.0.0 --port 71
+# 개발용 (수동)
+cd /Users/gyejinpark/Documents/GitHub/FencingMind-data/services/data
+PYTHONPATH=".:../../packages" python -m uvicorn app.server:app --host 0.0.0.0 --port 9071
 ```
 
 ### Import 규칙 (shared_core)
@@ -473,9 +472,10 @@ python scraper/full_scraper.py --competition-id 123
 
 ## Server Configuration
 ```
-내부 포트: 71 (Internal Port - DO NOT CHANGE!)
-개발 서버: python -m uvicorn app.server:app --host 0.0.0.0 --port 71
-ARM64 서버: arch -arm64 python3 -m uvicorn app.server:app --host 0.0.0.0 --port 71
+프로덕션 포트: 9071 (Cloudflare Tunnel → nginx:9090 → FastAPI:9071)
+서브도메인 포트 체계: account=9070, data=9071, club=9072, community=9073~9076
+관리 스크립트: bash scripts/fencingmind-server.sh {start|stop|restart|status}
+개발 서버: PYTHONPATH=".:../../packages" python -m uvicorn app.server:app --host 0.0.0.0 --port 9071
 ```
 
 ## Environment Variables
@@ -491,6 +491,8 @@ MAX_CONCURRENT_REQUESTS=3
 2. [ ] 서버 코드를 Supabase 전용으로 수정 (JSON 로드 로직 제거)
 3. [ ] 클럽 관리 기능 완성 (로스터, 출석, 비용)
 4. [ ] 카카오 로그인 연동
+5. [x] ~~7개 언어 i18n UI 번역 시스템~~ (완료 - ko/en/ja/fr/it/zh/tr)
+6. [x] ~~선수명 로마자 변환 + 영문명 수정 API~~ (완료 - 2026-05-21)
 
 ## Fencing Terminology (용어 체계)
 

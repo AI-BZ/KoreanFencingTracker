@@ -146,6 +146,15 @@ class PlayerService:
     # 선수 프로필 및 통계
     # =============================================
 
+    async def get_player_name(self, player_id: int) -> Optional[str]:
+        """선수 이름 조회"""
+        response = self.supabase.table("players").select(
+            "name"
+        ).eq("id", player_id).single().execute()
+        if response.data:
+            return response.data.get("name")
+        return None
+
     async def get_player_profile(self, player_id: int) -> Optional[Dict[str, Any]]:
         """
         선수 전체 프로필

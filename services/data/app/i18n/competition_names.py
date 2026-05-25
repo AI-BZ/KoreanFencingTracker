@@ -39,6 +39,80 @@ _ORDINAL = {
 # Variants (spacing, dot separators) are normalized before lookup.
 
 _BASE_TRANSLATIONS = {
+    # --- Selection page short labels (선발 포인트 테이블 약칭) ---
+    "중고연맹회장배": {
+        "en": "Jr. Federation President's Cup",
+        "fr": "Coupe du Président Fédération Jr.",
+        "it": "Coppa Presidente Fed. Jr.",
+        "ja": "中高連盟会長杯",
+        "zh": "中高联盟会长杯",
+        "tr": "Jr. Federasyon Başkan Kupası",
+    },
+    "회장배종별": {
+        "en": "President's Cup by Category",
+        "fr": "Coupe du Président par Catégorie",
+        "it": "Coppa Presidente per Categoria",
+        "ja": "会長杯種別",
+        "zh": "会长杯分类",
+        "tr": "Başkan Kupası Kategorilere Göre",
+    },
+    "문체부장관기": {
+        "en": "Minister of Culture Cup",
+        "fr": "Coupe du Ministre de la Culture",
+        "it": "Coppa Ministro della Cultura",
+        "ja": "文体部長官旗",
+        "zh": "文体部长官旗",
+        "tr": "Kültür Bakanı Kupası",
+    },
+    "전국종별": {
+        "en": "National by Category",
+        "fr": "National par Catégorie",
+        "it": "Nazionale per Categoria",
+        "ja": "全国種別",
+        "zh": "全国分类",
+        "tr": "Ulusal Kategorilere Göre",
+    },
+    "중고연맹종별": {
+        "en": "Jr. Federation by Category",
+        "fr": "Fédération Jr. par Catégorie",
+        "it": "Fed. Jr. per Categoria",
+        "ja": "中高連盟種別",
+        "zh": "中高联盟分类",
+        "tr": "Jr. Federasyon Kategorilere Göre",
+    },
+    "대통령배": {
+        "en": "Presidential Cup",
+        "fr": "Coupe Présidentielle",
+        "it": "Coppa Presidenziale",
+        "ja": "大統領杯",
+        "zh": "总统杯",
+        "tr": "Cumhurbaşkanlığı Kupası",
+    },
+    "김창환배": {
+        "en": "Kim Chang-hwan Cup",
+        "fr": "Coupe Kim Chang-hwan",
+        "it": "Coppa Kim Chang-hwan",
+        "ja": "キム・チャンファン杯",
+        "zh": "金昌焕杯",
+        "tr": "Kim Chang-hwan Kupası",
+    },
+    "종목별오픈": {
+        "en": "Open by Event",
+        "fr": "Open par Épreuve",
+        "it": "Open per Specialità",
+        "ja": "種目別オープン",
+        "zh": "项目公开赛",
+        "tr": "Branş Açık Turnuvası",
+    },
+    "국대선발": {
+        "en": "National Team Selection",
+        "fr": "Sélection Équipe Nationale",
+        "it": "Selezione Squadra Nazionale",
+        "ja": "国家代表選抜",
+        "zh": "国家队选拔",
+        "tr": "Milli Takım Seçimi",
+    },
+
     # --- KFF President's Cup ---
     "회장배전국남녀종별펜싱선수권대회": {
         "en": "KFF President's Cup National Fencing Championships by Category",

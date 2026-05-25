@@ -2,7 +2,7 @@
 
 **공식 명칭:** FencingMind Tracker
 **서브도메인:** data.fencingmind.ai
-**포트:** 71
+**포트:** 9071 (Cloudflare Tunnel → nginx:9090 → FastAPI:9071)
 **상태:** ✅ 운영 중 (메인 서비스)
 **로고:** `/static/images/logo/FencingMind_logo_long_Tracker.png`
 
@@ -13,6 +13,9 @@
 - 선수 프로필 및 랭킹 시스템
 - 클럽/코치 디렉토리
 - API 제공 (B2B 데이터 판매)
+
+## 핵심 문서 참조
+- **선발 포인트 기준** (꿈나무/청소년 대표): `docs/SELECTION_CRITERIA.md`
 
 ## 수익 모델
 - API 구독: $99~999/월 (이용량별)
@@ -40,8 +43,13 @@ services/data/
 
 ## 서버 실행
 ```bash
+# 프로덕션 (launchd 관리 - 자동 시작/재시작)
+# /Users/gyejinpark/opt/fencingmind/scripts/start-data.sh → port 9071
+bash scripts/fencingmind-server.sh restart
+
+# 개발용 (수동)
 cd services/data
-python -m uvicorn app.server:app --host 0.0.0.0 --port 71
+PYTHONPATH=".:../../packages" python -m uvicorn app.server:app --host 0.0.0.0 --port 9071
 ```
 
 ---
@@ -60,6 +68,65 @@ python -m uvicorn app.server:app --host 0.0.0.0 --port 71
 - `members` - 회원 (공유)
 - `players` - 선수 (공유)
 - `organizations` - 조직 (공유)
+
+---
+
+## 🌐 다국어 지원 (i18n) - 2026-05-21 현재
+
+### 지원 언어 (7개)
+ko (한국어, 기본), en (영어), ja (일본어), fr (프랑스어), it (이탈리아어), zh (중국어), tr (터키어)
+
+### 아키텍처
+```
+app/i18n/
+├── __init__.py              # TranslationManager, 미들웨어
+├── auto_translate.py        # 자동 번역 (LLM 기반)
+├── translations/{lang}/     # 정적 번역 JSON (common.json)
+└── ...
+
+app/translation_service.py   # TranslationService (선수명 로마자, 조직명 영문)
+app/international_data.py    # InternationalDataManager (FIE/FencingTracker 연동)
+```
+
+### 선수명 번역 파이프라인 (✅ 구현 완료)
+```
+서버 시작 → build_player_translation_cache()
+         → players.translations.en.name 캐시 로드 (~11,786건)
+
+요청 시:
+  lang == 'ko' → 한국어 원본
+  lang != 'ko' → _player_translation_cache 히트 → 즉시 반환
+              → 캐시 미스 → TranslationService.translate_player_name() 로마자 변환
+              → 실패 → 한국어 원본 fallback
+```
+
+### 템플릿 번역 함수
+| 함수 | 용도 | 사용 위치 |
+|------|------|----------|
+| `t('키')` | 정적 번역 (common.json) | 전체 |
+| `_t('한국어')` | 자동 번역 fallback | 전체 |
+| `tr_event(name)` | 종목명 번역 | 전체 |
+| `tr_comp(name)` | 대회명 번역 | 전체 |
+| `tr_team(name)` | 조직명 번역 (캐시) | 전체 |
+| `tr_player(name)` | 선수명 로마자 (캐시) | 전체 |
+
+### JS 번역 (동적 렌더링용)
+- `_tr_team(name)`: `_teamTransMap` / `_teamMap` JSON에서 조회
+- `_tr_player(name)`: `_playerTransMap` / `_playerMap` JSON에서 조회
+- 서버에서 이벤트/대회 내 모든 선수명 수집 → `player_translation_map` 생성 → 템플릿 전달
+
+### 영문명 수정 API
+```
+PUT /api/player/me/english-name          ← 본인 수정 (JWT, member.player_id)
+PUT /api/player/{name}/english-name      ← 관리자/코치 수정 (admin/coach/head_coach/owner)
+Body: {"english_name": "Soyun Park"}
+→ players.translations.en 업데이트 + _player_translation_cache 즉시 갱신
+```
+
+### 핵심 원칙
+- **URL은 한국어 유지**: `/player/박소윤` (라우팅용)
+- **표시는 로마자**: `{{ tr_player(player.name) }}` → "Soyun Park"
+- **캐시 우선**: 서버 시작 시 1회 빌드, API 수정 시 즉시 갱신
 
 ---
 
@@ -131,6 +198,33 @@ if starting_round in full_round_order:
 - [ ] 파이프라인 어느 단계에서 오류가 발생하는지 파악했는가?
 - [ ] 하드코딩을 근본 데이터 참조로 교체했는가?
 - [ ] 수정 후 다른 대회/이벤트에서도 정상 작동하는지 확인했는가?
+
+---
+
+## 📏📏📏 데이터 일관성 원칙 (Data Consistency Principles) 📏📏📏
+
+### 핵심 원칙: 같은 지표는 어디서나 같은 숫자
+하나의 지표(참가자 수, 순위 등)는 **모든 화면/API에서 동일한 값**을 표시해야 한다.
+
+### 참가자 수 (total_participants) 우선순위
+```
+1. participants 리스트 (fetch_participants.py 수집) — 가장 정확
+2. Pool 참가자 합계 (pool_rounds에서 집계한 unique 선수)
+3. pool_total_ranking 수 (자체 계산 시 전원 포함)
+4. final_rankings 수 (최소 fallback)
+```
+⚠️ `event.total_participants` 명시값은 더 이상 사용하지 않음 (과거 final_rankings 수 기반이라 부정확)
+
+### Pool 종합 순위 (pool_total_ranking) 정책
+- **Primary Source**: pool_rounds에서 자체 계산 (`pool_calculator.calculate_pool_total_ranking()`)
+- **KFF 스크래핑 데이터**: "진출" 상태 마킹에만 사용 (KFF는 본선 미진출자 삭제하므로 불완전)
+- **자체 계산 이점**: 전체 참가자 포함, 일관된 순위 산출, 중복 없음
+- **적용 시점**: 저장 시(competition_detector) + 표시 시(server.py) 이중 보장
+
+### 위반 방지 체크리스트
+- [ ] 같은 지표가 서로 다른 숫자로 표시되지 않는가?
+- [ ] pool_total_ranking이 pool_rounds 선수 수와 일치하는가?
+- [ ] participants 탭의 참가자 수와 헤더의 참가자 수가 같은가?
 
 ---
 
@@ -274,3 +368,14 @@ app/server.py                  # API 엔드포인트
 ### URL 파라미터
 - `?highlight=선수이름` - 페이지 로드 시 해당 선수 자동 하이라이트
 - 대회 페이지에서 종목 페이지로 이동 시 자동 전달
+
+---
+
+## 이벤트 정렬 순서 (Event Sorting Order)
+대회 상세 페이지에서 이벤트(종목) 목록의 표시 순서:
+1. **무기**: 플뢰레 → 에페 → 사브르
+2. **성별**: 여 → 남
+3. **나이그룹**: 초등 → 중학 → 고등 → 일반(대학/실업)
+4. **종류**: 개인전 → 단체전
+
+구현: server.py의 `_event_sort_key()` 함수

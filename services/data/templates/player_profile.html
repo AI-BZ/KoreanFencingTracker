@@ -5,7 +5,7 @@
 {% if weapon == 'foil' %}{{ i18n.common.weapons.foil|default('Foil') }}{% elif weapon == 'epee' %}{{ i18n.common.weapons.epee|default('Epee') }}{% elif weapon == 'sabre' %}{{ i18n.common.weapons.sabre|default('Sabre') }}{% else %}{{ weapon }}{% endif %}
 {%- endmacro %}
 
-{% block title %}{{ player.name }} - Korean Fencing Tracker{% endblock %}
+{% block title %}{{ tr_player(player.name) }} - Korean Fencing Tracker{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="/static/css/components.css">
@@ -17,15 +17,22 @@
     <nav class="breadcrumb">
         <a href="/">{{ i18n.common.nav.home|default('Home') }}</a> &gt;
         <a href="/search">{{ i18n.common.home.player_search|default('Player Search') }}</a> &gt;
-        <span>{{ player.name }}</span>
+        <span>{{ tr_player(player.name) }}</span>
     </nav>
 
     <!-- Player Header -->
     <div class="player-header">
         <div class="player-name">
+            {% if lang != 'ko' %}
+            {{ tr_player(player.name) }}
+            {% if tr_player(player.name) != player.name %}
+            <span class="name-en">{{ player.name }}</span>
+            {% endif %}
+            {% else %}
             {{ player.name }}
             {% if player.name_en %}
             <span class="name-en">{{ player.name_en }}</span>
+            {% endif %}
             {% endif %}
             {% if player.has_disambiguation %}
             <span class="disambiguation-badge">{{ i18n.common.player.same_name_notice|default('Multiple athletes with this name') }}</span>
@@ -52,7 +59,7 @@
 
         <div class="player-team">
             {% if player.current_team %}
-            <a href="/search?q={{ player.current_team|urlencode }}" class="team-link">{{ player.current_team }}</a>
+            <a href="/search?q={{ player.current_team|urlencode }}" class="team-link">{{ tr_team(player.current_team) }}</a>
             {% else %}
             -
             {% endif %}
@@ -65,7 +72,7 @@
             <div class="team-history-list">
                 {% for t in player.team_history %}
                 <span class="team-history-item">
-                    <a href="/search?q={{ t.team|urlencode }}" class="team-link">{{ t.team }}</a>
+                    <a href="/search?q={{ t.team|urlencode }}" class="team-link">{{ t.team_en if t.team_en and lang != 'ko' else tr_team(t.team) }}</a>
                     <span class="dates">({{ t.first_seen[:7] }}~{{ t.last_seen[:7] }})</span>
                 </span>
                 {% endfor %}
@@ -88,7 +95,7 @@
                 <div class="other-profiles-list">
                     {% for p in player.other_profiles %}
                     <a href="/player/{{ player.name }}?id={{ p.player_id }}" class="other-profile-link">
-                        {{ p.current_team or p.teams|join(', ') }}
+                        {% if p.current_team %}{{ tr_team(p.current_team) }}{% elif p.teams %}{% for t in p.teams %}{{ tr_team(t) }}{% if not loop.last %}, {% endif %}{% endfor %}{% else %}-{% endif %}
                         <span class="profile-count">({{ p.competition_count }} {{ i18n.common.player.entries|default('entries') }})</span>
                     </a>
                     {% endfor %}
@@ -141,7 +148,7 @@
                 {{ _t("진행 중인 대회") }} {{ in_progress_records|length }}{{ _t("건의 결과가 포함되어 있습니다. 대회 종료 후 최종 데이터가 업데이트됩니다.") }}
             </div>
             {% endif %}
-            <h4>{{ i18n.common.gate.recent_results|default('최근 대회 성적') }}</h4>
+            <h4>{{ _t("최근 대회 성적") }}</h4>
             {% for record in player.records[:3] %}
             <div class="result-card" style="pointer-events: auto;">
                 <div class="result-card-header">
@@ -179,8 +186,8 @@
                 </div>
             </div>
             <div class="gate-overlay">
-                <p class="gate-preview-text">{{ i18n.common.gate.summary_preview|default('로그인하면 전체 통계, 메달 분석, 무기별 성적을 확인할 수 있습니다.') }}</p>
-                <a href="{{ login_url }}" class="gate-cta-btn" onclick="localStorage.setItem('fencingmind_login_redirect', window.location.href)">{{ i18n.common.gate.login_cta|default('로그인하여 전체 보기') }}</a>
+                <p class="gate-preview-text">{{ _t("로그인하면 전체 통계, 메달 분석, 무기별 성적을 확인할 수 있습니다.") }}</p>
+                <a href="{{ login_url }}" class="gate-cta-btn" onclick="localStorage.setItem('fencingmind_login_redirect', window.location.href)">{{ _t("로그인하여 전체 보기") }}</a>
             </div>
         </div>
         {% else %}
@@ -305,7 +312,89 @@
             </div>
         </div>
 
-        <!-- Section 4: Quick Insights -->
+        <!-- Section 4: Rank Progression Chart -->
+        {% if player.chart_data and player.chart_data|length >= 2 %}
+        <div class="stat-card-large rank-chart-section">
+            <h4>Rank Progression</h4>
+            <div style="position: relative; height: 200px; width: 100%;">
+                <canvas id="rankProgressionChart"></canvas>
+            </div>
+        </div>
+        <script>
+        (function() {
+            var chartData = {{ player.chart_data | tojson }};
+            if (chartData.length >= 2 && typeof Chart !== 'undefined') {
+                var ctx = document.getElementById('rankProgressionChart').getContext('2d');
+                new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: chartData.map(function(d) { return d.label; }),
+                        datasets: [{
+                            label: 'Rank',
+                            data: chartData.map(function(d) { return d.rank; }),
+                            borderColor: '#1a5f7a',
+                            backgroundColor: 'rgba(26, 95, 122, 0.1)',
+                            fill: true,
+                            tension: 0.3,
+                            pointBackgroundColor: chartData.map(function(d) {
+                                if (d.rank === 1) return '#FFD700';
+                                if (d.rank === 2) return '#C0C0C0';
+                                if (d.rank === 3) return '#CD7F32';
+                                return '#1a5f7a';
+                            }),
+                            pointRadius: 5,
+                            pointHoverRadius: 7
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                callbacks: {
+                                    title: function(items) {
+                                        var d = chartData[items[0].dataIndex];
+                                        return d.label;
+                                    },
+                                    label: function(item) {
+                                        var d = chartData[item.dataIndex];
+                                        return 'Rank: ' + d.rank + '/' + d.total;
+                                    },
+                                    afterLabel: function(item) {
+                                        var d = chartData[item.dataIndex];
+                                        var lines = [];
+                                        if (d.event) lines.push(d.event);
+                                        if (d.date) lines.push(d.date);
+                                        return lines;
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                reverse: true,
+                                beginAtZero: false,
+                                min: 1,
+                                title: { display: true, text: 'Rank' },
+                                ticks: { stepSize: 1, precision: 0 }
+                            },
+                            x: {
+                                ticks: {
+                                    maxRotation: 45,
+                                    minRotation: 30,
+                                    font: { size: 10 }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+        })();
+        </script>
+        {% endif %}
+
+        <!-- Section 5: Quick Insights -->
         <div class="stat-card-large quick-insights">
             <h4>Quick Insights</h4>
             <div class="insights-grid">
@@ -359,7 +448,7 @@
                     </div>
                     {% endfor %}
                 </div>
-                <a href="/selection/kkumnamu?year={{ kk.school_year }}&weapon={{ kk.weapon }}&gender={{ kk.gender }}" class="sel-card-link">{{ _t("전체 순위 보기 →") }}</a>
+                <a href="/{{ lang|default('ko') }}/selection/kkumnamu?year={{ kk.school_year }}&weapon={{ kk.weapon }}&gender={{ kk.gender }}" class="sel-card-link">{{ _t("전체 순위 보기 →") }}</a>
             </div>
             {% endif %}
             {% if player.selection_points.national_team %}
@@ -378,7 +467,7 @@
                     </div>
                     {% endfor %}
                 </div>
-                <a href="/selection/national-team?year={{ nt.season_year }}&weapon={{ nt.weapon }}&gender={{ nt.gender }}" class="sel-card-link">{{ _t("전체 순위 보기 →") }}</a>
+                <a href="/{{ lang|default('ko') }}/selection/national-team?year={{ nt.season_year }}&weapon={{ nt.weapon }}&gender={{ nt.gender }}" class="sel-card-link">{{ _t("전체 순위 보기 →") }}</a>
             </div>
             {% endif %}
         </div>
@@ -448,14 +537,14 @@
             </div>
             <div class="gate-overlay">
                 <div class="gate-feature-list">
-                    <p>{{ i18n.common.gate.history_preview|default('가입하면 확인할 수 있는 정보:') }}</p>
+                    <p>{{ _t("가입하면 확인할 수 있는 정보:") }}</p>
                     <ul>
-                        <li>{{ i18n.common.gate.history_f1|default('전체 대회 참가 이력') }}</li>
-                        <li>{{ i18n.common.gate.history_f2|default('연도별/무기별 성적 필터') }}</li>
-                        <li>{{ i18n.common.gate.history_f3|default('상세 경기 결과 (Pool/DE)') }}</li>
+                        <li>{{ _t("전체 대회 참가 이력") }}</li>
+                        <li>{{ _t("연도별/무기별 성적 필터") }}</li>
+                        <li>{{ _t("상세 경기 결과 (Pool/DE)") }}</li>
                     </ul>
                 </div>
-                <a href="{{ login_url }}" class="gate-cta-btn" onclick="localStorage.setItem('fencingmind_login_redirect', window.location.href)">{{ i18n.common.gate.login_cta|default('로그인하여 전체 보기') }}</a>
+                <a href="{{ login_url }}" class="gate-cta-btn" onclick="localStorage.setItem('fencingmind_login_redirect', window.location.href)">{{ _t("로그인하여 전체 보기") }}</a>
             </div>
         </div>
         {% else %}
@@ -558,7 +647,7 @@
                                     {% for bout in record.pool_bouts %}
                                     <div class="bout-detail-item">
                                         <div class="bout-opponent">
-                                            <div class="bout-opponent-name">vs <a href="/player/{{ bout.opponent_name|urlencode }}?team={{ bout.opponent_team|urlencode }}" class="player-link">{{ bout.opponent_name }}</a></div>
+                                            <div class="bout-opponent-name">vs <a href="/player/{{ bout.opponent_name|urlencode }}?team={{ bout.opponent_team|urlencode }}" class="player-link">{{ bout.opponent_name }}</a> <a href="/player/{{ player.name|urlencode }}/h2h/{{ bout.opponent_name|urlencode }}" class="h2h-link" title="Head-to-Head">H2H</a></div>
                                             <div class="bout-opponent-team"><a href="/search?q={{ bout.opponent_team|urlencode }}" class="team-link">{{ bout.opponent_team }}</a></div>
                                         </div>
                                         <div class="bout-detail-score">{{ bout.my_score }} - {{ bout.opponent_score }}</div>
@@ -591,7 +680,7 @@
                             <div class="bout-detail-item {% if bout.is_bye %}bye-bout{% endif %}">
                                 <span style="min-width: 60px; color: var(--primary-color); font-weight: 500;">{{ bout.round_name }}{% if bout.de_phase == 'qualifying' %}<small class="de-phase-label qualifying">{{ _t("예선") }}</small>{% endif %}</span>
                                 <div class="bout-opponent">
-                                    <div class="bout-opponent-name">{% if bout.is_bye %}{{ _t("부전승") }}{% else %}vs <a href="/player/{{ bout.opponent_name|urlencode }}?team={{ bout.opponent_team|urlencode }}" class="player-link">{{ bout.opponent_name }}</a>{% endif %}</div>
+                                    <div class="bout-opponent-name">{% if bout.is_bye %}{{ _t("부전승") }}{% else %}vs <a href="/player/{{ bout.opponent_name|urlencode }}?team={{ bout.opponent_team|urlencode }}" class="player-link">{{ bout.opponent_name }}</a> <a href="/player/{{ player.name|urlencode }}/h2h/{{ bout.opponent_name|urlencode }}" class="h2h-link" title="Head-to-Head">H2H</a>{% endif %}</div>
                                     <div class="bout-opponent-team">{% if bout.opponent_team %}<a href="/search?q={{ bout.opponent_team|urlencode }}" class="team-link">{{ bout.opponent_team }}</a>{% endif %}</div>
                                 </div>
                                 {% if bout.is_bye %}
@@ -642,14 +731,14 @@
             </div>
             <div class="gate-overlay">
                 <div class="gate-feature-list">
-                    <p>{{ i18n.common.gate.strength_preview|default('가입 후 이용 가능한 분석:') }}</p>
+                    <p>{{ _t("가입 후 이용 가능한 분석:") }}</p>
                     <ul>
-                        <li>{{ i18n.common.gate.strength_f1|default('상대 전적 (Head-to-Head)') }}</li>
-                        <li>{{ i18n.common.gate.strength_f2|default('라운드별 성과 분석') }}</li>
-                        <li>{{ i18n.common.gate.strength_f3|default('무기별 통계') }}</li>
+                        <li>{{ _t("상대 전적 (Head-to-Head)") }}</li>
+                        <li>{{ _t("라운드별 성과 분석") }}</li>
+                        <li>{{ _t("무기별 통계") }}</li>
                     </ul>
                 </div>
-                <a href="{{ login_url }}" class="gate-cta-btn" onclick="localStorage.setItem('fencingmind_login_redirect', window.location.href)">{{ i18n.common.gate.login_cta|default('로그인하여 전체 보기') }}</a>
+                <a href="{{ login_url }}" class="gate-cta-btn" onclick="localStorage.setItem('fencingmind_login_redirect', window.location.href)">{{ _t("로그인하여 전체 보기") }}</a>
             </div>
         </div>
         {% else %}
@@ -830,8 +919,8 @@
                 <tbody>
                     {% for opponent in player.head_to_head %}
                     <tr class="opponent-row" onclick="toggleOpponentDetail(this)">
-                        <td><strong><a href="/player/{{ opponent.name|urlencode }}?team={{ opponent.team|urlencode }}" class="player-link" onclick="event.stopPropagation()">{{ opponent.name }}</a></strong></td>
-                        <td><a href="/search?q={{ opponent.team|urlencode }}" class="team-link" onclick="event.stopPropagation()">{{ opponent.team }}</a></td>
+                        <td><strong><a href="/player/{{ opponent.name|urlencode }}?team={{ opponent.team|urlencode }}" class="player-link" onclick="event.stopPropagation()">{{ tr_player(opponent.name) }}</a></strong> <a href="/player/{{ player.name|urlencode }}/h2h/{{ opponent.name|urlencode }}" class="h2h-link" onclick="event.stopPropagation()" title="Head-to-Head">H2H</a></td>
+                        <td><a href="/search?q={{ opponent.team|urlencode }}" class="team-link" onclick="event.stopPropagation()">{{ tr_team(opponent.team) }}</a></td>
                         <td class="record-cell">{{ opponent.wins }}-{{ opponent.losses }}</td>
                         <td class="winrate-cell">
                             {{ opponent.win_rate }}%
@@ -920,14 +1009,14 @@
             </div>
             <div class="gate-overlay">
                 <div class="gate-feature-list">
-                    <p>{{ i18n.common.gate.analysis_preview|default('프리미엄 분석 기능:') }}</p>
+                    <p>{{ _t("프리미엄 분석 기능:") }}</p>
                     <ul>
-                        <li>{{ i18n.common.gate.analysis_f1|default('AI 기반 경기 분석') }}</li>
-                        <li>{{ i18n.common.gate.analysis_f2|default('FencingLab 전술 리포트') }}</li>
-                        <li>{{ i18n.common.gate.analysis_f3|default('성장 추세 그래프') }}</li>
+                        <li>{{ _t("AI 기반 경기 분석") }}</li>
+                        <li>{{ _t("FencingLab 전술 리포트") }}</li>
+                        <li>{{ _t("성장 추세 그래프") }}</li>
                     </ul>
                 </div>
-                <a href="{{ login_url }}" class="gate-cta-btn" onclick="localStorage.setItem('fencingmind_login_redirect', window.location.href)">{{ i18n.common.gate.login_cta|default('로그인하여 전체 보기') }}</a>
+                <a href="{{ login_url }}" class="gate-cta-btn" onclick="localStorage.setItem('fencingmind_login_redirect', window.location.href)">{{ _t("로그인하여 전체 보기") }}</a>
             </div>
         </div>
         {% endif %}

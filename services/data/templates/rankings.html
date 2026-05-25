@@ -168,6 +168,51 @@
         display: none !important;
     }
 
+    /* Exclusion Toggle Buttons */
+    .exclusion-section {
+        margin-top: 16px;
+        padding-top: 16px;
+        border-top: 1px solid #e2e8f0;
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+
+    .exclusion-section .filter-label {
+        font-weight: 600;
+        color: #334155;
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-right: 8px;
+    }
+
+    .excl-btn {
+        padding: 8px 16px;
+        border: 2px solid #e2e8f0;
+        background: #fff;
+        color: #475569;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 500;
+        font-size: 13px;
+        transition: all 0.2s ease;
+    }
+
+    .excl-btn:hover:not(.active) {
+        border-color: #f87171;
+        color: #dc2626;
+        background: rgba(248, 113, 113, 0.05);
+    }
+
+    .excl-btn.active {
+        background: #fef2f2;
+        color: #dc2626;
+        border-color: #fca5a5;
+        font-weight: 600;
+    }
+
     /* Ranking Info Card */
     .ranking-info {
         background: linear-gradient(135deg, #1a5f7a 0%, #0f3460 100%);
@@ -469,7 +514,7 @@
 <div class="ranking-container">
     <div class="ranking-header">
         <h1>{{ i18n.common.rankings.title|default('FencingLab Ranking') }}</h1>
-        <p>{{ i18n.common.rankings.subtitle|default('FIE + USA Fencing 포인트 시스템 기반 비공식 커뮤니티 랭킹') }}</p>
+        <p>{{ i18n.common.rankings.subtitle|default(_t('FIE + USA Fencing 포인트 시스템 기반 비공식 커뮤니티 랭킹')) }}</p>
     </div>
 
     <div class="filter-section">
@@ -516,6 +561,12 @@
                 <button class="category-btn active" data-category="PRO">{{ i18n.common.rankings.pro|default('Professional') }}</button>
                 <button class="category-btn" data-category="CLUB">{{ i18n.common.rankings.club|default('Club') }}</button>
             </div>
+        </div>
+
+        <div class="exclusion-section">
+            <span class="filter-label">{{ _t('제외') }}</span>
+            <button class="excl-btn" id="excl-national-btn" data-key="excl_national">{{ _t('전국체전·소년체전 제외') }}</button>
+            <button class="excl-btn" id="excl-selection-btn" data-key="excl_selection">{{ _t('선발전 제외') }}</button>
         </div>
     </div>
 
@@ -586,6 +637,41 @@ document.addEventListener('DOMContentLoaded', function() {
     let currentPage = 1;
     const currentLang = '{{ lang }}' || 'ko';
 
+    // Exclusion toggles - restore from URL params
+    const urlParams = new URLSearchParams(window.location.search);
+    let exclNational = urlParams.get('excl_national') === 'true';
+    let exclSelection = urlParams.get('excl_selection') === 'true';
+
+    const exclNationalBtn = document.getElementById('excl-national-btn');
+    const exclSelectionBtn = document.getElementById('excl-selection-btn');
+
+    if (exclNational) exclNationalBtn.classList.add('active');
+    if (exclSelection) exclSelectionBtn.classList.add('active');
+
+    exclNationalBtn.addEventListener('click', function() {
+        exclNational = !exclNational;
+        this.classList.toggle('active', exclNational);
+        currentPage = 1;
+        updateUrlParams();
+        loadRankings();
+    });
+
+    exclSelectionBtn.addEventListener('click', function() {
+        exclSelection = !exclSelection;
+        this.classList.toggle('active', exclSelection);
+        currentPage = 1;
+        updateUrlParams();
+        loadRankings();
+    });
+
+    function updateUrlParams() {
+        const params = new URLSearchParams(window.location.search);
+        if (exclNational) params.set('excl_national', 'true'); else params.delete('excl_national');
+        if (exclSelection) params.set('excl_selection', 'true'); else params.delete('excl_selection');
+        const newUrl = params.toString() ? `${window.location.pathname}?${params}` : window.location.pathname;
+        history.replaceState(null, '', newUrl);
+    }
+
     // Load years and set default to 2025 (most recent year in DB)
     fetch('/api/rankings/options')
         .then(res => res.json())
@@ -647,6 +733,12 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         if (year) {
             url += `&year=${year}`;
+        }
+        if (exclNational) {
+            url += '&excl_national=true';
+        }
+        if (exclSelection) {
+            url += '&excl_selection=true';
         }
 
         rankingContent.innerHTML = `

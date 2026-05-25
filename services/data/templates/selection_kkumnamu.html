@@ -13,9 +13,12 @@
         <div class="selection-header">
             <h1>{{ _t("꿈나무 선발 포인트") }}</h1>
             <p class="selection-desc">{{ _t("중1 기간 4개 대상 대회 성적 합산 → 중2 초 종목·성별별 %s명 선발 | %s년 (%s)")|format(selection_count, school_year, season_range) }}</p>
+            {% if lang != 'ko' and _t("꿈나무 프로그램 설명") %}
+            <p class="selection-program-info">{{ _t("꿈나무 프로그램 설명") }}</p>
+            {% endif %}
             <div class="selection-nav-tabs">
-                <a href="/selection/kkumnamu?year={{ school_year }}&weapon={{ weapon }}&gender={{ gender }}" class="sel-nav-tab active">{{ _t("꿈나무") }}</a>
-                <a href="/selection/national-team/summary" class="sel-nav-tab">{{ _t("청소년 대표") }}</a>
+                <a href="/{{ lang|default('ko') }}/selection/kkumnamu?year={{ school_year }}&weapon={{ weapon }}&gender={{ gender }}" class="sel-nav-tab active">{{ _t("꿈나무") }}</a>
+                <a href="/{{ lang|default('ko') }}/selection/national-team/summary" class="sel-nav-tab">{{ _t("청소년 대표") }}</a>
             </div>
         </div>
 
@@ -52,7 +55,7 @@
             <div class="comp-chips">
                 {% for col in comp_columns %}
                 <span class="comp-chip {% if col.status == 'upcoming' %}upcoming{% endif %}">
-                    {{ col.label }}
+                    {{ tr_comp(col.label) }}
                     <small class="comp-date">
                         {% if col.status == 'completed' %}({{ col.date_short }}){% else %}({{ col.date_short }} {{ _t("예정") }}){% endif %}
                     </small>
@@ -78,7 +81,7 @@
                         <th class="team-col">{{ _t("소속") }}</th>
                         {% for col in comp_columns %}
                         <th class="pts-col {% if col.status == 'upcoming' %}upcoming{% endif %}">
-                            {{ col.label }}<br>
+                            {{ tr_comp(col.label) }}<br>
                             <small class="comp-date">
                                 {% if col.status == 'completed' %}({{ col.date_short }}){% else %}({{ col.date_short }} {{ _t("예정") }}){% endif %}
                             </small>
@@ -97,10 +100,10 @@
                             <span class="rank-badge {% if r.rank <= selection_count %}selected{% endif %}">{{ r.rank }}</span>
                         </td>
                         <td class="name-col">
-                            <span class="auth-protected"><a href="/player/{{ r.name }}?team={{ r.team }}" class="player-link">{{ r.name }}</a></span>
+                            <span class="auth-protected"><a href="/player/{{ r.name }}?team={{ r.team }}" class="player-link">{{ tr_player(r.name) }}</a></span>
                             {% if r.best_rank %}<span class="best-rank-badge">{{ _t("(%s위)")|format(r.best_rank) }}</span>{% endif %}
                         </td>
-                        <td class="team-col"><span class="auth-protected">{{ r.team }}</span></td>
+                        <td class="team-col"><span class="auth-protected">{{ tr_team(r.team) }}</span></td>
                         {% for col in comp_columns %}
                         <td class="pts-col {% if col.status == 'upcoming' %}upcoming{% endif %}">
                             {% set ns = namespace(found=false) %}
@@ -116,9 +119,9 @@
                         <td class="total-col"><strong>{{ r.total_points|int }}</strong></td>
                         <td class="grade-col">
                             {% if r.grade_confidence == 'confirmed' %}
-                            <span class="grade-badge confirmed">{{ r.grade }}</span>
+                            <span class="grade-badge confirmed">{{ tr_grade(r.grade) }}</span>
                             {% elif r.grade_confidence == 'estimated' %}
-                            <span class="grade-badge estimated">{{ r.grade }}</span>
+                            <span class="grade-badge estimated">{{ tr_grade(r.grade) }}</span>
                             {% else %}
                             <span class="grade-badge unknown">{{ _t("미확인") }}</span>
                             {% endif %}
@@ -166,7 +169,7 @@ function applyFilters() {
     const year = document.getElementById('yearFilter').value;
     const weapon = document.getElementById('weaponFilter').value;
     const gender = document.getElementById('genderFilter').value;
-    window.location.href = `/selection/kkumnamu?year=${year}&weapon=${weapon}&gender=${encodeURIComponent(gender)}`;
+    window.location.href = `/{{ lang|default('ko') }}/selection/kkumnamu?year=${year}&weapon=${weapon}&gender=${encodeURIComponent(gender)}`;
 }
 </script>
 {% endblock %}
