@@ -167,10 +167,15 @@
         })
         .then(function (resp) { return resp.json(); })
         .then(function (data) {
-            // Show success
+            // Show success message
             uploadForm.classList.add('hidden');
             progressSection.classList.add('hidden');
             uploadSuccess.classList.remove('hidden');
+
+            // Auto-redirect to dashboard after 3 seconds
+            setTimeout(function () {
+                window.location.href = '/dashboard';
+            }, 3000);
         })
         .catch(function (err) {
             alert('분석 시작 실패: ' + err.message);

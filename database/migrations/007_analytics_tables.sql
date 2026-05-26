@@ -129,7 +129,7 @@ CREATE INDEX IF NOT EXISTS idx_analytics_techniques_scorer ON analytics_techniqu
 CREATE TABLE IF NOT EXISTS analytics_player_metrics (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     result_id UUID NOT NULL REFERENCES analytics_analysis_results(id) ON DELETE CASCADE,
-    player_id UUID REFERENCES players(id) ON DELETE SET NULL,  -- nullable: 미연결 선수
+    player_id INTEGER REFERENCES players(id) ON DELETE SET NULL,  -- nullable: 미연결 선수 (players.id is INTEGER)
 
     -- 위치
     side TEXT NOT NULL CHECK (side IN ('left', 'right')),

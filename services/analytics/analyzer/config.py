@@ -165,3 +165,15 @@ FACTS_TO_ACTION = {
 # --- Integrated Analysis (2-pass enrichment) ---
 ENRICHED_POSE_WINDOW_BEFORE = 30  # frames before scoring event
 ENRICHED_POSE_WINDOW_AFTER = 15  # frames after scoring event
+
+
+# ==================================================================
+# Phase 4b: Scoreboard Auto-Detection
+# ==================================================================
+
+# --- Scoreboard detection thresholds ---
+SCOREBOARD_MIN_WIDTH_RATIO = 0.15    # Min scoreboard width as fraction of frame width
+SCOREBOARD_MAX_WIDTH_RATIO = 0.80    # Max scoreboard width as fraction of frame width
+SCOREBOARD_MIN_ASPECT = 2.0          # Min aspect ratio (width/height) for scoreboard
+SCOREBOARD_DETECTION_CONFIDENCE_MIN = 0.5  # Min confidence to accept detection
+SCOREBOARD_LAMP_PAD_RATIO = 0.20     # Lamp region padding ratio

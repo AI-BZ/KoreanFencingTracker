@@ -82,9 +82,12 @@ class IntegratedAnalyzer:
         Pass 1: Run VideoProcessor.process_video_headless() for scoring events.
         Pass 2: For each event, extract surrounding frames and run pose/action.
 
+        If rois is empty, attempts auto-detection via ScoreboardDetector.
+
         Args:
             video_path: Path to the video file.
-            rois: Pre-defined ROIs for lamp/score detection.
+            rois: Pre-defined ROIs for lamp/score detection. If empty,
+                  auto-detection is attempted.
             start_frame: Frame to start Phase 1 analysis from.
             output_dir: Directory for result files.
 
@@ -92,6 +95,10 @@ class IntegratedAnalyzer:
             List of EnrichedMatchEvent with pose and action data.
         """
         video_path = str(video_path)
+
+        # Auto-detect ROIs if not provided
+        if not rois:
+            rois = self._auto_detect_rois(video_path)
 
         # --- Pass 1: Phase 1 scoring events ---
         events = self.video_processor.process_video_headless(
@@ -175,6 +182,31 @@ class IntegratedAnalyzer:
 
         return enriched_events
 
+    def _auto_detect_rois(
+        self, video_path: str
+    ) -> Dict[str, Tuple[int, int, int, int]]:
+        """
+        Attempt automatic ROI detection using ScoreboardDetector.
+
+        Returns detected ROIs dict, or empty dict if detection fails.
+        """
+        try:
+            from analyzer.scoreboard_detector import ScoreboardDetector
+            detector = ScoreboardDetector()
+            rois = detector.detect_from_video(video_path)
+            if rois:
+                import logging
+                logging.getLogger(__name__).info(
+                    "Auto-detected scoreboard ROIs: %s", list(rois.keys())
+                )
+                return rois
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(
+                "Scoreboard auto-detection failed: %s", e
+            )
+        return {}
+
     def analyze_video_auto(
         self,
         video_path: str,
@@ -190,7 +222,8 @@ class IntegratedAnalyzer:
             video_path: Path to the video file.
             source_type: Override source type ("coach", "parent", "player",
                         "tv_broadcast"). If None, auto-detects.
-            rois: Pre-defined ROIs (for coach/parent pipeline).
+            rois: Pre-defined ROIs (for coach/parent pipeline). If None,
+                  auto-detection is attempted for coach/parent sources.
             start_frame: Frame to start from.
             output_dir: Directory for result files.
 

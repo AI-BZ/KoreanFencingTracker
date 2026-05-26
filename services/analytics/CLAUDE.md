@@ -2,8 +2,8 @@
 
 **서브도메인:** analytics.fencingmind.ai
 **포트:** 76
-**상태:** Phase 4a 구현 완료 (Web UI + 데모 모드 + 크레딧 시스템)
-**마지막 세션:** 2026-05-25
+**상태:** Phase 4b 구현 완료 (Auto-ROI + DB 레이어 + 휴리스틱 라벨러 + E2E 통합)
+**마지막 세션:** 2026-05-26
 **브랜치:** `feature/analytics/main`
 
 ---

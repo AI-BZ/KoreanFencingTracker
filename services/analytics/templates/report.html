@@ -121,7 +121,15 @@
                             {% endif %}
                         </td>
                         <td class="px-4 py-3 text-sm font-mono font-semibold text-gray-900">{{ touch.score_after }}</td>
-                        <td class="px-4 py-3 text-sm text-gray-700">{{ touch.action_scorer | default('-') }}</td>
+                        <td class="px-4 py-3 text-sm text-gray-700">
+                            {% if touch.action_scorer and touch.action_scorer != 'unknown' %}
+                                {{ touch.action_scorer }}
+                            {% elif touch.action_scorer == 'unknown' %}
+                                <span class="text-gray-400 italic">분석 중...</span>
+                            {% else %}
+                                <span class="text-gray-300">-</span>
+                            {% endif %}
+                        </td>
                         <td class="px-4 py-3">
                             {% if touch.action_confidence %}
                             <div class="flex items-center gap-2">

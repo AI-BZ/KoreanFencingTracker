@@ -9,6 +9,8 @@ import json
 import sys
 import uuid
 import time
+import logging
+from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Tuple
@@ -24,13 +26,29 @@ from app.upload import VideoUploader
 from app.credits import CreditManager, SubscriptionTier
 from app.demo import generate_demo_report
 
-
+_logger = logging.getLogger(__name__)
 _BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    """Application lifespan: connect DB on startup."""
+    global _db
+    try:
+        from app.db import AnalyticsDB
+        _db = AnalyticsDB()
+        _logger.info("Supabase DB connected")
+    except Exception as e:
+        _logger.warning("Supabase DB unavailable, using in-memory fallback: %s", e)
+        _db = None
+    yield
+
 
 app = FastAPI(
     title="FencingMind Analytics",
     description="AI-powered fencing match video analysis",
-    version="0.2.0",
+    version="0.3.0",
+    lifespan=_lifespan,
 )
 
 # Static files & Jinja2 templates
@@ -47,12 +65,15 @@ templates = Jinja2Templates(env=_jinja_env)
 
 
 # ------------------------------------------------------------------
-# In-memory job store (Phase 3: migrate to analytics_analysis_jobs DB)
+# In-memory job store + optional Supabase DB
 # ------------------------------------------------------------------
 
 _jobs: Dict[str, dict] = {}
 _videos: Dict[str, dict] = {}
 _credit_manager = CreditManager()
+
+# Supabase DB (optional — falls back to in-memory if unavailable)
+_db = None
 
 
 # ------------------------------------------------------------------
@@ -435,6 +456,23 @@ async def upload_video(
         "uploaded_at_display": datetime.now().strftime("%Y-%m-%d %H:%M"),
     }
 
+    # Persist to DB if available
+    if _db:
+        try:
+            db_record = _db.insert_video({
+                "filename": file.filename,
+                "original_filename": file.filename,
+                "file_size": file_size,
+                "storage_path": str(storage_path),
+                "source_type": source_type,
+                "weapon": weapon,
+            })
+            if db_record and db_record.get("id"):
+                # Use DB-generated UUID as video_id
+                _videos[video_id]["db_id"] = db_record["id"]
+        except Exception:
+            pass  # DB failure is non-fatal
+
     return {
         "video_id": video_id,
         "video_path": str(storage_path),
@@ -641,10 +679,14 @@ def _run_analysis(
         if not allowed:
             _jobs[job_id]["status"] = "failed"
             _jobs[job_id]["error"] = "insufficient_credits"
+            if _db:
+                _db.update_job(job_id, status="failed", error="insufficient_credits")
             return
 
         _jobs[job_id]["status"] = "processing"
         _jobs[job_id]["progress_pct"] = 10.0
+        if _db:
+            _db.update_job(job_id, status="processing", progress_pct=10.0)
 
         try:
             from ml.integrated_analyzer import IntegratedAnalyzer
@@ -662,15 +704,39 @@ def _run_analysis(
                     if isinstance(val, (list, tuple)) and len(val) == 4:
                         roi_tuples[key] = tuple(val)  # type: ignore[arg-type]
 
-            _jobs[job_id]["progress_pct"] = 20.0
+            # Auto-detect ROIs if none provided
+            if not roi_tuples:
+                _jobs[job_id]["progress_pct"] = 15.0
+                try:
+                    from analyzer.scoreboard_detector import ScoreboardDetector
+                    detector = ScoreboardDetector()
+                    detected = detector.detect_from_video(video_path)
+                    if detected:
+                        roi_tuples = detected
+                        import logging
+                        logging.getLogger(__name__).info(
+                            "Auto-detected ROIs for job %s: %s",
+                            job_id, list(roi_tuples.keys())
+                        )
+                except Exception as roi_err:
+                    import logging
+                    logging.getLogger(__name__).warning(
+                        "ROI auto-detection failed for job %s: %s", job_id, roi_err
+                    )
 
-            # Pass 1 + Pass 2
+            _jobs[job_id]["progress_pct"] = 20.0
+            if _db:
+                _db.update_job(job_id, progress_pct=20.0)
+
+            # Pass 1 + Pass 2 (auto-ROI integrated in IntegratedAnalyzer)
             enriched_events = ia.analyze_video(
                 video_path=video_path,
                 rois=roi_tuples,
             )
 
             _jobs[job_id]["progress_pct"] = 80.0
+            if _db:
+                _db.update_job(job_id, progress_pct=80.0)
 
             # Generate report
             gen = ReportGenerator()
@@ -681,9 +747,19 @@ def _run_analysis(
                 source_type=source_type,
             )
 
+            report_dict = report.to_dict()
             _jobs[job_id]["progress_pct"] = 100.0
             _jobs[job_id]["status"] = "completed"
-            _jobs[job_id]["result"] = report.to_dict()
+            _jobs[job_id]["result"] = report_dict
+
+            # Persist to DB
+            if _db:
+                _db.update_job(job_id, status="completed", progress_pct=100.0)
+                _db.save_result(
+                    job_id=job_id,
+                    result_json={"events": [e.to_dict() for e in enriched_events]},
+                    report_json=report_dict,
+                )
 
         except (ImportError, Exception) as ml_err:
             # ML models not available — fall back to mock mode
@@ -700,6 +776,8 @@ def _run_analysis(
     except Exception as exc:
         _jobs[job_id]["status"] = "failed"
         _jobs[job_id]["error"] = str(exc)
+        if _db:
+            _db.update_job(job_id, status="failed", error=str(exc))
 
 
 def _run_broadcast_analysis(
