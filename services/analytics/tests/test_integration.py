@@ -73,6 +73,12 @@ class TestHealthRoutes:
 
 
 class TestPageRoutes:
+    def test_landing_page(self, client):
+        resp = _get_template_page(client, "/")
+        assert resp.status_code == 200
+        assert "text/html" in resp.headers["content-type"]
+        assert "FencingMind" in resp.text
+
     def test_upload_page(self, client):
         resp = _get_template_page(client, "/upload")
         assert resp.status_code == 200
@@ -125,15 +131,43 @@ class TestDemoEndpoints:
         assert "5-3" in resp.text
         assert "foil" in resp.text.lower() or "플뢰레" in resp.text
 
+    def test_demo_report_contains_fencer_names(self, client):
+        resp = _get_template_page(client, "/demo")
+        assert resp.status_code == 200
+        assert "김민수" in resp.text
+        assert "박지현" in resp.text
+
     def test_demo_report_populates_job_store(self, client):
         resp = _get_template_page(client, "/demo")
         assert "demo-001" in _jobs
         assert _jobs["demo-001"]["status"] == "completed"
 
+    def test_demo_de_report_page(self, client):
+        resp = _get_template_page(client, "/demo/de")
+        assert resp.status_code == 200
+        assert "text/html" in resp.headers["content-type"]
+        assert "15-11" in resp.text
+
+    def test_demo_de_report_contains_fencer_names(self, client):
+        resp = _get_template_page(client, "/demo/de")
+        assert resp.status_code == 200
+        assert "이준호" in resp.text
+        assert "최서연" in resp.text
+
+    def test_demo_de_populates_job_store(self, client):
+        resp = _get_template_page(client, "/demo/de")
+        assert "demo-de-001" in _jobs
+        assert _jobs["demo-de-001"]["status"] == "completed"
+
     def test_demo_dashboard_page(self, client):
         resp = _get_template_page(client, "/demo/dashboard")
         assert resp.status_code == 200
         assert "text/html" in resp.headers["content-type"]
+
+    def test_demo_dashboard_shows_credits(self, client):
+        resp = _get_template_page(client, "/demo/dashboard")
+        assert resp.status_code == 200
+        assert "100" in resp.text
 
     def test_demo_dashboard_creates_multiple_jobs(self, client):
         resp = _get_template_page(client, "/demo/dashboard")
@@ -142,7 +176,7 @@ class TestDemoEndpoints:
         assert "demo-003" in _jobs
         assert _jobs["demo-001"]["status"] == "completed"
         assert _jobs["demo-002"]["status"] == "processing"
-        assert _jobs["demo-003"]["status"] == "failed"
+        assert _jobs["demo-003"]["status"] == "completed"
 
 
 # ------------------------------------------------------------------
@@ -382,13 +416,31 @@ class TestDemoData:
         assert right["total_touches_scored"] == 3
         assert len(left["action_distribution"]) > 0
 
+    def test_demo_report_fencer_names(self):
+        from app.demo import generate_demo_report
+        report = generate_demo_report()
+        assert report["left_fencer"]["name"] == "김민수"
+        assert report["left_fencer"]["club"] == "최병철펜싱클럽"
+        assert report["right_fencer"]["name"] == "박지현"
+        assert report["right_fencer"]["club"] == "서울펜싱클럽"
+
     def test_demo_report_insights(self):
         from app.demo import generate_demo_report
         insights = generate_demo_report()["insights"]
-        assert len(insights) == 4
+        assert len(insights) == 6
         severities = {i["severity"] for i in insights}
         assert "warning" in severities
         assert "info" in severities
+
+    def test_demo_report_insights_use_fencer_names(self):
+        from app.demo import generate_demo_report
+        insights = generate_demo_report()["insights"]
+        targets = {i["target"] for i in insights}
+        # Should not contain "left" or "right" as targets
+        assert "left" not in targets
+        assert "right" not in targets
+        # Should contain actual names
+        assert "김민수" in targets
 
     def test_demo_report_serializable(self):
         from app.demo import generate_demo_report
@@ -397,3 +449,42 @@ class TestDemoData:
         json_str = json.dumps(report, ensure_ascii=False)
         roundtrip = json.loads(json_str)
         assert roundtrip["summary"]["final_score"] == "5-3"
+
+
+class TestDemoDeData:
+    def test_de_report_structure(self):
+        from app.demo import generate_demo_de_report
+        report = generate_demo_de_report()
+        assert "summary" in report
+        assert "touches" in report
+        assert "left_fencer" in report
+        assert "right_fencer" in report
+        assert "insights" in report
+        assert "meta" in report
+
+    def test_de_report_summary(self):
+        from app.demo import generate_demo_de_report
+        s = generate_demo_de_report()["summary"]
+        assert s["final_score"] == "15-11"
+        assert s["total_touches"] == 26
+        assert s["weapon"] == "epee"
+        assert s["bout_type"] == "de"
+
+    def test_de_report_fencer_names(self):
+        from app.demo import generate_demo_de_report
+        report = generate_demo_de_report()
+        assert report["left_fencer"]["name"] == "이준호"
+        assert report["right_fencer"]["name"] == "최서연"
+
+    def test_de_report_touches(self):
+        from app.demo import generate_demo_de_report
+        touches = generate_demo_de_report()["touches"]
+        assert len(touches) == 26
+        assert touches[-1]["score_after"] == "15-11"
+
+    def test_de_report_serializable(self):
+        from app.demo import generate_demo_de_report
+        report = generate_demo_de_report()
+        json_str = json.dumps(report, ensure_ascii=False)
+        roundtrip = json.loads(json_str)
+        assert roundtrip["summary"]["final_score"] == "15-11"

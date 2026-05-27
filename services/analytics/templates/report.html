@@ -2,19 +2,55 @@
 
 {% block title %}분석 리포트 - FencingMind Analytics{% endblock %}
 
+{% set action_ko = {
+    'attack': '공격 (attack)',
+    'riposte': '리포스트 (riposte)',
+    'counter_attack': '카운터어택 (counter-attack)',
+    'remise': '르미즈 (remise)',
+    'parry': '파리 (parry)',
+    'lunge': '런지 (lunge)',
+    'fleche': '플레쉬 (fleche)',
+} %}
+
+{% set left_name = report.left_fencer.name | default('Left') %}
+{% set right_name = report.right_fencer.name | default('Right') %}
+{% set left_club = report.left_fencer.club | default('') %}
+{% set right_club = report.right_fencer.club | default('') %}
+
 {% block content %}
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
     {% if mock_mode or (job_id and job_id.startswith('demo')) %}
-    <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6 flex items-center gap-3">
-        <svg class="w-5 h-5 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-        </svg>
-        <p class="text-sm text-amber-700">
-            <span class="font-semibold">데모 모드</span> — 실제 AI 분석이 아닌 샘플 데이터입니다.
-            실제 분석을 시작하려면 <a href="/upload" class="underline font-medium">영상을 업로드</a>하세요.
-        </p>
+    <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6">
+        <div class="flex items-start gap-3">
+            <svg class="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <div class="flex-1">
+                <p class="text-sm text-amber-700 mb-2">
+                    <span class="font-semibold">데모 모드</span> — 실제 AI 분석이 아닌 샘플 데이터입니다.
+                </p>
+                <div class="flex flex-wrap gap-2">
+                    <a href="/demo"
+                       class="inline-flex items-center px-3 py-1 bg-amber-100 text-amber-800 rounded-full text-xs font-medium hover:bg-amber-200 transition-colors">
+                        Pool 데모 (5-3)
+                    </a>
+                    <a href="/demo/de"
+                       class="inline-flex items-center px-3 py-1 bg-amber-100 text-amber-800 rounded-full text-xs font-medium hover:bg-amber-200 transition-colors">
+                        DE 데모 (15-11)
+                    </a>
+                    <a href="/demo/dashboard"
+                       class="inline-flex items-center px-3 py-1 bg-amber-100 text-amber-800 rounded-full text-xs font-medium hover:bg-amber-200 transition-colors">
+                        대시보드 데모
+                    </a>
+                    <a href="/upload"
+                       class="inline-flex items-center px-3 py-1 bg-brand-600 text-white rounded-full text-xs font-medium hover:bg-brand-700 transition-colors">
+                        실제 분석 시작 &rarr;
+                    </a>
+                </div>
+            </div>
+        </div>
     </div>
     {% endif %}
 
@@ -25,12 +61,18 @@
                 <!-- Score Display -->
                 <div class="flex items-center gap-4">
                     <div class="text-center">
-                        <p class="text-xs font-medium text-blue-600 uppercase tracking-wider mb-1">Left</p>
+                        <p class="text-sm font-semibold text-blue-600 mb-1">{{ left_name }}</p>
+                        {% if left_club %}
+                        <p class="text-[10px] text-blue-400 mb-1">{{ left_club }}</p>
+                        {% endif %}
                         <p class="text-5xl font-bold text-blue-600">{{ report.summary.final_score.split('-')[0] }}</p>
                     </div>
                     <span class="text-3xl font-light text-gray-300">:</span>
                     <div class="text-center">
-                        <p class="text-xs font-medium text-red-600 uppercase tracking-wider mb-1">Right</p>
+                        <p class="text-sm font-semibold text-red-600 mb-1">{{ right_name }}</p>
+                        {% if right_club %}
+                        <p class="text-[10px] text-red-400 mb-1">{{ right_club }}</p>
+                        {% endif %}
                         <p class="text-5xl font-bold text-red-600">{{ report.summary.final_score.split('-')[1] }}</p>
                     </div>
                 </div>
@@ -46,6 +88,14 @@
                         {% if report.summary.weapon == 'foil' %}플뢰레
                         {% elif report.summary.weapon == 'epee' %}에페
                         {% elif report.summary.weapon == 'sabre' %}사브르
+                        {% endif %}
+                    </span>
+                    {% endif %}
+                    {% if report.summary.bout_type %}
+                    <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-700">
+                        {% if report.summary.bout_type == 'pool' %}예선 (Pool)
+                        {% elif report.summary.bout_type == 'de' %}본선 (DE)
+                        {% else %}{{ report.summary.bout_type }}
                         {% endif %}
                     </span>
                     {% endif %}
@@ -72,6 +122,28 @@
                 {% if report.meta.source_type %}
                 <p>Source: {{ report.meta.source_type }}</p>
                 {% endif %}
+            </div>
+        </div>
+
+        <!-- Key Metrics Bar -->
+        <div class="mt-6 pt-5 border-t border-gray-100">
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div class="text-center">
+                    <p class="text-2xl font-bold text-gray-900">{{ report.summary.total_touches }}</p>
+                    <p class="text-xs text-gray-500 mt-0.5">총 터치</p>
+                </div>
+                <div class="text-center">
+                    <p class="text-2xl font-bold text-gray-900">{{ report.summary.match_duration }}</p>
+                    <p class="text-xs text-gray-500 mt-0.5">경기 시간</p>
+                </div>
+                <div class="text-center">
+                    <p class="text-2xl font-bold text-gray-900">{{ "%.1f" | format(report.summary.analysis_time_sec) }}초</p>
+                    <p class="text-xs text-gray-500 mt-0.5">AI 분석 시간</p>
+                </div>
+                <div class="text-center">
+                    <p class="text-2xl font-bold text-gray-900">{{ "{:,}".format(report.summary.total_frames_analyzed) }}</p>
+                    <p class="text-xs text-gray-500 mt-0.5">분석 프레임 수</p>
+                </div>
             </div>
         </div>
     </div>
@@ -113,9 +185,9 @@
                         <td class="px-4 py-3 text-sm text-gray-600">{{ touch.match_time }}</td>
                         <td class="px-4 py-3">
                             {% if touch.scorer == 'left' %}
-                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">Left</span>
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">{{ left_name }}</span>
                             {% elif touch.scorer == 'right' %}
-                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">Right</span>
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">{{ right_name }}</span>
                             {% else %}
                             <span class="text-sm text-gray-400">-</span>
                             {% endif %}
@@ -123,7 +195,7 @@
                         <td class="px-4 py-3 text-sm font-mono font-semibold text-gray-900">{{ touch.score_after }}</td>
                         <td class="px-4 py-3 text-sm text-gray-700">
                             {% if touch.action_scorer and touch.action_scorer != 'unknown' %}
-                                {{ touch.action_scorer }}
+                                {{ action_ko.get(touch.action_scorer, touch.action_scorer) }}
                             {% elif touch.action_scorer == 'unknown' %}
                                 <span class="text-gray-400 italic">분석 중...</span>
                             {% else %}
@@ -163,7 +235,10 @@
         <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
             <div class="flex items-center gap-3 mb-4">
                 <div class="w-3 h-3 rounded-full bg-blue-500"></div>
-                <h3 class="text-lg font-bold text-gray-900">Left 선수</h3>
+                <h3 class="text-lg font-bold text-gray-900">{{ left_name }}</h3>
+                {% if left_club %}
+                <span class="text-xs text-gray-400">{{ left_club }}</span>
+                {% endif %}
             </div>
             <div class="grid grid-cols-2 gap-4 mb-6">
                 <div class="bg-blue-50 rounded-xl p-4 text-center">
@@ -177,7 +252,7 @@
             </div>
             {% if report.left_fencer.most_common_action %}
             <p class="text-sm text-gray-600 mb-4">
-                주요 동작: <span class="font-semibold">{{ report.left_fencer.most_common_action }}</span>
+                주요 동작: <span class="font-semibold">{{ action_ko.get(report.left_fencer.most_common_action, report.left_fencer.most_common_action) }}</span>
                 ({{ "%.0f" | format(report.left_fencer.most_common_action_pct) }}%)
             </p>
             {% endif %}
@@ -194,7 +269,10 @@
         <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
             <div class="flex items-center gap-3 mb-4">
                 <div class="w-3 h-3 rounded-full bg-red-500"></div>
-                <h3 class="text-lg font-bold text-gray-900">Right 선수</h3>
+                <h3 class="text-lg font-bold text-gray-900">{{ right_name }}</h3>
+                {% if right_club %}
+                <span class="text-xs text-gray-400">{{ right_club }}</span>
+                {% endif %}
             </div>
             <div class="grid grid-cols-2 gap-4 mb-6">
                 <div class="bg-red-50 rounded-xl p-4 text-center">
@@ -208,7 +286,7 @@
             </div>
             {% if report.right_fencer.most_common_action %}
             <p class="text-sm text-gray-600 mb-4">
-                주요 동작: <span class="font-semibold">{{ report.right_fencer.most_common_action }}</span>
+                주요 동작: <span class="font-semibold">{{ action_ko.get(report.right_fencer.most_common_action, report.right_fencer.most_common_action) }}</span>
                 ({{ "%.0f" | format(report.right_fencer.most_common_action_pct) }}%)
             </p>
             {% endif %}
@@ -267,7 +345,9 @@
                                  {% if insight.severity == 'warning' %}text-yellow-700
                                  {% elif insight.severity == 'suggestion' %}text-green-700
                                  {% else %}text-blue-700{% endif %}">
-                        {{ insight.target }} &middot; {{ insight.category }}
+                        {% if insight.target == 'both' or insight.target == '전체' %}전체
+                        {% else %}{{ insight.target }}{% endif %}
+                        &middot; {{ insight.category }}
                     </span>
                 </div>
             </div>

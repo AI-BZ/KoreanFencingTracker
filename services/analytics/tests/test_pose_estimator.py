@@ -1,12 +1,19 @@
 """
 Tests for PoseEstimator (YOLO11-Pose wrapper).
 
-Model-dependent tests are skipped if yolo11n-pose.pt is not available.
+Model-dependent tests are skipped if yolo11n-pose.pt is not available
+or if ultralytics is not installed.
 """
 
 import pytest
 import numpy as np
 from pathlib import Path
+
+try:
+    import ultralytics  # noqa: F401
+    HAS_ULTRALYTICS = True
+except ImportError:
+    HAS_ULTRALYTICS = False
 
 
 # ------------------------------------------------------------------
@@ -124,8 +131,8 @@ YOLO_MODEL_PATH = Path(__file__).resolve().parent.parent / "ml" / "models" / "yo
 
 
 @pytest.mark.skipif(
-    not YOLO_MODEL_PATH.exists(),
-    reason="yolo11n-pose.pt not available",
+    not HAS_ULTRALYTICS or not YOLO_MODEL_PATH.exists(),
+    reason="ultralytics not installed or yolo11n-pose.pt not available",
 )
 def test_pose_estimator_black_frame():
     from ml.pose_estimator import PoseEstimator
@@ -138,8 +145,8 @@ def test_pose_estimator_black_frame():
 
 
 @pytest.mark.skipif(
-    not YOLO_MODEL_PATH.exists(),
-    reason="yolo11n-pose.pt not available",
+    not HAS_ULTRALYTICS or not YOLO_MODEL_PATH.exists(),
+    reason="ultralytics not installed or yolo11n-pose.pt not available",
 )
 def test_pose_estimator_batch():
     from ml.pose_estimator import PoseEstimator

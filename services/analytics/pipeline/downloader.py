@@ -3,6 +3,7 @@ YouTube video downloader for fencing match footage.
 
 Ported from fencing-AI/1-download_vids.py.
 Changes: pytube → yt-dlp (more reliable, actively maintained).
+Phase 5a: anti-bot evasion options + bout clip extraction.
 """
 
 import subprocess
@@ -10,6 +11,13 @@ import shutil
 from pathlib import Path
 from typing import List, Optional
 from dataclasses import dataclass
+
+# Chrome-like User-Agent for anti-bot evasion
+_CHROME_UA = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/125.0.0.0 Safari/537.36"
+)
 
 
 @dataclass
@@ -23,11 +31,18 @@ class DownloadResult:
 class VideoDownloader:
     """Downloads fencing match videos from YouTube using yt-dlp."""
 
-    def __init__(self, output_dir: str = "data/raw", format: str = "mp4", quality: str = "720"):
+    def __init__(
+        self,
+        output_dir: str = "data/raw",
+        format: str = "mp4",
+        quality: str = "720",
+        anti_bot: bool = False,
+    ):
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.format = format
         self.quality = quality
+        self.anti_bot = anti_bot
 
         # Check yt-dlp is available
         if not shutil.which("yt-dlp"):
@@ -35,17 +50,25 @@ class VideoDownloader:
                 "yt-dlp not found. Install with: pip install yt-dlp"
             )
 
-    def download(self, url: str, filename: Optional[str] = None) -> DownloadResult:
+    def download(
+        self,
+        url: str,
+        filename: Optional[str] = None,
+        anti_bot: Optional[bool] = None,
+    ) -> DownloadResult:
         """
         Download a single video.
 
         Args:
             url: YouTube URL.
             filename: Optional output filename (without extension).
+            anti_bot: Override instance-level anti_bot setting.
 
         Returns:
             DownloadResult with path and status.
         """
+        use_anti_bot = anti_bot if anti_bot is not None else self.anti_bot
+
         if filename:
             output_template = str(self.output_dir / f"{filename}.%(ext)s")
         else:
@@ -58,8 +81,19 @@ class VideoDownloader:
             "--output", output_template,
             "--no-playlist",
             "--socket-timeout", "30",
-            url,
         ]
+
+        if use_anti_bot:
+            cmd.extend([
+                "--user-agent", _CHROME_UA,
+                "--sleep-interval", "2",
+                "--max-sleep-interval", "5",
+                "--throttled-rate", "500K",
+                "--retries", "3",
+                "--extractor-args", "youtube:player_client=web",
+            ])
+
+        cmd.append(url)
 
         try:
             result = subprocess.run(
@@ -99,6 +133,63 @@ class VideoDownloader:
                 success=False,
                 error=str(e),
             )
+
+    def download_bout_clips(
+        self,
+        video_path: str,
+        touch_events: list,
+        output_dir: Optional[str] = None,
+        before_sec: float = 3.0,
+        after_sec: float = 3.0,
+    ) -> List[Path]:
+        """
+        Extract bout clips around touch events using ffmpeg.
+
+        Args:
+            video_path: Path to the source video.
+            touch_events: List of TVTouchEvent (or any object with .timestamp).
+            output_dir: Output directory for clips (default: data/clips).
+            before_sec: Seconds to include before touch.
+            after_sec: Seconds to include after touch.
+
+        Returns:
+            List of extracted clip paths.
+        """
+        if not shutil.which("ffmpeg"):
+            raise RuntimeError("ffmpeg not found in PATH")
+
+        out = Path(output_dir or "data/clips")
+        out.mkdir(parents=True, exist_ok=True)
+
+        video_stem = Path(video_path).stem
+        clips: List[Path] = []
+
+        for i, event in enumerate(touch_events):
+            ts = event.timestamp if hasattr(event, "timestamp") else event.get("timestamp", 0)
+            start = max(0, ts - before_sec)
+            duration = before_sec + after_sec
+
+            clip_path = out / f"{video_stem}_touch{i:04d}.mp4"
+
+            cmd = [
+                "ffmpeg", "-y",
+                "-ss", f"{start:.3f}",
+                "-i", video_path,
+                "-t", f"{duration:.3f}",
+                "-c:v", "libx264",
+                "-preset", "fast",
+                "-crf", "23",
+                "-an",
+                str(clip_path),
+            ]
+
+            try:
+                subprocess.run(cmd, capture_output=True, timeout=60, check=True)
+                clips.append(clip_path)
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+                print(f"  Failed to extract clip {i}: {e}")
+
+        return clips
 
     def download_batch(
         self,

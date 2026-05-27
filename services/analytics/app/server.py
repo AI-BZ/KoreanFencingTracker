@@ -24,7 +24,7 @@ from pydantic import BaseModel
 
 from app.upload import VideoUploader
 from app.credits import CreditManager, SubscriptionTier
-from app.demo import generate_demo_report
+from app.demo import generate_demo_report, generate_demo_de_report
 
 _logger = logging.getLogger(__name__)
 _BASE_DIR = Path(__file__).resolve().parent.parent
@@ -280,9 +280,9 @@ async def get_report(job_id: str, format: str = "json"):
 
 
 @app.get("/")
-async def index():
-    """Redirect root to upload page."""
-    return RedirectResponse(url="/upload")
+async def index(request: Request):
+    """Landing page."""
+    return templates.TemplateResponse(request, "landing.html")
 
 
 @app.get("/upload")
@@ -374,48 +374,88 @@ async def demo_report_page(request: Request):
     })
 
 
+@app.get("/demo/de")
+async def demo_de_report_page(request: Request):
+    """Demo DE report page with sample epee DE bout data."""
+    report_dict = generate_demo_de_report()
+    demo_job_id = "demo-de-001"
+    _jobs[demo_job_id] = {
+        "status": "completed",
+        "progress_pct": 100.0,
+        "video_path": "demo_de_match.mp4",
+        "weapon": "epee",
+        "source_type": "coach",
+        "started_at": time.time(),
+        "result": report_dict,
+        "error": None,
+    }
+    return templates.TemplateResponse(request, "report.html", {
+        "report": report_dict,
+        "report_json": json.dumps(report_dict, ensure_ascii=False),
+        "job_id": demo_job_id,
+    })
+
+
 @app.get("/demo/dashboard")
 async def demo_dashboard_page(request: Request):
     """Demo dashboard with sample jobs."""
     report_dict = generate_demo_report()
+    de_report = generate_demo_de_report()
     demo_jobs = {
         "demo-001": {
             "status": "completed", "progress_pct": 100.0,
-            "video_path": "demo_match_foil.mp4", "weapon": "foil",
+            "video_path": "2026-전국체전-남자플뢰레-김민수vs박지현.mp4", "weapon": "foil",
             "source_type": "coach", "started_at": time.time(),
             "result": report_dict, "error": None, "video_id": "",
         },
         "demo-002": {
             "status": "processing", "progress_pct": 45.0,
-            "video_path": "demo_match_epee.mp4", "weapon": "epee",
-            "source_type": "parent", "started_at": time.time(),
+            "video_path": "2026-전국체전-남자에페-이준호vs최서연.mp4", "weapon": "epee",
+            "source_type": "coach", "started_at": time.time(),
             "result": None, "error": None, "video_id": "",
         },
         "demo-003": {
-            "status": "failed", "progress_pct": 20.0,
-            "video_path": "demo_match_sabre.mp4", "weapon": "sabre",
-            "source_type": "tv_broadcast", "started_at": time.time(),
-            "result": None, "error": "insufficient_credits", "video_id": "",
+            "status": "completed", "progress_pct": 100.0,
+            "video_path": "2026-회장배-여자사브르-예선3조.mp4", "weapon": "sabre",
+            "source_type": "parent", "started_at": time.time(),
+            "result": de_report, "error": None, "video_id": "",
         },
     }
     _jobs.update(demo_jobs)
 
-    jobs_list = []
-    for job_id, job in demo_jobs.items():
-        jobs_list.append({
-            "job_id": job_id,
-            "filename": Path(job.get("video_path", "")).name,
-            "weapon": job.get("weapon"),
-            "source_type": job.get("source_type"),
-            "status": job["status"],
-            "uploaded_at": "2026-05-21 14:30",
-            "error": job.get("error"),
-        })
+    jobs_list = [
+        {
+            "job_id": "demo-001",
+            "filename": "2026-전국체전-남자플뢰레-김민수vs박지현.mp4",
+            "weapon": "foil",
+            "source_type": "coach",
+            "status": "completed",
+            "uploaded_at": "2026-05-24 09:15",
+            "error": None,
+        },
+        {
+            "job_id": "demo-002",
+            "filename": "2026-전국체전-남자에페-이준호vs최서연.mp4",
+            "weapon": "epee",
+            "source_type": "coach",
+            "status": "processing",
+            "uploaded_at": "2026-05-25 14:30",
+            "error": None,
+        },
+        {
+            "job_id": "demo-003",
+            "filename": "2026-회장배-여자사브르-예선3조.mp4",
+            "weapon": "sabre",
+            "source_type": "parent",
+            "status": "completed",
+            "uploaded_at": "2026-05-25 16:45",
+            "error": None,
+        },
+    ]
 
-    sub_info = _credit_manager.get_subscription_info("default")
     return templates.TemplateResponse(request, "dashboard.html", {
         "jobs": jobs_list,
-        "credits": sub_info.get("credits", 0),
+        "credits": 100,
     })
 
 
@@ -808,16 +848,77 @@ def _run_broadcast_analysis(
             _jobs[job_id]["result"] = result.to_dict()
 
         except (ImportError, Exception) as ml_err:
-            # ML models not available — fall back to mock mode
+            # ML models not available — try TVOverlayOCR fallback
             import logging
             logging.getLogger(__name__).warning(
-                "ML models unavailable for broadcast, using mock mode: %s", ml_err
+                "ML models unavailable for broadcast, trying OCR fallback: %s", ml_err
             )
-            _generate_mock_result(
-                job_id, video_path,
-                weapon=_jobs[job_id].get("weapon"),
-                source_type="tv_broadcast",
-            )
+            try:
+                import cv2
+                from analyzer.tv_overlay_ocr import TVOverlayOCR, TVScoreTracker
+                from app.tv_report_converter import tv_ocr_to_match_report
+
+                ocr = TVOverlayOCR()
+                tracker = TVScoreTracker()
+                cap = cv2.VideoCapture(video_path)
+                fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+                total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                sample_interval = 5  # OCR every 5 frames
+
+                left_name = right_name = None
+                frame_num = 0
+                t_start = time.time()
+
+                while cap.isOpened():
+                    ret, frame = cap.read()
+                    if not ret:
+                        break
+                    if frame_num % sample_interval == 0:
+                        data = ocr.read_overlay(frame)
+                        if data:
+                            tracker.update(frame_num, data, fps)
+                            if data.left_name and not left_name:
+                                left_name = data.left_name
+                            if data.right_name and not right_name:
+                                right_name = data.right_name
+                    frame_num += 1
+                    if total > 0:
+                        _jobs[job_id]["progress_pct"] = 20 + 60 * (frame_num / total)
+                cap.release()
+
+                events = tracker.get_all_events()
+                summary = tracker.get_match_summary()
+                analysis_time = time.time() - t_start
+
+                report_dict = tv_ocr_to_match_report(
+                    events=events,
+                    summary=summary,
+                    left_name=left_name,
+                    right_name=right_name,
+                    video_path=video_path,
+                    analysis_time_sec=analysis_time,
+                    total_frames=frame_num,
+                    fps=fps,
+                )
+
+                _jobs[job_id]["progress_pct"] = 100.0
+                _jobs[job_id]["status"] = "completed"
+                _jobs[job_id]["result"] = report_dict
+                logging.getLogger(__name__).info(
+                    "OCR fallback completed for job %s: %d touches detected",
+                    job_id, summary.get("total_touches", 0),
+                )
+
+            except Exception as ocr_err:
+                # OCR also failed — fall back to mock mode
+                logging.getLogger(__name__).warning(
+                    "OCR fallback also failed, using mock mode: %s", ocr_err
+                )
+                _generate_mock_result(
+                    job_id, video_path,
+                    weapon=_jobs[job_id].get("weapon"),
+                    source_type="tv_broadcast",
+                )
 
     except Exception as exc:
         _jobs[job_id]["status"] = "failed"

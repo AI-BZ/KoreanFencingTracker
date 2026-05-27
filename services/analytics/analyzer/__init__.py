@@ -33,6 +33,12 @@ from analyzer.tv_models import (
     TechniqueCollection,
     TVAnalysisResult,
 )
+from analyzer.tv_overlay_ocr import (
+    OverlayData,
+    TVTouchEvent,
+    TVOverlayOCR,
+    TVScoreTracker,
+)
 
 __all__ = [
     "EventType",
@@ -65,4 +71,9 @@ __all__ = [
     "TechniqueClip",
     "TechniqueCollection",
     "TVAnalysisResult",
+    # Phase 5a: TV Overlay OCR
+    "OverlayData",
+    "TVTouchEvent",
+    "TVOverlayOCR",
+    "TVScoreTracker",
 ]

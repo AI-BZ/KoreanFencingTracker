@@ -4,6 +4,8 @@
 
 {% block nav_dashboard %}text-brand-600 bg-brand-50{% endblock %}
 
+{% block credits %}{{ credits | default(0) }} 크레딧{% endblock %}
+
 {% block content %}
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
     <div class="flex items-center justify-between mb-8">

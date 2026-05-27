@@ -177,3 +177,30 @@ SCOREBOARD_MAX_WIDTH_RATIO = 0.80    # Max scoreboard width as fraction of frame
 SCOREBOARD_MIN_ASPECT = 2.0          # Min aspect ratio (width/height) for scoreboard
 SCOREBOARD_DETECTION_CONFIDENCE_MIN = 0.5  # Min confidence to accept detection
 SCOREBOARD_LAMP_PAD_RATIO = 0.20     # Lamp region padding ratio
+
+
+# ==================================================================
+# Phase 5a: TV Overlay OCR
+# ==================================================================
+
+# --- Overlay bar position (720p reference) ---
+OVERLAY_BAR_Y_RATIO = 0.926           # Bottom bar start (667/720)
+OVERLAY_BAR_HEIGHT = 53               # Bar height in pixels (720p)
+OVERLAY_SCORE_DEBOUNCE = 15           # Frames to confirm score change (~0.5s @30fps)
+OVERLAY_OCR_SAMPLE_INTERVAL = 5       # OCR every N frames (not every frame)
+OVERLAY_MIN_SCORE_CONFIDENCE = 0.7    # Minimum confidence for score reading
+OVERLAY_TEXT_SCALE = 3                # Scale-up factor for OCR preprocessing
+
+# --- HSV color ranges for overlay text ---
+OVERLAY_WHITE_LOWER = [0, 0, 200]
+OVERLAY_WHITE_UPPER = [180, 30, 255]
+OVERLAY_RED_LOWER_1 = [0, 100, 150]
+OVERLAY_RED_UPPER_1 = [10, 255, 255]
+OVERLAY_RED_LOWER_2 = [170, 100, 150]
+OVERLAY_RED_UPPER_2 = [180, 255, 255]
+OVERLAY_GREEN_LOWER = [35, 60, 150]
+OVERLAY_GREEN_UPPER = [85, 255, 255]
+OVERLAY_YELLOW_LOWER = [20, 100, 200]   # Yellow card
+OVERLAY_YELLOW_UPPER = [35, 255, 255]
+OVERLAY_BLUE_LOWER = [85, 50, 100]       # Time/period digits (blue/cyan)
+OVERLAY_BLUE_UPPER = [130, 255, 255]

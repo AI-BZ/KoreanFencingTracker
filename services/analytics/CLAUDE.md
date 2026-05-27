@@ -2,8 +2,8 @@
 
 **서브도메인:** analytics.fencingmind.ai
 **포트:** 76
-**상태:** Phase 4b 구현 완료 (Auto-ROI + DB 레이어 + 휴리스틱 라벨러 + E2E 통합)
-**마지막 세션:** 2026-05-26
+**상태:** Phase 5a 구현 완료 (TV 오버레이 OCR + 파인튜닝 데이터 수집 파이프라인)
+**마지막 세션:** 2026-05-27
 **브랜치:** `feature/analytics/main`
 
 ---
@@ -33,7 +33,7 @@ services/analytics/
 │   ├── __init__.py
 │   ├── server.py                    # FastAPI 앱 (모든 엔드포인트 + 데모 모드) [Phase 4a]
 │   ├── filming_guide.py             # 촬영 가이드 (유형별 권장사항, 한국어/영어) [Phase 3]
-│   ├── demo.py                      # 데모 리포트 데이터 생성기 (샘플 플뢰레 5-3) [Phase 4a]
+│   ├── demo.py                      # 데모 리포트 생성 (Pool 5-3 + DE 15-11, 선수 이름) [Phase 4c]
 │   ├── upload.py                    # 영상 업로드 처리 (파일 저장, 검증) [Phase 4a]
 │   ├── credits.py                   # 크레딧 시스템 (잔액/차감/충전, in-memory) [Phase 4a]
 │   ├── report_renderer.py           # HTML 리포트 렌더링 로직 [Phase 4a]
@@ -47,13 +47,15 @@ services/analytics/
 │   ├── score_reader.py              # 7세그먼트 OCR (템플릿 매칭 + 세그먼트 분석)
 │   ├── video_processor.py           # 메인 영상 처리 루프 (GUI + headless)
 │   ├── video_source.py              # VideoSourceType enum + VideoSourceAssessment [Phase 3]
-│   └── tv_models.py                 # TechniqueClip, TechniqueCollection, TVAnalysisResult [Phase 3]
+│   ├── tv_models.py                 # TechniqueClip, TechniqueCollection, TVAnalysisResult [Phase 3]
+│   └── tv_overlay_ocr.py            # TVOverlayOCR, TVScoreTracker, OverlayData [Phase 5a]
 ├── pipeline/                        # fencing-AI에서 포팅한 데이터 수집/전처리
 │   ├── __init__.py
 │   ├── downloader.py                # 유튜브 영상 다운로드 (yt-dlp)
 │   ├── clip_cutter.py               # 득점 시점 자동 클립 분할 (v3 LED 감지 활용)
 │   ├── auto_labeler.py              # 자동 라벨링 (L/R/T 분류)
-│   └── data_augmentor.py            # 수평 플립 + 라벨 반전 증강
+│   ├── data_augmentor.py            # 수평 플립 + 라벨 반전 증강
+│   └── tv_data_collector.py         # YouTube TV → OCR → 클립 → 라벨 CSV E2E [Phase 5a]
 ├── ml/
 │   ├── __init__.py                  # 모든 ML 클래스 export
 │   ├── pose_estimator.py            # YOLO11-Pose 래퍼 (Phase 2)
@@ -72,11 +74,12 @@ services/analytics/
 │   └── models/
 │       ├── digit_templates.pkl      # v3 숫자 템플릿 데이터
 │       └── yolo11n-pose.pt          # YOLO11 Pose 모델
-├── templates/                       # Jinja2 HTML 템플릿 [Phase 4a]
-│   ├── base.html                    # 공통 레이아웃 (Tailwind CSS + Chart.js CDN)
+├── templates/                       # Jinja2 HTML 템플릿 [Phase 4a+4c]
+│   ├── base.html                    # 공통 레이아웃 (Tailwind CSS + Chart.js CDN, 데모 네비)
+│   ├── landing.html                 # 랜딩 페이지 (히어로, 3단계 설명, 기능, 가격표) [Phase 4c]
 │   ├── upload.html                  # 영상 업로드 페이지
 │   ├── dashboard.html               # 분석 대시보드 (작업 목록, 크레딧 잔액)
-│   └── report.html                  # 분석 리포트 (스코어, 터치 테이블, 차트, 인사이트)
+│   └── report.html                  # 분석 리포트 (선수 이름, 한국어 동작명, 차트, 인사이트)
 ├── static/                          # 정적 파일 [Phase 4a]
 │   ├── css/
 │   │   └── analytics.css            # 커스텀 스타일
@@ -90,7 +93,7 @@ services/analytics/
 │   ├── raw/                         # 다운로드 원본
 │   ├── clips/                       # 추출된 클립
 │   └── labeled/                     # 라벨링 완료 (L/R/T 서브디렉토리)
-├── tests/                           # 246개 테스트
+├── tests/                           # 259개 테스트
 │   ├── conftest.py                  # pytest 설정 (경로, fixture)
 │   ├── test_analyzer.py             # Phase 1 모듈 임포트 + 유닛 (24)
 │   ├── test_pose_estimator.py       # 포즈 추정 (11)
@@ -102,11 +105,12 @@ services/analytics/
 │   ├── test_quality_gate.py         # 품질 게이트 (12)
 │   ├── test_filming_guide.py        # 촬영 가이드 (8)
 │   ├── test_tv_analyzer.py          # TV 중계 분석 (15)
-│   ├── test_integration.py          # 통합 테스트 (HTTP 엔드포인트 39) [Phase 4a]
+│   ├── test_integration.py          # 통합 테스트 (HTTP + 데모 + DE + 랜딩 52) [Phase 4c]
 │   ├── test_credits.py              # 크레딧 시스템 (14) [Phase 4a]
 │   ├── test_upload.py               # 업로드 처리 (7) [Phase 4a]
 │   ├── test_report_rendering.py     # 리포트 렌더링 (9) [Phase 4a]
-│   └── test_subscription.py         # 구독 시스템 (6) [Phase 4a]
+│   ├── test_subscription.py         # 구독 시스템 (6) [Phase 4a]
+│   └── test_tv_overlay_ocr.py       # TV 오버레이 OCR + 트래커 (31) [Phase 5a]
 ├── requirements.txt
 ├── .gitignore
 └── CLAUDE.md                        # 이 파일
@@ -137,15 +141,17 @@ PYTHONPATH=. python3 -m uvicorn app.server:app --host 0.0.0.0 --port 76
 | `lamp_detector.py` | `detect_lamp()` | 밝기 + HSV 색상으로 LED ON/OFF 감지 |
 | `score_reader.py` | `read_7segment_digit()`, `match_digit_template()`, `get_score_roi_mask()` 등 | 7세그먼트 OCR, 템플릿 학습/매칭, 시계 읽기 |
 | `video_processor.py` | `process_video()`, 이벤트 처리 로직 | 메인 루프, ROI 선택, 이벤트 추적, JSON/CSV 저장 |
+| `tv_overlay_ocr.py` | Phase 5a 신규 | TVOverlayOCR (Tesseract OCR), TVScoreTracker (디바운스), OverlayData/TVTouchEvent |
 
 ### pipeline/ — fencing-AI에서 포팅
 
 | 모듈 | 원본 | 주요 변경 |
 |------|------|----------|
-| `downloader.py` | `1-download_vids.py` | pytube → yt-dlp, Python 2 → 3, 타임아웃 처리 |
+| `downloader.py` | `1-download_vids.py` | pytube → yt-dlp, anti_bot 옵션, download_bout_clips() |
 | `clip_cutter.py` | `2-fast_clip_cutter.py` | logistic classifier → v3의 LampDetector + ScoreReader |
 | `auto_labeler.py` | `3-data_labeller.py` | 픽셀 비교 → v3의 LED 감지 + OCR |
 | `data_augmentor.py` | `5-data_multiplier.py` | ffmpeg 파이프 → cv2.VideoWriter |
+| `tv_data_collector.py` | Phase 5a 신규 | YouTube TV → OCR → 클립 → 라벨 CSV E2E 파이프라인 |
 
 ---
 
@@ -243,16 +249,52 @@ PYTHONPATH=. python3 -m uvicorn app.server:app --host 0.0.0.0 --port 76
 - [x] Jinja2 3.1.x + Python 3.14 캐시 버그 수정 (`cache_size=0`)
 - [x] Starlette 1.0 TemplateResponse 시그니처 호환 (`request` 첫 번째 인자)
 - [x] 통합 테스트 39개 (모든 HTTP 엔드포인트 + 데모 + API)
-- [x] **246개 테스트** 전체 (Phase 1-3: 171 + Phase 4a: 75)
+- [x] **246개 테스트** (Phase 1-3: 171 + Phase 4a: 75)
 
-### Phase 4b: 서비스 연결 + AI 파인튜닝 (예정)
-- [ ] Supabase 연결 — in-memory → DB (analytics_* 8 테이블 적용)
+### Phase 4b: Auto-ROI + DB 레이어 + 휴리스틱 라벨러 (완료 — 2026-05-26)
+- [x] 자동 ROI 감지 — LED/점수판 영역 자동 탐색
+- [x] Supabase DB 레이어 — analytics_* 테이블 연결 준비
+- [x] 휴리스틱 라벨러 — 규칙 기반 자동 동작 라벨링
+- [x] E2E 통합 — 전체 파이프라인 end-to-end 검증
+
+### Phase 4c: 투자자 데모 폴리싱 (완료 — 2026-05-27)
+- [x] **선수 이름 표시** — "Left"/"Right" → 김민수/박지현 (데모), 이준호/최서연 (DE)
+- [x] **DE 경기 데모** — 에페 15-11, 26터치, 3기간제, `/demo/de` 엔드포인트
+- [x] **랜딩 페이지 신규** — 히어로, 3단계 설명, 4대 기능, 가격표, 데모 프리뷰
+- [x] **한국어 동작명** — action_ko 매핑 (공격, 리포스트, 카운터어택, 르미즈)
+- [x] **코칭 인사이트 업그레이드** — 4개→6개, 선수 이름 타겟, 전문적 내용
+- [x] **Chart.js 선수 이름** — 스코어 타임라인·도넛 차트에 선수 이름 반영
+- [x] **핵심 지표 바** — 총 터치, 경기 시간, AI 분석 시간, 분석 프레임 수
+- [x] **네비게이션 업그레이드** — 로고→/, 데모 네비 링크, 크레딧 block override
+- [x] **데모 대시보드** — 크레딧 100, 현실적 파일명/날짜, 3개 작업
+- [x] **통합 테스트 확장** — 39→52개 (DE 데모, 랜딩, 선수 이름 검증)
+- [x] **259개 테스트** 전체 (Phase 1-3: 171 + Phase 4a: 75 + Phase 4c: +13)
+
+### Phase 5a: TV 오버레이 OCR + 파인튜닝 데이터 수집 (완료 — 2026-05-27)
+- [x] **TVOverlayOCR** — USA Fencing 스타일 TV 오버레이 바 OCR (`analyzer/tv_overlay_ocr.py`)
+  - 점수/이름/시간/period/카드 추출, HSV 색상 필터링 + Tesseract OCR
+  - 레이아웃 프리셋 시스템 (`OVERLAY_LAYOUTS`), 해상도 자동 스케일링
+  - `_preprocess_region`: 스케일업 + 색상 마스킹 + 모폴로지 연산
+- [x] **TVScoreTracker** — 프레임별 점수 추적 + 터치 이벤트 감지
+  - 디바운싱 로직 (15프레임=0.5초), OCR 오류 필터링 (점수 감소 무시)
+  - `TVTouchEvent` 데이터클래스 (프레임, 타임스탬프, 득점자, 점수 변화)
+- [x] **VideoDownloader 강화** — `anti_bot` 옵션 (UA/지연/재시도/쓰로틀링)
+  - `download_bout_clips()` 메서드 — 터치 이벤트 기반 클립 자동 분할
+- [x] **TVDataCollector** — YouTube → OCR → 클립 → 라벨 CSV E2E 파이프라인
+  - `process_video()`, `process_youtube_url()`, `process_playlist()`
+  - ActionHeuristicLabeler 통합, labels.csv 자동 생성
+- [x] **config.py 확장** — `OVERLAY_*` 상수 18개 (HSV 범위, 임계값, 레이아웃)
+- [x] **31개 테스트** — OCR/트래커/직렬화/레이아웃/설정 검증
+- [x] **350개 테스트** 전체 (Phase 1-4c: 319 + Phase 5a: 31)
+
+### Phase 5b: 서비스 연결 + AI 파인튜닝 (예정)
+- [ ] Supabase 실적용 — in-memory → DB (analytics_* 8 테이블 실제 적용)
 - [ ] 인증 연동 — members 테이블 + 크레딧 실제 결제
 - [ ] FACTS 데이터셋 확보 + 실제 파인튜닝 실행 (Mac Studio MPS)
 - [ ] 비디오 스트리밍/재생 + 포즈 오버레이 UI
 - [ ] PDF 내보내기 실제 구현 (weasyprint 또는 reportlab)
 
-### Phase 5: 고도화 (예정)
+### Phase 6: 고도화 (예정)
 - [ ] 종목별 분석 로직 (Weapon-specific analyzer: foil/epee/sabre)
 - [ ] 풋워크/방어 동작 분류 (포즈 궤적 분석 — Layer 2)
 - [ ] 오디오 터치 감지 검토 (Allez Go 논문: 89.1% 정확도)
@@ -710,42 +752,52 @@ TV 중계나 선수 촬영은 Phase 1 이벤트가 없으므로 모든 프레임
 
 ## 기술 스택
 
-| 영역 | Phase 1 | Phase 2 | Phase 3 | Phase 4a (현재) | Phase 4b 예정 |
-|------|---------|---------|---------|----------------|-------------|
-| 영상 처리 | OpenCV 4.x | 유지 | 유지 | 유지 | + FFmpeg |
-| LED/점수 | 7-segment OCR | 유지 | 유지 | 유지 | 유형별 최적화 |
-| 다운로드 | yt-dlp | 유지 | 유지 | 유지 | 유지 |
-| 포즈 추정 | — | YOLO11-Pose | 유지 | 유지 | 유지 |
-| 행동 인식 | — | VideoMAE (K400) | FACTS 8클래스 정렬 | Mock fallback | FACTS 파인튜닝 실행 |
-| 영상 감지 | — | — | VideoSourceDetector | 유지 | 유지 |
-| 품질 관리 | — | — | QualityGate | 유지 | 유지 |
-| TV 분석 | — | — | TVBroadcastAnalyzer | 유지 | 유지 |
-| 종목 분석 | — | Weapon enum | 유지 | 유지 | 종목별 Analyzer |
-| 웹 프레임워크 | FastAPI | 유지 | 유지 | + Jinja2/Tailwind/Chart.js | + Supabase 연결 |
-| DB | — | — | — | in-memory (스키마 준비) | Supabase 적용 |
-| GPU | — | Apple Metal (MPS) | 유지 | 유지 | 파인튜닝도 MPS |
+| 영역 | Phase 1 | Phase 2 | Phase 3 | Phase 4a | Phase 4c | Phase 5a (현재) | Phase 5b 예정 |
+|------|---------|---------|---------|----------|---------|----------------|-------------|
+| 영상 처리 | OpenCV 4.x | 유지 | 유지 | 유지 | 유지 | + Tesseract OCR | + FFmpeg |
+| LED/점수 | 7-segment OCR | 유지 | 유지 | 유지 | 유지 | + TV 오버레이 OCR | 유형별 최적화 |
+| 다운로드 | yt-dlp | 유지 | 유지 | 유지 | 유지 | + anti-bot, 클립 분할 | 유지 |
+| 포즈 추정 | — | YOLO11-Pose | 유지 | 유지 | 유지 | 유지 | 유지 |
+| 행동 인식 | — | VideoMAE (K400) | FACTS 정렬 | Mock fallback | 유지 | 유지 | FACTS 파인튜닝 |
+| 영상 감지 | — | — | VideoSourceDetector | 유지 | 유지 | 유지 | 유지 |
+| 품질 관리 | — | — | QualityGate | 유지 | 유지 | 유지 | 유지 |
+| TV 분석 | — | — | TVBroadcastAnalyzer | 유지 | 유지 | + TVOverlayOCR | 유지 |
+| 데이터 수집 | — | — | — | — | — | TVDataCollector | 유지 |
+| 종목 분석 | — | Weapon enum | 유지 | 유지 | 유지 | 유지 | 종목별 Analyzer |
+| 웹 UI | — | — | — | Jinja2/Tailwind/Chart.js | + 랜딩/DE/한국어 | 유지 | + Supabase 연결 |
+| DB | — | — | — | in-memory (스키마) | 유지 | 유지 | Supabase 적용 |
+| GPU | — | Apple Metal (MPS) | 유지 | 유지 | 유지 | 유지 | 파인튜닝도 MPS |
 
 ---
 
-## 세션 재개 가이드 (2026-05-25 기준)
+## 세션 재개 가이드 (2026-05-27 기준)
 
 ### 현재 상태 요약
 - **브랜치**: `feature/analytics/main`
-- **Phase 4a 완료**: Web UI + 데모 모드 + 크레딧 시스템 + 통합 테스트
+- **Phase 5a 완료**: TV 오버레이 OCR + 파인튜닝 데이터 수집 파이프라인
 - **서버 실행 확인됨**: 모든 페이지 HTTP 200, 데모 콘텐츠 정상 렌더링
-- **테스트**: 246개 (integration 39개 전부 통과, ML의존 22개 numpy 미설치로 실패 — 기존 이슈)
+- **테스트**: 350개 (319기존 + 31신규, ultralytics 미설치 2개만 실패 — 기존 이슈)
 
-### 작동하는 것
+### 작동하는 것 (투자자 데모 플로우)
 | 기능 | 상태 | 엔드포인트 |
 |------|------|-----------|
-| 서버 기동 | ✅ | `port 76` |
-| 데모 리포트 | ✅ | `GET /demo` — 플뢰레 5-3, 8터치, Chart.js, 코칭 인사이트 |
-| 데모 대시보드 | ✅ | `GET /demo/dashboard` — 3종목, 크레딧 잔액, 작업 상태 |
+| 랜딩 페이지 | ✅ | `GET /` — 히어로, 3단계 설명, 가격표, 데모 프리뷰 |
+| 데모 리포트 (Pool) | ✅ | `GET /demo` — 김민수vs박지현, 플뢰레 5-3, 8터치, 선수 이름 |
+| 데모 리포트 (DE) | ✅ | `GET /demo/de` — 이준호vs최서연, 에페 15-11, 26터치 |
+| 데모 대시보드 | ✅ | `GET /demo/dashboard` — 100 크레딧, 현실적 파일명, 3작업 |
 | 영상 업로드 페이지 | ✅ | `GET /upload` |
 | 분석 대시보드 | ✅ | `GET /dashboard` |
 | Health/Status API | ✅ | `GET /health`, `GET /api/analytics/status` |
 | 촬영 가이드 API | ✅ | `GET /api/analytics/filming-guide` |
 | Mock fallback | ✅ | ML 미설치 시 자동으로 데모 데이터 반환 |
+
+### 데모 플로우 (투자자/고객 프레젠테이션)
+```
+/ (랜딩) → "데모 보기" → /demo (Pool 5-3, 김민수 vs 박지현)
+                        → /demo/de (DE 15-11, 이준호 vs 최서연)
+                        → /demo/dashboard (100 크레딧, 3 작업)
+                        → /upload (실제 업로드 시연)
+```
 
 ### 스캐폴드 (구조만 있고 실제 동작 X)
 | 기능 | 이유 | 해결 방법 |
@@ -757,18 +809,21 @@ TV 중계나 선수 촬영은 Phase 1 이벤트가 없으므로 모든 프레임
 | 인증 | 없음, 공개 접근 | members 테이블 + JWT 연동 |
 
 ### 핵심 블로커
-1. **FACTS 데이터셋 미확보** — 논문 저자 연락 또는 자체 수집 필요
-2. **numpy 미설치** (.venv) — ML 관련 22개 테스트 실패 원인 (데모/웹에는 영향 없음)
-3. **Supabase 마이그레이션 미적용** — `007_analytics_tables.sql` 준비됨, 적용 필요
+1. **FACTS 데이터셋 미확보** — 논문 저자 연락 또는 USA Fencing 스트림에서 자체 수집 (TVDataCollector 준비됨)
+2. **Supabase 마이그레이션 미적용** — `007_analytics_tables.sql` 준비됨, 적용 필요
+3. **ultralytics 미설치** (.venv) — pose_estimator 2개 테스트 실패 원인 (나머지 350 통과)
 
 ### 다음 세션 우선순위
-1. **Supabase 연결** — 007 마이그레이션 적용 → server.py의 in-memory를 DB로 교체
-2. **numpy/torch 설치** — `.venv`에 ML 의존성 설치 → 전체 테스트 통과
-3. **FACTS 데이터셋** — 확보 경로 결정 (논문 저자 / 자체 라벨링)
+1. **USA Fencing 스트림 스캔** — TVDataCollector로 실제 YouTube 스트림 처리, 학습 데이터 수집
+2. **Supabase 연결** — 007 마이그레이션 적용 → server.py의 in-memory를 DB로 교체
+3. **FACTS 파인튜닝** — 수집된 데이터로 VideoMAE 파인튜닝 실행 (Mac Studio MPS)
 4. **인증** — members 연동, 크레딧 실제 소유자 연결
+5. **PDF 내보내기** — weasyprint/reportlab 구현
 
 ### 커밋 이력 (이 브랜치)
 ```
+6e90480 Add analytics Phase 4b: auto-ROI detection, Supabase DB layer, heuristic labeler, E2E integration
+ea2f969 Update CLAUDE.md: Phase 4a completion status and session resume guide
 2837ff5 Fix Jinja2 template rendering on Python 3.14
 e9795e2 Add demo mode and integration tests for analytics web service
 6a17f02 Add analytics Phase 4: Web UI, upload API, credit system, report rendering, DB migration
@@ -782,7 +837,8 @@ e0ec750 Refactor to monorepo structure for FencingMind multi-subdomain architect
 ```bash
 cd /Users/gyejinpark/Documents/GitHub/FencingMind-analytics/services/analytics
 PYTHONPATH=. .venv/bin/python3 -m uvicorn app.server:app --host 0.0.0.0 --port 76
-# 브라우저: http://localhost:76/demo
+# 브라우저: http://localhost:76/
+# 데모 플로우: http://localhost:76/demo → /demo/de → /demo/dashboard
 ```
 
 ### 알려진 호환성 이슈

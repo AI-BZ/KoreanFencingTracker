@@ -10,7 +10,7 @@
     var ACTION_LABELS_KO = {
         'attack': '공격',
         'riposte': '리포스트',
-        'counter_attack': '카운터 어택',
+        'counter_attack': '카운터어택',
         'remise': '르미즈',
         'parry': '파리',
         'lunge': '런지',
@@ -25,6 +25,10 @@
         '#8b5cf6', '#ec4899', '#14b8a6', '#f97316',
         '#64748b', '#a3a3a3',
     ];
+
+    // Resolve fencer names from report data (fallback to Left/Right)
+    var leftName = (REPORT_DATA.left_fencer && REPORT_DATA.left_fencer.name) || 'Left';
+    var rightName = (REPORT_DATA.right_fencer && REPORT_DATA.right_fencer.name) || 'Right';
 
     // -- Score Timeline Chart --
 
@@ -49,7 +53,7 @@
                     labels: labels,
                     datasets: [
                         {
-                            label: 'Left',
+                            label: leftName,
                             data: leftScores,
                             borderColor: '#3b82f6',
                             backgroundColor: 'rgba(59, 130, 246, 0.1)',
@@ -60,7 +64,7 @@
                             borderWidth: 2,
                         },
                         {
-                            label: 'Right',
+                            label: rightName,
                             data: rightScores,
                             borderColor: '#ef4444',
                             backgroundColor: 'rgba(239, 68, 68, 0.1)',
@@ -88,7 +92,9 @@
                                         var t = touches[idx];
                                         var parts = [];
                                         if (t.match_time) parts.push(t.match_time);
-                                        if (t.action_scorer) parts.push(t.action_scorer);
+                                        if (t.action_scorer) {
+                                            parts.push(ACTION_LABELS_KO[t.action_scorer] || t.action_scorer);
+                                        }
                                         return parts.join(' | ');
                                     }
                                     return '';
@@ -113,7 +119,7 @@
 
     // -- Action Distribution Doughnut Charts --
 
-    function createActionChart(canvasId, distribution) {
+    function createActionChart(canvasId, distribution, fencerName) {
         var canvas = document.getElementById(canvasId);
         if (!canvas || !distribution || distribution.length === 0) return;
 
@@ -166,10 +172,10 @@
     }
 
     if (REPORT_DATA.left_fencer) {
-        createActionChart('left-action-chart', REPORT_DATA.left_fencer.action_distribution);
+        createActionChart('left-action-chart', REPORT_DATA.left_fencer.action_distribution, leftName);
     }
     if (REPORT_DATA.right_fencer) {
-        createActionChart('right-action-chart', REPORT_DATA.right_fencer.action_distribution);
+        createActionChart('right-action-chart', REPORT_DATA.right_fencer.action_distribution, rightName);
     }
 
     // -- Share Button --
