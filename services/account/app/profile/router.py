@@ -3,7 +3,11 @@ Profile Router - 프로필 관리 엔드포인트
 
 /account 접두사는 server.py에서 추가됨.
 """
+from pathlib import Path
+
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
 from loguru import logger
 
 from shared_core.auth.jwt import get_current_member
@@ -15,17 +19,75 @@ from shared_core.auth.models import (
 )
 from shared_core.db.client import get_supabase_client
 from shared_core.privacy.masking import mask_korean_name
+from app.i18n.middleware import create_language_context
 
 router = APIRouter(tags=["profile"])
+
+_templates = Jinja2Templates(directory=str(Path(__file__).parent.parent.parent / "templates"))
 
 
 def get_supabase():
     return get_supabase_client()
 
 
-@router.get("/me")
+@router.get("/me", response_class=HTMLResponse)
 async def get_my_profile(request: Request):
-    """내 정보 조회"""
+    """내 프로필 페이지 (HTML)"""
+    member = await get_current_member(request)
+    if not member:
+        return HTMLResponse(
+            content='<script>window.location.href="/auth/login?redirect=/account/me";</script>',
+            status_code=200,
+        )
+
+    member_id = str(member["id"])
+    supabase = get_supabase()
+
+    # OAuth 연결 목록
+    oauth_result = (
+        supabase.table("oauth_connections")
+        .select("provider, provider_email, provider_name, is_primary, created_at")
+        .eq("member_id", member_id)
+        .execute()
+    )
+    oauth_connections = oauth_result.data or []
+    has_x_connection = any(c["provider"] == "x" for c in oauth_connections)
+
+    # 소속 조직명
+    team_name = None
+    anonymous_team = None
+    org_id = member.get("organization_id")
+    if org_id:
+        try:
+            org_result = (
+                supabase.table("organizations")
+                .select("name, region, org_type")
+                .eq("id", org_id)
+                .single()
+                .execute()
+            )
+            if org_result.data:
+                team_name = org_result.data["name"]
+                region = org_result.data.get("region", "")
+                org_type = org_result.data.get("org_type", "클럽")
+                anonymous_team = f"{region}({org_type})" if region else f"({org_type})"
+        except Exception:
+            pass
+
+    return _templates.TemplateResponse("auth/profile.html", {
+        "request": request,
+        "member": member,
+        "oauth_connections": oauth_connections,
+        "has_x_connection": has_x_connection,
+        "team_name": team_name,
+        "anonymous_team": anonymous_team,
+        **create_language_context(request),
+    })
+
+
+@router.get("/me/json")
+async def get_my_profile_json(request: Request):
+    """내 정보 조회 (JSON API)"""
     member = await get_current_member(request)
     if not member:
         raise HTTPException(status_code=401, detail="로그인이 필요합니다")

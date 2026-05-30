@@ -12,7 +12,13 @@ PID_DIR="$ROOT/.pids"
 LOG_DIR="$ROOT/logs"
 
 # Service definitions: name:port
-SERVICES=("account:70" "data:71" "club:72")
+# Ports 9070-9076 reserved for FencingMind (unprivileged; no sudo needed)
+# nginx listens on 9090 and proxies to these ports
+SERVICES=("account:9070" "data:9071" "club:9072")
+
+# Analytics lives in a separate worktree
+ANALYTICS_ROOT="/Users/gyejinpark/Documents/GitHub/FencingMind-analytics/services/analytics"
+ANALYTICS_PORT=9076
 
 # Colors
 RED='\033[0;31m'
@@ -48,7 +54,8 @@ start_nginx() {
         return
     fi
     log_info "Starting nginx..."
-    sudo nginx
+    # nginx now listens on unprivileged 9090 — sudo no longer required
+    nginx
     # nginx manages its own PID, but store master PID for our tracking
     if pgrep -x nginx > /dev/null; then
         pgrep -x nginx | head -1 > "$PID_DIR/nginx.pid"
@@ -60,7 +67,7 @@ start_nginx() {
 
 stop_nginx() {
     log_info "Stopping nginx..."
-    sudo nginx -s stop 2>/dev/null || true
+    nginx -s stop 2>/dev/null || true
     rm -f "$PID_DIR/nginx.pid"
     log_info "nginx stopped"
 }
@@ -125,6 +132,26 @@ stop_service() {
     fi
 }
 
+start_analytics() {
+    if is_running analytics; then
+        log_warn "analytics service is already running"
+        return
+    fi
+
+    log_info "Starting analytics service on port $ANALYTICS_PORT..."
+    PYTHONPATH="$ANALYTICS_ROOT" nohup "$ANALYTICS_ROOT/.venv/bin/python3" -m uvicorn \
+        "app.server:app" \
+        --host 127.0.0.1 \
+        --port "$ANALYTICS_PORT" \
+        > "$LOG_DIR/analytics.log" 2>&1 &
+    echo $! > "$PID_DIR/analytics.pid"
+    log_info "analytics started (PID $!)"
+}
+
+stop_analytics() {
+    stop_service analytics
+}
+
 do_start() {
     ensure_dirs
     log_info "Starting FencingMind services..."
@@ -139,6 +166,8 @@ do_start() {
         start_service "$name" "$port"
     done
 
+    start_analytics
+
     echo ""
     log_info "All services started. Use '$0 status' to check."
 }
@@ -146,6 +175,8 @@ do_start() {
 do_stop() {
     log_info "Stopping FencingMind services..."
     echo ""
+
+    stop_analytics
 
     for svc in "${SERVICES[@]}"; do
         local name="${svc%%:*}"
@@ -190,6 +221,13 @@ do_status() {
             echo -e "  ${padded} ${RED}STOPPED${NC}  (port $port)"
         fi
     done
+
+    # Analytics (separate worktree)
+    if is_running analytics; then
+        echo -e "  analytics       ${GREEN}RUNNING${NC}  (PID $(cat "$PID_DIR/analytics.pid"), port $ANALYTICS_PORT)"
+    else
+        echo -e "  analytics       ${RED}STOPPED${NC}  (port $ANALYTICS_PORT)"
+    fi
 
     echo ""
 }

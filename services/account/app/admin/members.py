@@ -1,11 +1,13 @@
 """
 관리자 - 회원 관리 라우터
 
-회원 목록 조회, 상세, 수정, 정지/해제 기능.
+회원 목록 조회, 상세, 수정, 정지/해제, 이메일/알림 발송 기능.
 모든 쓰기 작업은 admin_audit_logs에 기록.
 """
+import json
 import math
 from pathlib import Path
+from typing import List
 
 from fastapi import APIRouter, HTTPException, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -13,9 +15,13 @@ from fastapi.templating import Jinja2Templates
 from loguru import logger
 
 from shared_core.db.client import get_supabase_client
+from shared_core.email.service import EmailService
 from shared_core.privacy.masking import mask_email, mask_phone
 
 from .dependencies import require_admin, log_admin_action, get_client_ip
+from app.i18n.middleware import create_language_context
+
+_email_service = EmailService()
 
 router = APIRouter(tags=["admin-members"])
 
@@ -96,6 +102,7 @@ async def list_members(
         "q": q,
         "status_filter": status,
         "type_filter": type,
+        **create_language_context(request),
     })
 
 
@@ -176,6 +183,7 @@ async def member_detail(request: Request, member_id: str):
         "player_claims": player_claims,
         "org_claims": org_claims,
         "notes": notes,
+        **create_language_context(request),
     })
 
 
@@ -312,3 +320,184 @@ async def add_member_note(request: Request, member_id: str, content: str = Form(
     )
 
     return RedirectResponse(url=f"/account/admin/members/{member_id}#notes", status_code=303)
+
+
+# =============================================
+# 이메일 발송
+# =============================================
+
+@router.post("/members/{member_id}/send-email")
+async def send_member_email(
+    request: Request,
+    member_id: str,
+    subject: str = Form(...),
+    body: str = Form(...),
+):
+    """개별 회원에게 이메일 발송"""
+    admin = await require_admin(request)
+    supabase = get_supabase_client()
+
+    # Fetch member
+    try:
+        result = supabase.table("members").select("id, email, full_name").eq("id", member_id).single().execute()
+    except Exception:
+        raise HTTPException(status_code=404, detail="회원을 찾을 수 없습니다")
+
+    member = result.data
+    if not member or not member.get("email"):
+        raise HTTPException(status_code=400, detail="이메일 주소가 없는 회원입니다")
+
+    success = await _email_service.send_admin_email(
+        to=member["email"],
+        recipient_name=member.get("full_name") or "회원",
+        subject=subject,
+        body=body,
+    )
+
+    await log_admin_action(
+        admin_id=admin.get("id"),
+        action="send_email",
+        target_type="member",
+        target_id=member_id,
+        details={"subject": subject, "success": success},
+        ip_address=get_client_ip(request),
+    )
+
+    if not success:
+        logger.error(f"이메일 발송 실패: member={member_id}")
+        return RedirectResponse(url=f"/account/admin/members/{member_id}#message?error=send_failed", status_code=303)
+
+    logger.info(f"이메일 발송: member={member_id}, subject={subject}, admin={admin.get('email')}")
+    return RedirectResponse(url=f"/account/admin/members/{member_id}#message?sent=1", status_code=303)
+
+
+@router.post("/members/send-bulk-email")
+async def send_bulk_email(
+    request: Request,
+    subject: str = Form(...),
+    body: str = Form(...),
+    member_ids: str = Form(""),
+):
+    """선택한 회원들에게 단체 이메일 발송
+
+    member_ids: 쉼표로 구분된 member ID 목록
+    """
+    admin = await require_admin(request)
+    supabase = get_supabase_client()
+
+    ids = [mid.strip() for mid in member_ids.split(",") if mid.strip()]
+    if not ids:
+        raise HTTPException(status_code=400, detail="수신자를 선택해주세요")
+
+    # Fetch members
+    result = supabase.table("members").select("id, email, full_name").in_("id", ids).execute()
+    members = result.data or []
+
+    sent_count = 0
+    fail_count = 0
+    for m in members:
+        if not m.get("email"):
+            fail_count += 1
+            continue
+        success = await _email_service.send_admin_email(
+            to=m["email"],
+            recipient_name=m.get("full_name") or "회원",
+            subject=subject,
+            body=body,
+        )
+        if success:
+            sent_count += 1
+        else:
+            fail_count += 1
+
+    await log_admin_action(
+        admin_id=admin.get("id"),
+        action="send_bulk_email",
+        target_type="member",
+        details={"subject": subject, "sent": sent_count, "failed": fail_count, "total": len(ids)},
+        ip_address=get_client_ip(request),
+    )
+
+    logger.info(f"단체 이메일 발송: sent={sent_count}, failed={fail_count}, admin={admin.get('email')}")
+    return RedirectResponse(url=f"/account/admin/members?bulk_sent={sent_count}&bulk_failed={fail_count}", status_code=303)
+
+
+# =============================================
+# 사이트 내 알림 발송
+# =============================================
+
+@router.post("/members/{member_id}/send-notification")
+async def send_member_notification(
+    request: Request,
+    member_id: str,
+    title: str = Form(...),
+    body: str = Form(...),
+):
+    """개별 회원에게 사이트 내 알림 발송"""
+    admin = await require_admin(request)
+    supabase = get_supabase_client()
+
+    # Verify member exists
+    try:
+        supabase.table("members").select("id").eq("id", member_id).single().execute()
+    except Exception:
+        raise HTTPException(status_code=404, detail="회원을 찾을 수 없습니다")
+
+    supabase.table("notifications").insert({
+        "recipient_id": member_id,
+        "sender_id": admin.get("id"),
+        "title": title,
+        "body": body,
+        "notification_type": "admin_message",
+    }).execute()
+
+    await log_admin_action(
+        admin_id=admin.get("id"),
+        action="send_notification",
+        target_type="member",
+        target_id=member_id,
+        details={"title": title},
+        ip_address=get_client_ip(request),
+    )
+
+    logger.info(f"알림 발송: member={member_id}, title={title}, admin={admin.get('email')}")
+    return RedirectResponse(url=f"/account/admin/members/{member_id}#message?notified=1", status_code=303)
+
+
+@router.post("/members/send-bulk-notification")
+async def send_bulk_notification(
+    request: Request,
+    title: str = Form(...),
+    body: str = Form(...),
+    member_ids: str = Form(""),
+):
+    """선택한 회원들에게 단체 알림 발송"""
+    admin = await require_admin(request)
+    supabase = get_supabase_client()
+
+    ids = [mid.strip() for mid in member_ids.split(",") if mid.strip()]
+    if not ids:
+        raise HTTPException(status_code=400, detail="수신자를 선택해주세요")
+
+    rows = [
+        {
+            "recipient_id": mid,
+            "sender_id": admin.get("id"),
+            "title": title,
+            "body": body,
+            "notification_type": "admin_message",
+        }
+        for mid in ids
+    ]
+    supabase.table("notifications").insert(rows).execute()
+
+    await log_admin_action(
+        admin_id=admin.get("id"),
+        action="send_bulk_notification",
+        target_type="member",
+        details={"title": title, "count": len(ids)},
+        ip_address=get_client_ip(request),
+    )
+
+    logger.info(f"단체 알림 발송: count={len(ids)}, admin={admin.get('email')}")
+    return RedirectResponse(url=f"/account/admin/members?bulk_notified={len(ids)}", status_code=303)

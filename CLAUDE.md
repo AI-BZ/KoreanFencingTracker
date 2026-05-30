@@ -89,6 +89,51 @@ member_services (서비스별 구독)
 
 ---
 
+## 🌐 다국어 & 테마 정책 (i18n & Theme Policy)
+
+### 지원 언어 (7개)
+| 코드 | 언어 | 테마 | 비고 |
+|------|------|------|------|
+| `ko` | 한국어 | Light | 기본 언어, Toss/Apple 스타일 |
+| `en` | English | Dark | 글로벌 기본 |
+| `fr` | Français | Dark | |
+| `it` | Italiano | Dark | |
+| `ja` | 日本語 | Light | |
+| `zh` | 中文 | Light | |
+| `tr` | Türkçe | Dark | |
+
+### 테마 결정 규칙
+- **수동 테마 토글 없음** — 언어 선택이 테마를 자동 결정
+- 아시아 3개 언어(ko, ja, zh) → Light 테마
+- 서양 4개 언어(en, fr, it, tr) → Dark 테마
+- `LANG_THEME_MAP` 딕셔너리로 관리 (각 서비스 i18n/manager.py)
+
+### 테마 구현 방식
+- `<html data-theme="light|dark">` 속성으로 CSS 변수 전환
+- 디자인 토큰: `packages/shared-ui/styles/variables.css`
+- 각 서비스 미들웨어가 `request.state.theme` 설정
+- 로고: light → 검정 텍스트 로고, dark → 흰색 텍스트 로고
+
+### 🔴 금지 사항
+- ❌ 테마 수동 토글 UI 구현 금지
+- ❌ 하드코딩 색상 사용 금지 (CSS 변수 필수)
+- ❌ 서비스별 다른 언어 목록 금지 (7개 통일)
+- ❌ 서비스별 다른 언어 전환 UI 금지 (포맷 통일)
+
+### 번역 파일 구조
+각 서비스: `app/i18n/translations/{lang}/{namespace}.json`
+- 미번역 언어는 en fallback → ko fallback 순서
+- 새 언어 추가 시 모든 서비스에 동시 추가
+
+### 언어 감지 우선순위
+1. `?lang=` 쿼리 파라미터 (account 서비스)
+2. URL 경로 접두사 (`/{lang}/...`) (data 서비스)
+3. `lang` 쿠키 (domain: `.fencingmind.ai`)
+4. `Accept-Language` 헤더
+5. 기본값: `ko`
+
+---
+
 ## 🌲 Git Worktree 개발 전략
 
 ### 브랜치 구조
@@ -126,6 +171,77 @@ git worktree add ../FencingMind-analytics feature/analytics/main
 | **R3** | `database/migrations/` 새 파일 추가만 허용 (기존 파일 수정 금지) |
 | **R4** | 공유 패키지 수정 PR은 모든 서비스 테스트 통과 필수 |
 | **R5** | 서브도메인 간 직접 import 금지 (shared-api 통해서만) |
+
+---
+
+## 🔴 로고 규칙 (LOGO RULES - DO NOT CHANGE)
+
+### 로고 원본 저장소
+```
+services/logo/                              ← 모든 로고 원본 (중앙 저장소)
+├── FencingMind_logo_long.png               # 기본 (검은 텍스트)
+├── FencingMind_logo_long_white.png         # 다크 테마용 (흰 텍스트) ⭐
+├── FencingMind_logo_long_Tracker.png       # Data 서비스 (검은 텍스트)
+├── FencingMind_logo_long_Tracker_white.png # Data 서비스 다크 테마용 ⭐
+├── FencingMind_logo_long_Club.png          # Club 서비스 (검은 텍스트)
+├── FencingMind_logo_long_Club_white.png    # Club 서비스 다크 테마용 ⭐
+├── FencingMind_logo_long_Shop.png          # Shop 서비스 (검은 텍스트)
+├── FencingMind_logo_long_Shop_white.png    # Shop 서비스 다크 테마용 ⭐
+├── FencingMind_logo_square.png             # 정사각형 (파비콘/앱 아이콘)
+├── FencingMind_logo_square_white.png       # 정사각형 다크 테마용
+├── FencingMind_logo_square_tracker.png     # Data 정사각형
+├── FencingMind_logo_square_tracker_white.png
+├── FencingMind_logo_square_shop.png        # Shop 정사각형
+├── FencingMind_logo_square_shop_white.png
+└── *.afdesign                              # Affinity Designer 원본 파일
+```
+
+### 서비스별 로고 매핑
+| 서비스 | navbar 로고 (다크 테마) | 파일명 |
+|--------|----------------------|--------|
+| **account** | FencingMind (서비스명 없음) | `FencingMind_logo_long_white.png` |
+| **data** | FencingMind Tracker | `FencingMind_logo_long_Tracker_white.png` |
+| **club** | FencingMind Club | `FencingMind_logo_long_Club_white.png` |
+| **shop** | FencingMind Shop | `FencingMind_logo_long_Shop_white.png` |
+| **community** | FencingMind Community | (미제작 — 필요 시 생성) |
+| **blog** | FencingMind Blog | (미제작 — 필요 시 생성) |
+| **analytics** | FencingMind Analytics | (미제작 — 필요 시 생성) |
+
+### 각 서비스에서 로고 사용법
+각 서비스의 `static/images/logo/`에 필요한 로고를 복사하여 사용:
+```bash
+# 예: data 서비스
+cp services/logo/FencingMind_logo_long_Tracker_white.png \
+   services/data/static/images/logo/
+
+# 예: account 서비스
+cp services/logo/FencingMind_logo_long_white.png \
+   services/account/static/images/logo/
+```
+
+### HTML 로고 마크업 (표준)
+```html
+<!-- 다크 테마 navbar 로고 (권장) -->
+<a href="/" class="logo">
+    <img src="/static/images/logo/FencingMind_logo_long_Tracker_white.png"
+         alt="FencingMind Tracker" height="32">
+</a>
+```
+
+### 로고 형태 선택 기준
+| 형태 | 용도 |
+|------|------|
+| `_long` | navbar, 헤더, 이메일 상단 |
+| `_square` | 파비콘, 앱 아이콘, SNS 프로필 |
+| `_white` | 다크 테마 배경 (현재 모든 서비스) |
+| (white 없음) | 라이트 테마, 인쇄물, 명함 |
+
+### 🔴 금지 사항
+- ❌ 이모지(⚔️, 🤺 등)를 로고 대용으로 사용 금지
+- ❌ 서비스명 없이 "FencingMind"만 단독 사용 금지 (account 서비스 제외)
+- ❌ 로고 색상/폰트를 임의 변경 금지 — 반드시 원본 이미지 사용
+- ❌ "Korean Fencing Tracker" 등 비공식 명칭 사용 금지
+- ❌ `services/logo/` 외 경로에서 로고 원본 관리 금지
 
 ---
 
@@ -321,7 +437,7 @@ FencingMind/
 ### 서버 실행 방법
 ```bash
 # 프로젝트 루트에서 실행 (PYTHONPATH 설정 필수!)
-cd /Users/gyejinpark/Documents/GitHub/FencingCommunityDropShipping
+cd /Users/gyejinpark/Documents/GitHub/fencingmind
 
 # data 서비스 실행 (packages 경로 포함 필수!)
 PYTHONPATH="${PWD}:${PWD}/packages:${PWD}/services/data" python -m uvicorn services.data.app.server:app --host 0.0.0.0 --port 71
@@ -371,6 +487,13 @@ from app.auth.privacy import mask_korean_name  # → shared_core.privacy.masking
   - ✅ 현재 소속: `최병철펜싱클럽`
   - ✅ 소속 이력: `송도펜싱클럽(2023-06~2024-08)`, `최병철펜싱클럽(2024-09~현재)`
   - ❌ 잘못된 표시: `송도펜싱클럽, 최병철펜싱클럽` (두 개 나열 금지)
+
+### 4. 개인정보 서류 수집 금지 (NO PERSONAL DOCUMENT COLLECTION)
+- **가족관계증명서, 주민등록등본, 건강보험자격확인서 등 개인정보 서류 절대 수집 금지**
+- 개인정보 리스크를 키우는 행위는 리스크가 조금이라도 있으면 절대 하지 않음
+- 본인 인증은 AI 추론 + 관리자 검토 방식으로만 처리
+- 예외: 사업자등록증 (조직 Claim용 - 공개 정보)
+- 학부모 인증: 선수 데이터 교차 검증 + AI 추론으로만 처리
 
 ---
 
@@ -509,7 +632,7 @@ database/migrations/
 
 ### Components
 ```
-FencingCommunityDropShipping/
+fencingmind/
 ├── app/
 │   ├── server.py          # FastAPI 웹 서버
 │   └── ai_chat.py         # AI 검색 기능

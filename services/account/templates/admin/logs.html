@@ -1,34 +1,34 @@
 {% extends "admin/layout.html" %}
 
-{% block title %}감사 로그{% endblock %}
+{% block title %}{{ i18n.admin.logs.title|default('감사 로그') }}{% endblock %}
 
 {% block content %}
 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-    <h2 style="font-size:1.25rem; font-weight:700;">감사 로그</h2>
-    <span style="font-size:0.85rem; color:var(--gray-500);">{{ logs|length }}건 표시</span>
+    <h2 style="font-size:1.25rem; font-weight:700;">{{ i18n.admin.logs.title|default('감사 로그') }}</h2>
+    <span style="font-size:0.85rem; color:var(--gray-500);">{{ i18n.admin.logs.items_shown|default('{count}건 표시')|replace('{count}', logs|length|string) }}</span>
 </div>
 
 <!-- Filters -->
 <form method="GET" action="/account/admin/logs" class="search-bar">
     <select name="action">
-        <option value="">전체 행동</option>
-        <option value="approve" {% if action_filter == 'approve' %}selected{% endif %}>승인</option>
-        <option value="reject" {% if action_filter == 'reject' %}selected{% endif %}>거부</option>
-        <option value="update_member" {% if action_filter == 'update_member' %}selected{% endif %}>회원 수정</option>
-        <option value="suspend_member" {% if action_filter == 'suspend_member' %}selected{% endif %}>정지</option>
-        <option value="unsuspend_member" {% if action_filter == 'unsuspend_member' %}selected{% endif %}>정지 해제</option>
-        <option value="add_note" {% if action_filter == 'add_note' %}selected{% endif %}>노트 추가</option>
+        <option value="">{{ i18n.admin.logs.filter_all_action|default('전체 행동') }}</option>
+        <option value="approve" {% if action_filter == 'approve' %}selected{% endif %}>{{ i18n.admin.logs.filter_approve|default('승인') }}</option>
+        <option value="reject" {% if action_filter == 'reject' %}selected{% endif %}>{{ i18n.admin.logs.filter_reject|default('거부') }}</option>
+        <option value="update_member" {% if action_filter == 'update_member' %}selected{% endif %}>{{ i18n.admin.logs.filter_update_member|default('회원 수정') }}</option>
+        <option value="suspend_member" {% if action_filter == 'suspend_member' %}selected{% endif %}>{{ i18n.admin.logs.filter_suspend|default('정지') }}</option>
+        <option value="unsuspend_member" {% if action_filter == 'unsuspend_member' %}selected{% endif %}>{{ i18n.admin.logs.filter_unsuspend|default('정지 해제') }}</option>
+        <option value="add_note" {% if action_filter == 'add_note' %}selected{% endif %}>{{ i18n.admin.logs.filter_add_note|default('노트 추가') }}</option>
     </select>
     <select name="target_type">
-        <option value="">전체 대상</option>
-        <option value="member" {% if target_type_filter == 'member' %}selected{% endif %}>회원</option>
-        <option value="verification" {% if target_type_filter == 'verification' %}selected{% endif %}>본인인증</option>
-        <option value="player_claim" {% if target_type_filter == 'player_claim' %}selected{% endif %}>선수 Claim</option>
-        <option value="org_claim" {% if target_type_filter == 'org_claim' %}selected{% endif %}>조직 Claim</option>
+        <option value="">{{ i18n.admin.logs.filter_all_target|default('전체 대상') }}</option>
+        <option value="member" {% if target_type_filter == 'member' %}selected{% endif %}>{{ i18n.admin.logs.filter_member|default('회원') }}</option>
+        <option value="verification" {% if target_type_filter == 'verification' %}selected{% endif %}>{{ i18n.admin.logs.filter_verification|default('본인인증') }}</option>
+        <option value="player_claim" {% if target_type_filter == 'player_claim' %}selected{% endif %}>{{ i18n.admin.logs.filter_player_claim|default('선수 Claim') }}</option>
+        <option value="org_claim" {% if target_type_filter == 'org_claim' %}selected{% endif %}>{{ i18n.admin.logs.filter_org_claim|default('조직 Claim') }}</option>
     </select>
-    <input type="date" name="date_from" value="{{ date_from or '' }}" placeholder="시작일">
-    <input type="date" name="date_to" value="{{ date_to or '' }}" placeholder="종료일">
-    <button type="submit" class="btn btn-primary">검색</button>
+    <input type="date" name="date_from" value="{{ date_from or '' }}" placeholder="{{ i18n.admin.logs.date_from|default('시작일') }}">
+    <input type="date" name="date_to" value="{{ date_to or '' }}" placeholder="{{ i18n.admin.logs.date_to|default('종료일') }}">
+    <button type="submit" class="btn btn-primary">{{ i18n.common.buttons.search|default('검색') }}</button>
 </form>
 
 <!-- Logs Table -->
@@ -36,12 +36,12 @@
     <table>
         <thead>
             <tr>
-                <th style="width:160px;">시간</th>
-                <th>관리자</th>
-                <th>행동</th>
-                <th>대상 유형</th>
-                <th>대상 ID</th>
-                <th>상세</th>
+                <th style="width:160px;">{{ i18n.admin.logs.col_time|default('시간') }}</th>
+                <th>{{ i18n.admin.logs.col_admin|default('관리자') }}</th>
+                <th>{{ i18n.admin.logs.col_action|default('행동') }}</th>
+                <th>{{ i18n.admin.logs.col_target_type|default('대상 유형') }}</th>
+                <th>{{ i18n.admin.logs.col_target_id|default('대상 ID') }}</th>
+                <th>{{ i18n.admin.logs.col_detail|default('상세') }}</th>
                 <th>IP</th>
             </tr>
         </thead>
@@ -54,17 +54,17 @@
                 <td style="font-size:0.85rem;">{{ log.admin_name or (log.admin_id[:8] if log.admin_id else '-') }}</td>
                 <td>
                     {% if log.action == 'approve' %}
-                        <span class="status-badge status-approved">승인</span>
+                        <span class="status-badge status-approved">{{ i18n.admin.logs.action_approve|default('승인') }}</span>
                     {% elif log.action == 'reject' %}
-                        <span class="status-badge status-rejected">거부</span>
+                        <span class="status-badge status-rejected">{{ i18n.admin.logs.action_reject|default('거부') }}</span>
                     {% elif log.action == 'suspend_member' %}
-                        <span class="status-badge status-suspended">정지</span>
+                        <span class="status-badge status-suspended">{{ i18n.admin.logs.action_suspend|default('정지') }}</span>
                     {% elif log.action == 'unsuspend_member' %}
-                        <span class="status-badge status-active">정지해제</span>
+                        <span class="status-badge status-active">{{ i18n.admin.logs.action_unsuspend|default('정지해제') }}</span>
                     {% elif log.action == 'update_member' %}
-                        <span class="status-badge" style="background:var(--primary-light); color:var(--primary);">수정</span>
+                        <span class="status-badge" style="background:var(--primary-light); color:var(--primary);">{{ i18n.admin.logs.action_update|default('수정') }}</span>
                     {% elif log.action == 'add_note' %}
-                        <span class="status-badge" style="background:var(--gray-100); color:var(--gray-600);">노트</span>
+                        <span class="status-badge" style="background:var(--gray-100); color:var(--gray-600);">{{ i18n.admin.logs.action_note|default('노트') }}</span>
                     {% else %}
                         <span class="status-badge" style="background:var(--gray-100); color:var(--gray-600);">{{ log.action }}</span>
                     {% endif %}
@@ -95,7 +95,7 @@
             {% endfor %}
             {% if not logs %}
             <tr>
-                <td colspan="7" class="empty-state">감사 로그가 없습니다</td>
+                <td colspan="7" class="empty-state">{{ i18n.admin.logs.no_logs|default('감사 로그가 없습니다') }}</td>
             </tr>
             {% endif %}
         </tbody>

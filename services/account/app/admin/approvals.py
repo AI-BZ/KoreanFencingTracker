@@ -1,8 +1,10 @@
 """
 관리자 - 통합 승인 큐 라우터
 
-본인인증(verification), 선수Claim(player_claim), 조직Claim(org_claim) 통합 관리.
+본인인증(verification), 선수Claim(player_claim), 조직Claim(org_claim),
+학부모Claim(parent_claim) 통합 관리.
 """
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -14,6 +16,8 @@ from loguru import logger
 from shared_core.db.client import get_supabase_client
 
 from .dependencies import require_admin, log_admin_action, get_client_ip
+from app.i18n.middleware import create_language_context
+from app.verification.notification_service import VerificationNotificationService
 
 router = APIRouter(tags=["admin-approvals"])
 
@@ -29,14 +33,22 @@ def _get_pending_counts(supabase) -> dict:
         v_count = v.count or 0
         pc_count = pc.count or 0
         oc_count = oc.count or 0
-        return {
-            "verification": v_count,
-            "player_claim": pc_count,
-            "org_claim": oc_count,
-            "total": v_count + pc_count + oc_count,
-        }
     except Exception:
-        return {"verification": 0, "player_claim": 0, "org_claim": 0, "total": 0}
+        v_count = pc_count = oc_count = 0
+
+    try:
+        prc = supabase.table("parent_claims").select("id", count="exact").eq("status", "ai_reviewed").execute()
+        prc_count = prc.count or 0
+    except Exception:
+        prc_count = 0
+
+    return {
+        "verification": v_count,
+        "player_claim": pc_count,
+        "org_claim": oc_count,
+        "parent_claim": prc_count,
+        "total": v_count + pc_count + oc_count + prc_count,
+    }
 
 
 @router.get("/approvals", response_class=HTMLResponse)
@@ -104,6 +116,33 @@ async def list_approvals(request: Request, type: str = ""):
         except Exception as e:
             logger.debug(f"organization_claims fetch: {e}")
 
+    # Fetch parent claims
+    if not type or type == "parent_claim":
+        try:
+            prc_result = (
+                supabase.table("parent_claims")
+                .select(
+                    "id, member_id, child_name, child_birth_year, child_team_name, "
+                    "child_gender, relationship_type, matched_player_id, "
+                    "ai_confidence, ai_report, status, created_at"
+                )
+                .eq("status", "ai_reviewed")
+                .order("created_at", desc=False)
+                .limit(50)
+                .execute()
+            )
+            for prc in (prc_result.data or []):
+                prc["type"] = "parent_claim"
+                # Parse ai_report if it's a string
+                if isinstance(prc.get("ai_report"), str):
+                    try:
+                        prc["ai_report"] = json.loads(prc["ai_report"])
+                    except (json.JSONDecodeError, TypeError):
+                        prc["ai_report"] = {}
+                items.append(prc)
+        except Exception as e:
+            logger.debug(f"parent_claims fetch: {e}")
+
     # Enrich with member names and related data
     member_ids = list(set(item.get("member_id") for item in items if item.get("member_id")))
     member_names = {}
@@ -115,8 +154,9 @@ async def list_approvals(request: Request, type: str = ""):
         except Exception:
             pass
 
-    # Enrich player claims with player names
+    # Enrich player claims and parent claims with player names
     player_ids = [item.get("player_id") for item in items if item.get("type") == "player_claim" and item.get("player_id")]
+    player_ids += [item.get("matched_player_id") for item in items if item.get("type") == "parent_claim" and item.get("matched_player_id")]
     player_names = {}
     if player_ids:
         try:
@@ -143,6 +183,8 @@ async def list_approvals(request: Request, type: str = ""):
             item["player_name"] = player_names.get(item.get("player_id"), "")
         if item.get("type") == "org_claim":
             item["org_name"] = org_names_map.get(item.get("organization_id"), "")
+        if item.get("type") == "parent_claim":
+            item["matched_player_name"] = player_names.get(item.get("matched_player_id"), "")
 
     # Sort by created_at
     items.sort(key=lambda x: x.get("created_at", ""), reverse=False)
@@ -155,6 +197,7 @@ async def list_approvals(request: Request, type: str = ""):
         "items": items,
         "counts": counts,
         "type_filter": type,
+        **create_language_context(request),
     })
 
 
@@ -171,6 +214,8 @@ async def approve_item(request: Request, item_type: str, item_id: str, reason: s
         await _approve_player_claim(supabase, item_id, admin, now, reason)
     elif item_type == "org_claim":
         await _approve_org_claim(supabase, item_id, admin, now, reason)
+    elif item_type == "parent_claim":
+        await _approve_parent_claim(supabase, item_id, admin, now, reason)
     else:
         raise HTTPException(status_code=400, detail="유효하지 않은 유형입니다")
 
@@ -203,6 +248,8 @@ async def reject_item(request: Request, item_type: str, item_id: str, reason: st
         await _reject_player_claim(supabase, item_id, admin, now, reason)
     elif item_type == "org_claim":
         await _reject_org_claim(supabase, item_id, admin, now, reason)
+    elif item_type == "parent_claim":
+        await _reject_parent_claim(supabase, item_id, admin, now, reason)
     else:
         raise HTTPException(status_code=400, detail="유효하지 않은 유형입니다")
 
@@ -247,6 +294,11 @@ async def _approve_verification(supabase, verification_id: str, admin: dict, now
             "verified_at": now,
         }).eq("id", member_id).execute()
 
+        notifier = VerificationNotificationService()
+        await notifier.notify_member_status_change(
+            member_id=member_id, request_type="verification", status="approved",
+        )
+
 
 async def _reject_verification(supabase, verification_id: str, admin: dict, now: str, reason: str):
     """본인인증 거부"""
@@ -271,6 +323,11 @@ async def _reject_verification(supabase, verification_id: str, admin: dict, now:
         supabase.table("members").update({
             "verification_status": "rejected",
         }).eq("id", member_id).execute()
+
+        notifier = VerificationNotificationService()
+        await notifier.notify_member_status_change(
+            member_id=member_id, request_type="verification", status="rejected", details=reason,
+        )
 
 
 async def _approve_player_claim(supabase, claim_id: str, admin: dict, now: str, reason: str):
@@ -299,6 +356,12 @@ async def _approve_player_claim(supabase, claim_id: str, admin: dict, now: str, 
             "verification_tier": 3,
         }).eq("id", member_id).execute()
 
+    if member_id:
+        notifier = VerificationNotificationService()
+        await notifier.notify_member_status_change(
+            member_id=member_id, request_type="player_claim", status="approved",
+        )
+
 
 async def _reject_player_claim(supabase, claim_id: str, admin: dict, now: str, reason: str):
     """선수 Claim 거부"""
@@ -314,6 +377,13 @@ async def _reject_player_claim(supabase, claim_id: str, admin: dict, now: str, r
 
     if not result.data:
         raise HTTPException(status_code=404, detail="Claim을 찾을 수 없습니다")
+
+    member_id = result.data[0].get("member_id")
+    if member_id:
+        notifier = VerificationNotificationService()
+        await notifier.notify_member_status_change(
+            member_id=member_id, request_type="player_claim", status="rejected", details=reason,
+        )
 
 
 async def _approve_org_claim(supabase, claim_id: str, admin: dict, now: str, reason: str):
@@ -378,6 +448,12 @@ async def _approve_org_claim(supabase, claim_id: str, admin: dict, now: str, rea
             "data_linked_at": now,
         }).eq("id", member_id).execute()
 
+    if member_id:
+        notifier = VerificationNotificationService()
+        await notifier.notify_member_status_change(
+            member_id=member_id, request_type="org_claim", status="approved",
+        )
+
 
 async def _reject_org_claim(supabase, claim_id: str, admin: dict, now: str, reason: str):
     """조직 Claim 거부"""
@@ -393,3 +469,91 @@ async def _reject_org_claim(supabase, claim_id: str, admin: dict, now: str, reas
 
     if not result.data:
         raise HTTPException(status_code=404, detail="Claim을 찾을 수 없습니다")
+
+    member_id = result.data[0].get("member_id")
+    if member_id:
+        notifier = VerificationNotificationService()
+        await notifier.notify_member_status_change(
+            member_id=member_id, request_type="org_claim", status="rejected", details=reason,
+        )
+
+
+async def _approve_parent_claim(supabase, claim_id: str, admin: dict, now: str, reason: str):
+    """학부모 Claim 승인"""
+    update_data = {
+        "status": "approved",
+        "reviewer_notes": reason or None,
+        "reviewed_at": now,
+    }
+    if admin.get("id"):
+        update_data["reviewer_id"] = admin["id"]
+
+    result = supabase.table("parent_claims").update(update_data).eq("id", claim_id).execute()
+
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Claim을 찾을 수 없습니다")
+
+    claim = result.data[0]
+    member_id = claim.get("member_id")
+    matched_player_id = claim.get("matched_player_id")
+
+    if member_id:
+        # Update member: set guardian relationship
+        member_update = {
+            "verification_tier": max(2, 0),  # At least tier 2 for verified parent
+        }
+
+        if matched_player_id:
+            # Set guardian_member_id on the player's linked member (if any)
+            try:
+                player_member = supabase.table("members").select("id").eq(
+                    "player_id", matched_player_id
+                ).limit(1).execute()
+                if player_member.data:
+                    supabase.table("members").update({
+                        "guardian_member_id": member_id,
+                    }).eq("id", player_member.data[0]["id"]).execute()
+            except Exception as e:
+                logger.warning(f"Guardian link update: {e}")
+
+        try:
+            supabase.table("members").update(member_update).eq("id", member_id).execute()
+        except Exception as e:
+            logger.warning(f"Member tier update: {e}")
+
+    # Notify the member
+    notifier = VerificationNotificationService()
+    if member_id:
+        await notifier.notify_member_status_change(
+            member_id=member_id,
+            request_type="parent_claim",
+            status="approved",
+        )
+
+
+async def _reject_parent_claim(supabase, claim_id: str, admin: dict, now: str, reason: str):
+    """학부모 Claim 거부"""
+    update_data = {
+        "status": "rejected",
+        "reviewer_notes": reason,
+        "reviewed_at": now,
+    }
+    if admin.get("id"):
+        update_data["reviewer_id"] = admin["id"]
+
+    result = supabase.table("parent_claims").update(update_data).eq("id", claim_id).execute()
+
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Claim을 찾을 수 없습니다")
+
+    member_id = result.data[0].get("member_id")
+
+    # Notify the member
+    notifier = VerificationNotificationService()
+    if member_id:
+        await notifier.notify_member_status_change(
+            member_id=member_id,
+            request_type="parent_claim",
+            status="rejected",
+            details=reason,
+        )

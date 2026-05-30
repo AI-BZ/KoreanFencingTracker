@@ -6,8 +6,9 @@ JWT/OAuth 핵심 로직은 shared_core에서 import.
 """
 import os
 import json
+import random
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List
 from pathlib import Path
 from urllib.parse import urlparse, quote
@@ -29,10 +30,9 @@ from shared_core.auth.oauth.handler import OAuthHandler
 from shared_core.auth.oauth.user_info import get_oauth_user_info
 from shared_core.db.client import get_supabase_client
 from shared_core.privacy.masking import mask_korean_name
-from shared_core.privacy.anonymize import is_minor
 from shared_core.email.service import EmailService
 from shared_core.utils.country import phone_to_country
-from shared_core.email.templates import SERVICE_DESCRIPTIONS
+from shared_core.email.templates import SERVICE_DESCRIPTIONS, get_svc_name, get_svc_features
 from app.config import get_account_settings
 from app.i18n.middleware import create_language_context
 from app.verification.claims import calculate_claim_confidence, _link_player_to_member
@@ -229,6 +229,118 @@ async def check_nickname(nickname: str):
 
 
 # =============================================
+# 이메일 인증코드 로그인
+# =============================================
+
+@router.post("/email/send-code")
+async def send_email_code(request: Request, email: str = Form(...)):
+    """이메일 인증코드 발송"""
+    email = email.strip().lower()
+    if not email or "@" not in email:
+        raise HTTPException(status_code=400, detail="유효한 이메일을 입력해주세요")
+
+    settings = get_account_settings()
+    code = str(random.randint(100000, 999999))
+    registration_token = secrets.token_urlsafe(32)
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(minutes=settings.EMAIL_CODE_EXPIRE_MINUTES)
+
+    supabase = get_supabase()
+
+    # 기존 이메일 pending 삭제 (중복 방지)
+    try:
+        supabase.table("pending_registrations").delete().eq(
+            "provider", "email"
+        ).eq("provider_email", email).execute()
+    except Exception:
+        pass
+
+    row = {
+        "token": registration_token,
+        "provider": "email",
+        "provider_user_id": email,
+        "provider_email": email,
+        "provider_name": None,
+        "access_token": None,
+        "refresh_token": None,
+        "promotional": False,
+        "verification_code": code,
+        "code_attempts": 0,
+        "expires_at": expires_at.isoformat(),
+    }
+    try:
+        supabase.table("pending_registrations").insert(row).execute()
+    except Exception as e:
+        logger.error(f"Email code pending insert failed: {e}")
+        raise HTTPException(status_code=500, detail="인증코드 생성 중 오류가 발생했습니다")
+
+    lang = getattr(request.state, "lang", "ko")
+    await get_email_service().send_verification_code_email(email, "", code, lang=lang)
+
+    return {"success": True, "token": registration_token}
+
+
+@router.post("/email/verify-code")
+async def verify_email_code(token: str = Form(...), code: str = Form(...)):
+    """이메일 인증코드 검증"""
+    supabase = get_supabase()
+    settings = get_account_settings()
+
+    result = supabase.table("pending_registrations").select("*").eq(
+        "token", token
+    ).execute()
+
+    if not result.data:
+        raise HTTPException(status_code=400, detail="유효하지 않은 토큰입니다")
+
+    pending = result.data[0]
+
+    # 만료 확인
+    expires_at = datetime.fromisoformat(pending["expires_at"].replace("Z", "+00:00"))
+    if datetime.now(timezone.utc) > expires_at:
+        raise HTTPException(status_code=400, detail="인증코드가 만료되었습니다. 다시 발송해주세요.")
+
+    # 시도 횟수 확인
+    if (pending.get("code_attempts") or 0) >= settings.EMAIL_CODE_MAX_ATTEMPTS:
+        raise HTTPException(status_code=400, detail="인증 시도 횟수를 초과했습니다. 코드를 재발송해주세요.")
+
+    # 코드 확인
+    if pending.get("verification_code") != code.strip():
+        # 시도 횟수 증가
+        supabase.table("pending_registrations").update({
+            "code_attempts": (pending.get("code_attempts") or 0) + 1,
+        }).eq("token", token).execute()
+        raise HTTPException(status_code=400, detail="인증코드가 일치하지 않습니다")
+
+    email = pending["provider_email"]
+
+    # 기존 회원 확인 (이메일로 members 또는 oauth_connections 검색)
+    existing_member = supabase.table("members").select(
+        "id, email, member_type, full_name"
+    ).eq("email", email).execute()
+
+    if existing_member.data:
+        # 기존 회원 → JWT 발급 + 로그인
+        member = existing_member.data[0]
+        access_token = create_access_token({
+            "member_id": str(member["id"]),
+            "email": member["email"],
+            "member_type": member["member_type"],
+        })
+        # pending 삭제
+        supabase.table("pending_registrations").delete().eq("token", token).execute()
+        return {
+            "verified": True,
+            "is_new": False,
+            "access_token": access_token,
+            "email": email,
+        }
+
+    # 신규 → 회원가입 진행
+    return {"verified": True, "is_new": True, "token": token}
+
+
+# =============================================
 # OAuth 로그인
 # =============================================
 
@@ -253,10 +365,12 @@ async def get_oauth_providers(request: Request):
 
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request, redirect: Optional[str] = None):
-    """로그인 페이지 표시"""
+    """로그인 페이지 표시 (서비스 소개 + 인증 선택)"""
+    available_services = _get_available_services()
     return _templates.TemplateResponse("auth/login.html", {
         "request": request,
         "redirect_url": redirect or "",
+        "available_services": available_services,
         **create_language_context(request),
     })
 
@@ -382,8 +496,8 @@ def _get_available_services() -> list[dict]:
         {
             "service_key": key,
             "icon": svc["icon"],
-            "display_name": svc["name"],
-            "description": ", ".join(svc["features"][:2]),
+            "display_name": get_svc_name(svc, "ko"),
+            "description": ", ".join(get_svc_features(svc, "ko")[:2]),
             "is_active": not svc.get("coming_soon", False),
         }
         for key, svc in SERVICE_DESCRIPTIONS.items()
@@ -392,17 +506,15 @@ def _get_available_services() -> list[dict]:
 
 @router.get("/register", response_class=HTMLResponse)
 async def register_page(request: Request, token: Optional[str] = None):
-    """회원가입 페이지"""
+    """회원가입 페이지 (멀티스텝 위자드)"""
     pending = None
     if token:
+        # OAuth 또는 이메일 인증코드 모두 pending_registrations에 저장됨
         pending = _oauth_handler.get_pending_registration(token)
         if not pending:
             raise HTTPException(status_code=400, detail="유효하지 않은 등록 토큰입니다")
 
-    available_services = _get_available_services()
     i18n_ctx = create_language_context(request)
-    i18n_data = i18n_ctx.get("i18n", {})
-    mt = i18n_data.get("common", {}).get("member_types", {})
 
     return _templates.TemplateResponse(
         "auth/register.html",
@@ -410,16 +522,6 @@ async def register_page(request: Request, token: Optional[str] = None):
             "request": request,
             "token": token,
             "pending": pending,
-            "available_services": available_services,
-            "member_types": [
-                {"value": "general", "label": mt.get("general", "일반 회원")},
-                {"value": "player", "label": mt.get("player", "선수회원")},
-                {"value": "player_parent", "label": mt.get("player_parent", "선수 부모회원")},
-                {"value": "club_coach", "label": mt.get("club_coach", "클럽 코치")},
-                {"value": "club_director", "label": mt.get("club_director", "클럽 감독/대표")},
-                {"value": "school_coach", "label": mt.get("school_coach", "학교 코치")},
-                {"value": "school_director", "label": mt.get("school_director", "학교 감독")},
-            ],
             **i18n_ctx,
         }
     )
@@ -432,20 +534,13 @@ async def register_member(
     full_name: str = Form(...),
     nickname: str = Form(...),
     email: str = Form(...),
-    phone: Optional[str] = Form(None),
-    phone_country_code: str = Form("+82"),
-    birth_date: Optional[str] = Form(None),
     member_type: str = Form(...),
-    interested_services: List[str] = Form([]),
     # 동의 항목 (서버사이드 검증)
     terms_consent: bool = Form(False),
     privacy_consent: bool = Form(False),
-    overseas_consent: bool = Form(False),
-    optional_privacy_consent: bool = Form(False),
+    overseas_consent: bool = Form(False),  # 하위 호환 - 더 이상 필수 아님
     marketing_consent: bool = Form(False),
-    promotional_consent: bool = Form(False),
     # 가입 시 선수/조직 선택 (선택사항 — Claim 자동 생성용)
-    # str로 받아서 수동 파싱 (hidden field의 빈 문자열 → None 변환)
     selected_player_id: Optional[str] = Form(None),
     selected_org_id: Optional[str] = Form(None),
     selected_child_player_id: Optional[str] = Form(None),
@@ -453,9 +548,9 @@ async def register_member(
     selected_child_birth_year: Optional[str] = Form(None),
     selected_child_team: Optional[str] = Form(None),
 ):
-    """회원가입 처리"""
-    # 필수 동의 검증
-    if not all([terms_consent, privacy_consent, overseas_consent]):
+    """회원가입 처리 (위자드 폼)"""
+    # 필수 동의 검증 (overseas_consent 제거 — 2023 PIPA 개정)
+    if not all([terms_consent, privacy_consent]):
         raise HTTPException(status_code=400, detail="필수 동의 항목을 모두 체크해주세요")
 
     pending = _oauth_handler.pop_pending_registration(token)
@@ -469,21 +564,6 @@ async def register_member(
     # Fix email "None" from OAuth
     if not email or email.lower() == "none":
         raise HTTPException(status_code=400, detail="이메일을 입력해주세요")
-
-    # 생년월일 파싱
-    parsed_birth_date = None
-    if birth_date:
-        try:
-            parsed_birth_date = datetime.strptime(birth_date, "%Y-%m-%d").date()
-        except ValueError:
-            raise HTTPException(status_code=400, detail="잘못된 생년월일 형식입니다")
-
-    # 14세 미만 확인
-    if is_minor(parsed_birth_date) and member_type == "player":
-        raise HTTPException(
-            status_code=400,
-            detail="14세 미만 선수는 보호자(부모회원)를 통해 등록해야 합니다"
-        )
 
     # Claim 파라미터 파싱 (빈 문자열 → None, 숫자 문자열 → int)
     def _parse_int(v):
@@ -513,51 +593,40 @@ async def register_member(
     if existing_nick.data:
         raise HTTPException(status_code=400, detail="이미 사용 중인 닉네임입니다")
 
-    # Generate email verification token
-    verification_token = secrets.token_urlsafe(64)
-    settings = get_account_settings()
-    expires_at = datetime.utcnow() + timedelta(hours=settings.EMAIL_VERIFICATION_EXPIRE_HOURS)
     now = datetime.utcnow()
+    is_email_provider = pending["provider"] == "email"
 
-    # 선택 개인정보 미동의 시 전화번호/생년월일 무시
-    if not optional_privacy_consent:
-        phone = None
-        birth_date = None
+    # 이메일 가입: 이미 인증코드로 검증 완료 → email_verified = True
+    # OAuth 가입: 이메일 인증 필요 → email_verified = False
+    if is_email_provider:
+        email_verified = True
+        verification_token = None
+        verification_expires = None
+    else:
+        email_verified = False
+        verification_token = secrets.token_urlsafe(64)
+        settings = get_account_settings()
+        verification_expires = (now + timedelta(hours=settings.EMAIL_VERIFICATION_EXPIRE_HOURS)).isoformat()
 
-    # interested_services 검증: 유효한 서비스 키만 허용
-    valid_service_keys = set(SERVICE_DESCRIPTIONS.keys())
-    try:
-        svc_result = supabase.table("services").select("id").execute()
-        if svc_result.data:
-            valid_service_keys.update(s["id"] for s in svc_result.data)
-    except Exception:
-        pass
-    interested_services = [s for s in interested_services if s in valid_service_keys]
-    # data는 항상 포함
-    if "data" not in interested_services:
-        interested_services.insert(0, "data")
+    # data 서비스는 항상 기본 구독
+    interested_services = ["data"]
 
     member_data = {
         "full_name": full_name,
         "nickname": nickname,
         "display_name": mask_korean_name(full_name),
         "email": email,
-        "phone": phone if phone else None,
-        "phone_country_code": phone_country_code,
-        "birth_date": birth_date if birth_date else None,
         "member_type": member_type,
         "interested_services": json.dumps(interested_services),
         "marketing_consent": marketing_consent,
-        "promotional_consent": promotional_consent,
-        "overseas_transfer_consent": True,
-        "optional_privacy_consent": optional_privacy_consent,
+        "overseas_transfer_consent": True,  # 개인정보처리방침 동의로 갈음
         "verification_status": "pending",
-        "email_verified": False,
+        "email_verified": email_verified,
         "email_verification_token": verification_token,
-        "email_verification_expires_at": expires_at.isoformat(),
+        "email_verification_expires_at": verification_expires,
         "terms_agreed_at": now.isoformat(),
         "privacy_agreed_at": now.isoformat(),
-        "consent_version": "1.0",
+        "consent_version": "2.0",
     }
 
     result = supabase.table("members").insert(member_data).execute()
@@ -571,10 +640,8 @@ async def register_member(
     consent_entries = [
         {"consent_type": "terms_of_service", "agreed": True},
         {"consent_type": "required_privacy", "agreed": True},
-        {"consent_type": "overseas_transfer", "agreed": True},
-        {"consent_type": "optional_privacy", "agreed": optional_privacy_consent},
+        {"consent_type": "overseas_transfer", "agreed": True},  # 개인정보처리방침에 포함
         {"consent_type": "marketing", "agreed": marketing_consent},
-        {"consent_type": "promotional", "agreed": promotional_consent},
     ]
     for entry in consent_entries:
         try:
@@ -582,40 +649,27 @@ async def register_member(
                 "member_id": member["id"],
                 "consent_type": entry["consent_type"],
                 "agreed": entry["agreed"],
-                "consent_version": "1.0",
+                "consent_version": "2.0",
                 "ip_address": str(request.client.host) if request.client else None,
                 "user_agent": request.headers.get("user-agent", "")[:500],
             }).execute()
         except Exception as e:
             logger.warning(f"consent_logs 기록 실패: {e}")
 
-    # OAuth 연결 저장
-    oauth_data = {
-        "member_id": member["id"],
-        "provider": pending["provider"],
-        "provider_user_id": pending["provider_user_id"],
-        "provider_email": pending.get("email"),
-        "provider_name": pending.get("name"),
-        "is_primary": True,
-        "for_promotional": pending.get("promotional", False),
-        "access_token_encrypted": pending.get("access_token"),
-        "refresh_token_encrypted": pending.get("refresh_token"),
-    }
-
-    supabase.table("oauth_connections").insert(oauth_data).execute()
-
-    # 선택한 서비스별 free tier 구독 생성 (data는 DB trigger가 처리)
-    for svc_key in interested_services:
-        if svc_key == "data":
-            continue  # DB trigger가 자동 생성
-        try:
-            supabase.table("member_services").insert({
-                "member_id": member["id"],
-                "service_id": svc_key,
-                "tier": "free",
-            }).execute()
-        except Exception as e:
-            logger.debug(f"member_services 생성 실패 ({svc_key}): {e}")
+    # OAuth 연결 저장 (이메일 가입 시에는 건너뜀)
+    if not is_email_provider:
+        oauth_data = {
+            "member_id": member["id"],
+            "provider": pending["provider"],
+            "provider_user_id": pending["provider_user_id"],
+            "provider_email": pending.get("email"),
+            "provider_name": pending.get("name"),
+            "is_primary": True,
+            "for_promotional": pending.get("promotional", False),
+            "access_token_encrypted": pending.get("access_token"),
+            "refresh_token_encrypted": pending.get("refresh_token"),
+        }
+        supabase.table("oauth_connections").insert(oauth_data).execute()
 
     # =============================================
     # 가입 시 선택한 선수/조직 → 자동 Claim 생성
@@ -639,14 +693,16 @@ async def register_member(
         "member_type": member["member_type"],
     })
 
-    # Send verification email
-    verify_url = f"https://account.fencingmind.ai/auth/verify-email?token={verification_token}"
-    await get_email_service().send_verification_email(
-        email, full_name, verification_token, verify_url=verify_url,
-    )
+    # OAuth 가입 → 이메일 인증 메일 발송
+    if not is_email_provider and verification_token:
+        lang = getattr(request.state, "lang", "ko")
+        verify_url = f"https://account.fencingmind.ai/auth/verify-email?token={verification_token}"
+        await get_email_service().send_verification_email(
+            email, full_name, verification_token, verify_url=verify_url, lang=lang,
+        )
 
-    # Redirect to email verification page instead of /account/verification
-    response = RedirectResponse(url=f"/auth/verify-email-sent?email={email}", status_code=303)
+    # Welcome 페이지로 리다이렉트
+    response = RedirectResponse(url="/auth/welcome", status_code=303)
     _set_auth_cookies(response, access_token, email)
 
     return response
@@ -822,6 +878,24 @@ async def _create_registration_claims(
 
 
 # =============================================
+# 환영 페이지
+# =============================================
+
+@router.get("/welcome", response_class=HTMLResponse)
+async def welcome_page(request: Request):
+    """가입 완료 환영 페이지"""
+    member = await get_current_member(request)
+    if not member:
+        return RedirectResponse(url="/auth/login", status_code=303)
+
+    return _templates.TemplateResponse("auth/welcome.html", {
+        "request": request,
+        "member": member,
+        **create_language_context(request),
+    })
+
+
+# =============================================
 # 이메일 인증
 # =============================================
 
@@ -851,7 +925,7 @@ def _send_welcome_notification(supabase, member_id: str, services: list[str]):
         svc = SERVICE_DESCRIPTIONS.get(svc_key)
         if svc and not svc.get("coming_soon"):
             icon = _NOTIFICATION_ICONS.get(svc_key, "")
-            svc_names.append(f'{icon} {svc["name"]}')
+            svc_names.append(f'{icon} {get_svc_name(svc, "ko")}')
 
     if svc_names:
         body = f"관심 서비스: {', '.join(svc_names)}\n\n시작하기: https://data.fencingmind.ai"
@@ -870,7 +944,7 @@ def _send_welcome_notification(supabase, member_id: str, services: list[str]):
 
 
 @router.get("/verify-email")
-async def verify_email(token: str):
+async def verify_email(request: Request, token: str):
     """이메일 인증 처리"""
     supabase = get_supabase()
 
@@ -905,8 +979,9 @@ async def verify_email(token: str):
             interested = json.loads(interested)
         except (json.JSONDecodeError, TypeError):
             interested = ["data"]
+    lang = getattr(request.state, "lang", "ko")
     await get_email_service().send_welcome_email(
-        member["email"], member["full_name"], services=interested,
+        member["email"], member["full_name"], services=interested, lang=lang,
     )
 
     # Create welcome notification
@@ -937,9 +1012,10 @@ async def resend_verification_email(request: Request):
         "email_verification_expires_at": expires_at.isoformat(),
     }).eq("id", member["id"]).execute()
 
+    lang = getattr(request.state, "lang", "ko")
     verify_url = f"https://account.fencingmind.ai/auth/verify-email?token={new_token}"
     await get_email_service().send_verification_email(
-        member["email"], member["full_name"], new_token, verify_url=verify_url,
+        member["email"], member["full_name"], new_token, verify_url=verify_url, lang=lang,
     )
 
     return RedirectResponse(url=f"/auth/verify-email-sent?email={member['email']}", status_code=303)

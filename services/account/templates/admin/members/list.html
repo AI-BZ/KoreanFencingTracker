@@ -1,53 +1,115 @@
 {% extends "admin/layout.html" %}
 
-{% block title %}회원 관리{% endblock %}
+{% block title %}{{ i18n.admin.members.title|default('회원 관리') }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .bulk-actions {
+        display: none;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 16px;
+        background: var(--primary-light);
+        border-radius: 6px;
+        margin-bottom: 12px;
+        font-size: 0.85rem;
+    }
+    .bulk-actions.show { display: flex; }
+    .bulk-actions .selected-count { font-weight: 600; color: var(--primary); }
+    .bulk-modal-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.4);
+        z-index: 200;
+        justify-content: center;
+        align-items: center;
+    }
+    .bulk-modal-overlay.show { display: flex; }
+    .bulk-modal {
+        background: #fff;
+        border-radius: 12px;
+        padding: 28px;
+        width: 500px;
+        max-width: 90vw;
+        max-height: 80vh;
+        overflow-y: auto;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+    }
+    .bulk-modal h3 { font-size: 1.1rem; margin-bottom: 16px; }
+    .bulk-modal label { font-size: 0.8rem; color: var(--gray-500); display: block; margin-bottom: 4px; }
+    .bulk-modal input[type="text"], .bulk-modal textarea {
+        width: 100%; padding: 8px; border: 1px solid var(--gray-300); border-radius: 6px; font-size: 0.85rem; margin-bottom: 12px;
+    }
+    .bulk-modal textarea { resize: vertical; min-height: 80px; }
+    .bulk-modal .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
+</style>
+{% endblock %}
 
 {% block content %}
 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-    <h2 style="font-size:1.25rem; font-weight:700;">회원 관리</h2>
-    <span style="font-size:0.85rem; color:var(--gray-500);">총 {{ total }}명</span>
+    <h2 style="font-size:1.25rem; font-weight:700;">{{ i18n.admin.members.title|default('회원 관리') }}</h2>
+    <span style="font-size:0.85rem; color:var(--gray-500);">{{ i18n.admin.members.total_count|default('총 {count}명')|replace('{count}', total|string) }}</span>
 </div>
+
+{% set params = request.query_params %}
+{% if params.get('bulk_sent') %}
+<div class="flash flash-success">이메일 {{ params.get('bulk_sent') }}건 발송 완료{% if params.get('bulk_failed') and params.get('bulk_failed') != '0' %}, {{ params.get('bulk_failed') }}건 실패{% endif %}</div>
+{% endif %}
+{% if params.get('bulk_notified') %}
+<div class="flash flash-success">알림 {{ params.get('bulk_notified') }}건 발송 완료</div>
+{% endif %}
 
 <!-- Search & Filter -->
 <form method="GET" action="/account/admin/members" class="search-bar">
-    <input type="text" name="q" value="{{ q or '' }}" placeholder="이름, 이메일, 닉네임 검색...">
+    <input type="text" name="q" value="{{ q or '' }}" placeholder="{{ i18n.admin.members.search_placeholder|default('이름, 이메일, 닉네임 검색...') }}">
     <select name="status">
-        <option value="">전체 상태</option>
-        <option value="active" {% if status_filter == 'active' %}selected{% endif %}>활성</option>
-        <option value="inactive" {% if status_filter == 'inactive' %}selected{% endif %}>휴회</option>
-        <option value="suspended" {% if status_filter == 'suspended' %}selected{% endif %}>정지</option>
+        <option value="">{{ i18n.admin.members.filter_all_status|default('전체 상태') }}</option>
+        <option value="active" {% if status_filter == 'active' %}selected{% endif %}>{{ i18n.admin.members.filter_active|default('활성') }}</option>
+        <option value="inactive" {% if status_filter == 'inactive' %}selected{% endif %}>{{ i18n.admin.members.filter_inactive|default('휴회') }}</option>
+        <option value="suspended" {% if status_filter == 'suspended' %}selected{% endif %}>{{ i18n.admin.members.filter_suspended|default('정지') }}</option>
     </select>
     <select name="type">
-        <option value="">전체 유형</option>
-        <option value="player" {% if type_filter == 'player' %}selected{% endif %}>선수</option>
-        <option value="player_parent" {% if type_filter == 'player_parent' %}selected{% endif %}>학부모</option>
-        <option value="club_coach" {% if type_filter == 'club_coach' %}selected{% endif %}>클럽 코치</option>
-        <option value="club_director" {% if type_filter == 'club_director' %}selected{% endif %}>클럽 감독</option>
-        <option value="school_coach" {% if type_filter == 'school_coach' %}selected{% endif %}>학교 코치</option>
-        <option value="school_director" {% if type_filter == 'school_director' %}selected{% endif %}>학교 감독</option>
-        <option value="general" {% if type_filter == 'general' %}selected{% endif %}>일반</option>
+        <option value="">{{ i18n.admin.members.filter_all_type|default('전체 유형') }}</option>
+        <option value="player" {% if type_filter == 'player' %}selected{% endif %}>{{ i18n.admin.members.filter_player|default('선수') }}</option>
+        <option value="player_parent" {% if type_filter == 'player_parent' %}selected{% endif %}>{{ i18n.admin.members.filter_player_parent|default('학부모') }}</option>
+        <option value="club_coach" {% if type_filter == 'club_coach' %}selected{% endif %}>{{ i18n.admin.members.filter_club_coach|default('클럽 코치') }}</option>
+        <option value="club_director" {% if type_filter == 'club_director' %}selected{% endif %}>{{ i18n.admin.members.filter_club_director|default('클럽 감독') }}</option>
+        <option value="school_coach" {% if type_filter == 'school_coach' %}selected{% endif %}>{{ i18n.admin.members.filter_school_coach|default('학교 코치') }}</option>
+        <option value="school_director" {% if type_filter == 'school_director' %}selected{% endif %}>{{ i18n.admin.members.filter_school_director|default('학교 감독') }}</option>
+        <option value="general" {% if type_filter == 'general' %}selected{% endif %}>{{ i18n.admin.members.filter_general|default('일반') }}</option>
     </select>
-    <button type="submit" class="btn btn-primary">검색</button>
+    <button type="submit" class="btn btn-primary">{{ i18n.common.buttons.search|default('검색') }}</button>
 </form>
+
+<!-- Bulk Actions Bar -->
+<div class="bulk-actions" id="bulkActions">
+    <span class="selected-count" id="selectedCount">0</span>{{ i18n.admin.members.selected_suffix|default('명 선택') }}
+    <button class="btn btn-primary btn-sm" onclick="openBulkModal('email')">{{ i18n.admin.members.bulk_email|default('이메일 발송') }}</button>
+    <button class="btn btn-sm" onclick="openBulkModal('notification')">{{ i18n.admin.members.bulk_notification|default('알림 발송') }}</button>
+    <button class="btn btn-sm" onclick="clearSelection()">{{ i18n.admin.members.clear_selection|default('선택 해제') }}</button>
+</div>
 
 <!-- Members Table -->
 <div class="card" style="padding:0; overflow-x:auto;">
     <table>
         <thead>
             <tr>
-                <th>이름</th>
-                <th>이메일</th>
-                <th>유형</th>
-                <th>인증</th>
-                <th>상태</th>
-                <th>관리자</th>
-                <th>가입일</th>
+                <th style="width:36px;"><input type="checkbox" id="selectAll" onchange="toggleAll(this)"></th>
+                <th>{{ i18n.admin.members.col_name|default('이름') }}</th>
+                <th>{{ i18n.admin.members.col_email|default('이메일') }}</th>
+                <th>{{ i18n.admin.members.col_type|default('유형') }}</th>
+                <th>{{ i18n.admin.members.col_verification|default('인증') }}</th>
+                <th>{{ i18n.admin.members.col_status|default('상태') }}</th>
+                <th>{{ i18n.admin.members.col_admin|default('관리자') }}</th>
+                <th>{{ i18n.admin.members.col_created|default('가입일') }}</th>
                 <th></th>
             </tr>
         </thead>
         <tbody>
             {% for m in members %}
             <tr>
+                <td><input type="checkbox" class="member-cb" value="{{ m.id }}" onchange="updateSelection()"></td>
                 <td style="font-weight:600;">
                     <a href="/account/admin/members/{{ m.id }}">{{ m.full_name or '-' }}</a>
                     {% if m.nickname %}<br><span style="font-size:0.75rem; color:var(--gray-400);">@{{ m.nickname }}</span>{% endif %}
@@ -56,13 +118,13 @@
                 <td><span class="status-badge" style="background:var(--gray-100); color:var(--gray-600);">{{ m.member_type or '-' }}</span></td>
                 <td>
                     {% if m.verification_status == 'verified' %}
-                        <span class="status-badge status-approved">인증완료</span>
+                        <span class="status-badge status-approved">{{ i18n.admin.members.verified_label|default('인증완료') }}</span>
                     {% elif m.verification_status == 'submitted' %}
-                        <span class="status-badge status-pending">제출됨</span>
+                        <span class="status-badge status-pending">{{ i18n.admin.members.submitted_label|default('제출됨') }}</span>
                     {% elif m.verification_status == 'rejected' %}
-                        <span class="status-badge status-rejected">거부</span>
+                        <span class="status-badge status-rejected">{{ i18n.admin.members.rejected_label|default('거부') }}</span>
                     {% else %}
-                        <span class="status-badge" style="background:var(--gray-100); color:var(--gray-400);">미인증</span>
+                        <span class="status-badge" style="background:var(--gray-100); color:var(--gray-400);">{{ i18n.admin.members.unverified_label|default('미인증') }}</span>
                     {% endif %}
                 </td>
                 <td>
@@ -78,12 +140,12 @@
                     {% endif %}
                 </td>
                 <td style="font-size:0.8rem; color:var(--gray-400); white-space:nowrap;">{{ (m.created_at or '')[:10] }}</td>
-                <td><a href="/account/admin/members/{{ m.id }}" class="btn btn-sm">상세</a></td>
+                <td><a href="/account/admin/members/{{ m.id }}" class="btn btn-sm">{{ i18n.admin.members.detail_btn|default('상세') }}</a></td>
             </tr>
             {% endfor %}
             {% if not members %}
             <tr>
-                <td colspan="8" class="empty-state">검색 결과가 없습니다</td>
+                <td colspan="9" class="empty-state">{{ i18n.admin.members.no_results|default('검색 결과가 없습니다') }}</td>
             </tr>
             {% endif %}
         </tbody>
@@ -94,7 +156,7 @@
 {% if total_pages > 1 %}
 <div class="pagination">
     {% if page > 1 %}
-        <a href="?q={{ q or '' }}&status={{ status_filter or '' }}&type={{ type_filter or '' }}&page={{ page - 1 }}&limit={{ limit }}">&laquo; 이전</a>
+        <a href="?q={{ q or '' }}&status={{ status_filter or '' }}&type={{ type_filter or '' }}&page={{ page - 1 }}&limit={{ limit }}">&laquo; {{ i18n.admin.members.prev|default('이전') }}</a>
     {% endif %}
     {% for p in range(1, total_pages + 1) %}
         {% if p == page %}
@@ -106,8 +168,100 @@
         {% endif %}
     {% endfor %}
     {% if page < total_pages %}
-        <a href="?q={{ q or '' }}&status={{ status_filter or '' }}&type={{ type_filter or '' }}&page={{ page + 1 }}&limit={{ limit }}">다음 &raquo;</a>
+        <a href="?q={{ q or '' }}&status={{ status_filter or '' }}&type={{ type_filter or '' }}&page={{ page + 1 }}&limit={{ limit }}">{{ i18n.admin.members.next|default('다음') }} &raquo;</a>
     {% endif %}
 </div>
 {% endif %}
+
+<!-- Bulk Email Modal -->
+<div class="bulk-modal-overlay" id="bulkEmailModal">
+    <div class="bulk-modal">
+        <h3>{{ i18n.admin.members.bulk_email_title|default('단체 이메일 발송') }}</h3>
+        <form method="POST" action="/account/admin/members/send-bulk-email" id="bulkEmailForm">
+            <input type="hidden" name="member_ids" id="bulkEmailIds">
+            <label>{{ i18n.common.labels.subject|default('제목') }}</label>
+            <input type="text" name="subject" required placeholder="{{ i18n.admin.members.bulk_email_subject_placeholder|default('이메일 제목') }}">
+            <label>{{ i18n.common.labels.body|default('본문') }}</label>
+            <textarea name="body" required placeholder="{{ i18n.admin.members.bulk_email_body_placeholder|default('이메일 본문을 작성하세요...') }}" rows="5"></textarea>
+            <p style="font-size:0.75rem; color:var(--gray-400); margin-bottom:8px;">
+                {{ i18n.admin.members.modal_send_to|default('선택된 {count}명의 회원에게 발송됩니다.')|replace('{count}', '<span class="modal-count">0</span>')|safe }}
+            </p>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-sm" onclick="closeBulkModal()">{{ i18n.common.buttons.cancel|default('취소') }}</button>
+                <button type="submit" class="btn btn-primary btn-sm" onclick="return confirm('{{ i18n.admin.members.confirm_send_email|default('이메일을 발송하시겠습니까?') }}');">{{ i18n.admin.members.send_btn|default('발송') }}</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Bulk Notification Modal -->
+<div class="bulk-modal-overlay" id="bulkNotifModal">
+    <div class="bulk-modal">
+        <h3>{{ i18n.admin.members.bulk_notif_title|default('단체 알림 발송') }}</h3>
+        <form method="POST" action="/account/admin/members/send-bulk-notification" id="bulkNotifForm">
+            <input type="hidden" name="member_ids" id="bulkNotifIds">
+            <label>{{ i18n.common.labels.subject|default('제목') }}</label>
+            <input type="text" name="title" required placeholder="{{ i18n.admin.members.bulk_notif_title_placeholder|default('알림 제목') }}">
+            <label>{{ i18n.common.labels.content|default('내용') }}</label>
+            <textarea name="body" required placeholder="{{ i18n.admin.members.bulk_notif_body_placeholder|default('알림 내용을 작성하세요...') }}" rows="5"></textarea>
+            <p style="font-size:0.75rem; color:var(--gray-400); margin-bottom:8px;">
+                {{ i18n.admin.members.modal_send_to|default('선택된 {count}명의 회원에게 발송됩니다.')|replace('{count}', '<span class="modal-count">0</span>')|safe }}
+            </p>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-sm" onclick="closeBulkModal()">{{ i18n.common.buttons.cancel|default('취소') }}</button>
+                <button type="submit" class="btn btn-primary btn-sm" onclick="return confirm('{{ i18n.admin.members.confirm_send_notification|default('알림을 발송하시겠습니까?') }}');">{{ i18n.admin.members.send_btn|default('발송') }}</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function getSelectedIds() {
+    return Array.from(document.querySelectorAll('.member-cb:checked')).map(cb => cb.value);
+}
+
+function updateSelection() {
+    const ids = getSelectedIds();
+    const bar = document.getElementById('bulkActions');
+    const count = document.getElementById('selectedCount');
+    count.textContent = ids.length;
+    bar.classList.toggle('show', ids.length > 0);
+    document.querySelectorAll('.modal-count').forEach(el => el.textContent = ids.length);
+}
+
+function toggleAll(master) {
+    document.querySelectorAll('.member-cb').forEach(cb => cb.checked = master.checked);
+    updateSelection();
+}
+
+function clearSelection() {
+    document.querySelectorAll('.member-cb').forEach(cb => cb.checked = false);
+    document.getElementById('selectAll').checked = false;
+    updateSelection();
+}
+
+function openBulkModal(type) {
+    const ids = getSelectedIds().join(',');
+    if (type === 'email') {
+        document.getElementById('bulkEmailIds').value = ids;
+        document.getElementById('bulkEmailModal').classList.add('show');
+    } else {
+        document.getElementById('bulkNotifIds').value = ids;
+        document.getElementById('bulkNotifModal').classList.add('show');
+    }
+}
+
+function closeBulkModal() {
+    document.querySelectorAll('.bulk-modal-overlay').forEach(el => el.classList.remove('show'));
+}
+
+// Close modal on overlay click
+document.querySelectorAll('.bulk-modal-overlay').forEach(overlay => {
+    overlay.addEventListener('click', function(e) {
+        if (e.target === this) closeBulkModal();
+    });
+});
+</script>
 {% endblock %}

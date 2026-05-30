@@ -1,54 +1,54 @@
 {% extends "base.html" %}
 
-{% block title %}이메일 인증 - FencingMind{% endblock %}
+{% block title %}{{ i18n.auth.verify_email.page_title|default('이메일 인증 - FencingMind') }}{% endblock %}
 
 {% block content %}
 <div class="auth-container">
     <div class="auth-card verify-card">
         <div class="verify-icon">
-            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#3182ce" stroke-width="1.5">
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--info-color)" stroke-width="1.5">
                 <rect x="2" y="4" width="20" height="16" rx="2"/>
                 <path d="M22 4L12 13L2 4"/>
             </svg>
         </div>
 
-        <h1>이메일을 확인해주세요</h1>
+        <h1>{{ i18n.auth.verify_email.title|default('이메일을 확인해주세요') }}</h1>
 
         <p class="verify-message">
             {% if email %}
-            <strong>{{ email }}</strong>로<br>
+            <strong>{{ email }}</strong>{{ i18n.auth.verify_email.sent_to|default('로') }}<br>
             {% endif %}
-            인증 메일을 보냈습니다.<br>
-            메일함을 확인해주세요.
+            {{ i18n.auth.verify_email.sent_message|default('인증 메일을 보냈습니다.') }}<br>
+            {{ i18n.auth.verify_email.check_inbox|default('메일함을 확인해주세요.') }}
         </p>
 
         <div class="verify-steps">
             <div class="step">
                 <span class="step-num">1</span>
-                <span>메일함에서 FencingMind 인증 메일을 찾아주세요</span>
+                <span>{{ i18n.auth.verify_email.step1|default('메일함에서 FencingMind 인증 메일을 찾아주세요') }}</span>
             </div>
             <div class="step">
                 <span class="step-num">2</span>
-                <span>"이메일 인증하기" 버튼을 클릭해주세요</span>
+                <span>{{ i18n.auth.verify_email.step2|default('"이메일 인증하기" 버튼을 클릭해주세요') }}</span>
             </div>
             <div class="step">
                 <span class="step-num">3</span>
-                <span>인증이 완료되면 자동으로 이동합니다</span>
+                <span>{{ i18n.auth.verify_email.step3|default('인증이 완료되면 자동으로 이동합니다') }}</span>
             </div>
         </div>
 
         <div class="verify-help">
-            <p>메일이 오지 않았나요?</p>
+            <p>{{ i18n.auth.verify_email.help_title|default('메일이 오지 않았나요?') }}</p>
             <ul>
-                <li>스팸/정크 메일함을 확인해주세요</li>
-                <li>이메일 주소가 올바른지 확인해주세요</li>
+                <li>{{ i18n.auth.verify_email.help_spam|default('스팸/정크 메일함을 확인해주세요') }}</li>
+                <li>{{ i18n.auth.verify_email.help_email|default('이메일 주소가 올바른지 확인해주세요') }}</li>
             </ul>
             <form action="/auth/resend-verification" method="POST" style="margin-top: 1rem;">
-                <button type="submit" class="resend-btn">인증 메일 재발송</button>
+                <button type="submit" class="resend-btn">{{ i18n.auth.verify_email.resend_btn|default('인증 메일 재발송') }}</button>
             </form>
         </div>
 
-        <a href="/auth/login" class="back-link">로그인 페이지로 돌아가기</a>
+        <a href="/auth/login" class="back-link">{{ i18n.auth.verify_email.back_to_login|default('로그인 페이지로 돌아가기') }}</a>
     </div>
 </div>
 
@@ -67,9 +67,12 @@
 }
 
 .auth-card {
-    background: var(--card-bg, #fff);
+    background: var(--bg-card);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--border-color);
     border-radius: 16px;
-    box-shadow: 0 4px 24px rgba(0,0,0,0.1);
+    box-shadow: var(--shadow-lg);
     padding: 2.5rem;
     width: 100%;
 }
@@ -81,11 +84,11 @@
 .verify-card h1 {
     font-size: 1.4rem;
     margin-bottom: 1rem;
-    color: var(--text-primary, #333);
+    color: var(--text-primary);
 }
 
 .verify-message {
-    color: var(--text-secondary, #666);
+    color: var(--text-secondary);
     font-size: 1rem;
     line-height: 1.6;
     margin-bottom: 2rem;
@@ -102,15 +105,15 @@
     gap: 0.75rem;
     margin-bottom: 0.75rem;
     font-size: 0.9rem;
-    color: #555;
+    color: var(--text-secondary);
 }
 
 .step-num {
     width: 28px;
     height: 28px;
     border-radius: 50%;
-    background: #ebf8ff;
-    color: #3182ce;
+    background: rgba(59, 130, 246, 0.15);
+    color: var(--info-color);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -120,7 +123,8 @@
 }
 
 .verify-help {
-    background: #f7fafc;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
     border-radius: 8px;
     padding: 1.25rem;
     margin-bottom: 1.5rem;
@@ -131,12 +135,12 @@
     font-size: 0.9rem;
     font-weight: 500;
     margin-bottom: 0.5rem;
-    color: #555;
+    color: var(--text-secondary);
 }
 
 .verify-help ul {
     font-size: 0.85rem;
-    color: #777;
+    color: var(--text-muted);
     padding-left: 1.25rem;
     margin: 0;
 }
@@ -149,26 +153,27 @@
     width: 100%;
     padding: 0.75rem;
     background: transparent;
-    border: 1px solid var(--primary-color, #3182ce);
-    color: var(--primary-color, #3182ce);
+    border: 1px solid var(--accent-primary);
+    color: var(--accent-primary);
     border-radius: 8px;
     font-size: 0.9rem;
     font-weight: 500;
     cursor: pointer;
-    transition: background 0.2s;
+    transition: all 0.2s;
 }
 
 .resend-btn:hover {
-    background: #ebf8ff;
+    background: rgba(201, 48, 44, 0.1);
 }
 
 .back-link {
-    color: var(--text-secondary, #888);
+    color: var(--text-muted);
     text-decoration: none;
     font-size: 0.85rem;
 }
 
 .back-link:hover {
+    color: var(--text-secondary);
     text-decoration: underline;
 }
 </style>

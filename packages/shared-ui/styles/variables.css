@@ -146,3 +146,64 @@
     -webkit-backdrop-filter: blur(20px);
     border: 1px solid var(--fm-border);
 }
+
+/* ==================== LIGHT THEME (ko, ja, zh) ==================== */
+[data-theme="light"] {
+    /* Background - Apple/Toss style */
+    --fm-bg-primary: #ffffff;
+    --fm-bg-secondary: #f5f5f7;
+    --fm-bg-tertiary: #f0f0f5;
+    --fm-bg-card: #ffffff;
+    --fm-bg-card-hover: #f9f9fb;
+    --fm-bg-input: #f5f5f7;
+    --fm-bg-overlay: rgba(255, 255, 255, 0.95);
+
+    /* Accent - same across themes */
+    --fm-accent-primary: #c9302c;
+    --fm-accent-secondary: #1e3a8a;
+    --fm-accent-primary-hover: #a82824;
+    --fm-accent-secondary-hover: #172e6e;
+
+    /* Text - Toss/Apple style */
+    --fm-text-primary: #191f28;
+    --fm-text-secondary: #4e5968;
+    --fm-text-muted: #8b95a1;
+    --fm-text-accent: #c9302c;
+    --fm-text-link: #1e3a8a;
+    --fm-text-link-hover: #2d4cab;
+
+    /* Status */
+    --fm-success-bg: rgba(16, 185, 129, 0.1);
+    --fm-warning-bg: rgba(245, 158, 11, 0.1);
+    --fm-danger-bg: rgba(239, 68, 68, 0.1);
+    --fm-info-bg: rgba(59, 130, 246, 0.1);
+
+    /* Border */
+    --fm-border: rgba(0, 0, 0, 0.08);
+    --fm-border-light: rgba(0, 0, 0, 0.12);
+
+    /* Glow - disabled in light theme */
+    --fm-glow-primary: transparent;
+    --fm-glow-secondary: transparent;
+    --fm-glow-gold: transparent;
+
+    /* Shadow - light theme uses shadows for depth */
+    --fm-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
+    --fm-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+    --fm-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+    --fm-shadow-glow: none;
+}
+
+[data-theme="light"] .fm-glass {
+    background: var(--fm-bg-card);
+    backdrop-filter: none;
+    border: 1px solid var(--fm-border);
+    box-shadow: var(--fm-shadow-sm);
+}
+
+[data-theme="light"] .fm-glass-dark {
+    background: var(--fm-bg-overlay);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--fm-border);
+}

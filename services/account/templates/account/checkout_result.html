@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block title %}
-{% if success %}결제 완료{% else %}결제 취소{% endif %} - FencingMind
+{% if success %}{{ i18n.account.checkout.success_page_title|default('결제 완료') }}{% else %}{{ i18n.account.checkout.cancel_page_title|default('결제 취소') }}{% endif %} - FencingMind
 {% endblock %}
 
 {% block head %}
@@ -15,14 +15,16 @@
     .result-icon {
         font-size: 3rem;
         margin-bottom: 16px;
+        color: var(--text-primary);
     }
     .result-title {
         font-size: 1.5rem;
         font-weight: 700;
         margin-bottom: 8px;
+        color: var(--text-primary);
     }
     .result-desc {
-        color: #666;
+        color: var(--text-secondary);
         margin-bottom: 24px;
     }
     .btn {
@@ -32,10 +34,11 @@
         font-size: 0.9rem;
         font-weight: 500;
         text-decoration: none;
-        background: #3182ce;
+        background: linear-gradient(135deg, var(--accent-primary), #a02320);
         color: #fff;
+        transition: transform 0.2s, box-shadow 0.2s;
     }
-    .btn:hover { background: #2b6cb0; }
+    .btn:hover { transform: translateY(-1px); box-shadow: 0 4px 15px rgba(201, 48, 44, 0.3); }
 </style>
 {% endblock %}
 
@@ -43,17 +46,17 @@
 <div class="result-container">
     {% if success %}
         <div class="result-icon">&#10003;</div>
-        <div class="result-title">결제가 완료되었습니다</div>
+        <div class="result-title">{{ i18n.account.checkout.success_title|default('결제가 완료되었습니다') }}</div>
         <div class="result-desc">
-            구독이 활성화되었습니다. 대시보드에서 확인해주세요.
+            {{ i18n.account.checkout.success_desc|default('구독이 활성화되었습니다. 대시보드에서 확인해주세요.') }}
         </div>
     {% else %}
         <div class="result-icon">&#10007;</div>
-        <div class="result-title">결제가 취소되었습니다</div>
+        <div class="result-title">{{ i18n.account.checkout.cancel_title|default('결제가 취소되었습니다') }}</div>
         <div class="result-desc">
-            언제든지 다시 시도하실 수 있습니다.
+            {{ i18n.account.checkout.cancel_desc|default('언제든지 다시 시도하실 수 있습니다.') }}
         </div>
     {% endif %}
-    <a href="/account/dashboard" class="btn">대시보드로 이동</a>
+    <a href="/account/dashboard" class="btn">{{ i18n.account.dashboard.go_to_dashboard|default('대시보드로 이동') }}</a>
 </div>
 {% endblock %}

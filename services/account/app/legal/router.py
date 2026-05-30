@@ -10,6 +10,8 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
+from app.i18n.middleware import create_language_context
+
 router = APIRouter(tags=["legal"])
 
 LEGAL_DIR = Path(__file__).parent.parent.parent / "templates" / "legal"
@@ -24,13 +26,17 @@ async def terms_page(request: Request, v: str = None):
     if not md_file.exists():
         md_file = LEGAL_DIR / "terms_v1.0.md"
     content = md_file.read_text(encoding="utf-8")
+    i18n_ctx = create_language_context(request)
+    lang = i18n_ctx.get("lang", "ko")
+    title = "Terms of Service" if lang == "en" else "이용약관"
     return _templates.TemplateResponse("legal/document.html", {
         "request": request,
-        "title": "이용약관",
+        "title": title,
         "doc_type": "terms",
         "version": version,
         "effective_date": "2026-03-01",
         "content": content,
+        **i18n_ctx,
     })
 
 
@@ -42,13 +48,17 @@ async def privacy_page(request: Request, v: str = None):
     if not md_file.exists():
         md_file = LEGAL_DIR / "privacy_v1.0.md"
     content = md_file.read_text(encoding="utf-8")
+    i18n_ctx = create_language_context(request)
+    lang = i18n_ctx.get("lang", "ko")
+    title = "Privacy Policy" if lang == "en" else "개인정보처리방침"
     return _templates.TemplateResponse("legal/document.html", {
         "request": request,
-        "title": "개인정보처리방침",
+        "title": title,
         "doc_type": "privacy",
         "version": version,
         "effective_date": "2026-03-01",
         "content": content,
+        **i18n_ctx,
     })
 
 

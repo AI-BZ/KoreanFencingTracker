@@ -14,6 +14,7 @@ from loguru import logger
 from shared_core.db.client import get_supabase_client
 
 from .dependencies import require_admin
+from app.i18n.middleware import create_language_context
 
 router = APIRouter(tags=["admin-logs"])
 
@@ -99,4 +100,5 @@ async def list_logs(
         "target_type_filter": target_type,
         "date_from": date_from,
         "date_to": date_to,
+        **create_language_context(request),
     })

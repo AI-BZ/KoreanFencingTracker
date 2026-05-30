@@ -60,6 +60,9 @@ packages/shared-ui/
 🔴 **CRITICAL**: 이 패키지 수정 시 `feature/shared/*` 브랜치 사용
 
 ## 중요 규칙
-- 하드코딩 색상 금지 → CSS 변수 사용
-- 라이트 모드 금지 → 다크 모드만
+- 하드코딩 색상 금지 → CSS 변수 사용 필수
+- 테마는 언어별 자동 결정 (수동 토글 없음)
+  - Dark 테마: `:root` 기본값 (en, fr, it, tr)
+  - Light 테마: `[data-theme="light"]` 오버라이드 (ko, ja, zh)
 - 인라인 스타일 금지 → 클래스 사용
+- 새 컴포넌트 추가 시 `[data-theme="light"]` 오버라이드도 함께 추가

@@ -14,6 +14,7 @@ from shared_core.auth.jwt import get_current_member
 from shared_core.auth.subscription import get_all_member_tiers, get_service_info
 from shared_core.db.client import get_supabase_client
 from app.messenger.service import build_messenger_context
+from app.i18n.middleware import create_language_context
 
 router = APIRouter(prefix="/account", tags=["dashboard"])
 
@@ -81,4 +82,5 @@ async def dashboard(request: Request):
         "stripe_customer": stripe_customer,
         "oauth_connections": oauth_connections,
         "messenger": messenger,
+        **create_language_context(request),
     })

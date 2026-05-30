@@ -381,3 +381,55 @@
 .fm-animate-slideIn {
     animation: fm-slideIn 0.3s ease forwards;
 }
+
+/* ==================== LIGHT THEME COMPONENT OVERRIDES ==================== */
+
+/* Cards - clean white with shadow instead of glassmorphism */
+[data-theme="light"] .fm-card {
+    background: var(--fm-bg-card);
+    backdrop-filter: none;
+    border: 1px solid var(--fm-border);
+    box-shadow: var(--fm-shadow-sm);
+}
+
+[data-theme="light"] .fm-card:hover {
+    box-shadow: var(--fm-shadow-md);
+}
+
+/* Buttons - adjust ghost button for light bg */
+[data-theme="light"] .fm-btn-ghost {
+    border-color: rgba(0, 0, 0, 0.12);
+    color: var(--fm-text-secondary);
+}
+
+[data-theme="light"] .fm-btn-ghost:hover:not(:disabled) {
+    background: var(--fm-bg-secondary);
+    border-color: var(--fm-accent-primary);
+}
+
+/* Tables */
+[data-theme="light"] .fm-table th {
+    background: var(--fm-bg-secondary);
+}
+
+[data-theme="light"] .fm-table tbody tr:hover {
+    background: var(--fm-bg-secondary);
+}
+
+/* Tabs */
+[data-theme="light"] .fm-tabs {
+    background: var(--fm-bg-secondary);
+}
+
+[data-theme="light"] .fm-tab:hover {
+    background: #ffffff;
+}
+
+/* Forms */
+[data-theme="light"] .fm-input:focus,
+[data-theme="light"] .fm-select:focus,
+[data-theme="light"] .fm-textarea:focus {
+    box-shadow: 0 0 0 3px rgba(201, 48, 44, 0.12);
+}
+
+/* Medal badges keep their colors in both themes */

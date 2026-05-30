@@ -15,9 +15,10 @@
     .admin-header h1 {
         font-size: 1.5rem;
         font-weight: 700;
+        color: var(--text-primary);
     }
     .admin-header p {
-        color: #666;
+        color: var(--text-secondary);
         font-size: 0.9rem;
     }
     .stats-grid {
@@ -27,20 +28,22 @@
         margin-bottom: 32px;
     }
     .stat-card {
-        background: #fff;
-        border: 1px solid #e2e8f0;
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
         border-radius: 8px;
         padding: 20px;
         text-align: center;
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
     }
     .stat-number {
         font-size: 2rem;
         font-weight: 700;
-        color: #3182ce;
+        color: var(--accent-gold);
     }
     .stat-label {
         font-size: 0.85rem;
-        color: #666;
+        color: var(--text-muted);
         margin-top: 4px;
     }
     .admin-links {
@@ -49,24 +52,29 @@
         gap: 12px;
     }
     .admin-link {
-        background: #fff;
-        border: 1px solid #e2e8f0;
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
         border-radius: 8px;
         padding: 16px;
         text-decoration: none;
-        color: #333;
-        transition: border-color 0.2s;
+        color: var(--text-primary);
+        transition: all 0.3s;
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
     }
     .admin-link:hover {
-        border-color: #3182ce;
+        border-color: var(--border-light);
+        background: var(--bg-card-hover);
+        transform: translateY(-2px);
     }
     .admin-link h3 {
         font-size: 1rem;
         margin-bottom: 4px;
+        color: var(--text-primary);
     }
     .admin-link p {
         font-size: 0.8rem;
-        color: #666;
+        color: var(--text-secondary);
     }
 </style>
 {% endblock %}

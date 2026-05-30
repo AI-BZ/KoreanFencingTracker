@@ -7,7 +7,7 @@ DE 파싱 v3 테스트 스크립트
 import asyncio
 import json
 import sys
-sys.path.insert(0, '/Users/gyejinpark/Documents/GitHub/FencingCommunityDropShipping')
+sys.path.insert(0, '/Users/gyejinpark/Documents/GitHub/fencingmind')
 
 from scraper.full_scraper import KFFFullScraper
 from loguru import logger
@@ -127,7 +127,7 @@ async def test_de_parsing():
                 logger.warning("⚠️ 파싱된 경기가 없습니다. 웹사이트 구조 확인 필요")
 
         # JSON 저장
-        output_file = "/Users/gyejinpark/Documents/GitHub/FencingCommunityDropShipping/data/test_de_v3_result.json"
+        output_file = "/Users/gyejinpark/Documents/GitHub/fencingmind/data/test_de_v3_result.json"
         with open(output_file, 'w', encoding='utf-8') as f:
             json.dump(de_bracket, f, ensure_ascii=False, indent=2)
         logger.info(f"결과 저장: {output_file}")

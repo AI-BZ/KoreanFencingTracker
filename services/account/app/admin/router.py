@@ -12,7 +12,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from loguru import logger
 
@@ -23,6 +23,7 @@ from .dependencies import require_admin as rbac_require_admin, log_admin_action,
 from .members import router as members_router
 from .approvals import router as approvals_router
 from .logs import router as logs_router
+from app.i18n.middleware import create_language_context
 
 router = APIRouter(prefix="/account/admin", tags=["admin"])
 
@@ -87,6 +88,12 @@ def _get_pending_count(supabase) -> int:
         return (v.count or 0) + (pc.count or 0) + (oc.count or 0)
     except Exception:
         return 0
+
+
+@router.get("", include_in_schema=False)
+async def admin_root():
+    """/ → /dashboard 리다이렉트"""
+    return RedirectResponse(url="/account/admin/dashboard", status_code=302)
 
 
 @router.get("/dashboard", response_class=HTMLResponse)
@@ -186,6 +193,7 @@ async def admin_dashboard(request: Request):
         },
         "service_stats": service_stats,
         "recent_activity": recent_activity,
+        **create_language_context(request),
     })
 
     # CF Access admin에게 크로스 서비스 JWT 쿠키 발급

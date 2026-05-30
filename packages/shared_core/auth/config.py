@@ -24,17 +24,17 @@ class SharedAuthSettings(BaseSettings):
     # Kakao OAuth
     KAKAO_CLIENT_ID: str = os.getenv("KAKAO_CLIENT_ID", "")
     KAKAO_CLIENT_SECRET: str = os.getenv("KAKAO_CLIENT_SECRET", "")
-    KAKAO_REDIRECT_URI: str = os.getenv("KAKAO_REDIRECT_URI", "http://localhost:70/auth/callback/kakao")
+    KAKAO_REDIRECT_URI: str = os.getenv("KAKAO_REDIRECT_URI", "http://localhost:9070/auth/callback/kakao")
 
     # Google OAuth
     GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
     GOOGLE_CLIENT_SECRET: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
-    GOOGLE_REDIRECT_URI: str = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:70/auth/callback/google")
+    GOOGLE_REDIRECT_URI: str = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:9070/auth/callback/google")
 
     # X (Twitter) OAuth
     X_CLIENT_ID: str = os.getenv("X_CLIENT_ID", "")
     X_CLIENT_SECRET: str = os.getenv("X_CLIENT_SECRET", "")
-    X_REDIRECT_URI: str = os.getenv("X_REDIRECT_URI", "http://localhost:70/auth/callback/x")
+    X_REDIRECT_URI: str = os.getenv("X_REDIRECT_URI", "http://localhost:9070/auth/callback/x")
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

@@ -1,9 +1,12 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="{{ lang|default('ko') }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}관리자{% endblock %} - FencingMind Admin</title>
+    <title>{% block title %}{{ i18n.admin.nav.home|default('관리자') }}{% endblock %} - FencingMind Admin</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
     <style>
         :root {
             --primary: #2563eb;
@@ -277,7 +280,7 @@
     <!-- Top Navigation -->
     <nav class="admin-topnav">
         <a href="/account/admin/dashboard" class="brand">
-            FencingMind <span>Admin</span>
+            {{ i18n.admin.nav.brand|default('FencingMind') }} <span>{{ i18n.admin.nav.brand_label|default('Admin') }}</span>
         </a>
         <div class="user-info">
             {% if admin %}
@@ -286,7 +289,7 @@
                 {% if admin._cf_access_only %}
                     <span style="font-size:0.7rem; color:var(--primary-light);">CF Access</span>
                 {% else %}
-                    <a href="/auth/logout">로그아웃</a>
+                    <a href="/auth/logout">{{ i18n.common.nav.logout|default('로그아웃') }}</a>
                 {% endif %}
             {% endif %}
         </div>
@@ -294,10 +297,10 @@
 
     <!-- Tab Navigation -->
     <nav class="admin-tabs">
-        <a href="/account/admin/dashboard" class="{% if active_tab == 'home' %}active{% endif %}">홈</a>
-        <a href="/account/admin/members" class="{% if active_tab == 'members' %}active{% endif %}">회원</a>
+        <a href="/account/admin/dashboard" class="{% if active_tab == 'home' %}active{% endif %}">{{ i18n.admin.nav.home|default('홈') }}</a>
+        <a href="/account/admin/members" class="{% if active_tab == 'members' %}active{% endif %}">{{ i18n.admin.nav.members|default('회원') }}</a>
         <a href="/account/admin/approvals" class="{% if active_tab == 'approvals' %}active{% endif %}">
-            승인
+            {{ i18n.admin.nav.approvals|default('승인') }}
             {% if pending_count is defined and pending_count > 0 %}
                 <span class="badge">{{ pending_count }}</span>
             {% endif %}
@@ -305,8 +308,8 @@
         <a href="/account/admin/dashboard?tab=account" class="{% if active_tab == 'account' %}active{% endif %}">ACC</a>
         <a href="/account/admin/dashboard?tab=data" class="{% if active_tab == 'data' %}active{% endif %}">DATA</a>
         <a href="/account/admin/dashboard?tab=club" class="{% if active_tab == 'club' %}active{% endif %}">CLUB</a>
-        <a href="/account/admin/logs" class="{% if active_tab == 'logs' %}active{% endif %}">로그</a>
-        <a href="/account/admin/settings" class="{% if active_tab == 'settings' %}active{% endif %}">설정</a>
+        <a href="/account/admin/logs" class="{% if active_tab == 'logs' %}active{% endif %}">{{ i18n.admin.nav.logs|default('로그') }}</a>
+        <a href="/account/admin/settings" class="{% if active_tab == 'settings' %}active{% endif %}">{{ i18n.admin.nav.settings|default('설정') }}</a>
     </nav>
 
     <!-- Main Content -->

@@ -43,6 +43,10 @@ class AccountSettings(SharedAuthSettings):
     RESEND_API_KEY: str = os.getenv("RESEND_API_KEY", "")
     EMAIL_VERIFICATION_EXPIRE_HOURS: int = 24
 
+    # Email verification code (login via email)
+    EMAIL_CODE_EXPIRE_MINUTES: int = 10
+    EMAIL_CODE_MAX_ATTEMPTS: int = 5
+
     # Account deletion
     ACCOUNT_DELETION_GRACE_DAYS: int = 30
 
@@ -52,6 +56,10 @@ class AccountSettings(SharedAuthSettings):
     # Player Claim thresholds
     CLAIM_AUTO_APPROVE_THRESHOLD: float = 0.85
     CLAIM_MANUAL_REVIEW_THRESHOLD: float = 0.50
+
+    # Parent Claim (학부모 인증은 자동 승인 없음, AI는 판단 보조만)
+    PARENT_CLAIM_HIGH_CONFIDENCE: float = 0.80  # AI 리포트에서 "recommend approve" 기준
+    PARENT_CLAIM_LOW_CONFIDENCE: float = 0.40   # AI 리포트에서 "recommend reject" 기준
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -132,5 +140,36 @@ VERIFICATION_PROMPTS = {
 형식: { "business_registration_number": "...", "business_name": "...", ... }
 추출할 수 없는 항목은 null로 표시하세요.
 중요: 반드시 유효한 JSON 형식으로만 응답하세요. 마크다운이나 설명 없이 JSON만 반환하세요.
+""",
+
+    "parent_claim": """
+학부모-선수 관계 인증 요청을 분석하세요. 개인정보 서류 없이 데이터 교차검증만으로 판단합니다.
+
+## 입력 데이터
+- 부모 정보: {parent_info}
+- 자녀(선수) 후보: {child_candidates}
+- 사전 분석 신호: {signals}
+
+## 평가 기준
+1. 성씨 일치: 부모 성과 선수 성이 같은지 (한국 가족 동일 성씨 문화)
+2. 나이 차이: 부모-자녀 간 나이 차이가 합리적인지 (20~50세 정상, 25~40세 최적)
+3. 소속팀 일치: 부모가 속한 조직과 선수의 소속팀이 일치하는지
+4. 선수 존재: players 테이블에서 이름+생년으로 매칭되는 선수가 있는지
+5. 중복 여부: 같은 선수에 대한 기존 승인된 학부모 claim이 있는지
+
+## 출력 형식 (JSON)
+{
+    "confidence": 0.0~1.0,
+    "recommendation": "approve" | "reject" | "manual_review",
+    "reasoning": "한국어 요약 3줄 이내",
+    "flags": [{"type": "warning|info|danger", "message": "설명"}]
+}
+
+## 제약사항
+- 개인 서류(가족관계증명서, 주민등록등본 등) 요청을 절대 권장하지 마세요.
+- 미성년자 안전 문제로 자동 승인은 불가능하며, 관리자 최종 판단이 필요합니다.
+- confidence가 높더라도 recommendation은 "manual_review" 이상으로만 설정하세요.
+
+중요: 반드시 유효한 JSON 형식으로만 응답하세요.
 """
 }

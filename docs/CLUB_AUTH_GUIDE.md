@@ -353,7 +353,7 @@ Club 서비스의 로그인은 Account 서비스로 리다이렉트하는 구조
 
 ```bash
 # 프로젝트 루트에서 실행
-cd /Users/gyejinpark/Documents/GitHub/FencingCommunityDropShipping
+cd /Users/gyejinpark/Documents/GitHub/fencingmind
 
 # 터미널 1: Account 서비스 (port 70) — 로그인/회원가입 처리
 PYTHONPATH="${PWD}:${PWD}/packages:${PWD}/services/account" \

@@ -21,4 +21,4 @@ if [ -f .env ]; then
 fi
 
 exec /Library/Frameworks/Python.framework/Versions/3.13/bin/python3 \
-    -m uvicorn services.account.app.server:app --host 0.0.0.0 --port 70
+    -m uvicorn services.account.app.server:app --host 0.0.0.0 --port 9070

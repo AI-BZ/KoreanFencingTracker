@@ -1,6 +1,6 @@
 {% extends "admin/layout.html" %}
 
-{% block title %}회원 상세 - {{ member.full_name }}{% endblock %}
+{% block title %}{{ i18n.admin.member_detail.page_title|default('회원 상세') }} - {{ member.full_name }}{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -57,24 +57,25 @@
         {% if member.member_status != 'suspended' %}
         <form method="POST" action="/account/admin/members/{{ member.id }}/suspend" style="display:inline;">
             <input type="hidden" name="reason" value="">
-            <button type="submit" class="btn btn-danger btn-sm" onclick="var r=prompt('정지 사유를 입력하세요');if(!r)return false;this.form.querySelector('[name=reason]').value=r;">정지</button>
+            <button type="submit" class="btn btn-danger btn-sm" onclick="var r=prompt('{{ i18n.admin.member_detail.suspend_prompt|default('정지 사유를 입력하세요') }}');if(!r)return false;this.form.querySelector('[name=reason]').value=r;">{{ i18n.admin.member_detail.suspend_btn|default('정지') }}</button>
         </form>
         {% else %}
         <form method="POST" action="/account/admin/members/{{ member.id }}/unsuspend" style="display:inline;">
-            <button type="submit" class="btn btn-success btn-sm">정지 해제</button>
+            <button type="submit" class="btn btn-success btn-sm">{{ i18n.admin.member_detail.unsuspend_btn|default('정지 해제') }}</button>
         </form>
         {% endif %}
-        <a href="/account/admin/members" class="btn btn-sm">목록으로</a>
+        <a href="/account/admin/members" class="btn btn-sm">{{ i18n.admin.member_detail.back_to_list|default('목록으로') }}</a>
     </div>
 </div>
 
 <!-- Tabs -->
 <div class="detail-tabs">
-    <a href="#profile" class="tab-link active" data-tab="profile">프로필</a>
-    <a href="#verification" class="tab-link" data-tab="verification">인증</a>
-    <a href="#subscriptions" class="tab-link" data-tab="subscriptions">구독</a>
+    <a href="#profile" class="tab-link active" data-tab="profile">{{ i18n.admin.member_detail.tab_profile|default('프로필') }}</a>
+    <a href="#verification" class="tab-link" data-tab="verification">{{ i18n.admin.member_detail.tab_verification|default('인증') }}</a>
+    <a href="#subscriptions" class="tab-link" data-tab="subscriptions">{{ i18n.admin.member_detail.tab_subscriptions|default('구독') }}</a>
     <a href="#claims" class="tab-link" data-tab="claims">Claim</a>
-    <a href="#notes" class="tab-link" data-tab="notes">노트
+    <a href="#message" class="tab-link" data-tab="message">{{ i18n.admin.member_detail.tab_message|default('메시지') }}</a>
+    <a href="#notes" class="tab-link" data-tab="notes">{{ i18n.admin.member_detail.tab_notes|default('노트') }}
         {% if notes %}<span class="badge" style="background:var(--gray-300); color:var(--gray-700); font-size:0.65rem; padding:1px 5px; border-radius:8px; margin-left:4px;">{{ notes|length }}</span>{% endif %}
     </a>
 </div>
@@ -83,40 +84,45 @@
 <div id="profile" class="detail-section active">
     <div class="grid-2">
         <div class="card">
-            <div class="card-header">기본 정보</div>
+            <div class="card-header">{{ i18n.admin.member_detail.basic_info|default('기본 정보') }}</div>
             <dl class="info-grid">
-                <dt>이름</dt><dd>{{ member.full_name or '-' }}</dd>
-                <dt>닉네임</dt><dd>{{ member.nickname or '-' }}</dd>
-                <dt>이메일</dt><dd>{{ member.masked_email }} {% if member.email_verified %}<span class="status-badge status-approved">인증됨</span>{% else %}<span class="status-badge status-pending">미인증</span>{% endif %}</dd>
-                <dt>전화번호</dt><dd>{{ member.masked_phone or '-' }}</dd>
-                <dt>생년월일</dt><dd>{{ member.birth_date or '-' }}</dd>
-                <dt>국가 코드</dt><dd>{{ member.phone_country_code or '-' }}</dd>
+                <dt>{{ i18n.admin.member_detail.name|default('이름') }}</dt><dd>{{ member.full_name or '-' }}</dd>
+                <dt>{{ i18n.admin.member_detail.nickname|default('닉네임') }}</dt><dd>{{ member.nickname or '-' }}</dd>
+                <dt>{{ i18n.admin.member_detail.email|default('이메일') }}</dt>
+                <dd>
+                    {{ member.email or '-' }}
+                    {% if member.email_verified %}<span class="status-badge status-approved">{{ i18n.admin.member_detail.verified|default('인증됨') }}</span>{% else %}<span class="status-badge status-pending">{{ i18n.admin.member_detail.unverified|default('미인증') }}</span>{% endif %}
+                    {% if member.email %}<a href="#message" class="tab-link-inline" data-tab="message" style="font-size:0.75rem; margin-left:6px;">{{ i18n.admin.member_detail.send_email_link|default('메일 보내기') }}</a>{% endif %}
+                </dd>
+                <dt>{{ i18n.admin.member_detail.phone|default('전화번호') }}</dt><dd>{{ member.phone or '-' }}</dd>
+                <dt>{{ i18n.admin.member_detail.birth_date|default('생년월일') }}</dt><dd>{{ member.birth_date or '-' }}</dd>
+                <dt>{{ i18n.admin.member_detail.country_code|default('국가 코드') }}</dt><dd>{{ member.phone_country_code or '-' }}</dd>
             </dl>
         </div>
         <div class="card">
-            <div class="card-header">계정 정보</div>
+            <div class="card-header">{{ i18n.admin.member_detail.account_info|default('계정 정보') }}</div>
             <dl class="info-grid">
-                <dt>회원 유형</dt><dd><span class="status-badge" style="background:var(--gray-100); color:var(--gray-600);">{{ member.member_type or '-' }}</span></dd>
-                <dt>인증 상태</dt><dd><span class="status-badge status-{{ member.verification_status or 'pending' }}">{{ member.verification_status or 'pending' }}</span></dd>
-                <dt>인증 등급</dt><dd>Tier {{ member.verification_tier or 0 }}</dd>
-                <dt>계정 상태</dt><dd><span class="status-badge status-{{ member.member_status or 'active' }}">{{ member.member_status or 'active' }}</span></dd>
-                <dt>관리자 역할</dt><dd>{{ member.admin_role or '-' }}</dd>
-                <dt>가입일</dt><dd>{{ (member.created_at or '')[:10] }}</dd>
-                <dt>선수 연결</dt><dd>{% if member.player_id %}Player #{{ member.player_id }}{% else %}-{% endif %}</dd>
-                <dt>소속 조직</dt><dd>{% if member.organization_id %}Org #{{ member.organization_id }}{% else %}-{% endif %}</dd>
+                <dt>{{ i18n.admin.member_detail.member_type|default('회원 유형') }}</dt><dd><span class="status-badge" style="background:var(--gray-100); color:var(--gray-600);">{{ member.member_type or '-' }}</span></dd>
+                <dt>{{ i18n.admin.member_detail.verification_status|default('인증 상태') }}</dt><dd><span class="status-badge status-{{ member.verification_status or 'pending' }}">{{ member.verification_status or 'pending' }}</span></dd>
+                <dt>{{ i18n.admin.member_detail.verification_tier|default('인증 등급') }}</dt><dd>Tier {{ member.verification_tier or 0 }}</dd>
+                <dt>{{ i18n.admin.member_detail.account_status|default('계정 상태') }}</dt><dd><span class="status-badge status-{{ member.member_status or 'active' }}">{{ member.member_status or 'active' }}</span></dd>
+                <dt>{{ i18n.admin.member_detail.admin_role|default('관리자 역할') }}</dt><dd>{{ member.admin_role or '-' }}</dd>
+                <dt>{{ i18n.admin.member_detail.joined|default('가입일') }}</dt><dd>{{ (member.created_at or '')[:10] }}</dd>
+                <dt>{{ i18n.admin.member_detail.player_link|default('선수 연결') }}</dt><dd>{% if member.player_id %}Player #{{ member.player_id }}{% else %}-{% endif %}</dd>
+                <dt>{{ i18n.admin.member_detail.org_link|default('소속 조직') }}</dt><dd>{% if member.organization_id %}Org #{{ member.organization_id }}{% else %}-{% endif %}</dd>
             </dl>
         </div>
     </div>
 
     <!-- Quick Edit -->
     <div class="card" style="margin-top:16px;">
-        <div class="card-header">정보 수정</div>
+        <div class="card-header">{{ i18n.admin.member_detail.edit_info|default('정보 수정') }}</div>
         <form method="POST" action="/account/admin/members/{{ member.id }}" style="display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end;">
             <input type="hidden" name="_method" value="PATCH">
             <div>
-                <label style="font-size:0.8rem; color:var(--gray-500); display:block; margin-bottom:4px;">관리자 역할</label>
+                <label style="font-size:0.8rem; color:var(--gray-500); display:block; margin-bottom:4px;">{{ i18n.admin.member_detail.admin_role|default('관리자 역할') }}</label>
                 <select name="admin_role" style="padding:8px; border:1px solid var(--gray-300); border-radius:6px; font-size:0.85rem;">
-                    <option value="" {% if not member.admin_role %}selected{% endif %}>없음</option>
+                    <option value="" {% if not member.admin_role %}selected{% endif %}>{{ i18n.admin.member_detail.admin_role_none|default('없음') }}</option>
                     <option value="super_admin" {% if member.admin_role == 'super_admin' %}selected{% endif %}>Super Admin</option>
                     <option value="service_admin" {% if member.admin_role == 'service_admin' %}selected{% endif %}>Service Admin</option>
                     <option value="moderator" {% if member.admin_role == 'moderator' %}selected{% endif %}>Moderator</option>
@@ -124,19 +130,19 @@
                 </select>
             </div>
             <div>
-                <label style="font-size:0.8rem; color:var(--gray-500); display:block; margin-bottom:4px;">회원 유형</label>
+                <label style="font-size:0.8rem; color:var(--gray-500); display:block; margin-bottom:4px;">{{ i18n.admin.member_detail.member_type|default('회원 유형') }}</label>
                 <select name="member_type" style="padding:8px; border:1px solid var(--gray-300); border-radius:6px; font-size:0.85rem;">
-                    <option value="general" {% if member.member_type == 'general' %}selected{% endif %}>일반</option>
-                    <option value="player" {% if member.member_type == 'player' %}selected{% endif %}>선수</option>
-                    <option value="player_parent" {% if member.member_type == 'player_parent' %}selected{% endif %}>학부모</option>
-                    <option value="club_coach" {% if member.member_type == 'club_coach' %}selected{% endif %}>클럽 코치</option>
-                    <option value="club_director" {% if member.member_type == 'club_director' %}selected{% endif %}>클럽 감독</option>
-                    <option value="school_coach" {% if member.member_type == 'school_coach' %}selected{% endif %}>학교 코치</option>
-                    <option value="school_director" {% if member.member_type == 'school_director' %}selected{% endif %}>학교 감독</option>
+                    <option value="general" {% if member.member_type == 'general' %}selected{% endif %}>{{ i18n.admin.members.filter_general|default('일반') }}</option>
+                    <option value="player" {% if member.member_type == 'player' %}selected{% endif %}>{{ i18n.admin.members.filter_player|default('선수') }}</option>
+                    <option value="player_parent" {% if member.member_type == 'player_parent' %}selected{% endif %}>{{ i18n.admin.members.filter_player_parent|default('학부모') }}</option>
+                    <option value="club_coach" {% if member.member_type == 'club_coach' %}selected{% endif %}>{{ i18n.admin.members.filter_club_coach|default('클럽 코치') }}</option>
+                    <option value="club_director" {% if member.member_type == 'club_director' %}selected{% endif %}>{{ i18n.admin.members.filter_club_director|default('클럽 감독') }}</option>
+                    <option value="school_coach" {% if member.member_type == 'school_coach' %}selected{% endif %}>{{ i18n.admin.members.filter_school_coach|default('학교 코치') }}</option>
+                    <option value="school_director" {% if member.member_type == 'school_director' %}selected{% endif %}>{{ i18n.admin.members.filter_school_director|default('학교 감독') }}</option>
                 </select>
             </div>
             <div>
-                <label style="font-size:0.8rem; color:var(--gray-500); display:block; margin-bottom:4px;">인증 등급</label>
+                <label style="font-size:0.8rem; color:var(--gray-500); display:block; margin-bottom:4px;">{{ i18n.admin.member_detail.verification_tier|default('인증 등급') }}</label>
                 <select name="verification_tier" style="padding:8px; border:1px solid var(--gray-300); border-radius:6px; font-size:0.85rem;">
                     <option value="0" {% if member.verification_tier == 0 %}selected{% endif %}>0</option>
                     <option value="1" {% if member.verification_tier == 1 %}selected{% endif %}>1</option>
@@ -145,7 +151,7 @@
                     <option value="4" {% if member.verification_tier == 4 %}selected{% endif %}>4</option>
                 </select>
             </div>
-            <button type="submit" class="btn btn-primary btn-sm">저장</button>
+            <button type="submit" class="btn btn-primary btn-sm">{{ i18n.admin.member_detail.save_btn|default('저장') }}</button>
         </form>
     </div>
 </div>
@@ -153,11 +159,11 @@
 <!-- Verification Tab -->
 <div id="verification" class="detail-section">
     <div class="card">
-        <div class="card-header">인증 이력</div>
+        <div class="card-header">{{ i18n.admin.member_detail.verification_history|default('인증 이력') }}</div>
         {% if verifications %}
         <table>
             <thead>
-                <tr><th>유형</th><th>상태</th><th>AI 신뢰도</th><th>제출일</th><th>처리일</th></tr>
+                <tr><th>{{ i18n.admin.member_detail.col_type|default('유형') }}</th><th>{{ i18n.admin.member_detail.col_status|default('상태') }}</th><th>{{ i18n.admin.member_detail.col_ai_confidence|default('AI 신뢰도') }}</th><th>{{ i18n.admin.member_detail.col_submitted|default('제출일') }}</th><th>{{ i18n.admin.member_detail.col_processed|default('처리일') }}</th></tr>
             </thead>
             <tbody>
                 {% for v in verifications %}
@@ -172,7 +178,7 @@
             </tbody>
         </table>
         {% else %}
-        <div class="empty-state">인증 이력이 없습니다</div>
+        <div class="empty-state">{{ i18n.admin.member_detail.no_verifications|default('인증 이력이 없습니다') }}</div>
         {% endif %}
     </div>
 </div>
@@ -180,11 +186,11 @@
 <!-- Subscriptions Tab -->
 <div id="subscriptions" class="detail-section">
     <div class="card">
-        <div class="card-header">구독 현황</div>
+        <div class="card-header">{{ i18n.admin.member_detail.subscription_status|default('구독 현황') }}</div>
         {% if subscriptions %}
         <table>
             <thead>
-                <tr><th>서비스</th><th>등급</th><th>상태</th><th>시작일</th></tr>
+                <tr><th>{{ i18n.admin.member_detail.col_service|default('서비스') }}</th><th>{{ i18n.admin.member_detail.col_tier|default('등급') }}</th><th>{{ i18n.admin.member_detail.col_status|default('상태') }}</th><th>{{ i18n.admin.member_detail.col_start_date|default('시작일') }}</th></tr>
             </thead>
             <tbody>
                 {% for s in subscriptions %}
@@ -198,7 +204,7 @@
             </tbody>
         </table>
         {% else %}
-        <div class="empty-state">구독 정보가 없습니다</div>
+        <div class="empty-state">{{ i18n.admin.member_detail.no_subscriptions|default('구독 정보가 없습니다') }}</div>
         {% endif %}
     </div>
 </div>
@@ -207,11 +213,11 @@
 <div id="claims" class="detail-section">
     <div class="grid-2">
         <div class="card">
-            <div class="card-header">선수 Claim</div>
+            <div class="card-header">{{ i18n.admin.member_detail.player_claims|default('선수 Claim') }}</div>
             {% if player_claims %}
             <table>
                 <thead>
-                    <tr><th>선수</th><th>점수</th><th>상태</th><th>일시</th></tr>
+                    <tr><th>{{ i18n.admin.member_detail.col_player|default('선수') }}</th><th>{{ i18n.admin.member_detail.col_score|default('점수') }}</th><th>{{ i18n.admin.member_detail.col_status|default('상태') }}</th><th>{{ i18n.admin.member_detail.col_datetime|default('일시') }}</th></tr>
                 </thead>
                 <tbody>
                     {% for c in player_claims %}
@@ -225,15 +231,15 @@
                 </tbody>
             </table>
             {% else %}
-            <div class="empty-state">선수 Claim 없음</div>
+            <div class="empty-state">{{ i18n.admin.member_detail.no_player_claims|default('선수 Claim 없음') }}</div>
             {% endif %}
         </div>
         <div class="card">
-            <div class="card-header">조직 Claim</div>
+            <div class="card-header">{{ i18n.admin.member_detail.org_claims|default('조직 Claim') }}</div>
             {% if org_claims %}
             <table>
                 <thead>
-                    <tr><th>조직</th><th>유형</th><th>상태</th><th>일시</th></tr>
+                    <tr><th>{{ i18n.admin.member_detail.col_org|default('조직') }}</th><th>{{ i18n.admin.member_detail.col_type|default('유형') }}</th><th>{{ i18n.admin.member_detail.col_status|default('상태') }}</th><th>{{ i18n.admin.member_detail.col_datetime|default('일시') }}</th></tr>
                 </thead>
                 <tbody>
                     {% for c in org_claims %}
@@ -247,8 +253,66 @@
                 </tbody>
             </table>
             {% else %}
-            <div class="empty-state">조직 Claim 없음</div>
+            <div class="empty-state">{{ i18n.admin.member_detail.no_org_claims|default('조직 Claim 없음') }}</div>
             {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Message Tab -->
+<div id="message" class="detail-section">
+    {% set params = request.query_params %}
+    {% if params.get('sent') %}
+    <div class="flash flash-success" style="margin-bottom:16px;">{{ i18n.admin.member_detail.email_sent_success|default('이메일이 발송되었습니다.') }}</div>
+    {% endif %}
+    {% if params.get('notified') %}
+    <div class="flash flash-success" style="margin-bottom:16px;">{{ i18n.admin.member_detail.notification_sent_success|default('알림이 발송되었습니다.') }}</div>
+    {% endif %}
+    {% if params.get('error') == 'send_failed' %}
+    <div class="flash flash-error" style="margin-bottom:16px;">{{ i18n.admin.member_detail.email_send_failed|default('이메일 발송에 실패했습니다. RESEND_API_KEY 설정을 확인하세요.') }}</div>
+    {% endif %}
+
+    <div class="grid-2">
+        <!-- 이메일 발송 -->
+        <div class="card">
+            <div class="card-header">{{ i18n.admin.member_detail.send_email_title|default('이메일 발송') }}</div>
+            {% if member.email %}
+            <p style="font-size:0.8rem; color:var(--gray-500); margin-bottom:12px;">
+                {{ i18n.admin.member_detail.send_email_to|default('수신') }}: {{ member.email }}
+            </p>
+            <form method="POST" action="/account/admin/members/{{ member.id }}/send-email">
+                <div style="margin-bottom:10px;">
+                    <label style="font-size:0.8rem; color:var(--gray-500); display:block; margin-bottom:4px;">{{ i18n.common.labels.subject|default('제목') }}</label>
+                    <input type="text" name="subject" required placeholder="{{ i18n.admin.member_detail.email_subject_placeholder|default('이메일 제목') }}" style="width:100%; padding:8px; border:1px solid var(--gray-300); border-radius:6px; font-size:0.85rem;">
+                </div>
+                <div style="margin-bottom:10px;">
+                    <label style="font-size:0.8rem; color:var(--gray-500); display:block; margin-bottom:4px;">{{ i18n.common.labels.body|default('본문') }}</label>
+                    <textarea name="body" required placeholder="{{ i18n.admin.member_detail.email_body_placeholder|default('이메일 본문을 작성하세요...') }}" rows="5" style="width:100%; padding:8px; border:1px solid var(--gray-300); border-radius:6px; font-size:0.85rem; resize:vertical;"></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm" onclick="return confirm('{{ i18n.admin.member_detail.confirm_send_email|default('이메일을 발송하시겠습니까?') }}');">{{ i18n.admin.member_detail.send_email_title|default('이메일 발송') }}</button>
+            </form>
+            {% else %}
+            <div class="empty-state" style="padding:20px;">{{ i18n.admin.member_detail.no_email_registered|default('이메일 주소가 등록되어 있지 않습니다') }}</div>
+            {% endif %}
+        </div>
+
+        <!-- 사이트 내 알림 -->
+        <div class="card">
+            <div class="card-header">{{ i18n.admin.member_detail.site_notification|default('사이트 내 알림') }}</div>
+            <p style="font-size:0.8rem; color:var(--gray-500); margin-bottom:12px;">
+                {{ i18n.admin.member_detail.send_email_to|default('수신') }}: {{ member.full_name or '-' }} ({{ i18n.admin.member_detail.site_notification_label|default('사이트 알림') }})
+            </p>
+            <form method="POST" action="/account/admin/members/{{ member.id }}/send-notification">
+                <div style="margin-bottom:10px;">
+                    <label style="font-size:0.8rem; color:var(--gray-500); display:block; margin-bottom:4px;">{{ i18n.common.labels.subject|default('제목') }}</label>
+                    <input type="text" name="title" required placeholder="{{ i18n.admin.member_detail.notif_title_placeholder|default('알림 제목') }}" style="width:100%; padding:8px; border:1px solid var(--gray-300); border-radius:6px; font-size:0.85rem;">
+                </div>
+                <div style="margin-bottom:10px;">
+                    <label style="font-size:0.8rem; color:var(--gray-500); display:block; margin-bottom:4px;">{{ i18n.common.labels.content|default('내용') }}</label>
+                    <textarea name="body" required placeholder="{{ i18n.admin.member_detail.notif_body_placeholder|default('알림 내용을 작성하세요...') }}" rows="5" style="width:100%; padding:8px; border:1px solid var(--gray-300); border-radius:6px; font-size:0.85rem; resize:vertical;"></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm" onclick="return confirm('{{ i18n.admin.member_detail.confirm_send_notification|default('알림을 발송하시겠습니까?') }}');">{{ i18n.admin.member_detail.send_notification_btn|default('알림 발송') }}</button>
+            </form>
         </div>
     </div>
 </div>
@@ -256,7 +320,7 @@
 <!-- Notes Tab -->
 <div id="notes" class="detail-section">
     <div class="card">
-        <div class="card-header">관리 노트</div>
+        <div class="card-header">{{ i18n.admin.member_detail.admin_notes|default('관리 노트') }}</div>
         {% if notes %}
         {% for note in notes %}
         <div style="padding:12px 0; border-bottom:1px solid var(--gray-100);">
@@ -268,13 +332,13 @@
         </div>
         {% endfor %}
         {% else %}
-        <div class="empty-state" style="padding:20px;">노트가 없습니다</div>
+        <div class="empty-state" style="padding:20px;">{{ i18n.admin.member_detail.no_notes|default('노트가 없습니다') }}</div>
         {% endif %}
 
         <!-- Add note form -->
         <form method="POST" action="/account/admin/members/{{ member.id }}/notes" class="note-form">
-            <textarea name="content" placeholder="관리 노트를 작성하세요..." required></textarea>
-            <button type="submit" class="btn btn-primary btn-sm" style="align-self:flex-end;">추가</button>
+            <textarea name="content" placeholder="{{ i18n.admin.member_detail.note_placeholder|default('관리 노트를 작성하세요...') }}" required></textarea>
+            <button type="submit" class="btn btn-primary btn-sm" style="align-self:flex-end;">{{ i18n.admin.member_detail.note_add|default('추가') }}</button>
         </form>
     </div>
 </div>
@@ -283,21 +347,35 @@
 
 {% block scripts %}
 <script>
+function switchTab(tabName) {
+    document.querySelectorAll('.tab-link').forEach(l => l.classList.remove('active'));
+    document.querySelectorAll('.detail-section').forEach(s => s.classList.remove('active'));
+    const tabLink = document.querySelector(`.detail-tabs .tab-link[data-tab="${tabName}"]`);
+    if (tabLink) tabLink.classList.add('active');
+    const section = document.getElementById(tabName);
+    if (section) section.classList.add('active');
+    history.replaceState(null, '', `#${tabName}`);
+}
+
 document.querySelectorAll('.tab-link').forEach(link => {
     link.addEventListener('click', function(e) {
         e.preventDefault();
-        document.querySelectorAll('.tab-link').forEach(l => l.classList.remove('active'));
-        document.querySelectorAll('.detail-section').forEach(s => s.classList.remove('active'));
-        this.classList.add('active');
-        document.getElementById(this.dataset.tab).classList.add('active');
-        history.replaceState(null, '', this.href);
+        switchTab(this.dataset.tab);
     });
 });
-// Auto-select tab from hash
+
+// Inline tab links (e.g. "메일 보내기" in profile)
+document.querySelectorAll('.tab-link-inline').forEach(link => {
+    link.addEventListener('click', function(e) {
+        e.preventDefault();
+        switchTab(this.dataset.tab);
+    });
+});
+
+// Auto-select tab from hash (strip query string)
 if (window.location.hash) {
-    const tab = window.location.hash.slice(1);
-    const link = document.querySelector(`.tab-link[data-tab="${tab}"]`);
-    if (link) link.click();
+    const tab = window.location.hash.slice(1).split('?')[0];
+    switchTab(tab);
 }
 </script>
 {% endblock %}

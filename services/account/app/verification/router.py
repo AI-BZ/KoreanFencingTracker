@@ -24,6 +24,8 @@ from ..config import get_account_settings
 from .processor import VerificationProcessor
 from .brn import validate_brn_checkdigit
 from .claims import router as claims_router
+from .notification_service import VerificationNotificationService
+from app.i18n.middleware import create_language_context
 
 router = APIRouter(prefix="/verification", tags=["verification"])
 
@@ -57,29 +59,82 @@ class BRNVerifyRequest(BaseModel):
 
 @router.get("", response_class=HTMLResponse)
 async def verification_page(request: Request):
-    """인증 페이지"""
+    """인증 페이지 - member_type에 따라 적절한 인증 플로우 표시"""
     member = await get_current_member(request)
     if not member:
         return RedirectResponse(url="/auth/login", status_code=303)
 
     supabase = get_supabase()
-    verifications = supabase.table("verifications").select("*").eq(
-        "member_id", member["id"]
-    ).order("created_at", desc=True).execute()
 
-    return _templates.TemplateResponse(
-        "auth/verification.html",
-        {
-            "request": request,
-            "member": member,
-            "verifications": verifications.data or [],
-            "verification_types": [
-                {"value": "association_card", "label": "협회 등록증", "icon": "card"},
-                {"value": "mask_photo", "label": "마스크 + 이름/날짜 종이", "icon": "mask"},
-                {"value": "uniform_photo", "label": "도복 + 이름/날짜 종이", "icon": "uniform"},
-            ],
-        }
-    )
+    i18n_ctx = create_language_context(request)
+    i18n_data = i18n_ctx.get("i18n", {})
+    acct = i18n_data.get("account", {}).get("verification", {}) if isinstance(i18n_data, dict) else {}
+
+    member_type = member.get("member_type", "general")
+
+    # Determine verification flow based on member_type
+    flow_map = {
+        "player": "player",
+        "player_parent": "parent",
+        "club_coach": "coach",
+        "school_coach": "coach",
+        "club_director": "director",
+        "school_director": "director",
+        "general": "general",
+    }
+    verification_flow = flow_map.get(member_type, "general")
+
+    # Base context
+    context = {
+        "request": request,
+        "member": member,
+        "verification_flow": verification_flow,
+        **i18n_ctx,
+    }
+
+    # Flow-specific data
+    if verification_flow == "player":
+        verifications = supabase.table("verifications").select("*").eq(
+            "member_id", member["id"]
+        ).order("created_at", desc=True).execute()
+        context["verifications"] = verifications.data or []
+        context["verification_types"] = [
+            {"value": "association_card", "label": acct.get("type_association_card", "협회 등록증"), "icon": "card"},
+            {"value": "mask_photo", "label": acct.get("type_mask_photo", "마스크 + 이름/날짜 종이"), "icon": "mask"},
+            {"value": "uniform_photo", "label": acct.get("type_uniform_photo", "도복 + 이름/날짜 종이"), "icon": "uniform"},
+        ]
+
+    elif verification_flow == "parent":
+        # Fetch existing parent claims
+        parent_claims = supabase.table("parent_claims").select("*").eq(
+            "member_id", member["id"]
+        ).order("created_at", desc=True).execute()
+        context["parent_claims"] = parent_claims.data or []
+
+        # Parse ai_report if string
+        for pc in context["parent_claims"]:
+            if isinstance(pc.get("ai_report"), str):
+                try:
+                    import json
+                    pc["ai_report"] = json.loads(pc["ai_report"])
+                except Exception:
+                    pc["ai_report"] = {}
+
+    elif verification_flow == "coach":
+        # Fetch existing player claims
+        player_claims = supabase.table("player_claims").select("*").eq(
+            "member_id", member["id"]
+        ).order("created_at", desc=True).execute()
+        context["player_claims"] = player_claims.data or []
+
+    elif verification_flow == "director":
+        # Fetch existing org claims
+        org_claims = supabase.table("organization_claims").select("*").eq(
+            "member_id", member["id"]
+        ).order("created_at", desc=True).execute()
+        context["org_claims"] = org_claims.data or []
+
+    return _templates.TemplateResponse("auth/verification.html", context)
 
 
 @router.post("/upload")
@@ -143,17 +198,44 @@ async def upload_verification(
             UUID(member["id"]),
         )
 
+        # Notify admins if status requires review
+        status = process_result.get("status", "pending")
+        if status in ("pending", "submitted"):
+            try:
+                notifier = VerificationNotificationService()
+                await notifier.notify_admin_new_request(
+                    request_type="verification",
+                    item_id=verification["id"],
+                    summary=f"{member.get('full_name', '회원')} - {verification_type}, AI 신뢰도: {process_result.get('confidence', 0):.0%}",
+                    member_name=member.get("full_name"),
+                )
+            except Exception as ne:
+                logger.warning(f"Admin notification failed: {ne}")
+
         return {
             "success": True,
             "verification_id": verification["id"],
-            "status": process_result.get("status", "pending"),
+            "status": status,
             "confidence": process_result.get("confidence"),
             "extracted_name": process_result.get("extracted_name"),
-            "message": _get_status_message(process_result.get("status")),
+            "message": _get_status_message(status),
         }
 
     except Exception as e:
         logger.exception(f"인증 처리 오류: {e}")
+
+        # Still notify admin even on processing error
+        try:
+            notifier = VerificationNotificationService()
+            await notifier.notify_admin_new_request(
+                request_type="verification",
+                item_id=verification["id"],
+                summary=f"{member.get('full_name', '회원')} - {verification_type} (처리 오류, 수동 검토 필요)",
+                member_name=member.get("full_name"),
+            )
+        except Exception:
+            pass
+
         return {
             "success": True,
             "verification_id": verification["id"],

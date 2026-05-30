@@ -16,6 +16,7 @@ from loguru import logger
 from shared_core.auth.jwt import get_current_member
 from shared_core.db.client import get_supabase_client
 from shared_core.types.service import SubscriptionTier, SubscriptionStatus
+from app.i18n.middleware import create_language_context
 
 router = APIRouter(prefix="/account", tags=["payments"])
 
@@ -75,6 +76,7 @@ async def checkout_success(request: Request, session_id: str = ""):
         "request": request,
         "success": True,
         "session_id": session_id,
+        **create_language_context(request),
     })
 
 
@@ -84,6 +86,7 @@ async def checkout_cancel(request: Request):
     return _templates.TemplateResponse("account/checkout_result.html", {
         "request": request,
         "success": False,
+        **create_language_context(request),
     })
 
 

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}내 계정 - FencingMind{% endblock %}
+{% block title %}{{ i18n.account.dashboard.page_title|default('내 계정 - FencingMind') }}{% endblock %}
 
 {% block head %}
 <style>
@@ -34,13 +34,13 @@
         background: var(--primary-color);
         color: #fff;
     }
-    .btn-primary:hover { background: #2b6cb0; }
+    .btn-primary:hover { background: rgba(201, 48, 44, 0.8); }
     .btn-outline {
         background: transparent;
         color: var(--primary-color);
         border: 1px solid var(--primary-color);
     }
-    .btn-outline:hover { background: #ebf4ff; }
+    .btn-outline:hover { background: rgba(255,255,255,0.05); }
     .btn-sm { padding: 4px 12px; font-size: 0.8rem; }
 
     /* Profile Section */
@@ -60,7 +60,7 @@
         background: var(--card-bg);
         border-radius: 8px;
         padding: 16px;
-        border: 1px solid #e2e8f0;
+        border: 1px solid var(--border-color);
     }
     .info-card .label {
         font-size: 0.75rem;
@@ -80,10 +80,10 @@
         font-size: 0.75rem;
         font-weight: 500;
     }
-    .badge-green { background: #c6f6d5; color: #22543d; }
-    .badge-yellow { background: #fefcbf; color: #744210; }
-    .badge-gray { background: #e2e8f0; color: #4a5568; }
-    .badge-red { background: #fed7d7; color: #822727; }
+    .badge-green { background: rgba(16, 185, 129, 0.15); color: var(--success-color); }
+    .badge-yellow { background: rgba(245, 158, 11, 0.15); color: var(--warning-color); }
+    .badge-gray { background: rgba(255, 255, 255, 0.08); color: var(--text-secondary); }
+    .badge-red { background: rgba(239, 68, 68, 0.15); color: var(--danger-color); }
 
     /* Services Grid */
     .services-grid {
@@ -93,7 +93,7 @@
     }
     .service-card {
         background: var(--card-bg);
-        border: 1px solid #e2e8f0;
+        border: 1px solid var(--border-color);
         border-radius: 8px;
         padding: 16px;
         display: flex;
@@ -141,7 +141,7 @@
     }
     .oauth-item {
         background: var(--card-bg);
-        border: 1px solid #e2e8f0;
+        border: 1px solid var(--border-color);
         border-radius: 8px;
         padding: 12px 16px;
         display: flex;
@@ -156,7 +156,7 @@
     /* Summary */
     .summary-bar {
         background: var(--card-bg);
-        border: 1px solid #e2e8f0;
+        border: 1px solid var(--border-color);
         border-radius: 8px;
         padding: 16px;
         display: flex;
@@ -181,57 +181,57 @@
 <div class="dashboard-container">
     <!-- Header -->
     <div class="dashboard-header">
-        <h1>내 계정</h1>
+        <h1>{{ i18n.account.dashboard.title|default('내 계정') }}</h1>
         <div>
-            <a href="/auth/logout" class="btn btn-outline btn-sm">로그아웃</a>
+            <a href="/auth/logout" class="btn btn-outline btn-sm">{{ i18n.common.nav.logout|default('로그아웃') }}</a>
         </div>
     </div>
 
     <!-- Profile Section -->
     <div class="section">
-        <div class="section-title">프로필</div>
+        <div class="section-title">{{ i18n.account.dashboard.profile_section|default('프로필') }}</div>
         <div class="info-cards">
             <div class="info-card">
-                <div class="label">이름</div>
+                <div class="label">{{ i18n.account.dashboard.name_label|default('이름') }}</div>
                 <div class="value">{{ member.full_name }}</div>
             </div>
             <div class="info-card">
-                <div class="label">회원 유형</div>
+                <div class="label">{{ i18n.account.dashboard.member_type_label|default('회원 유형') }}</div>
                 <div class="value">
                     {% set type_labels = {
-                        "general": "일반회원",
-                        "player": "선수",
-                        "player_parent": "학부모",
-                        "club_coach": "클럽 코치",
-                        "club_director": "클럽 감독",
-                        "school_coach": "학교 코치",
-                        "school_director": "학교 감독"
+                        "general": i18n.common.member_types.general|default("일반회원"),
+                        "player": i18n.common.member_types.player|default("선수"),
+                        "player_parent": i18n.common.member_types.player_parent|default("학부모"),
+                        "club_coach": i18n.common.member_types.club_coach|default("클럽 코치"),
+                        "club_director": i18n.common.member_types.club_director|default("클럽 감독"),
+                        "school_coach": i18n.common.member_types.school_coach|default("학교 코치"),
+                        "school_director": i18n.common.member_types.school_director|default("학교 감독")
                     } %}
                     {{ type_labels.get(member.member_type, member.member_type) }}
                 </div>
             </div>
             <div class="info-card">
-                <div class="label">이메일 인증</div>
+                <div class="label">{{ i18n.account.dashboard.email_verification_label|default('이메일 인증') }}</div>
                 <div class="value">
                     {% if member.email_verified %}
-                        <span class="badge badge-green">인증완료</span>
+                        <span class="badge badge-green">{{ i18n.account.dashboard.verified|default('인증완료') }}</span>
                     {% else %}
-                        <span class="badge badge-yellow">미인증</span>
+                        <span class="badge badge-yellow">{{ i18n.account.dashboard.unverified|default('미인증') }}</span>
                     {% endif %}
                 </div>
             </div>
             <div class="info-card">
-                <div class="label">본인인증</div>
+                <div class="label">{{ i18n.account.dashboard.identity_verification_label|default('본인인증') }}</div>
                 <div class="value">
                     {% set vstatus = member.get("verification_status", "pending") %}
                     {% if vstatus == "verified" %}
-                        <span class="badge badge-green">인증완료</span>
+                        <span class="badge badge-green">{{ i18n.account.dashboard.verified|default('인증완료') }}</span>
                     {% elif vstatus == "submitted" %}
-                        <span class="badge badge-yellow">심사중</span>
+                        <span class="badge badge-yellow">{{ i18n.account.dashboard.reviewing|default('심사중') }}</span>
                     {% elif vstatus == "rejected" %}
-                        <span class="badge badge-red">거부됨</span>
+                        <span class="badge badge-red">{{ i18n.account.dashboard.rejected|default('거부됨') }}</span>
                     {% else %}
-                        <span class="badge badge-gray">미제출</span>
+                        <span class="badge badge-gray">{{ i18n.account.dashboard.not_submitted|default('미제출') }}</span>
                     {% endif %}
                 </div>
             </div>
@@ -240,7 +240,7 @@
 
     <!-- Connected Accounts -->
     <div class="section">
-        <div class="section-title">연결된 계정</div>
+        <div class="section-title">{{ i18n.account.dashboard.connected_accounts|default('연결된 계정') }}</div>
         <div class="oauth-list">
             {% for conn in oauth_connections %}
             <div class="oauth-item">
@@ -253,13 +253,13 @@
                     {% endif %}
                 </div>
                 {% if conn.is_primary %}
-                    <span class="badge badge-green">주 계정</span>
+                    <span class="badge badge-green">{{ i18n.account.dashboard.primary_account|default('주 계정') }}</span>
                 {% endif %}
             </div>
             {% endfor %}
             {% if not oauth_connections %}
             <div class="oauth-item" style="color: var(--text-secondary);">
-                연결된 소셜 계정이 없습니다
+                {{ i18n.account.dashboard.no_connected_accounts|default('연결된 소셜 계정이 없습니다') }}
             </div>
             {% endif %}
         </div>
@@ -268,7 +268,7 @@
     <!-- Messenger Connection -->
     {% if messenger %}
     <div class="section">
-        <div class="section-title">메시지 연결</div>
+        <div class="section-title">{{ i18n.account.dashboard.messenger_section|default('메시지 연결') }}</div>
         <div class="oauth-list">
             {% set mp = messenger.provider_info %}
             {% set state = messenger.ui_state %}
@@ -279,22 +279,22 @@
                 </div>
                 <div style="display: flex; align-items: center; gap: 8px;">
                     {% if state == "connected" %}
-                        <span class="badge badge-green">연결됨</span>
+                        <span class="badge badge-green">{{ i18n.account.dashboard.messenger_connected|default('연결됨') }}</span>
                         <form action="/account/messenger/disconnect" method="post" style="margin: 0;">
-                            <button type="submit" class="btn btn-outline btn-sm">연결 해제</button>
+                            <button type="submit" class="btn btn-outline btn-sm">{{ i18n.account.dashboard.messenger_disconnect|default('연결 해제') }}</button>
                         </form>
                     {% elif state == "upgrade" %}
-                        <span style="font-size: 0.8rem; color: var(--text-secondary);">메시지 권한 필요</span>
+                        <span style="font-size: 0.8rem; color: var(--text-secondary);">{{ i18n.account.dashboard.messenger_permission_needed|default('메시지 권한 필요') }}</span>
                         <form action="/account/messenger/connect" method="post" style="margin: 0;">
-                            <button type="submit" class="btn btn-primary btn-sm">권한 업그레이드</button>
+                            <button type="submit" class="btn btn-primary btn-sm">{{ i18n.account.dashboard.messenger_upgrade|default('권한 업그레이드') }}</button>
                         </form>
                     {% elif state == "enable" %}
-                        <span style="font-size: 0.8rem; color: var(--text-secondary);">비활성화됨</span>
+                        <span style="font-size: 0.8rem; color: var(--text-secondary);">{{ i18n.account.dashboard.messenger_disabled|default('비활성화됨') }}</span>
                         <form action="/account/messenger/connect" method="post" style="margin: 0;">
-                            <button type="submit" class="btn btn-primary btn-sm">활성화</button>
+                            <button type="submit" class="btn btn-primary btn-sm">{{ i18n.account.dashboard.messenger_activate|default('활성화') }}</button>
                         </form>
                     {% else %}
-                        <span style="font-size: 0.8rem; color: var(--text-secondary);">클럽 메시지 발송용</span>
+                        <span style="font-size: 0.8rem; color: var(--text-secondary);">{{ i18n.account.dashboard.messenger_for_club|default('클럽 메시지 발송용') }}</span>
                         <form action="/account/messenger/connect" method="post" style="margin: 0;">
                             <button type="submit" class="btn btn-primary btn-sm">{{ mp.display_name_ko }} 연결</button>
                         </form>
@@ -307,20 +307,20 @@
 
     <!-- Payment Method -->
     <div class="section">
-        <div class="section-title">결제 수단</div>
+        <div class="section-title">{{ i18n.account.dashboard.payment_section|default('결제 수단') }}</div>
         <div class="info-cards">
             <div class="info-card">
                 {% if stripe_customer and stripe_customer.default_payment_method_id %}
-                    <div class="label">기본 결제수단</div>
-                    <div class="value">등록됨</div>
+                    <div class="label">{{ i18n.account.dashboard.payment_default|default('기본 결제수단') }}</div>
+                    <div class="value">{{ i18n.account.dashboard.payment_registered|default('등록됨') }}</div>
                     <form action="/account/portal" method="post" style="margin-top: 8px;">
-                        <button type="submit" class="btn btn-outline btn-sm">결제수단 관리</button>
+                        <button type="submit" class="btn btn-outline btn-sm">{{ i18n.account.dashboard.payment_manage|default('결제수단 관리') }}</button>
                     </form>
                 {% else %}
-                    <div class="label">결제수단</div>
-                    <div class="value" style="color: var(--text-secondary);">미등록</div>
+                    <div class="label">{{ i18n.account.dashboard.payment_label|default('결제수단') }}</div>
+                    <div class="value" style="color: var(--text-secondary);">{{ i18n.account.dashboard.payment_not_registered|default('미등록') }}</div>
                     <div style="margin-top: 4px; font-size: 0.8rem; color: var(--text-secondary);">
-                        유료 구독 시 자동 등록됩니다
+                        {{ i18n.account.dashboard.payment_auto_msg|default('유료 구독 시 자동 등록됩니다') }}
                     </div>
                 {% endif %}
             </div>
@@ -329,7 +329,7 @@
 
     <!-- Services -->
     <div class="section">
-        <div class="section-title">내 구독</div>
+        <div class="section-title">{{ i18n.account.dashboard.subscriptions_section|default('내 구독') }}</div>
         <div class="services-grid">
             {% for svc in services %}
             {% set sub = subscriptions.get(svc.id) %}
@@ -355,24 +355,24 @@
                                 <div class="tier-price">${{ pricing[price_key] }}/월</div>
                             {% endif %}
                             <form action="/account/portal" method="post" style="margin-top: 4px;">
-                                <button type="submit" class="btn btn-outline btn-sm">관리</button>
+                                <button type="submit" class="btn btn-outline btn-sm">{{ i18n.account.dashboard.manage|default('관리') }}</button>
                             </form>
                         {% else %}
                             {% if svc.is_active %}
                             <a href="#" class="btn btn-primary btn-sm"
-                               onclick="alert('Stripe Price ID 설정 후 활성화됩니다'); return false;">
-                                업그레이드
+                               onclick="alert('{{ i18n.account.dashboard.stripe_notice|default("Stripe Price ID 설정 후 활성화됩니다") }}'); return false;">
+                                {{ i18n.account.dashboard.upgrade|default('업그레이드') }}
                             </a>
                             {% endif %}
                         {% endif %}
                     {% elif svc.is_active %}
-                        <div class="tier-label" style="color: var(--text-secondary);">미구독</div>
+                        <div class="tier-label" style="color: var(--text-secondary);">{{ i18n.account.dashboard.not_subscribed|default('미구독') }}</div>
                         <a href="#" class="btn btn-outline btn-sm"
-                           onclick="alert('Stripe Price ID 설정 후 활성화됩니다'); return false;">
-                            시작하기
+                           onclick="alert('{{ i18n.account.dashboard.stripe_notice|default("Stripe Price ID 설정 후 활성화됩니다") }}'); return false;">
+                            {{ i18n.account.dashboard.subscribe|default('시작하기') }}
                         </a>
                     {% else %}
-                        <div class="tier-label" style="color: var(--text-secondary);">준비 중</div>
+                        <div class="tier-label" style="color: var(--text-secondary);">{{ i18n.account.dashboard.coming_soon|default('준비 중') }}</div>
                     {% endif %}
                 </div>
             </div>
@@ -382,16 +382,16 @@
 
     <!-- Profile Management Links -->
     <div class="section">
-        <div class="section-title">계정 관리</div>
+        <div class="section-title">{{ i18n.account.dashboard.account_management|default('계정 관리') }}</div>
         <div class="info-cards">
             <div class="info-card">
-                <a href="/account/me" style="text-decoration: none; color: var(--primary-color);">프로필 수정</a>
+                <a href="/account/me" style="text-decoration: none; color: var(--primary-color);">{{ i18n.account.dashboard.edit_profile|default('프로필 수정') }}</a>
             </div>
             <div class="info-card">
-                <a href="/account/verification" style="text-decoration: none; color: var(--primary-color);">본인인증</a>
+                <a href="/account/verification" style="text-decoration: none; color: var(--primary-color);">{{ i18n.account.dashboard.identity_verification_link|default('본인인증') }}</a>
             </div>
             <div class="info-card">
-                <a href="/account/me/privacy" style="text-decoration: none; color: var(--text-secondary);">개인정보 설정</a>
+                <a href="/account/me/privacy" style="text-decoration: none; color: var(--text-secondary);">{{ i18n.account.dashboard.privacy_settings|default('개인정보 설정') }}</a>
             </div>
         </div>
     </div>
