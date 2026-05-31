@@ -1,0 +1,209 @@
+/* ============================================================
+   FencingMind Design System - CSS Variables (Design Tokens)
+   All subdomains MUST use these variables for consistency
+   ============================================================ */
+
+:root {
+    /* ==================== COLORS ==================== */
+
+    /* Background Colors - Dark Theme */
+    --fm-bg-primary: #0a0a0f;           /* 메인 배경 */
+    --fm-bg-secondary: #12121a;         /* 섹션 배경 */
+    --fm-bg-tertiary: #1a1a25;          /* 카드 내부 배경 */
+    --fm-bg-card: rgba(18, 18, 26, 0.85);      /* 글래스모피즘 카드 */
+    --fm-bg-card-hover: rgba(26, 26, 37, 0.9); /* 카드 호버 */
+    --fm-bg-input: rgba(255, 255, 255, 0.05);  /* 입력 필드 배경 */
+    --fm-bg-overlay: rgba(10, 10, 15, 0.95);   /* 네비바/모달 오버레이 */
+
+    /* Accent Colors - Korean Flag (태극기) Inspired */
+    --fm-accent-primary: #c9302c;       /* 태극 빨강 - Primary CTA */
+    --fm-accent-secondary: #1e3a8a;     /* 태극 파랑 - Secondary actions */
+    --fm-accent-primary-hover: #a82824; /* 빨강 호버 */
+    --fm-accent-secondary-hover: #172e6e; /* 파랑 호버 */
+
+    /* Medal Colors - Rankings */
+    --fm-medal-gold: #d4a574;           /* 금메달 - 1위 */
+    --fm-medal-silver: #9ca3af;         /* 은메달 - 2위 */
+    --fm-medal-bronze: #cd7f32;         /* 동메달 - 3위 */
+
+    /* Text Colors */
+    --fm-text-primary: #ffffff;         /* 주요 텍스트 */
+    --fm-text-secondary: #b4b4c4;       /* 보조 텍스트 */
+    --fm-text-muted: #6b6b7b;           /* 비활성 텍스트 */
+    --fm-text-accent: #c9302c;          /* 강조 텍스트 */
+    --fm-text-link: #60a5fa;            /* 링크 */
+    --fm-text-link-hover: #93c5fd;      /* 링크 호버 */
+
+    /* Status Colors */
+    --fm-success: #10b981;              /* 성공/승리 */
+    --fm-success-bg: rgba(16, 185, 129, 0.15);
+    --fm-warning: #f59e0b;              /* 경고 */
+    --fm-warning-bg: rgba(245, 158, 11, 0.15);
+    --fm-danger: #ef4444;               /* 오류/패배 */
+    --fm-danger-bg: rgba(239, 68, 68, 0.15);
+    --fm-info: #3b82f6;                 /* 정보 */
+    --fm-info-bg: rgba(59, 130, 246, 0.15);
+
+    /* Border Colors */
+    --fm-border: rgba(255, 255, 255, 0.08);
+    --fm-border-light: rgba(255, 255, 255, 0.15);
+    --fm-border-focus: var(--fm-accent-primary);
+
+    /* Glow Effects */
+    --fm-glow-primary: rgba(201, 48, 44, 0.3);
+    --fm-glow-secondary: rgba(30, 58, 138, 0.3);
+    --fm-glow-gold: rgba(212, 165, 116, 0.4);
+
+    /* ==================== TYPOGRAPHY ==================== */
+
+    /* Font Family */
+    --fm-font-primary: 'Pretendard Variable', 'Pretendard', 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    --fm-font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+    /* Font Sizes */
+    --fm-text-xs: 0.75rem;      /* 12px */
+    --fm-text-sm: 0.875rem;     /* 14px */
+    --fm-text-base: 1rem;       /* 16px */
+    --fm-text-lg: 1.125rem;     /* 18px */
+    --fm-text-xl: 1.25rem;      /* 20px */
+    --fm-text-2xl: 1.5rem;      /* 24px */
+    --fm-text-3xl: 1.875rem;    /* 30px */
+    --fm-text-4xl: 2.25rem;     /* 36px */
+
+    /* Font Weights */
+    --fm-font-normal: 400;
+    --fm-font-medium: 500;
+    --fm-font-semibold: 600;
+    --fm-font-bold: 700;
+
+    /* Line Heights */
+    --fm-leading-tight: 1.25;
+    --fm-leading-normal: 1.5;
+    --fm-leading-relaxed: 1.75;
+
+    /* ==================== SPACING ==================== */
+    --fm-space-1: 0.25rem;      /* 4px */
+    --fm-space-2: 0.5rem;       /* 8px */
+    --fm-space-3: 0.75rem;      /* 12px */
+    --fm-space-4: 1rem;         /* 16px */
+    --fm-space-5: 1.25rem;      /* 20px */
+    --fm-space-6: 1.5rem;       /* 24px */
+    --fm-space-8: 2rem;         /* 32px */
+    --fm-space-10: 2.5rem;      /* 40px */
+    --fm-space-12: 3rem;        /* 48px */
+    --fm-space-16: 4rem;        /* 64px */
+
+    /* ==================== BORDERS ==================== */
+    --fm-radius-sm: 4px;
+    --fm-radius-md: 8px;
+    --fm-radius-lg: 12px;
+    --fm-radius-xl: 16px;
+    --fm-radius-2xl: 20px;
+    --fm-radius-full: 9999px;
+
+    /* ==================== SHADOWS ==================== */
+    --fm-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+    --fm-shadow-md: 0 4px 20px rgba(0, 0, 0, 0.4);
+    --fm-shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.5);
+    --fm-shadow-glow: 0 0 20px var(--fm-glow-primary);
+
+    /* ==================== TRANSITIONS ==================== */
+    --fm-transition-fast: 150ms ease;
+    --fm-transition-normal: 250ms ease;
+    --fm-transition-slow: 350ms ease;
+
+    /* ==================== Z-INDEX ==================== */
+    --fm-z-dropdown: 100;
+    --fm-z-sticky: 200;
+    --fm-z-fixed: 500;
+    --fm-z-modal-backdrop: 900;
+    --fm-z-modal: 1000;
+    --fm-z-tooltip: 1100;
+    --fm-z-toast: 1200;
+
+    /* ==================== LAYOUT ==================== */
+    --fm-container-sm: 640px;
+    --fm-container-md: 768px;
+    --fm-container-lg: 1024px;
+    --fm-container-xl: 1200px;
+    --fm-container-2xl: 1400px;
+
+    --fm-navbar-height: 60px;
+    --fm-sidebar-width: 280px;
+}
+
+/* ==================== GLASSMORPHISM UTILITIES ==================== */
+.fm-glass {
+    background: var(--fm-bg-card);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--fm-border);
+}
+
+.fm-glass-dark {
+    background: var(--fm-bg-overlay);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--fm-border);
+}
+
+/* ==================== LIGHT THEME (ko, ja, zh) ==================== */
+[data-theme="light"] {
+    /* Background - Apple/Toss style */
+    --fm-bg-primary: #ffffff;
+    --fm-bg-secondary: #f5f5f7;
+    --fm-bg-tertiary: #f0f0f5;
+    --fm-bg-card: #ffffff;
+    --fm-bg-card-hover: #f9f9fb;
+    --fm-bg-input: #f5f5f7;
+    --fm-bg-overlay: rgba(255, 255, 255, 0.95);
+
+    /* Accent - same across themes */
+    --fm-accent-primary: #c9302c;
+    --fm-accent-secondary: #1e3a8a;
+    --fm-accent-primary-hover: #a82824;
+    --fm-accent-secondary-hover: #172e6e;
+
+    /* Text - Toss/Apple style */
+    --fm-text-primary: #191f28;
+    --fm-text-secondary: #4e5968;
+    --fm-text-muted: #8b95a1;
+    --fm-text-accent: #c9302c;
+    --fm-text-link: #1e3a8a;
+    --fm-text-link-hover: #2d4cab;
+
+    /* Status */
+    --fm-success-bg: rgba(16, 185, 129, 0.1);
+    --fm-warning-bg: rgba(245, 158, 11, 0.1);
+    --fm-danger-bg: rgba(239, 68, 68, 0.1);
+    --fm-info-bg: rgba(59, 130, 246, 0.1);
+
+    /* Border */
+    --fm-border: rgba(0, 0, 0, 0.08);
+    --fm-border-light: rgba(0, 0, 0, 0.12);
+
+    /* Glow - disabled in light theme */
+    --fm-glow-primary: transparent;
+    --fm-glow-secondary: transparent;
+    --fm-glow-gold: transparent;
+
+    /* Shadow - light theme uses shadows for depth */
+    --fm-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
+    --fm-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+    --fm-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+    --fm-shadow-glow: none;
+}
+
+[data-theme="light"] .fm-glass {
+    background: var(--fm-bg-card);
+    backdrop-filter: none;
+    border: 1px solid var(--fm-border);
+    box-shadow: var(--fm-shadow-sm);
+}
+
+[data-theme="light"] .fm-glass-dark {
+    background: var(--fm-bg-overlay);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--fm-border);
+}
