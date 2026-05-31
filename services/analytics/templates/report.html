@@ -1099,16 +1099,16 @@
             container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
             try {
-                // Check if clip is available before loading into video element
-                const resp = await fetch(url, { method: 'HEAD' });
+                const resp = await fetch(url);
                 if (!resp.ok) {
-                    const detail = resp.status === 404
-                        ? '원본 영상이 필요합니다. 영상 파일을 업로드해주세요.'
-                        : `클립 생성 실패 (${resp.status})`;
-                    throw new Error(detail);
+                    let detail;
+                    try { detail = (await resp.json()).detail; } catch (_) {}
+                    throw new Error(detail || `클립 생성 실패 (${resp.status})`);
                 }
 
-                source.src = url;
+                const blob = await resp.blob();
+                const blobUrl = URL.createObjectURL(blob);
+                source.src = blobUrl;
                 video.load();
 
                 video.oncanplay = () => {
@@ -1121,6 +1121,7 @@
                     loading.classList.add('hidden');
                     error.textContent = '클립을 재생할 수 없습니다.';
                     error.classList.remove('hidden');
+                    URL.revokeObjectURL(blobUrl);
                 };
             } catch (e) {
                 loading.classList.add('hidden');
