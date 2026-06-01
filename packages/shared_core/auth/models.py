@@ -28,11 +28,16 @@ class MemberCreate(BaseModel):
     full_name: str = Field(..., min_length=2, max_length=100)
     email: EmailStr
     phone: Optional[str] = None
+    phone_country_code: str = "+82"
     birth_date: Optional[date] = None
     member_type: MemberType
     organization_id: Optional[int] = None
     marketing_consent: bool = False
     promotional_consent: bool = False
+    email_verified: bool = False
+    terms_agreed_at: Optional[datetime] = None
+    privacy_agreed_at: Optional[datetime] = None
+    consent_version: str = "1.0"
 
     @field_validator('birth_date')
     @classmethod
@@ -78,15 +83,20 @@ class MemberResponse(BaseModel):
     display_name: Optional[str] = None
     email: str
     phone: Optional[str] = None
+    phone_country_code: str = "+82"
     birth_date: Optional[date] = None
     member_type: MemberType
     player_id: Optional[int] = None
     organization_id: Optional[int] = None
     verification_status: MemberVerificationStatus
     verified_at: Optional[datetime] = None
+    email_verified: bool = False
     privacy_public: bool
     marketing_consent: bool
     promotional_consent: bool
+    terms_agreed_at: Optional[datetime] = None
+    privacy_agreed_at: Optional[datetime] = None
+    consent_version: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     model_config = ConfigDict(from_attributes=True)

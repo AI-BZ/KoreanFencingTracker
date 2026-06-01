@@ -17,24 +17,24 @@ class SharedAuthSettings(BaseSettings):
     SUPABASE_SERVICE_KEY: str = os.getenv("SUPABASE_SERVICE_KEY", "")
 
     # JWT
-    JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "")  # MUST set in .env — empty = startup validation fail
+    JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24시간
 
     # Kakao OAuth
     KAKAO_CLIENT_ID: str = os.getenv("KAKAO_CLIENT_ID", "")
     KAKAO_CLIENT_SECRET: str = os.getenv("KAKAO_CLIENT_SECRET", "")
-    KAKAO_REDIRECT_URI: str = os.getenv("KAKAO_REDIRECT_URI", "http://localhost:70/auth/callback/kakao")
+    KAKAO_REDIRECT_URI: str = os.getenv("KAKAO_REDIRECT_URI", "http://localhost:9070/auth/callback/kakao")
 
     # Google OAuth
     GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
     GOOGLE_CLIENT_SECRET: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
-    GOOGLE_REDIRECT_URI: str = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:70/auth/callback/google")
+    GOOGLE_REDIRECT_URI: str = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:9070/auth/callback/google")
 
     # X (Twitter) OAuth
     X_CLIENT_ID: str = os.getenv("X_CLIENT_ID", "")
     X_CLIENT_SECRET: str = os.getenv("X_CLIENT_SECRET", "")
-    X_REDIRECT_URI: str = os.getenv("X_REDIRECT_URI", "http://localhost:70/auth/callback/x")
+    X_REDIRECT_URI: str = os.getenv("X_REDIRECT_URI", "http://localhost:9070/auth/callback/x")
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

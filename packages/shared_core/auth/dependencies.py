@@ -5,14 +5,11 @@
 기존 ClubMemberContext를 일반화한 ServiceMemberContext 제공.
 """
 import os
-import logging
 from typing import Optional, List
 
 from fastapi import Depends, HTTPException, status, Request
 
-logger = logging.getLogger(__name__)
-
-from shared_core.types.member import ClubRole, MemberType
+from shared_core.types.member import ClubRole, MemberType, MemberVerificationStatus
 from shared_core.auth.jwt import decode_token, extract_token
 from shared_core.db.client import get_supabase_client
 
@@ -48,6 +45,8 @@ class ServiceMemberContext:
         guardian_member_id: Optional[str] = None,
         email: Optional[str] = None,
         member_type: Optional[str] = None,
+        verification_status: Optional[str] = None,
+        email_verified: bool = False,
     ):
         self.member_id = member_id
         self.organization_id = organization_id
@@ -57,6 +56,8 @@ class ServiceMemberContext:
         self.guardian_member_id = guardian_member_id
         self.email = email
         self.member_type = member_type
+        self.verification_status = verification_status
+        self.email_verified = email_verified
 
     def is_coach(self) -> bool:
         """코치 이상 권한인지"""
@@ -94,36 +95,6 @@ class ServiceMemberContext:
         """전체 출석 조회 권한"""
         return self.is_staff()
 
-    def is_minor(self) -> bool:
-        """미성년 선수인지"""
-        return self.member_type == MemberType.MINOR_PLAYER.value
-
-    def is_player(self) -> bool:
-        """선수 계정인지 (성인 + 미성년 모두)"""
-        return self.member_type in [
-            MemberType.PLAYER.value,
-            MemberType.MINOR_PLAYER.value,
-        ]
-
-    def is_parent(self) -> bool:
-        """학부모 계정인지"""
-        return self.member_type == MemberType.PLAYER_PARENT.value
-
-    def can_make_payment(self) -> bool:
-        """결제 가능 여부 (미성년은 불가 → 학부모가 대리)"""
-        if self.is_minor():
-            return False
-        # 성인 선수, 학부모, 감독 등은 결제 가능
-        return True
-
-    def can_checkin(self) -> bool:
-        """체크인 가능 여부 (선수 계정 = 성인 + 미성년 모두)"""
-        return self.club_role == ClubRole.student
-
-    def can_request_lesson(self) -> bool:
-        """레슨 신청 가능 여부 (선수 본인 + 학부모 대리)"""
-        return self.club_role in [ClubRole.student, ClubRole.parent]
-
 
 async def get_client_ip(request: Request) -> str:
     """클라이언트 IP 추출"""
@@ -151,8 +122,11 @@ async def get_current_club_member(request: Request) -> ServiceMemberContext:
     - 환경변수 CLUB_TEST_MODE=1
     - 또는 쿼리 파라미터 ?test=1
     """
-    # 테스트 모드 체크 (환경변수만 허용, 쿼리 파라미터 bypass 제거)
-    if TEST_MODE_ENV:
+    # 테스트 모드 체크
+    test_param = request.query_params.get("test", "0")
+    is_test_mode = TEST_MODE_ENV or test_param == "1"
+
+    if is_test_mode:
         return ServiceMemberContext(
             member_id=TEST_CLUB_CONFIG["member_id"],
             organization_id=TEST_CLUB_CONFIG["organization_id"],
@@ -170,11 +144,28 @@ async def get_current_club_member(request: Request) -> ServiceMemberContext:
                 supabase = get_supabase_client()
                 member_response = supabase.table("members").select(
                     "id, organization_id, club_role, full_name, player_id, "
-                    "guardian_member_id, email, member_type"
+                    "guardian_member_id, email, member_type, "
+                    "verification_status, email_verified, admin_role"
                 ).eq("id", payload["member_id"]).single().execute()
 
                 if member_response.data:
                     member = member_response.data
+
+                    # super_admin은 클럽 소속/역할 없이도 최고 권한으로 접근
+                    if member.get("admin_role") == "super_admin":
+                        return ServiceMemberContext(
+                            member_id=member["id"],
+                            organization_id=member.get("organization_id"),
+                            club_role=ClubRole.owner,  # 최고 권한 부여
+                            full_name=member["full_name"],
+                            player_id=member.get("player_id"),
+                            guardian_member_id=member.get("guardian_member_id"),
+                            email=member.get("email"),
+                            member_type=member.get("member_type"),
+                            verification_status=member.get("verification_status"),
+                            email_verified=member.get("email_verified", False),
+                        )
+
                     if not member.get("organization_id"):
                         raise HTTPException(
                             status_code=status.HTTP_403_FORBIDDEN,
@@ -194,14 +185,15 @@ async def get_current_club_member(request: Request) -> ServiceMemberContext:
                         guardian_member_id=member.get("guardian_member_id"),
                         email=member.get("email"),
                         member_type=member.get("member_type"),
+                        verification_status=member.get("verification_status"),
+                        email_verified=member.get("email_verified", False),
                     )
             except HTTPException:
                 raise
             except Exception as e:
-                logger.error(f"JWT 인증 실패: {e}")
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="인증에 실패했습니다",
+                    detail=f"인증 오류: {str(e)}",
                 )
 
     # 2. Supabase Auth 토큰 폴백 (기존 호환성)
@@ -220,7 +212,8 @@ async def get_current_club_member(request: Request) -> ServiceMemberContext:
             user_id = user_response.user.id
             member_response = supabase.table("members").select(
                 "id, organization_id, club_role, full_name, player_id, "
-                "guardian_member_id, email, member_type"
+                "guardian_member_id, email, member_type, "
+                "verification_status, email_verified"
             ).eq("supabase_auth_id", user_id).single().execute()
 
             if not member_response.data:
@@ -250,15 +243,16 @@ async def get_current_club_member(request: Request) -> ServiceMemberContext:
                 guardian_member_id=member.get("guardian_member_id"),
                 email=member.get("email"),
                 member_type=member.get("member_type"),
+                verification_status=member.get("verification_status"),
+                email_verified=member.get("email_verified", False),
             )
 
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"Supabase Auth 인증 실패: {e}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="인증에 실패했습니다",
+                detail=f"인증 오류: {str(e)}",
             )
 
     raise HTTPException(
@@ -315,3 +309,40 @@ def require_roles(allowed_roles: List[ClubRole]):
             )
         return member
     return _check
+
+
+def require_verified(
+    member: ServiceMemberContext = Depends(get_current_club_member),
+) -> ServiceMemberContext:
+    """사진 인증 완료 회원만 (verification_status == verified)"""
+    if member.verification_status != MemberVerificationStatus.VERIFIED.value:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="본인 인증이 필요합니다",
+        )
+    return member
+
+
+def require_email_verified(
+    member: ServiceMemberContext = Depends(get_current_club_member),
+) -> ServiceMemberContext:
+    """이메일 인증 완료 회원만"""
+    if not member.email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="이메일 인증이 필요합니다",
+        )
+    return member
+
+
+def require_director(
+    member: ServiceMemberContext = Depends(get_current_club_member),
+) -> ServiceMemberContext:
+    """감독급 이상 권한 필요 (club_director, school_director)"""
+    director_types = [MemberType.CLUB_DIRECTOR.value, MemberType.SCHOOL_DIRECTOR.value]
+    if member.member_type not in director_types:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="감독 권한이 필요합니다",
+        )
+    return member

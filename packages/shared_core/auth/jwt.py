@@ -26,8 +26,6 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
         JWT 토큰 문자열
     """
     settings = get_shared_auth_settings()
-    if not settings.JWT_SECRET_KEY:
-        raise ValueError("JWT_SECRET_KEY가 설정되지 않았습니다. .env 파일을 확인하세요.")
     to_encode = data.copy()
 
     if expires_delta:
@@ -55,9 +53,6 @@ def decode_token(token: str) -> Optional[dict]:
         디코딩된 payload 딕셔너리 또는 None
     """
     settings = get_shared_auth_settings()
-    if not settings.JWT_SECRET_KEY:
-        logger.error("JWT_SECRET_KEY가 설정되지 않았습니다")
-        return None
     try:
         payload = jwt.decode(
             token,

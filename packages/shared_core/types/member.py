@@ -8,12 +8,13 @@ from enum import Enum
 
 class MemberType(str, Enum):
     """회원 유형"""
-    PLAYER = "player"                # 성인 선수 (직접 가입)
-    MINOR_PLAYER = "minor_player"    # 미성년 선수 (본인 계정, guardian 필수)
-    PLAYER_PARENT = "player_parent"  # 선수 학부모 (미성년 자녀 결제/관리)
-    CLUB_COACH = "club_coach"        # 클럽 코치
-    SCHOOL_COACH = "school_coach"    # 학교 코치
-    GENERAL = "general"              # 일반 회원
+    PLAYER = "player"                  # 선수회원
+    PLAYER_PARENT = "player_parent"    # 선수 부모회원
+    CLUB_COACH = "club_coach"          # 클럽 코치
+    CLUB_DIRECTOR = "club_director"    # 클럽 감독/대표
+    SCHOOL_COACH = "school_coach"      # 학교 코치
+    SCHOOL_DIRECTOR = "school_director"  # 학교 감독
+    GENERAL = "general"                # 일반 회원
 
 
 class VerificationType(str, Enum):
@@ -46,6 +47,7 @@ class OAuthProvider(str, Enum):
     KAKAO = "kakao"
     GOOGLE = "google"
     X = "x"
+    LINE = "line"
 
 
 class ClubRole(str, Enum):
@@ -65,3 +67,11 @@ class MemberStatus(str, Enum):
     inactive = "inactive"     # 휴회
     suspended = "suspended"   # 정지
     graduated = "graduated"   # 졸업/퇴회
+
+
+class AdminRole(str, Enum):
+    """관리자 역할"""
+    SUPER_ADMIN = "super_admin"        # 전체 관리자
+    SERVICE_ADMIN = "service_admin"    # 서비스별 관리자
+    MODERATOR = "moderator"            # 모더레이터
+    SUPPORT = "support"                # 고객지원

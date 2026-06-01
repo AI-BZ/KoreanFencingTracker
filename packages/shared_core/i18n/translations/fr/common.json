@@ -1,0 +1,91 @@
+{
+    "nav": {
+        "login": "Login",
+        "logout": "Logout",
+        "register": "Sign Up",
+        "dashboard": "Dashboard",
+        "my_account": "My Account",
+        "home": "Home"
+    },
+    "footer": {
+        "terms": "Terms of Service",
+        "privacy": "Privacy Policy",
+        "privacy_inquiry": "Privacy Inquiry",
+        "copyright": "2024-2026 FencingMind LLC"
+    },
+    "member_types": {
+        "general": "General Member",
+        "player": "Player",
+        "player_parent": "Player's Parent",
+        "club_coach": "Club Coach",
+        "club_director": "Club Director",
+        "school_coach": "School Coach",
+        "school_director": "School Director"
+    },
+    "status": {
+        "active": "Active",
+        "inactive": "Inactive",
+        "suspended": "Suspended",
+        "pending": "Pending",
+        "approved": "Approved",
+        "rejected": "Rejected",
+        "verified": "Verified",
+        "submitted": "Submitted",
+        "unverified": "Unverified",
+        "auto_verified": "Auto-verified",
+        "running": "Active"
+    },
+    "buttons": {
+        "save": "Save",
+        "cancel": "Cancel",
+        "confirm": "Confirm",
+        "delete": "Delete",
+        "edit": "Edit",
+        "search": "Search",
+        "back": "Back",
+        "submit": "Submit",
+        "send": "Send",
+        "retry": "Retry",
+        "view": "View",
+        "detail": "Detail",
+        "review": "Review",
+        "close": "Close"
+    },
+    "labels": {
+        "name": "Name",
+        "email": "Email",
+        "phone": "Phone",
+        "birth_date": "Date of Birth",
+        "nickname": "Nickname",
+        "member_type": "Member Type",
+        "status": "Status",
+        "date": "Date",
+        "created_at": "Joined",
+        "required": "Required",
+        "optional": "Optional",
+        "subject": "Subject",
+        "body": "Body",
+        "content": "Content"
+    },
+    "messages": {
+        "no_data": "No data available",
+        "no_results": "No results found",
+        "loading": "Loading...",
+        "confirm_action": "Are you sure?",
+        "success": "Success",
+        "error": "An error occurred"
+    },
+    "pagination": {
+        "prev": "Previous",
+        "next": "Next"
+    },
+    "language": {
+        "ko": "한국어",
+        "en": "English",
+        "fr": "Français",
+        "it": "Italiano",
+        "ja": "日本語",
+        "zh": "中文",
+        "tr": "Türkçe"
+    }
+}
