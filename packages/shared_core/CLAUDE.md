@@ -42,6 +42,15 @@ packages/shared_core/
 │   ├── __init__.py
 │   ├── masking.py              # mask_korean_name(), mask_email(), mask_phone()
 │   └── anonymize.py            # anonymize_team(), is_minor(), get_age()
+├── i18n/
+│   ├── __init__.py                # 전체 export
+│   ├── constants.py               # SUPPORTED_LANGUAGES, LANG_THEME_MAP 등
+│   ├── manager.py                 # TranslationManager (공유+서비스별 번역 deep merge)
+│   ├── middleware.py              # LanguageMiddleware, create_language_context
+│   └── translations/              # 공유 번역 (7개 언어)
+│       ├── ko/common.json         # 한국어 (실제 번역)
+│       ├── en/common.json         # 영어 (실제 번역)
+│       └── {fr,it,ja,zh,tr}/      # en fallback (추후 번역)
 ├── utils/
 │   └── __init__.py
 └── tests/
@@ -65,6 +74,62 @@ from shared_core.auth.dependencies import ServiceMemberContext, require_coach
 from app.auth.models import MemberType  # → shared_core.types.member에서 가져옴
 from app.auth.privacy import mask_korean_name  # → shared_core.privacy.masking에서 가져옴
 ```
+
+## i18n (다국어/테마)
+
+### 개요
+- **7개 언어**: ko, en, fr, it, ja, zh, tr
+- **테마 자동 결정**: 아시아(ko/ja/zh) → Light, 서양(en/fr/it/tr) → Dark
+- **수동 테마 토글 없음** — 언어 선택이 테마를 결정
+
+### Import 사용법
+```python
+# 상수
+from shared_core.i18n import SUPPORTED_LANGUAGES, LANG_THEME_MAP, LANGUAGE_NAMES
+
+# 미들웨어 (서비스 server.py에서)
+from shared_core.i18n import LanguageMiddleware
+app.add_middleware(LanguageMiddleware)
+
+# 서비스별 번역을 추가하려면
+from shared_core.i18n import LanguageMiddleware, create_shared_i18n
+from pathlib import Path
+i18n = create_shared_i18n(extra_dirs=[Path(__file__).parent / "i18n" / "translations"])
+app.add_middleware(LanguageMiddleware, i18n=i18n)
+
+# 라우터에서 템플릿 컨텍스트
+from shared_core.i18n import create_language_context
+context = create_language_context(request)
+```
+
+### 번역 병합 구조
+```
+shared_core/i18n/translations/  (공통 번역, 기본)
+    + 서비스별 app/i18n/translations/  (서비스 고유, 오버라이드)
+    = 최종 번역 (deep merge, 서비스별이 우선)
+```
+
+### Fallback 순서
+요청 언어 → en → ko → key 자체 반환
+
+### LanguageMiddleware가 request.state에 설정하는 값
+| 키 | 타입 | 설명 |
+|----|------|------|
+| `lang` | str | 현재 언어 코드 (예: 'ko') |
+| `theme` | str | 'light' 또는 'dark' |
+| `t` | callable | 번역 함수 `t('common.nav.login')` |
+| `supported_langs` | list | 지원 언어 목록 |
+| `language_names` | dict | 언어 표시명 |
+| `i18n_data` | dict | 현재 언어의 전체 번역 데이터 |
+
+### 언어 감지 우선순위
+1. `?lang=` 쿼리 파라미터
+2. URL path prefix (`/{lang}/...`)
+3. `lang` 쿠키 (domain: `.fencingmind.ai`)
+4. `Accept-Language` 헤더
+5. 기본값: `ko`
+
+---
 
 ## 인증 아키텍처
 
