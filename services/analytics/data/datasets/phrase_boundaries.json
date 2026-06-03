@@ -1,0 +1,5724 @@
+{
+  "version": "1.0",
+  "generated": "2026-05-31",
+  "total_phrases": 302,
+  "total_videos": 5,
+  "videos": [
+    "usaf_7Amgqc5HJR0",
+    "usaf_Jiq1kQLftjw",
+    "usaf_UzQ8Ci7lft8",
+    "usaf_hKUXgUsDOKE",
+    "usaf_zTsHbehQrC0"
+  ],
+  "config": {
+    "merge_separation_frames": 30,
+    "fps": 30.0
+  },
+  "annotations": [
+    {
+      "video_id": "usaf_7Amgqc5HJR0",
+      "phrase_id": 1,
+      "start_frame": 975,
+      "end_frame": 1014,
+      "start_time": "0:32",
+      "end_time": "0:33",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "attack"
+      ],
+      "confidence": 0.4,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_7Amgqc5HJR0",
+      "phrase_id": 2,
+      "start_frame": 1122,
+      "end_frame": 1152,
+      "start_time": "0:37",
+      "end_time": "0:38",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "stationary",
+        "attack"
+      ],
+      "confidence": 0.4,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_7Amgqc5HJR0",
+      "phrase_id": 3,
+      "start_frame": 1263,
+      "end_frame": 1290,
+      "start_time": "0:42",
+      "end_time": "0:43",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "stationary",
+        "attack"
+      ],
+      "confidence": 0.4,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_7Amgqc5HJR0",
+      "phrase_id": 4,
+      "start_frame": 1341,
+      "end_frame": 1416,
+      "start_time": "0:44",
+      "end_time": "0:47",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "stationary",
+        "retreat",
+        "defense",
+        "attack",
+        "parade"
+      ],
+      "confidence": 0.4,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_7Amgqc5HJR0",
+      "phrase_id": 5,
+      "start_frame": 1467,
+      "end_frame": 1497,
+      "start_time": "0:48",
+      "end_time": "0:49",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "lunge",
+        "attack"
+      ],
+      "confidence": 0.4,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_7Amgqc5HJR0",
+      "phrase_id": 6,
+      "start_frame": 1725,
+      "end_frame": 1743,
+      "start_time": "0:57",
+      "end_time": "0:58",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "retreat",
+        "attack"
+      ],
+      "confidence": 0.4,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_7Amgqc5HJR0",
+      "phrase_id": 7,
+      "start_frame": 1968,
+      "end_frame": 2886,
+      "start_time": "1:05",
+      "end_time": "1:36",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "advance",
+        "attack"
+      ],
+      "confidence": 0.4,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_7Amgqc5HJR0",
+      "phrase_id": 8,
+      "start_frame": 2946,
+      "end_frame": 3063,
+      "start_time": "1:38",
+      "end_time": "1:42",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.3,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_7Amgqc5HJR0",
+      "phrase_id": 9,
+      "start_frame": 3108,
+      "end_frame": 3138,
+      "start_time": "1:43",
+      "end_time": "1:44",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "stationary",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.4,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_7Amgqc5HJR0",
+      "phrase_id": 10,
+      "start_frame": 3261,
+      "end_frame": 3285,
+      "start_time": "1:48",
+      "end_time": "1:49",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.4,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_7Amgqc5HJR0",
+      "phrase_id": 11,
+      "start_frame": 3516,
+      "end_frame": 3537,
+      "start_time": "1:57",
+      "end_time": "1:58",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.4,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_7Amgqc5HJR0",
+      "phrase_id": 12,
+      "start_frame": 4944,
+      "end_frame": 4965,
+      "start_time": "2:44",
+      "end_time": "2:45",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "retreat",
+        "attack"
+      ],
+      "confidence": 0.4,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_7Amgqc5HJR0",
+      "phrase_id": 13,
+      "start_frame": 5055,
+      "end_frame": 5082,
+      "start_time": "2:48",
+      "end_time": "2:49",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "stationary",
+        "attack"
+      ],
+      "confidence": 0.4,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_7Amgqc5HJR0",
+      "phrase_id": 14,
+      "start_frame": 6273,
+      "end_frame": 6306,
+      "start_time": "3:29",
+      "end_time": "3:30",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "stationary",
+        "attack"
+      ],
+      "confidence": 0.4,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_7Amgqc5HJR0",
+      "phrase_id": 15,
+      "start_frame": 6750,
+      "end_frame": 6768,
+      "start_time": "3:45",
+      "end_time": "3:45",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "stationary",
+        "attack"
+      ],
+      "confidence": 0.4,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 1,
+      "start_frame": 4725,
+      "end_frame": 4824,
+      "start_time": "2:37",
+      "end_time": "2:40",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "retreat",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 2,
+      "start_frame": 4914,
+      "end_frame": 4980,
+      "start_time": "2:43",
+      "end_time": "2:46",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "fleche",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 3,
+      "start_frame": 5055,
+      "end_frame": 5088,
+      "start_time": "2:48",
+      "end_time": "2:49",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "advance",
+        "retreat",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 4,
+      "start_frame": 5124,
+      "end_frame": 5160,
+      "start_time": "2:50",
+      "end_time": "2:52",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "stationary",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 5,
+      "start_frame": 5367,
+      "end_frame": 5460,
+      "start_time": "2:58",
+      "end_time": "3:02",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "retreat",
+        "stationary",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 6,
+      "start_frame": 5796,
+      "end_frame": 5853,
+      "start_time": "3:13",
+      "end_time": "3:15",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 7,
+      "start_frame": 6096,
+      "end_frame": 6141,
+      "start_time": "3:23",
+      "end_time": "3:24",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 8,
+      "start_frame": 6384,
+      "end_frame": 6450,
+      "start_time": "3:32",
+      "end_time": "3:35",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 9,
+      "start_frame": 6693,
+      "end_frame": 6738,
+      "start_time": "3:43",
+      "end_time": "3:44",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 10,
+      "start_frame": 7023,
+      "end_frame": 7080,
+      "start_time": "3:54",
+      "end_time": "3:56",
+      "trigger": "scoring",
+      "outcome": "touch_right",
+      "action_sequence": [
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 11,
+      "start_frame": 7362,
+      "end_frame": 7476,
+      "start_time": "4:05",
+      "end_time": "4:09",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "advance",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 12,
+      "start_frame": 8439,
+      "end_frame": 8484,
+      "start_time": "4:41",
+      "end_time": "4:42",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 13,
+      "start_frame": 8631,
+      "end_frame": 8685,
+      "start_time": "4:47",
+      "end_time": "4:49",
+      "trigger": "scoring",
+      "outcome": "touch_right",
+      "action_sequence": [
+        "retreat",
+        "stationary",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 14,
+      "start_frame": 8778,
+      "end_frame": 8865,
+      "start_time": "4:52",
+      "end_time": "4:55",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "retreat",
+        "fleche",
+        "fleche",
+        "retreat",
+        "retreat",
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 15,
+      "start_frame": 9168,
+      "end_frame": 9204,
+      "start_time": "5:05",
+      "end_time": "5:06",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 16,
+      "start_frame": 10143,
+      "end_frame": 10194,
+      "start_time": "5:38",
+      "end_time": "5:39",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 17,
+      "start_frame": 10437,
+      "end_frame": 10506,
+      "start_time": "5:47",
+      "end_time": "5:50",
+      "trigger": "scoring",
+      "outcome": "touch_right",
+      "action_sequence": [
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 18,
+      "start_frame": 10779,
+      "end_frame": 10920,
+      "start_time": "5:59",
+      "end_time": "6:04",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "fleche",
+        "fleche",
+        "advance",
+        "advance",
+        "fleche",
+        "advance",
+        "defense",
+        "attack",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 19,
+      "start_frame": 11034,
+      "end_frame": 11088,
+      "start_time": "6:07",
+      "end_time": "6:09",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "retreat",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 20,
+      "start_frame": 11337,
+      "end_frame": 11361,
+      "start_time": "6:17",
+      "end_time": "6:18",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "advance",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 21,
+      "start_frame": 12183,
+      "end_frame": 12324,
+      "start_time": "6:46",
+      "end_time": "6:50",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "retreat",
+        "lunge",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 22,
+      "start_frame": 12561,
+      "end_frame": 12702,
+      "start_time": "6:58",
+      "end_time": "7:03",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "retreat",
+        "lunge",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 23,
+      "start_frame": 12750,
+      "end_frame": 12870,
+      "start_time": "7:05",
+      "end_time": "7:09",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "retreat",
+        "advance",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 24,
+      "start_frame": 12948,
+      "end_frame": 12969,
+      "start_time": "7:11",
+      "end_time": "7:12",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 25,
+      "start_frame": 13098,
+      "end_frame": 13251,
+      "start_time": "7:16",
+      "end_time": "7:21",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "retreat",
+        "retreat",
+        "advance",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 26,
+      "start_frame": 13314,
+      "end_frame": 13443,
+      "start_time": "7:23",
+      "end_time": "7:28",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "lunge",
+        "retreat",
+        "stationary",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 27,
+      "start_frame": 13515,
+      "end_frame": 13563,
+      "start_time": "7:30",
+      "end_time": "7:32",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 28,
+      "start_frame": 13743,
+      "end_frame": 13794,
+      "start_time": "7:38",
+      "end_time": "7:39",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 29,
+      "start_frame": 14103,
+      "end_frame": 14127,
+      "start_time": "7:50",
+      "end_time": "7:50",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "stationary",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 30,
+      "start_frame": 14274,
+      "end_frame": 14316,
+      "start_time": "7:55",
+      "end_time": "7:57",
+      "trigger": "scoring",
+      "outcome": "touch_right",
+      "action_sequence": [
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 31,
+      "start_frame": 14604,
+      "end_frame": 14658,
+      "start_time": "8:06",
+      "end_time": "8:08",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 32,
+      "start_frame": 14703,
+      "end_frame": 14766,
+      "start_time": "8:10",
+      "end_time": "8:12",
+      "trigger": "scoring",
+      "outcome": "touch_right",
+      "action_sequence": [
+        "fleche",
+        "retreat",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 33,
+      "start_frame": 14973,
+      "end_frame": 15018,
+      "start_time": "8:19",
+      "end_time": "8:20",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "retreat",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 34,
+      "start_frame": 15051,
+      "end_frame": 15246,
+      "start_time": "8:21",
+      "end_time": "8:28",
+      "trigger": "scoring",
+      "outcome": "touch_right",
+      "action_sequence": [
+        "retreat",
+        "lunge",
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 35,
+      "start_frame": 15327,
+      "end_frame": 15396,
+      "start_time": "8:30",
+      "end_time": "8:33",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 36,
+      "start_frame": 15576,
+      "end_frame": 15633,
+      "start_time": "8:39",
+      "end_time": "8:41",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 37,
+      "start_frame": 15969,
+      "end_frame": 16023,
+      "start_time": "8:52",
+      "end_time": "8:54",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 38,
+      "start_frame": 16371,
+      "end_frame": 16416,
+      "start_time": "9:05",
+      "end_time": "9:07",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "fleche",
+        "advance",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 39,
+      "start_frame": 16752,
+      "end_frame": 16890,
+      "start_time": "9:18",
+      "end_time": "9:23",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "retreat",
+        "fleche",
+        "fleche",
+        "retreat",
+        "fleche",
+        "fleche",
+        "fleche",
+        "retreat",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 40,
+      "start_frame": 17349,
+      "end_frame": 17421,
+      "start_time": "9:38",
+      "end_time": "9:40",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 41,
+      "start_frame": 17736,
+      "end_frame": 17799,
+      "start_time": "9:51",
+      "end_time": "9:53",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "fleche",
+        "lunge",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 42,
+      "start_frame": 18117,
+      "end_frame": 18165,
+      "start_time": "10:03",
+      "end_time": "10:05",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 43,
+      "start_frame": 19233,
+      "end_frame": 19284,
+      "start_time": "10:41",
+      "end_time": "10:42",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "stationary",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 44,
+      "start_frame": 19521,
+      "end_frame": 19554,
+      "start_time": "10:50",
+      "end_time": "10:51",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 45,
+      "start_frame": 19758,
+      "end_frame": 19782,
+      "start_time": "10:58",
+      "end_time": "10:59",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "lunge",
+        "stationary",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 46,
+      "start_frame": 19920,
+      "end_frame": 19998,
+      "start_time": "11:04",
+      "end_time": "11:06",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "lunge",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 47,
+      "start_frame": 22572,
+      "end_frame": 22602,
+      "start_time": "12:32",
+      "end_time": "12:33",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.8,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 48,
+      "start_frame": 23226,
+      "end_frame": 23286,
+      "start_time": "12:54",
+      "end_time": "12:56",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 49,
+      "start_frame": 23595,
+      "end_frame": 23703,
+      "start_time": "13:06",
+      "end_time": "13:10",
+      "trigger": "scoring",
+      "outcome": "touch_right",
+      "action_sequence": [
+        "retreat",
+        "fleche",
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 50,
+      "start_frame": 24117,
+      "end_frame": 24174,
+      "start_time": "13:23",
+      "end_time": "13:25",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 51,
+      "start_frame": 24591,
+      "end_frame": 24612,
+      "start_time": "13:39",
+      "end_time": "13:40",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "attack"
+      ],
+      "confidence": 0.8,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 52,
+      "start_frame": 24858,
+      "end_frame": 24900,
+      "start_time": "13:48",
+      "end_time": "13:50",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "stationary",
+        "advance",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_Jiq1kQLftjw",
+      "phrase_id": 53,
+      "start_frame": 25278,
+      "end_frame": 25398,
+      "start_time": "14:02",
+      "end_time": "14:06",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "advance",
+        "advance",
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 1,
+      "start_frame": 1632,
+      "end_frame": 1719,
+      "start_time": "0:54",
+      "end_time": "0:57",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "stationary",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 2,
+      "start_frame": 1797,
+      "end_frame": 1875,
+      "start_time": "0:59",
+      "end_time": "1:02",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "stationary",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 3,
+      "start_frame": 2883,
+      "end_frame": 2922,
+      "start_time": "1:36",
+      "end_time": "1:37",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "stationary",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 4,
+      "start_frame": 3000,
+      "end_frame": 3141,
+      "start_time": "1:40",
+      "end_time": "1:44",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "advance",
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 5,
+      "start_frame": 3273,
+      "end_frame": 3312,
+      "start_time": "1:49",
+      "end_time": "1:50",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "retreat",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 6,
+      "start_frame": 3492,
+      "end_frame": 3525,
+      "start_time": "1:56",
+      "end_time": "1:57",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "stationary",
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 7,
+      "start_frame": 3633,
+      "end_frame": 3669,
+      "start_time": "2:01",
+      "end_time": "2:02",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "retreat",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 8,
+      "start_frame": 3777,
+      "end_frame": 3798,
+      "start_time": "2:06",
+      "end_time": "2:06",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "stationary",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 9,
+      "start_frame": 4368,
+      "end_frame": 4386,
+      "start_time": "2:25",
+      "end_time": "2:26",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 10,
+      "start_frame": 4419,
+      "end_frame": 4500,
+      "start_time": "2:27",
+      "end_time": "2:30",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "stationary",
+        "advance",
+        "retreat",
+        "advance",
+        "defense",
+        "attack",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 11,
+      "start_frame": 4551,
+      "end_frame": 4575,
+      "start_time": "2:31",
+      "end_time": "2:32",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 12,
+      "start_frame": 4614,
+      "end_frame": 4641,
+      "start_time": "2:33",
+      "end_time": "2:34",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "retreat",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 13,
+      "start_frame": 4743,
+      "end_frame": 4860,
+      "start_time": "2:38",
+      "end_time": "2:42",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "advance",
+        "advance",
+        "advance",
+        "lunge",
+        "retreat",
+        "defense",
+        "attack",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 14,
+      "start_frame": 4902,
+      "end_frame": 5124,
+      "start_time": "2:43",
+      "end_time": "2:50",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "fleche",
+        "retreat",
+        "fleche",
+        "stationary",
+        "stationary",
+        "retreat",
+        "fleche",
+        "advance",
+        "retreat",
+        "defense",
+        "attack",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 15,
+      "start_frame": 5274,
+      "end_frame": 5301,
+      "start_time": "2:55",
+      "end_time": "2:56",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 16,
+      "start_frame": 5391,
+      "end_frame": 5463,
+      "start_time": "2:59",
+      "end_time": "3:02",
+      "trigger": "scoring",
+      "outcome": "touch_right",
+      "action_sequence": [
+        "advance",
+        "advance",
+        "advance",
+        "fleche",
+        "defense",
+        "attack",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 17,
+      "start_frame": 5499,
+      "end_frame": 5784,
+      "start_time": "3:03",
+      "end_time": "3:12",
+      "trigger": "scoring",
+      "outcome": "touch_right",
+      "action_sequence": [
+        "retreat",
+        "fleche",
+        "fleche",
+        "fleche",
+        "advance",
+        "advance",
+        "fleche",
+        "retreat",
+        "retreat",
+        "fleche",
+        "advance",
+        "retreat",
+        "fleche",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 18,
+      "start_frame": 5835,
+      "end_frame": 5967,
+      "start_time": "3:14",
+      "end_time": "3:19",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "retreat",
+        "advance",
+        "advance",
+        "advance",
+        "retreat",
+        "fleche",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 19,
+      "start_frame": 6003,
+      "end_frame": 6327,
+      "start_time": "3:20",
+      "end_time": "3:31",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "stationary",
+        "fleche",
+        "stationary",
+        "retreat",
+        "retreat",
+        "fleche",
+        "retreat",
+        "defense",
+        "attack",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 20,
+      "start_frame": 6402,
+      "end_frame": 6507,
+      "start_time": "3:33",
+      "end_time": "3:37",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "fleche",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.8,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 21,
+      "start_frame": 6543,
+      "end_frame": 6780,
+      "start_time": "3:38",
+      "end_time": "3:46",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "stationary",
+        "fleche",
+        "fleche",
+        "advance",
+        "fleche",
+        "advance",
+        "advance",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 22,
+      "start_frame": 6813,
+      "end_frame": 6858,
+      "start_time": "3:47",
+      "end_time": "3:48",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "retreat",
+        "fleche",
+        "advance",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 23,
+      "start_frame": 6900,
+      "end_frame": 6930,
+      "start_time": "3:50",
+      "end_time": "3:51",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "retreat",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 24,
+      "start_frame": 6966,
+      "end_frame": 7122,
+      "start_time": "3:52",
+      "end_time": "3:57",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "retreat",
+        "fleche",
+        "lunge",
+        "advance",
+        "stationary",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 25,
+      "start_frame": 7416,
+      "end_frame": 7440,
+      "start_time": "4:07",
+      "end_time": "4:08",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "stationary",
+        "fleche",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 26,
+      "start_frame": 7497,
+      "end_frame": 7578,
+      "start_time": "4:10",
+      "end_time": "4:12",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "retreat",
+        "retreat",
+        "fleche",
+        "defense",
+        "attack",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 27,
+      "start_frame": 7626,
+      "end_frame": 7650,
+      "start_time": "4:14",
+      "end_time": "4:15",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "retreat",
+        "lunge",
+        "defense",
+        "attack",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 28,
+      "start_frame": 7704,
+      "end_frame": 7806,
+      "start_time": "4:17",
+      "end_time": "4:20",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "retreat",
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 29,
+      "start_frame": 8091,
+      "end_frame": 8235,
+      "start_time": "4:29",
+      "end_time": "4:34",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "stationary",
+        "advance",
+        "advance",
+        "fleche",
+        "fleche",
+        "lunge",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 30,
+      "start_frame": 8274,
+      "end_frame": 8328,
+      "start_time": "4:36",
+      "end_time": "4:37",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "lunge",
+        "advance",
+        "retreat",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 31,
+      "start_frame": 8388,
+      "end_frame": 8484,
+      "start_time": "4:39",
+      "end_time": "4:43",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "fleche",
+        "advance",
+        "retreat",
+        "retreat",
+        "fleche",
+        "defense",
+        "attack",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 32,
+      "start_frame": 8532,
+      "end_frame": 8622,
+      "start_time": "4:44",
+      "end_time": "4:47",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "retreat",
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 33,
+      "start_frame": 8655,
+      "end_frame": 8682,
+      "start_time": "4:48",
+      "end_time": "4:49",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 34,
+      "start_frame": 8748,
+      "end_frame": 8814,
+      "start_time": "4:51",
+      "end_time": "4:54",
+      "trigger": "scoring",
+      "outcome": "touch_right",
+      "action_sequence": [
+        "retreat",
+        "fleche",
+        "advance",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 35,
+      "start_frame": 9063,
+      "end_frame": 9201,
+      "start_time": "5:02",
+      "end_time": "5:07",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "stationary",
+        "fleche",
+        "fleche",
+        "advance",
+        "defense",
+        "attack",
+        "parade"
+      ],
+      "confidence": 0.8,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 36,
+      "start_frame": 9255,
+      "end_frame": 9330,
+      "start_time": "5:08",
+      "end_time": "5:11",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "retreat",
+        "fleche",
+        "advance",
+        "retreat",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 37,
+      "start_frame": 9378,
+      "end_frame": 9567,
+      "start_time": "5:12",
+      "end_time": "5:19",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "retreat",
+        "fleche",
+        "retreat",
+        "advance",
+        "advance",
+        "fleche",
+        "retreat",
+        "defense",
+        "attack",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 38,
+      "start_frame": 9648,
+      "end_frame": 9717,
+      "start_time": "5:21",
+      "end_time": "5:24",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "retreat",
+        "advance",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 39,
+      "start_frame": 9795,
+      "end_frame": 9858,
+      "start_time": "5:26",
+      "end_time": "5:28",
+      "trigger": "scoring",
+      "outcome": "touch_right",
+      "action_sequence": [
+        "advance",
+        "advance",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 40,
+      "start_frame": 10104,
+      "end_frame": 10236,
+      "start_time": "5:37",
+      "end_time": "5:41",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "stationary",
+        "fleche",
+        "fleche",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 41,
+      "start_frame": 10284,
+      "end_frame": 10368,
+      "start_time": "5:43",
+      "end_time": "5:45",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "retreat",
+        "advance",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 42,
+      "start_frame": 10422,
+      "end_frame": 10482,
+      "start_time": "5:47",
+      "end_time": "5:49",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "retreat",
+        "fleche",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 43,
+      "start_frame": 10518,
+      "end_frame": 10587,
+      "start_time": "5:50",
+      "end_time": "5:53",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "retreat",
+        "stationary",
+        "retreat",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 44,
+      "start_frame": 10626,
+      "end_frame": 10644,
+      "start_time": "5:54",
+      "end_time": "5:55",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "retreat",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 45,
+      "start_frame": 10695,
+      "end_frame": 10779,
+      "start_time": "5:56",
+      "end_time": "5:59",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "retreat",
+        "fleche",
+        "retreat",
+        "fleche",
+        "advance",
+        "defense",
+        "attack",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 46,
+      "start_frame": 10830,
+      "end_frame": 10983,
+      "start_time": "6:01",
+      "end_time": "6:06",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "retreat",
+        "fleche",
+        "retreat",
+        "retreat",
+        "fleche",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 47,
+      "start_frame": 11061,
+      "end_frame": 11568,
+      "start_time": "6:09",
+      "end_time": "6:25",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "advance",
+        "stationary",
+        "lunge",
+        "advance",
+        "advance",
+        "advance",
+        "advance",
+        "retreat",
+        "advance",
+        "retreat",
+        "fleche",
+        "retreat",
+        "advance",
+        "fleche",
+        "advance",
+        "advance",
+        "advance",
+        "fleche",
+        "fleche",
+        "retreat",
+        "defense",
+        "attack",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 48,
+      "start_frame": 11601,
+      "end_frame": 11676,
+      "start_time": "6:27",
+      "end_time": "6:29",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "fleche",
+        "advance",
+        "advance",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 49,
+      "start_frame": 13071,
+      "end_frame": 13125,
+      "start_time": "7:16",
+      "end_time": "7:17",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "stationary",
+        "advance",
+        "retreat",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 50,
+      "start_frame": 13167,
+      "end_frame": 13215,
+      "start_time": "7:19",
+      "end_time": "7:20",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "stationary",
+        "advance",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 51,
+      "start_frame": 13254,
+      "end_frame": 13311,
+      "start_time": "7:22",
+      "end_time": "7:24",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "fleche",
+        "stationary",
+        "defense",
+        "attack",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 52,
+      "start_frame": 13392,
+      "end_frame": 13413,
+      "start_time": "7:26",
+      "end_time": "7:27",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 53,
+      "start_frame": 13446,
+      "end_frame": 13473,
+      "start_time": "7:28",
+      "end_time": "7:29",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "advance",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 54,
+      "start_frame": 13515,
+      "end_frame": 13542,
+      "start_time": "7:30",
+      "end_time": "7:31",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 55,
+      "start_frame": 15996,
+      "end_frame": 16014,
+      "start_time": "8:53",
+      "end_time": "8:54",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "stationary",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 56,
+      "start_frame": 16059,
+      "end_frame": 16134,
+      "start_time": "8:55",
+      "end_time": "8:58",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "stationary",
+        "advance",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 57,
+      "start_frame": 16356,
+      "end_frame": 16530,
+      "start_time": "9:05",
+      "end_time": "9:11",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "advance",
+        "fleche",
+        "fleche",
+        "advance",
+        "retreat",
+        "fleche",
+        "stationary",
+        "lunge",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 58,
+      "start_frame": 16575,
+      "end_frame": 16587,
+      "start_time": "9:13",
+      "end_time": "9:13",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 59,
+      "start_frame": 16620,
+      "end_frame": 16827,
+      "start_time": "9:14",
+      "end_time": "9:21",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "retreat",
+        "retreat",
+        "advance",
+        "retreat",
+        "retreat",
+        "stationary",
+        "advance",
+        "fleche",
+        "fleche",
+        "lunge",
+        "fleche",
+        "retreat",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 60,
+      "start_frame": 16884,
+      "end_frame": 17007,
+      "start_time": "9:23",
+      "end_time": "9:27",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "stationary",
+        "fleche",
+        "advance",
+        "advance",
+        "advance",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 61,
+      "start_frame": 17169,
+      "end_frame": 17319,
+      "start_time": "9:32",
+      "end_time": "9:37",
+      "trigger": "scoring",
+      "outcome": "touch_right",
+      "action_sequence": [
+        "lunge",
+        "stationary",
+        "fleche",
+        "fleche",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 62,
+      "start_frame": 17355,
+      "end_frame": 17430,
+      "start_time": "9:39",
+      "end_time": "9:41",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "advance",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 63,
+      "start_frame": 17616,
+      "end_frame": 17679,
+      "start_time": "9:47",
+      "end_time": "9:49",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "lunge",
+        "stationary",
+        "advance",
+        "defense",
+        "attack",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 64,
+      "start_frame": 17715,
+      "end_frame": 17730,
+      "start_time": "9:51",
+      "end_time": "9:51",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "stationary",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 65,
+      "start_frame": 17856,
+      "end_frame": 18057,
+      "start_time": "9:55",
+      "end_time": "10:02",
+      "trigger": "scoring",
+      "outcome": "touch_right",
+      "action_sequence": [
+        "advance",
+        "fleche",
+        "retreat",
+        "advance",
+        "fleche",
+        "retreat",
+        "advance",
+        "stationary",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 66,
+      "start_frame": 18411,
+      "end_frame": 18456,
+      "start_time": "10:14",
+      "end_time": "10:15",
+      "trigger": "scoring",
+      "outcome": "touch_right",
+      "action_sequence": [
+        "stationary",
+        "stationary",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 67,
+      "start_frame": 18528,
+      "end_frame": 18543,
+      "start_time": "10:18",
+      "end_time": "10:18",
+      "trigger": "scoring",
+      "outcome": "touch_right",
+      "action_sequence": [
+        "stationary",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 68,
+      "start_frame": 18582,
+      "end_frame": 18843,
+      "start_time": "10:20",
+      "end_time": "10:28",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "stationary",
+        "advance",
+        "retreat",
+        "advance",
+        "stationary",
+        "fleche",
+        "advance",
+        "retreat",
+        "fleche",
+        "retreat",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 69,
+      "start_frame": 19053,
+      "end_frame": 19365,
+      "start_time": "10:35",
+      "end_time": "10:46",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "stationary",
+        "fleche",
+        "advance",
+        "fleche",
+        "retreat",
+        "advance",
+        "fleche",
+        "fleche",
+        "retreat",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 70,
+      "start_frame": 19431,
+      "end_frame": 19455,
+      "start_time": "10:48",
+      "end_time": "10:49",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "fleche",
+        "retreat",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 71,
+      "start_frame": 19632,
+      "end_frame": 19698,
+      "start_time": "10:55",
+      "end_time": "10:57",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "stationary",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 72,
+      "start_frame": 19731,
+      "end_frame": 20175,
+      "start_time": "10:58",
+      "end_time": "11:13",
+      "trigger": "scoring",
+      "outcome": "touch_right",
+      "action_sequence": [
+        "stationary",
+        "fleche",
+        "retreat",
+        "retreat",
+        "fleche",
+        "advance",
+        "retreat",
+        "stationary",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 73,
+      "start_frame": 20319,
+      "end_frame": 20352,
+      "start_time": "11:17",
+      "end_time": "11:19",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 74,
+      "start_frame": 20406,
+      "end_frame": 20571,
+      "start_time": "11:20",
+      "end_time": "11:26",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "retreat",
+        "fleche",
+        "advance",
+        "fleche",
+        "fleche",
+        "retreat",
+        "fleche",
+        "retreat",
+        "defense",
+        "attack",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 75,
+      "start_frame": 20751,
+      "end_frame": 21015,
+      "start_time": "11:32",
+      "end_time": "11:41",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "fleche",
+        "retreat",
+        "advance",
+        "fleche",
+        "fleche",
+        "fleche",
+        "retreat",
+        "stationary",
+        "defense",
+        "attack",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 76,
+      "start_frame": 21111,
+      "end_frame": 21144,
+      "start_time": "11:44",
+      "end_time": "11:45",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "retreat",
+        "advance",
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 77,
+      "start_frame": 21216,
+      "end_frame": 21588,
+      "start_time": "11:47",
+      "end_time": "12:00",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "retreat",
+        "fleche",
+        "stationary",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 78,
+      "start_frame": 21621,
+      "end_frame": 21918,
+      "start_time": "12:01",
+      "end_time": "12:11",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "stationary",
+        "advance",
+        "stationary",
+        "retreat",
+        "stationary",
+        "advance",
+        "fleche",
+        "retreat",
+        "stationary",
+        "fleche",
+        "fleche",
+        "retreat",
+        "advance",
+        "fleche",
+        "advance",
+        "retreat",
+        "defense",
+        "attack",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 79,
+      "start_frame": 21969,
+      "end_frame": 22008,
+      "start_time": "12:13",
+      "end_time": "12:14",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "fleche",
+        "retreat",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 80,
+      "start_frame": 22116,
+      "end_frame": 22134,
+      "start_time": "12:17",
+      "end_time": "12:18",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "stationary",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 81,
+      "start_frame": 22638,
+      "end_frame": 22776,
+      "start_time": "12:35",
+      "end_time": "12:39",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "stationary",
+        "fleche",
+        "fleche",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 82,
+      "start_frame": 22809,
+      "end_frame": 23013,
+      "start_time": "12:41",
+      "end_time": "12:47",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "fleche",
+        "advance",
+        "retreat",
+        "fleche",
+        "advance",
+        "fleche",
+        "advance",
+        "fleche",
+        "defense",
+        "attack",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 83,
+      "start_frame": 23052,
+      "end_frame": 23373,
+      "start_time": "12:49",
+      "end_time": "12:59",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "advance",
+        "fleche",
+        "stationary",
+        "advance",
+        "advance",
+        "stationary",
+        "stationary",
+        "advance",
+        "advance",
+        "defense",
+        "attack",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 84,
+      "start_frame": 23460,
+      "end_frame": 23535,
+      "start_time": "13:02",
+      "end_time": "13:05",
+      "trigger": "scoring",
+      "outcome": "touch_right",
+      "action_sequence": [
+        "fleche",
+        "fleche",
+        "advance",
+        "retreat",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 85,
+      "start_frame": 23853,
+      "end_frame": 24168,
+      "start_time": "13:15",
+      "end_time": "13:26",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "stationary",
+        "stationary",
+        "advance",
+        "fleche",
+        "retreat",
+        "advance",
+        "fleche",
+        "retreat",
+        "retreat",
+        "advance",
+        "fleche",
+        "advance",
+        "fleche",
+        "advance",
+        "advance",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 86,
+      "start_frame": 24432,
+      "end_frame": 24912,
+      "start_time": "13:35",
+      "end_time": "13:51",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "advance",
+        "advance",
+        "stationary",
+        "advance",
+        "advance",
+        "retreat",
+        "fleche",
+        "lunge",
+        "advance",
+        "retreat",
+        "advance",
+        "fleche",
+        "advance",
+        "fleche",
+        "advance",
+        "retreat",
+        "fleche",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 87,
+      "start_frame": 24978,
+      "end_frame": 25068,
+      "start_time": "13:53",
+      "end_time": "13:56",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "lunge",
+        "fleche",
+        "retreat",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 88,
+      "start_frame": 25104,
+      "end_frame": 25320,
+      "start_time": "13:57",
+      "end_time": "14:04",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "retreat",
+        "fleche",
+        "advance",
+        "advance",
+        "advance",
+        "advance",
+        "retreat",
+        "fleche",
+        "defense",
+        "attack",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 89,
+      "start_frame": 25368,
+      "end_frame": 25803,
+      "start_time": "14:06",
+      "end_time": "14:20",
+      "trigger": "scoring",
+      "outcome": "touch_right",
+      "action_sequence": [
+        "retreat",
+        "fleche",
+        "advance",
+        "retreat",
+        "fleche",
+        "stationary",
+        "retreat",
+        "advance",
+        "advance",
+        "retreat",
+        "retreat",
+        "fleche",
+        "defense",
+        "attack",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 90,
+      "start_frame": 27207,
+      "end_frame": 27288,
+      "start_time": "15:07",
+      "end_time": "15:10",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 91,
+      "start_frame": 27525,
+      "end_frame": 27630,
+      "start_time": "15:18",
+      "end_time": "15:21",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "advance",
+        "fleche",
+        "fleche",
+        "fleche",
+        "advance",
+        "stationary",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 92,
+      "start_frame": 27663,
+      "end_frame": 27720,
+      "start_time": "15:23",
+      "end_time": "15:24",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "advance",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 93,
+      "start_frame": 27756,
+      "end_frame": 27840,
+      "start_time": "15:26",
+      "end_time": "15:28",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "fleche",
+        "retreat",
+        "advance",
+        "fleche",
+        "stationary",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 94,
+      "start_frame": 27876,
+      "end_frame": 27906,
+      "start_time": "15:30",
+      "end_time": "15:31",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "fleche",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 95,
+      "start_frame": 27954,
+      "end_frame": 28143,
+      "start_time": "15:32",
+      "end_time": "15:39",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "retreat",
+        "retreat",
+        "advance",
+        "fleche",
+        "advance",
+        "advance",
+        "advance",
+        "advance",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.8,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 96,
+      "start_frame": 28302,
+      "end_frame": 28455,
+      "start_time": "15:44",
+      "end_time": "15:49",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "fleche",
+        "advance",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_UzQ8Ci7lft8",
+      "phrase_id": 97,
+      "start_frame": 28530,
+      "end_frame": 28557,
+      "start_time": "15:51",
+      "end_time": "15:52",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 1,
+      "start_frame": 1170,
+      "end_frame": 1188,
+      "start_time": "0:39",
+      "end_time": "0:39",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "advance",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 2,
+      "start_frame": 1344,
+      "end_frame": 1419,
+      "start_time": "0:44",
+      "end_time": "0:47",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "retreat",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 3,
+      "start_frame": 1482,
+      "end_frame": 1572,
+      "start_time": "0:49",
+      "end_time": "0:52",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "stationary",
+        "fleche",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 4,
+      "start_frame": 1620,
+      "end_frame": 1638,
+      "start_time": "0:54",
+      "end_time": "0:54",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "retreat"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 5,
+      "start_frame": 2769,
+      "end_frame": 2817,
+      "start_time": "1:32",
+      "end_time": "1:33",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 6,
+      "start_frame": 2889,
+      "end_frame": 3051,
+      "start_time": "1:36",
+      "end_time": "1:41",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "retreat",
+        "advance",
+        "fleche",
+        "stationary",
+        "defense",
+        "attack",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 7,
+      "start_frame": 3135,
+      "end_frame": 3288,
+      "start_time": "1:44",
+      "end_time": "1:49",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "retreat",
+        "fleche",
+        "advance",
+        "lunge",
+        "retreat",
+        "fleche",
+        "stationary",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 8,
+      "start_frame": 3414,
+      "end_frame": 3429,
+      "start_time": "1:53",
+      "end_time": "1:54",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 9,
+      "start_frame": 3741,
+      "end_frame": 3804,
+      "start_time": "2:04",
+      "end_time": "2:06",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "stationary",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 10,
+      "start_frame": 3954,
+      "end_frame": 3996,
+      "start_time": "2:11",
+      "end_time": "2:13",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "stationary",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 11,
+      "start_frame": 4215,
+      "end_frame": 4284,
+      "start_time": "2:20",
+      "end_time": "2:22",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "stationary",
+        "stationary",
+        "stationary",
+        "stationary",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 12,
+      "start_frame": 4467,
+      "end_frame": 4500,
+      "start_time": "2:29",
+      "end_time": "2:30",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "stationary",
+        "advance",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 13,
+      "start_frame": 4659,
+      "end_frame": 4680,
+      "start_time": "2:35",
+      "end_time": "2:36",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "stationary",
+        "advance",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 14,
+      "start_frame": 5304,
+      "end_frame": 5340,
+      "start_time": "2:56",
+      "end_time": "2:58",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "stationary",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 15,
+      "start_frame": 5391,
+      "end_frame": 5436,
+      "start_time": "2:59",
+      "end_time": "3:01",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "advance",
+        "stationary",
+        "defense",
+        "attack",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 16,
+      "start_frame": 5535,
+      "end_frame": 5553,
+      "start_time": "3:04",
+      "end_time": "3:05",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 17,
+      "start_frame": 5628,
+      "end_frame": 5694,
+      "start_time": "3:07",
+      "end_time": "3:09",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "lunge",
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 18,
+      "start_frame": 5739,
+      "end_frame": 5892,
+      "start_time": "3:11",
+      "end_time": "3:16",
+      "trigger": "scoring",
+      "outcome": "touch_right",
+      "action_sequence": [
+        "advance",
+        "advance",
+        "retreat",
+        "fleche",
+        "fleche",
+        "retreat",
+        "defense",
+        "attack",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 19,
+      "start_frame": 6090,
+      "end_frame": 6201,
+      "start_time": "3:23",
+      "end_time": "3:26",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "retreat",
+        "advance",
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 20,
+      "start_frame": 6237,
+      "end_frame": 6294,
+      "start_time": "3:28",
+      "end_time": "3:30",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "advance",
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 21,
+      "start_frame": 6510,
+      "end_frame": 6597,
+      "start_time": "3:37",
+      "end_time": "3:40",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "fleche",
+        "defense",
+        "attack",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 22,
+      "start_frame": 6630,
+      "end_frame": 6711,
+      "start_time": "3:41",
+      "end_time": "3:43",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "fleche",
+        "advance",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 23,
+      "start_frame": 6744,
+      "end_frame": 6804,
+      "start_time": "3:45",
+      "end_time": "3:47",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "retreat",
+        "fleche",
+        "defense",
+        "attack",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 24,
+      "start_frame": 6960,
+      "end_frame": 7023,
+      "start_time": "3:52",
+      "end_time": "3:54",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "stationary",
+        "advance",
+        "stationary",
+        "advance",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 25,
+      "start_frame": 7086,
+      "end_frame": 7137,
+      "start_time": "3:56",
+      "end_time": "3:58",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 26,
+      "start_frame": 7350,
+      "end_frame": 7500,
+      "start_time": "4:05",
+      "end_time": "4:10",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "advance",
+        "fleche",
+        "fleche",
+        "advance",
+        "fleche",
+        "lunge",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 27,
+      "start_frame": 7632,
+      "end_frame": 7653,
+      "start_time": "4:14",
+      "end_time": "4:15",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "stationary",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 28,
+      "start_frame": 7704,
+      "end_frame": 7827,
+      "start_time": "4:17",
+      "end_time": "4:21",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "fleche",
+        "advance",
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 29,
+      "start_frame": 8025,
+      "end_frame": 8046,
+      "start_time": "4:27",
+      "end_time": "4:28",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 30,
+      "start_frame": 8085,
+      "end_frame": 8187,
+      "start_time": "4:29",
+      "end_time": "4:33",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "advance",
+        "fleche",
+        "fleche",
+        "defense",
+        "attack",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 31,
+      "start_frame": 8262,
+      "end_frame": 8280,
+      "start_time": "4:35",
+      "end_time": "4:36",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "advance",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 32,
+      "start_frame": 8325,
+      "end_frame": 8475,
+      "start_time": "4:37",
+      "end_time": "4:42",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "retreat",
+        "advance",
+        "lunge",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 33,
+      "start_frame": 8643,
+      "end_frame": 8679,
+      "start_time": "4:48",
+      "end_time": "4:49",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "stationary",
+        "attack"
+      ],
+      "confidence": 0.8,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 34,
+      "start_frame": 8721,
+      "end_frame": 8952,
+      "start_time": "4:50",
+      "end_time": "4:58",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "fleche",
+        "retreat",
+        "advance",
+        "fleche",
+        "fleche",
+        "retreat",
+        "fleche",
+        "fleche",
+        "retreat",
+        "retreat",
+        "fleche",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 35,
+      "start_frame": 9012,
+      "end_frame": 9090,
+      "start_time": "5:00",
+      "end_time": "5:03",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "retreat",
+        "fleche",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 36,
+      "start_frame": 9132,
+      "end_frame": 9192,
+      "start_time": "5:04",
+      "end_time": "5:06",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "retreat",
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 37,
+      "start_frame": 9249,
+      "end_frame": 9432,
+      "start_time": "5:08",
+      "end_time": "5:14",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "retreat",
+        "fleche",
+        "advance",
+        "advance",
+        "fleche",
+        "fleche",
+        "advance",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 38,
+      "start_frame": 9690,
+      "end_frame": 9717,
+      "start_time": "5:23",
+      "end_time": "5:24",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "lunge",
+        "fleche",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 39,
+      "start_frame": 9753,
+      "end_frame": 9807,
+      "start_time": "5:25",
+      "end_time": "5:27",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 40,
+      "start_frame": 10062,
+      "end_frame": 10131,
+      "start_time": "5:35",
+      "end_time": "5:38",
+      "trigger": "scoring",
+      "outcome": "touch_right",
+      "action_sequence": [
+        "fleche",
+        "advance",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 41,
+      "start_frame": 10257,
+      "end_frame": 10272,
+      "start_time": "5:42",
+      "end_time": "5:42",
+      "trigger": "scoring",
+      "outcome": "touch_right",
+      "action_sequence": [
+        "stationary",
+        "fleche",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 42,
+      "start_frame": 10308,
+      "end_frame": 10353,
+      "start_time": "5:43",
+      "end_time": "5:45",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 43,
+      "start_frame": 10392,
+      "end_frame": 10500,
+      "start_time": "5:46",
+      "end_time": "5:50",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "retreat",
+        "retreat",
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 44,
+      "start_frame": 10629,
+      "end_frame": 10797,
+      "start_time": "5:54",
+      "end_time": "6:00",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "lunge",
+        "advance",
+        "fleche",
+        "advance",
+        "advance",
+        "advance",
+        "stationary",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 45,
+      "start_frame": 10836,
+      "end_frame": 10908,
+      "start_time": "6:01",
+      "end_time": "6:03",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "retreat",
+        "defense",
+        "attack",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 46,
+      "start_frame": 10941,
+      "end_frame": 10989,
+      "start_time": "6:05",
+      "end_time": "6:06",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "fleche",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 47,
+      "start_frame": 11202,
+      "end_frame": 11364,
+      "start_time": "6:13",
+      "end_time": "6:19",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "retreat",
+        "fleche",
+        "fleche",
+        "fleche",
+        "advance",
+        "stationary",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 48,
+      "start_frame": 11430,
+      "end_frame": 11523,
+      "start_time": "6:21",
+      "end_time": "6:24",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "advance",
+        "retreat",
+        "fleche",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 49,
+      "start_frame": 11568,
+      "end_frame": 11580,
+      "start_time": "6:25",
+      "end_time": "6:26",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 50,
+      "start_frame": 11631,
+      "end_frame": 11703,
+      "start_time": "6:28",
+      "end_time": "6:30",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "retreat",
+        "advance",
+        "advance",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 51,
+      "start_frame": 11760,
+      "end_frame": 11784,
+      "start_time": "6:32",
+      "end_time": "6:33",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 52,
+      "start_frame": 11925,
+      "end_frame": 11943,
+      "start_time": "6:37",
+      "end_time": "6:38",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 53,
+      "start_frame": 12012,
+      "end_frame": 12204,
+      "start_time": "6:40",
+      "end_time": "6:47",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "advance",
+        "retreat",
+        "fleche",
+        "fleche",
+        "defense",
+        "attack",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 54,
+      "start_frame": 12405,
+      "end_frame": 12486,
+      "start_time": "6:53",
+      "end_time": "6:56",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "fleche",
+        "advance",
+        "fleche",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 55,
+      "start_frame": 12603,
+      "end_frame": 12642,
+      "start_time": "7:00",
+      "end_time": "7:01",
+      "trigger": "scoring",
+      "outcome": "touch_right",
+      "action_sequence": [
+        "advance",
+        "stationary",
+        "advance",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 56,
+      "start_frame": 12675,
+      "end_frame": 12789,
+      "start_time": "7:02",
+      "end_time": "7:06",
+      "trigger": "scoring",
+      "outcome": "touch_right",
+      "action_sequence": [
+        "advance",
+        "fleche",
+        "retreat",
+        "fleche",
+        "lunge",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 57,
+      "start_frame": 13005,
+      "end_frame": 13047,
+      "start_time": "7:13",
+      "end_time": "7:15",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "retreat",
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 58,
+      "start_frame": 13098,
+      "end_frame": 13131,
+      "start_time": "7:17",
+      "end_time": "7:18",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 59,
+      "start_frame": 13305,
+      "end_frame": 13464,
+      "start_time": "7:23",
+      "end_time": "7:29",
+      "trigger": "scoring",
+      "outcome": "touch_right",
+      "action_sequence": [
+        "retreat",
+        "fleche",
+        "fleche",
+        "lunge",
+        "fleche",
+        "advance",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 60,
+      "start_frame": 13704,
+      "end_frame": 13779,
+      "start_time": "7:37",
+      "end_time": "7:39",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "retreat",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 61,
+      "start_frame": 14265,
+      "end_frame": 14370,
+      "start_time": "7:55",
+      "end_time": "7:59",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "fleche",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 62,
+      "start_frame": 14487,
+      "end_frame": 14592,
+      "start_time": "8:03",
+      "end_time": "8:06",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "retreat",
+        "fleche",
+        "defense",
+        "attack",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 63,
+      "start_frame": 14703,
+      "end_frame": 14820,
+      "start_time": "8:10",
+      "end_time": "8:14",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "stationary",
+        "advance",
+        "defense",
+        "attack",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 64,
+      "start_frame": 14919,
+      "end_frame": 15042,
+      "start_time": "8:17",
+      "end_time": "8:21",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "retreat",
+        "fleche",
+        "retreat",
+        "fleche",
+        "lunge",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 65,
+      "start_frame": 15213,
+      "end_frame": 15225,
+      "start_time": "8:27",
+      "end_time": "8:28",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "lunge",
+        "advance",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 66,
+      "start_frame": 15261,
+      "end_frame": 15423,
+      "start_time": "8:29",
+      "end_time": "8:34",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "stationary",
+        "advance",
+        "advance",
+        "lunge",
+        "retreat",
+        "fleche",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 67,
+      "start_frame": 15717,
+      "end_frame": 15771,
+      "start_time": "8:44",
+      "end_time": "8:46",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "fleche",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 68,
+      "start_frame": 15981,
+      "end_frame": 16041,
+      "start_time": "8:53",
+      "end_time": "8:55",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "advance",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 69,
+      "start_frame": 16089,
+      "end_frame": 16188,
+      "start_time": "8:56",
+      "end_time": "9:00",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "advance",
+        "lunge",
+        "stationary",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 70,
+      "start_frame": 16275,
+      "end_frame": 16305,
+      "start_time": "9:03",
+      "end_time": "9:04",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "stationary",
+        "advance",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 71,
+      "start_frame": 16470,
+      "end_frame": 16524,
+      "start_time": "9:09",
+      "end_time": "9:11",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "retreat",
+        "fleche",
+        "defense",
+        "attack",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 72,
+      "start_frame": 16566,
+      "end_frame": 16707,
+      "start_time": "9:12",
+      "end_time": "9:17",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "lunge",
+        "advance",
+        "advance",
+        "fleche",
+        "defense",
+        "attack",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 73,
+      "start_frame": 17001,
+      "end_frame": 17190,
+      "start_time": "9:27",
+      "end_time": "9:33",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "fleche",
+        "retreat",
+        "fleche",
+        "fleche",
+        "retreat",
+        "advance",
+        "advance",
+        "fleche",
+        "lunge",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 74,
+      "start_frame": 17424,
+      "end_frame": 17523,
+      "start_time": "9:41",
+      "end_time": "9:44",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "advance",
+        "advance",
+        "advance",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 75,
+      "start_frame": 17679,
+      "end_frame": 17703,
+      "start_time": "9:49",
+      "end_time": "9:50",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "stationary",
+        "advance",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 76,
+      "start_frame": 18093,
+      "end_frame": 18108,
+      "start_time": "10:03",
+      "end_time": "10:04",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 77,
+      "start_frame": 18159,
+      "end_frame": 18288,
+      "start_time": "10:05",
+      "end_time": "10:10",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "stationary",
+        "fleche",
+        "retreat",
+        "fleche",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 78,
+      "start_frame": 18351,
+      "end_frame": 18375,
+      "start_time": "10:12",
+      "end_time": "10:13",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 79,
+      "start_frame": 18408,
+      "end_frame": 18438,
+      "start_time": "10:14",
+      "end_time": "10:15",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "lunge",
+        "fleche",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 80,
+      "start_frame": 18477,
+      "end_frame": 18561,
+      "start_time": "10:16",
+      "end_time": "10:19",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "advance",
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 81,
+      "start_frame": 18600,
+      "end_frame": 18699,
+      "start_time": "10:20",
+      "end_time": "10:23",
+      "trigger": "scoring",
+      "outcome": "touch_right",
+      "action_sequence": [
+        "retreat",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 82,
+      "start_frame": 18858,
+      "end_frame": 18879,
+      "start_time": "10:29",
+      "end_time": "10:29",
+      "trigger": "scoring",
+      "outcome": "touch_right",
+      "action_sequence": [
+        "advance",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 83,
+      "start_frame": 18912,
+      "end_frame": 18960,
+      "start_time": "10:31",
+      "end_time": "10:32",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "fleche",
+        "advance",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 84,
+      "start_frame": 19068,
+      "end_frame": 19083,
+      "start_time": "10:36",
+      "end_time": "10:36",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "stationary",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 85,
+      "start_frame": 19161,
+      "end_frame": 19224,
+      "start_time": "10:39",
+      "end_time": "10:41",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 86,
+      "start_frame": 19365,
+      "end_frame": 19434,
+      "start_time": "10:46",
+      "end_time": "10:48",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "retreat",
+        "advance",
+        "fleche",
+        "defense",
+        "attack",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 87,
+      "start_frame": 19617,
+      "end_frame": 19644,
+      "start_time": "10:54",
+      "end_time": "10:55",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "stationary",
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 88,
+      "start_frame": 19734,
+      "end_frame": 19809,
+      "start_time": "10:58",
+      "end_time": "11:00",
+      "trigger": "scoring",
+      "outcome": "touch_right",
+      "action_sequence": [
+        "advance",
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 89,
+      "start_frame": 19914,
+      "end_frame": 20010,
+      "start_time": "11:04",
+      "end_time": "11:07",
+      "trigger": "scoring",
+      "outcome": "touch_right",
+      "action_sequence": [
+        "fleche",
+        "fleche",
+        "fleche",
+        "retreat",
+        "fleche",
+        "advance",
+        "defense",
+        "attack",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 90,
+      "start_frame": 20043,
+      "end_frame": 20124,
+      "start_time": "11:08",
+      "end_time": "11:11",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "retreat",
+        "advance",
+        "stationary",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 91,
+      "start_frame": 20274,
+      "end_frame": 20313,
+      "start_time": "11:16",
+      "end_time": "11:17",
+      "trigger": "scoring",
+      "outcome": "touch_right",
+      "action_sequence": [
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 92,
+      "start_frame": 20463,
+      "end_frame": 20631,
+      "start_time": "11:22",
+      "end_time": "11:28",
+      "trigger": "scoring",
+      "outcome": "touch_right",
+      "action_sequence": [
+        "lunge",
+        "lunge",
+        "stationary",
+        "fleche",
+        "fleche",
+        "fleche",
+        "retreat",
+        "advance",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_hKUXgUsDOKE",
+      "phrase_id": 93,
+      "start_frame": 20697,
+      "end_frame": 20787,
+      "start_time": "11:30",
+      "end_time": "11:33",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "advance",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_zTsHbehQrC0",
+      "phrase_id": 1,
+      "start_frame": 90,
+      "end_frame": 123,
+      "start_time": "0:03",
+      "end_time": "0:04",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "stationary",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_zTsHbehQrC0",
+      "phrase_id": 2,
+      "start_frame": 246,
+      "end_frame": 354,
+      "start_time": "0:08",
+      "end_time": "0:11",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "retreat",
+        "fleche",
+        "stationary",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_zTsHbehQrC0",
+      "phrase_id": 3,
+      "start_frame": 852,
+      "end_frame": 882,
+      "start_time": "0:28",
+      "end_time": "0:29",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "stationary",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_zTsHbehQrC0",
+      "phrase_id": 4,
+      "start_frame": 1059,
+      "end_frame": 1089,
+      "start_time": "0:35",
+      "end_time": "0:36",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "stationary",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_zTsHbehQrC0",
+      "phrase_id": 5,
+      "start_frame": 1221,
+      "end_frame": 1272,
+      "start_time": "0:40",
+      "end_time": "0:42",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_zTsHbehQrC0",
+      "phrase_id": 6,
+      "start_frame": 1344,
+      "end_frame": 1383,
+      "start_time": "0:44",
+      "end_time": "0:46",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "stationary",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_zTsHbehQrC0",
+      "phrase_id": 7,
+      "start_frame": 1443,
+      "end_frame": 1488,
+      "start_time": "0:48",
+      "end_time": "0:49",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_zTsHbehQrC0",
+      "phrase_id": 8,
+      "start_frame": 1566,
+      "end_frame": 1602,
+      "start_time": "0:52",
+      "end_time": "0:53",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "advance",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_zTsHbehQrC0",
+      "phrase_id": 9,
+      "start_frame": 1653,
+      "end_frame": 1701,
+      "start_time": "0:55",
+      "end_time": "0:56",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_zTsHbehQrC0",
+      "phrase_id": 10,
+      "start_frame": 1782,
+      "end_frame": 1809,
+      "start_time": "0:59",
+      "end_time": "1:00",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "fleche",
+        "retreat",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_zTsHbehQrC0",
+      "phrase_id": 11,
+      "start_frame": 1872,
+      "end_frame": 1929,
+      "start_time": "1:02",
+      "end_time": "1:04",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_zTsHbehQrC0",
+      "phrase_id": 12,
+      "start_frame": 2016,
+      "end_frame": 2043,
+      "start_time": "1:07",
+      "end_time": "1:08",
+      "trigger": "scoring",
+      "outcome": "touch_right",
+      "action_sequence": [
+        "attack"
+      ],
+      "confidence": 0.8,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_zTsHbehQrC0",
+      "phrase_id": 13,
+      "start_frame": 2109,
+      "end_frame": 2172,
+      "start_time": "1:10",
+      "end_time": "1:12",
+      "trigger": "scoring",
+      "outcome": "touch_right",
+      "action_sequence": [
+        "fleche",
+        "retreat",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_zTsHbehQrC0",
+      "phrase_id": 14,
+      "start_frame": 2334,
+      "end_frame": 2355,
+      "start_time": "1:17",
+      "end_time": "1:18",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "advance",
+        "stationary",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_zTsHbehQrC0",
+      "phrase_id": 15,
+      "start_frame": 2400,
+      "end_frame": 2448,
+      "start_time": "1:20",
+      "end_time": "1:21",
+      "trigger": "scoring",
+      "outcome": "touch_right",
+      "action_sequence": [
+        "fleche",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_zTsHbehQrC0",
+      "phrase_id": 16,
+      "start_frame": 2529,
+      "end_frame": 2568,
+      "start_time": "1:24",
+      "end_time": "1:25",
+      "trigger": "scoring",
+      "outcome": "touch_right",
+      "action_sequence": [
+        "stationary",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_zTsHbehQrC0",
+      "phrase_id": 17,
+      "start_frame": 2640,
+      "end_frame": 2685,
+      "start_time": "1:28",
+      "end_time": "1:29",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_zTsHbehQrC0",
+      "phrase_id": 18,
+      "start_frame": 2865,
+      "end_frame": 2919,
+      "start_time": "1:35",
+      "end_time": "1:37",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_zTsHbehQrC0",
+      "phrase_id": 19,
+      "start_frame": 3015,
+      "end_frame": 3081,
+      "start_time": "1:40",
+      "end_time": "1:42",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "retreat",
+        "stationary",
+        "advance",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_zTsHbehQrC0",
+      "phrase_id": 20,
+      "start_frame": 4197,
+      "end_frame": 4224,
+      "start_time": "2:20",
+      "end_time": "2:20",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "stationary",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_zTsHbehQrC0",
+      "phrase_id": 21,
+      "start_frame": 4281,
+      "end_frame": 4341,
+      "start_time": "2:22",
+      "end_time": "2:24",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "stationary",
+        "stationary",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_zTsHbehQrC0",
+      "phrase_id": 22,
+      "start_frame": 5418,
+      "end_frame": 5556,
+      "start_time": "3:00",
+      "end_time": "3:05",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "stationary",
+        "advance",
+        "stationary",
+        "stationary",
+        "lunge",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_zTsHbehQrC0",
+      "phrase_id": 23,
+      "start_frame": 5601,
+      "end_frame": 5616,
+      "start_time": "3:06",
+      "end_time": "3:07",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "stationary",
+        "advance",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_zTsHbehQrC0",
+      "phrase_id": 24,
+      "start_frame": 5745,
+      "end_frame": 5790,
+      "start_time": "3:11",
+      "end_time": "3:13",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "stationary",
+        "stationary",
+        "advance",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_zTsHbehQrC0",
+      "phrase_id": 25,
+      "start_frame": 5853,
+      "end_frame": 5898,
+      "start_time": "3:15",
+      "end_time": "3:16",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_zTsHbehQrC0",
+      "phrase_id": 26,
+      "start_frame": 6234,
+      "end_frame": 6264,
+      "start_time": "3:28",
+      "end_time": "3:29",
+      "trigger": "scoring",
+      "outcome": "touch_right",
+      "action_sequence": [
+        "advance",
+        "stationary",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_zTsHbehQrC0",
+      "phrase_id": 27,
+      "start_frame": 6318,
+      "end_frame": 6360,
+      "start_time": "3:30",
+      "end_time": "3:32",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "fleche",
+        "stationary",
+        "retreat",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_zTsHbehQrC0",
+      "phrase_id": 28,
+      "start_frame": 6477,
+      "end_frame": 6495,
+      "start_time": "3:36",
+      "end_time": "3:36",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "stationary",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_zTsHbehQrC0",
+      "phrase_id": 29,
+      "start_frame": 6555,
+      "end_frame": 6609,
+      "start_time": "3:38",
+      "end_time": "3:40",
+      "trigger": "scoring",
+      "outcome": "touch_right",
+      "action_sequence": [
+        "fleche",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_zTsHbehQrC0",
+      "phrase_id": 30,
+      "start_frame": 6747,
+      "end_frame": 6768,
+      "start_time": "3:45",
+      "end_time": "3:45",
+      "trigger": "scoring",
+      "outcome": "touch_right",
+      "action_sequence": [
+        "advance",
+        "stationary",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_zTsHbehQrC0",
+      "phrase_id": 31,
+      "start_frame": 6840,
+      "end_frame": 6888,
+      "start_time": "3:48",
+      "end_time": "3:49",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "stationary",
+        "fleche",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_zTsHbehQrC0",
+      "phrase_id": 32,
+      "start_frame": 7089,
+      "end_frame": 7101,
+      "start_time": "3:56",
+      "end_time": "3:56",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_zTsHbehQrC0",
+      "phrase_id": 33,
+      "start_frame": 7248,
+      "end_frame": 7266,
+      "start_time": "4:01",
+      "end_time": "4:02",
+      "trigger": "scoring",
+      "outcome": "touch_right",
+      "action_sequence": [
+        "advance",
+        "stationary",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_zTsHbehQrC0",
+      "phrase_id": 34,
+      "start_frame": 7338,
+      "end_frame": 7386,
+      "start_time": "4:04",
+      "end_time": "4:06",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "fleche",
+        "attack",
+        "defense"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_zTsHbehQrC0",
+      "phrase_id": 35,
+      "start_frame": 7482,
+      "end_frame": 7497,
+      "start_time": "4:09",
+      "end_time": "4:10",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "stationary",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_zTsHbehQrC0",
+      "phrase_id": 36,
+      "start_frame": 7605,
+      "end_frame": 7626,
+      "start_time": "4:13",
+      "end_time": "4:14",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "advance",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_zTsHbehQrC0",
+      "phrase_id": 37,
+      "start_frame": 9021,
+      "end_frame": 9057,
+      "start_time": "5:01",
+      "end_time": "5:02",
+      "trigger": "scoring",
+      "outcome": "touch_right",
+      "action_sequence": [
+        "advance",
+        "stationary",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_zTsHbehQrC0",
+      "phrase_id": 38,
+      "start_frame": 9201,
+      "end_frame": 9246,
+      "start_time": "5:07",
+      "end_time": "5:08",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "advance",
+        "fleche",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_zTsHbehQrC0",
+      "phrase_id": 39,
+      "start_frame": 9501,
+      "end_frame": 9525,
+      "start_time": "5:17",
+      "end_time": "5:17",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "stationary",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_zTsHbehQrC0",
+      "phrase_id": 40,
+      "start_frame": 10122,
+      "end_frame": 10134,
+      "start_time": "5:37",
+      "end_time": "5:38",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "stationary",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_zTsHbehQrC0",
+      "phrase_id": 41,
+      "start_frame": 10536,
+      "end_frame": 10554,
+      "start_time": "5:51",
+      "end_time": "5:52",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "fleche",
+        "retreat",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_zTsHbehQrC0",
+      "phrase_id": 42,
+      "start_frame": 10881,
+      "end_frame": 10896,
+      "start_time": "6:03",
+      "end_time": "6:03",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "advance",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_zTsHbehQrC0",
+      "phrase_id": 43,
+      "start_frame": 11070,
+      "end_frame": 11085,
+      "start_time": "6:09",
+      "end_time": "6:09",
+      "trigger": "scoring",
+      "outcome": "touch_left",
+      "action_sequence": [
+        "advance",
+        "stationary",
+        "attack"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    },
+    {
+      "video_id": "usaf_zTsHbehQrC0",
+      "phrase_id": 44,
+      "start_frame": 11259,
+      "end_frame": 11478,
+      "start_time": "6:15",
+      "end_time": "6:22",
+      "trigger": "distance",
+      "outcome": "halt",
+      "action_sequence": [
+        "stationary",
+        "fleche",
+        "advance",
+        "defense",
+        "parade"
+      ],
+      "confidence": 0.9,
+      "reviewed": false
+    }
+  ],
+  "stats": {
+    "outcome_distribution": {
+      "halt": 215,
+      "touch_left": 48,
+      "touch_right": 39
+    },
+    "trigger_distribution": {
+      "distance": 215,
+      "scoring": 87
+    },
+    "avg_confidence": 0.87
+  }
+}

@@ -1,0 +1,154 @@
+{
+  "summary": {
+    "video_path": "data/raw/usaf_58iFZYW8XYI.mp4",
+    "final_score": "2-4",
+    "total_touches": 6,
+    "match_duration": "9:36",
+    "total_frames_analyzed": 18822,
+    "analysis_time_sec": 367.5,
+    "weapon": "foil",
+    "bout_type": "de",
+    "gender": "women",
+    "age_group": "unknown"
+  },
+  "touches": [
+    {
+      "touch_number": 1,
+      "frame": 1410,
+      "video_timestamp": "0:47",
+      "match_time": "0:47",
+      "scorer": "left",
+      "score_after": "1-0",
+      "action_scorer": "unknown",
+      "action_confidence": 0.0,
+      "action_opponent": "unknown",
+      "opponent_confidence": 0.0,
+      "description": "Touch 1: WEINTRAUB METE scores (1-0)"
+    },
+    {
+      "touch_number": 2,
+      "frame": 2100,
+      "video_timestamp": "1:10",
+      "match_time": "1:10",
+      "scorer": "right",
+      "score_after": "1-1",
+      "action_scorer": "unknown",
+      "action_confidence": 0.0,
+      "action_opponent": "unknown",
+      "opponent_confidence": 0.0,
+      "description": "Touch 2: DUBROVICH Jacqueline scores (1-1)"
+    },
+    {
+      "touch_number": 3,
+      "frame": 2700,
+      "video_timestamp": "1:30",
+      "match_time": "1:30",
+      "scorer": "right",
+      "score_after": "1-2",
+      "action_scorer": "unknown",
+      "action_confidence": 0.0,
+      "action_opponent": "unknown",
+      "opponent_confidence": 0.0,
+      "description": "Touch 3: DUBROVICH Jacqueline scores (1-2)"
+    },
+    {
+      "touch_number": 4,
+      "frame": 3240,
+      "video_timestamp": "1:48",
+      "match_time": "1:48",
+      "scorer": "right",
+      "score_after": "1-3",
+      "action_scorer": "unknown",
+      "action_confidence": 0.0,
+      "action_opponent": "unknown",
+      "opponent_confidence": 0.0,
+      "description": "Touch 4: DUBROVICH Jacqueline scores (1-3)"
+    },
+    {
+      "touch_number": 5,
+      "frame": 4920,
+      "video_timestamp": "2:44",
+      "match_time": "2:44",
+      "scorer": "left",
+      "score_after": "2-3",
+      "action_scorer": "unknown",
+      "action_confidence": 0.0,
+      "action_opponent": "unknown",
+      "opponent_confidence": 0.0,
+      "description": "Touch 5: WEINTRAUB METE scores (2-3)"
+    },
+    {
+      "touch_number": 6,
+      "frame": 17280,
+      "video_timestamp": "9:36",
+      "match_time": "9:36",
+      "scorer": "right",
+      "score_after": "2-4",
+      "action_scorer": "unknown",
+      "action_confidence": 0.0,
+      "action_opponent": "unknown",
+      "opponent_confidence": 0.0,
+      "description": "Touch 6: DUBROVICH Jacqueline scores (2-4)"
+    }
+  ],
+  "left_fencer": {
+    "side": "left",
+    "name": "WEINTRAUB METE",
+    "club": "",
+    "total_touches_scored": 2,
+    "total_touches_conceded": 4,
+    "action_distribution": [],
+    "most_common_action": "unknown",
+    "most_common_action_pct": 0.0
+  },
+  "right_fencer": {
+    "side": "right",
+    "name": "DUBROVICH Jacqueline",
+    "club": "",
+    "total_touches_scored": 4,
+    "total_touches_conceded": 2,
+    "action_distribution": [],
+    "most_common_action": "unknown",
+    "most_common_action_pct": 0.0
+  },
+  "insights": [
+    {
+      "category": "score_flow",
+      "target": "DUBROVICH Jacqueline",
+      "message": "DUBROVICH Jacqueline won 2-4 (WEINTRAUB METE 33.3% vs DUBROVICH Jacqueline 66.7% scoring rate)",
+      "severity": "info",
+      "evidence": "WEINTRAUB METE: 2 touches scored, DUBROVICH Jacqueline: 4 touches scored"
+    },
+    {
+      "category": "momentum",
+      "target": "DUBROVICH Jacqueline",
+      "message": "DUBROVICH Jacqueline had a 3-touch scoring run starting at touch 2",
+      "severity": "warning",
+      "evidence": "Consecutive 3 touches without opponent scoring"
+    },
+    {
+      "category": "analysis_mode",
+      "target": "system",
+      "message": "This analysis uses TV overlay OCR only. Action classification (attack/riposte/counter) is not available in broadcast OCR mode.",
+      "severity": "info",
+      "evidence": "OCR-based score tracking from TV broadcast overlay"
+    }
+  ],
+  "warnings": [
+    {
+      "type": "video_truncated",
+      "message": "Video appears truncated. Final score 2-4 did not reach expected 15 points.",
+      "severity": "warning"
+    }
+  ],
+  "meta": {
+    "phase": 5,
+    "pose_model": null,
+    "action_model": null,
+    "pose_enabled": false,
+    "action_enabled": false,
+    "confidence_threshold": 0.0,
+    "source_type": "tv_broadcast",
+    "analysis_mode": "ocr_only"
+  }
+}
