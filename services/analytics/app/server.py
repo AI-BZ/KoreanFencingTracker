@@ -22,9 +22,13 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
+from fastapi.middleware.cors import CORSMiddleware
+
 from app.upload import VideoUploader
 from app.credits import CreditManager, SubscriptionTier
 from app.demo import generate_demo_report, generate_demo_de_report
+from app.i18n.manager import i18n
+from app.gallery import get_demo_reports, extract_youtube_id
 
 _logger = logging.getLogger(__name__)
 _BASE_DIR = Path(__file__).resolve().parent.parent
@@ -51,10 +55,27 @@ app = FastAPI(
     lifespan=_lifespan,
 )
 
+# CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://analytics.fencingmind.ai",
+        "https://data.fencingmind.ai",
+        "http://localhost:76",
+    ],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Static files & Jinja2 templates
 # Jinja2 3.1.x has an LRU cache key hashing bug on Python 3.14+;
 # disable template caching to work around it until Jinja2 ships a fix.
 app.mount("/static", StaticFiles(directory=str(_BASE_DIR / "static")), name="static")
+
+# Serve raw video files for in-report playback (only if directory exists)
+_raw_video_dir = _BASE_DIR / "data" / "raw"
+if _raw_video_dir.exists():
+    app.mount("/videos", StaticFiles(directory=str(_raw_video_dir)), name="videos")
 _cache_size = 0 if sys.version_info >= (3, 14) else 400
 _jinja_env = jinja2.Environment(
     loader=jinja2.FileSystemLoader(str(_BASE_DIR / "templates")),
@@ -193,6 +214,10 @@ async def get_job_status(job_id: str):
     """Check analysis job status."""
     job = _jobs.get(job_id)
     if job is None:
+        # Check if report exists on disk (completed before restart)
+        report_path = _BASE_DIR / "data" / "reports" / f"{job_id}.json"
+        if report_path.exists():
+            return JobStatus(job_id=job_id, status="completed", progress_pct=100.0)
         raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
 
     return JobStatus(
@@ -212,6 +237,11 @@ async def get_results(job_id: str):
     """
     job = _jobs.get(job_id)
     if job is None:
+        # Job not in memory — check persisted reports on disk
+        report_path = _BASE_DIR / "data" / "reports" / f"{job_id}.json"
+        if report_path.exists():
+            with open(report_path, "r", encoding="utf-8") as f:
+                return json.load(f)
         raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
 
     if job["status"] == "processing":
@@ -242,15 +272,19 @@ async def get_report(job_id: str, format: str = "json"):
     """
     job = _jobs.get(job_id)
     if job is None:
-        raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
-
-    if job["status"] != "completed" or job["result"] is None:
+        # Job not in memory — check persisted reports on disk
+        report_path = _BASE_DIR / "data" / "reports" / f"{job_id}.json"
+        if not report_path.exists():
+            raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
+        with open(report_path, "r", encoding="utf-8") as f:
+            report_dict = json.load(f)
+    elif job["status"] != "completed" or job["result"] is None:
         return JSONResponse(
             status_code=202,
             content={"job_id": job_id, "status": job["status"]},
         )
-
-    report_dict = job["result"]
+    else:
+        report_dict = job["result"]
 
     if format == "html":
         from app.report_renderer import ReportRenderer
@@ -275,6 +309,42 @@ async def get_report(job_id: str, format: str = "json"):
 
 
 # ------------------------------------------------------------------
+# i18n helpers
+# ------------------------------------------------------------------
+
+
+def _get_lang(request: Request) -> str:
+    """Detect language from cookie, Accept-Language header, or default."""
+    lang = request.cookies.get("lang")
+    if lang in ("ko", "en"):
+        return lang
+    accept = request.headers.get("accept-language", "")
+    if "en" in accept.split(",")[0].lower():
+        return "en"
+    return "ko"
+
+
+def _i18n_context(request: Request) -> dict:
+    """Build Jinja2 template context with i18n support."""
+    lang = _get_lang(request)
+    return {
+        "lang": lang,
+        "t": lambda key: i18n.get(key, lang),
+    }
+
+
+@app.get("/lang/{code}")
+async def switch_language(request: Request, code: str):
+    """Switch language and redirect back."""
+    if code not in ("ko", "en"):
+        code = "ko"
+    referer = request.headers.get("referer", "/")
+    response = RedirectResponse(url=referer, status_code=303)
+    response.set_cookie("lang", code, max_age=365 * 24 * 3600, path="/")
+    return response
+
+
+# ------------------------------------------------------------------
 # HTML page routes (Jinja2 templates)
 # ------------------------------------------------------------------
 
@@ -282,13 +352,18 @@ async def get_report(job_id: str, format: str = "json"):
 @app.get("/")
 async def index(request: Request):
     """Landing page."""
-    return templates.TemplateResponse(request, "landing.html")
+    ctx = _i18n_context(request)
+    gallery_reports = get_demo_reports(ctx["lang"])
+    return templates.TemplateResponse(request, "landing.html", {
+        **ctx,
+        "gallery_reports": gallery_reports,
+    })
 
 
 @app.get("/upload")
 async def upload_page(request: Request):
     """Video upload page."""
-    return templates.TemplateResponse(request, "upload.html")
+    return templates.TemplateResponse(request, "upload.html", _i18n_context(request))
 
 
 @app.get("/dashboard")
@@ -314,6 +389,7 @@ async def dashboard_page(request: Request):
     credits = sub_info.get("credits", 0)
 
     return templates.TemplateResponse(request, "dashboard.html", {
+        **_i18n_context(request),
         "jobs": jobs_list,
         "credits": credits,
     })
@@ -325,75 +401,83 @@ async def report_page(request: Request, job_id: str):
     Analysis report page with charts and insights.
 
     Uses Jinja2 template with Chart.js for interactive visualizations.
-    Falls back to standalone HTML renderer if template is unavailable.
+    Falls back to loading from data/reports/ if job is not in memory
+    (e.g. after server restart).
     """
     job = _jobs.get(job_id)
-    if job is None:
-        raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
 
-    if job["status"] != "completed" or job["result"] is None:
-        return HTMLResponse(
-            content=f"<html><body><p>분석 진행 중... (상태: {job['status']})</p></body></html>",
-            status_code=202,
-        )
+    if job is not None:
+        if job["status"] != "completed" or job["result"] is None:
+            return HTMLResponse(
+                content=f"<html><body><p>분석 진행 중... (상태: {job['status']})</p></body></html>",
+                status_code=202,
+            )
+        report_dict = job["result"]
+        mock_mode = job.get("mock_mode", False)
+    else:
+        # Job not in memory — check persisted reports on disk
+        report_path = _BASE_DIR / "data" / "reports" / f"{job_id}.json"
+        if not report_path.exists():
+            raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
+        with open(report_path, "r", encoding="utf-8") as f:
+            report_dict = json.load(f)
+        mock_mode = False
 
-    report_dict = job["result"]
+    # Enrich with aggregated stats if needed
+    _enrich_report_stats(report_dict)
+
+    # Resolve video for playback
+    video_filename = None
+    video_path = report_dict.get("meta", {}).get("video_path") or ""
+    if video_path:
+        vf = Path(video_path).name
+        if (_raw_video_dir / vf).exists():
+            video_filename = vf
+
+    youtube_url = None
+    if not video_filename:
+        yt_id = extract_youtube_id(job_id)
+        if yt_id:
+            youtube_url = f"https://www.youtube.com/watch?v={yt_id}"
 
     return templates.TemplateResponse(request, "report.html", {
+        **_i18n_context(request),
         "report": report_dict,
         "report_json": json.dumps(report_dict, ensure_ascii=False),
         "job_id": job_id,
-        "mock_mode": job.get("mock_mode", False),
+        "report_id": job_id,
+        "mock_mode": mock_mode,
+        "video_filename": video_filename,
+        "youtube_url": youtube_url,
     })
 
 
 # ------------------------------------------------------------------
-# Demo endpoints
+# Demo gallery
 # ------------------------------------------------------------------
+
+
+@app.get("/gallery")
+async def gallery_page(request: Request):
+    """Demo gallery page with curated real analysis reports."""
+    ctx = _i18n_context(request)
+    reports = get_demo_reports(ctx["lang"])
+    return templates.TemplateResponse(request, "gallery.html", {
+        **ctx,
+        "reports": reports,
+    })
 
 
 @app.get("/demo")
 async def demo_report_page(request: Request):
-    """Demo report page with sample data."""
-    report_dict = generate_demo_report()
-    demo_job_id = "demo-001"
-    _jobs[demo_job_id] = {
-        "status": "completed",
-        "progress_pct": 100.0,
-        "video_path": "demo_match.mp4",
-        "weapon": "foil",
-        "source_type": "coach",
-        "started_at": time.time(),
-        "result": report_dict,
-        "error": None,
-    }
-    return templates.TemplateResponse(request, "report.html", {
-        "report": report_dict,
-        "report_json": json.dumps(report_dict, ensure_ascii=False),
-        "job_id": demo_job_id,
-    })
+    """Redirect legacy /demo to /gallery."""
+    return RedirectResponse(url="/gallery", status_code=303)
 
 
 @app.get("/demo/de")
 async def demo_de_report_page(request: Request):
-    """Demo DE report page with sample epee DE bout data."""
-    report_dict = generate_demo_de_report()
-    demo_job_id = "demo-de-001"
-    _jobs[demo_job_id] = {
-        "status": "completed",
-        "progress_pct": 100.0,
-        "video_path": "demo_de_match.mp4",
-        "weapon": "epee",
-        "source_type": "coach",
-        "started_at": time.time(),
-        "result": report_dict,
-        "error": None,
-    }
-    return templates.TemplateResponse(request, "report.html", {
-        "report": report_dict,
-        "report_json": json.dumps(report_dict, ensure_ascii=False),
-        "job_id": demo_job_id,
-    })
+    """Redirect legacy /demo/de to /gallery."""
+    return RedirectResponse(url="/gallery", status_code=303)
 
 
 @app.get("/demo/dashboard")
@@ -454,8 +538,338 @@ async def demo_dashboard_page(request: Request):
     ]
 
     return templates.TemplateResponse(request, "dashboard.html", {
+        **_i18n_context(request),
         "jobs": jobs_list,
         "credits": 100,
+    })
+
+
+# ------------------------------------------------------------------
+# Saved report endpoints (load from data/reports/)
+# ------------------------------------------------------------------
+
+
+def _enrich_report_stats(report_dict: dict) -> dict:
+    """Compute distance_stats and footwork_stats from per-touch pose_analysis data.
+
+    Saved reports may have per-touch pose_analysis data but missing aggregated
+    fencer_profile.distance_stats / footwork_stats. This function computes them
+    on-the-fly from the available touch and exchange data.
+    """
+    touches = report_dict.get("touches") or []
+    exchanges = report_dict.get("exchanges") or []
+    fencer_profile = report_dict.get("fencer_profile") or {}
+
+    for side in ("left", "right"):
+        fp = fencer_profile.get(side)
+        if not fp:
+            continue
+
+        # Skip if already populated
+        has_distance = fp.get("distance_stats") and fp["distance_stats"].get("zone_distribution")
+        has_footwork = fp.get("footwork_stats") and fp["footwork_stats"].get("type_distribution")
+        if has_distance and has_footwork:
+            continue
+
+        # Aggregate from touches
+        zone_counts: Dict[str, int] = {}
+        zone_scored: Dict[str, int] = {}
+        footwork_counts: Dict[str, int] = {}
+        footwork_scored: Dict[str, int] = {}
+        total_distance_bh = 0.0
+        distance_count = 0
+
+        for touch in touches:
+            pa = touch.get("pose_analysis")
+            if not pa:
+                continue
+
+            scorer = touch.get("scorer", "")
+
+            # Distance stats
+            zone = pa.get("distance_zone")
+            dist_bh = pa.get("distance_bh")
+            if zone:
+                zone_counts[zone] = zone_counts.get(zone, 0) + 1
+                if scorer == side:
+                    zone_scored[zone] = zone_scored.get(zone, 0) + 1
+            if dist_bh is not None:
+                total_distance_bh += dist_bh
+                distance_count += 1
+
+            # Footwork — use scorer's footwork
+            fw_key = f"footwork_{'scorer' if scorer == side else 'opponent'}"
+            fw = pa.get(fw_key, pa.get("footwork_scorer"))
+            if fw and fw != "unknown":
+                footwork_counts[fw] = footwork_counts.get(fw, 0) + 1
+                if scorer == side:
+                    footwork_scored[fw] = footwork_scored.get(fw, 0) + 1
+
+        # Also aggregate from exchanges for footwork
+        for ex in exchanges:
+            # exchanges use footwork_left / footwork_right
+            fw = ex.get(f"footwork_{side}")
+            if fw and fw != "unknown":
+                footwork_counts[fw] = footwork_counts.get(fw, 0) + 1
+
+        # Build distance_stats if we have data
+        if not has_distance and zone_counts:
+            zone_success_rate = {}
+            for z, cnt in zone_counts.items():
+                scored = zone_scored.get(z, 0)
+                zone_success_rate[z] = scored / cnt if cnt > 0 else 0.0
+
+            # Preferred zone = zone with most touches
+            preferred = max(zone_counts, key=zone_counts.get) if zone_counts else None
+
+            fp["distance_stats"] = {
+                "zone_distribution": zone_counts,
+                "zone_success_rate": zone_success_rate,
+                "preferred_zone": preferred,
+                "avg_distance_bh": total_distance_bh / distance_count if distance_count > 0 else None,
+            }
+
+        # Build footwork_stats if we have data
+        if not has_footwork and footwork_counts:
+            fw_success_rate = {}
+            for fw_type, cnt in footwork_counts.items():
+                scored = footwork_scored.get(fw_type, 0)
+                fw_success_rate[fw_type] = scored / cnt if cnt > 0 else 0.0
+
+            preferred_fw = max(footwork_counts, key=footwork_counts.get) if footwork_counts else None
+
+            fp["footwork_stats"] = {
+                "type_distribution": footwork_counts,
+                "type_success_rate": fw_success_rate,
+                "preferred_footwork": preferred_fw,
+            }
+
+    return report_dict
+
+
+@app.get("/report/saved/{video_id}")
+async def saved_report_page(request: Request, video_id: str):
+    """Load a saved report JSON from data/reports/ and render it."""
+    reports_dir = _BASE_DIR / "data" / "reports"
+    report_path = reports_dir / f"{video_id}.json"
+
+    if not report_path.exists():
+        raise HTTPException(status_code=404, detail=f"Report not found: {video_id}")
+
+    with open(report_path, "r", encoding="utf-8") as f:
+        report_dict = json.load(f)
+
+    # Enrich fencer_profile with aggregated distance/footwork stats
+    _enrich_report_stats(report_dict)
+
+    # Resolve video filename for in-report playback
+    video_filename = None
+    video_path = report_dict.get("meta", {}).get("video_path") or ""
+    if video_path:
+        vf = Path(video_path).name
+        if (_raw_video_dir / vf).exists():
+            video_filename = vf
+    if not video_filename:
+        # Convention: {stem}_continuous_report → {stem}.mp4
+        stem = video_id.replace("_continuous_report", "").replace("_report", "")
+        for ext in (".mp4", ".mkv", ".webm"):
+            if (_raw_video_dir / f"{stem}{ext}").exists():
+                video_filename = f"{stem}{ext}"
+                break
+
+    # Extract YouTube URL for TV broadcast reports with no local video
+    youtube_url = None
+    if not video_filename:
+        yt_id = extract_youtube_id(video_id)
+        if yt_id:
+            youtube_url = f"https://www.youtube.com/watch?v={yt_id}"
+
+    return templates.TemplateResponse(request, "report.html", {
+        **_i18n_context(request),
+        "report": report_dict,
+        "report_json": json.dumps(report_dict, ensure_ascii=False),
+        "job_id": f"saved-{video_id}",
+        "report_id": video_id,
+        "video_filename": video_filename,
+        "youtube_url": youtube_url,
+    })
+
+
+@app.get("/reports")
+async def list_saved_reports(request: Request):
+    """List all saved report JSON files."""
+    reports_dir = _BASE_DIR / "data" / "reports"
+    if not reports_dir.exists():
+        return JSONResponse({"reports": []})
+
+    reports = []
+    for f in sorted(reports_dir.glob("*.json")):
+        try:
+            with open(f, "r", encoding="utf-8") as fh:
+                data = json.load(fh)
+            summary = data.get("summary", {})
+            reports.append({
+                "video_id": f.stem,
+                "url": f"/report/saved/{f.stem}",
+                "final_score": summary.get("final_score", ""),
+                "match_duration": summary.get("match_duration", ""),
+                "analysis_mode": data.get("meta", {}).get("analysis_mode", "unknown"),
+                "total_exchanges": data.get("continuous_summary", {}).get("total_exchanges", 0),
+            })
+        except (json.JSONDecodeError, KeyError):
+            continue
+
+    return JSONResponse({"reports": reports, "total": len(reports)})
+
+
+# ------------------------------------------------------------------
+# Clip overlay endpoints
+# ------------------------------------------------------------------
+
+
+@app.get("/api/analytics/clips/{report_id}/{event_type}/{event_number}")
+async def get_event_clip(report_id: str, event_type: str, event_number: int):
+    """
+    On-demand clip generation with caching.
+
+    Generates a pose-overlay mp4 clip for a specific touch or exchange event.
+    Clips are cached in data/clips/overlay/{report_id}/.
+    """
+    from fastapi.responses import StreamingResponse
+
+    # Validate event_type
+    if event_type not in ("touch", "exchange"):
+        raise HTTPException(status_code=400, detail=f"Invalid event_type: {event_type}")
+
+    # Load report
+    reports_dir = _BASE_DIR / "data" / "reports"
+    report_path = reports_dir / f"{report_id}.json"
+    if not report_path.exists():
+        raise HTTPException(status_code=404, detail=f"Report not found: {report_id}")
+
+    with open(report_path, "r", encoding="utf-8") as f:
+        report_dict = json.load(f)
+
+    # Check cache
+    clips_dir = _BASE_DIR / "data" / "clips" / "overlay" / report_id
+    clip_filename = f"{event_type}_{event_number:03d}.mp4"
+    clip_path = clips_dir / clip_filename
+
+    if clip_path.exists() and clip_path.stat().st_size > 1000:
+        return StreamingResponse(
+            open(str(clip_path), "rb"),
+            media_type="video/mp4",
+            headers={"Content-Disposition": f"inline; filename={clip_filename}"},
+        )
+
+    # Find the event
+    if event_type == "touch":
+        events = report_dict.get("touches", [])
+        event = next((t for t in events if t.get("touch_number") == event_number), None)
+        if event is None:
+            raise HTTPException(status_code=404, detail=f"Touch #{event_number} not found")
+        frame = event.get("frame")
+        if frame is None:
+            raise HTTPException(status_code=400, detail=f"Touch #{event_number} has no frame data")
+        start_frame = frame
+        end_frame = frame
+    else:
+        events = report_dict.get("exchanges", [])
+        event = next((e for e in events if e.get("exchange_number") == event_number), None)
+        if event is None:
+            raise HTTPException(status_code=404, detail=f"Exchange #{event_number} not found")
+        start_frame = event.get("start_frame")
+        end_frame = event.get("end_frame")
+        if start_frame is None or end_frame is None:
+            raise HTTPException(status_code=400, detail=f"Exchange #{event_number} has no frame data")
+
+    # Find video path from report metadata
+    video_path = report_dict.get("meta", {}).get("video_path")
+    if not video_path:
+        # Try to infer from report_id (convention: {video_stem}_continuous_report)
+        stem = report_id.replace("_continuous_report", "")
+        raw_dir = _BASE_DIR / "data" / "raw"
+        candidates = list(raw_dir.glob(f"{stem}.*"))
+        if candidates:
+            video_path = str(candidates[0])
+
+    if not video_path or not Path(video_path).exists():
+        raise HTTPException(
+            status_code=404,
+            detail="Source video not found. Cannot generate clip.",
+        )
+
+    # Generate clip
+    try:
+        from ml.clip_overlay import ClipOverlayGenerator
+        gen = ClipOverlayGenerator()
+
+        event_info = {}
+        if event_type == "touch":
+            event_info = gen._extract_touch_info(event)
+        else:
+            event_info = gen._extract_exchange_info(event)
+
+        gen.generate_clip(
+            video_path, start_frame, end_frame, str(clip_path), event_info,
+        )
+    except Exception as e:
+        _logger.error("Clip generation failed: %s", e)
+        raise HTTPException(status_code=500, detail=f"Clip generation failed: {e}")
+
+    return StreamingResponse(
+        open(str(clip_path), "rb"),
+        media_type="video/mp4",
+        headers={"Content-Disposition": f"inline; filename={clip_filename}"},
+    )
+
+
+@app.post("/api/analytics/clips/{report_id}/generate")
+async def generate_all_clips(
+    report_id: str,
+    background_tasks: BackgroundTasks,
+    touches_only: bool = True,
+):
+    """Generate all overlay clips for a report (background task)."""
+    reports_dir = _BASE_DIR / "data" / "reports"
+    report_path = reports_dir / f"{report_id}.json"
+    if not report_path.exists():
+        raise HTTPException(status_code=404, detail=f"Report not found: {report_id}")
+
+    with open(report_path, "r", encoding="utf-8") as f:
+        report_dict = json.load(f)
+
+    video_path = report_dict.get("meta", {}).get("video_path")
+    if not video_path:
+        stem = report_id.replace("_continuous_report", "")
+        raw_dir = _BASE_DIR / "data" / "raw"
+        candidates = list(raw_dir.glob(f"{stem}.*"))
+        if candidates:
+            video_path = str(candidates[0])
+
+    if not video_path or not Path(video_path).exists():
+        raise HTTPException(status_code=404, detail="Source video not found")
+
+    clips_dir = _BASE_DIR / "data" / "clips" / "overlay" / report_id
+
+    def _generate_clips():
+        try:
+            from ml.clip_overlay import ClipOverlayGenerator
+            gen = ClipOverlayGenerator()
+            gen.generate_clips_for_report(
+                video_path, report_dict, str(clips_dir), touches_only=touches_only,
+            )
+            _logger.info("Batch clip generation completed for %s", report_id)
+        except Exception as e:
+            _logger.error("Batch clip generation failed for %s: %s", report_id, e)
+
+    background_tasks.add_task(_generate_clips)
+
+    return JSONResponse({
+        "status": "generating",
+        "report_id": report_id,
+        "clips_dir": str(clips_dir),
+        "touches_only": touches_only,
     })
 
 
@@ -673,6 +1087,19 @@ async def start_broadcast_analysis(
 # ------------------------------------------------------------------
 
 
+def _persist_report(job_id: str, report_dict: dict) -> None:
+    """Save a completed report to data/reports/ for persistence across restarts."""
+    reports_dir = _BASE_DIR / "data" / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    report_path = reports_dir / f"{job_id}.json"
+    try:
+        with open(report_path, "w", encoding="utf-8") as f:
+            json.dump(report_dict, f, ensure_ascii=False, indent=2)
+        _logger.info("Report persisted to %s", report_path)
+    except Exception as e:
+        _logger.warning("Failed to persist report %s: %s", job_id, e)
+
+
 def _generate_mock_result(
     job_id: str,
     video_path: str,
@@ -792,7 +1219,8 @@ def _run_analysis(
             _jobs[job_id]["status"] = "completed"
             _jobs[job_id]["result"] = report_dict
 
-            # Persist to DB
+            # Persist to disk + DB
+            _persist_report(job_id, report_dict)
             if _db:
                 _db.update_job(job_id, status="completed", progress_pct=100.0)
                 _db.save_result(
@@ -812,6 +1240,9 @@ def _run_analysis(
         # Deduct credit on successful completion
         if _jobs[job_id]["status"] == "completed":
             _credit_manager.deduct_credit(member_id, job_type, reference_id=job_id)
+            # Persist mock/fallback results too
+            if _jobs[job_id]["result"]:
+                _persist_report(job_id, _jobs[job_id]["result"])
 
     except Exception as exc:
         _jobs[job_id]["status"] = "failed"
@@ -843,9 +1274,11 @@ def _run_broadcast_analysis(
 
             result = analyzer.analyze_broadcast(video_path)
 
+            report_dict_ml = result.to_dict()
             _jobs[job_id]["progress_pct"] = 100.0
             _jobs[job_id]["status"] = "completed"
-            _jobs[job_id]["result"] = result.to_dict()
+            _jobs[job_id]["result"] = report_dict_ml
+            _persist_report(job_id, report_dict_ml)
 
         except (ImportError, Exception) as ml_err:
             # ML models not available — try TVOverlayOCR fallback
@@ -854,9 +1287,17 @@ def _run_broadcast_analysis(
                 "ML models unavailable for broadcast, trying OCR fallback: %s", ml_err
             )
             try:
+                import os
                 import cv2
                 from analyzer.tv_overlay_ocr import TVOverlayOCR, TVScoreTracker
                 from app.tv_report_converter import tv_ocr_to_match_report
+                from app.metadata_parser import parse_fencing_metadata
+
+                # Parse metadata from filename
+                filename = os.path.basename(video_path)
+                metadata = parse_fencing_metadata(filename)
+                weapon = _jobs[job_id].get("weapon") or metadata.get("weapon", "unknown")
+                expected_final = metadata.get("expected_final_score")
 
                 ocr = TVOverlayOCR()
                 tracker = TVScoreTracker()
@@ -887,6 +1328,7 @@ def _run_broadcast_analysis(
                 cap.release()
 
                 events = tracker.get_all_events()
+                clock_events = tracker.get_clock_events()
                 summary = tracker.get_match_summary()
                 analysis_time = time.time() - t_start
 
@@ -899,11 +1341,24 @@ def _run_broadcast_analysis(
                     analysis_time_sec=analysis_time,
                     total_frames=frame_num,
                     fps=fps,
+                    expected_final_score=expected_final,
                 )
+
+                # Inject metadata into report
+                report_dict["summary"]["weapon"] = weapon
+                report_dict["summary"]["gender"] = metadata.get("gender", "unknown")
+                report_dict["summary"]["age_group"] = metadata.get("age_group", "unknown")
+                if metadata.get("bout_type", "unknown") != "unknown":
+                    report_dict["summary"]["bout_type"] = metadata["bout_type"]
+
+                # Store clock events (Allez/Halt proxy)
+                if clock_events:
+                    report_dict["clock_events"] = clock_events
 
                 _jobs[job_id]["progress_pct"] = 100.0
                 _jobs[job_id]["status"] = "completed"
                 _jobs[job_id]["result"] = report_dict
+                _persist_report(job_id, report_dict)
                 logging.getLogger(__name__).info(
                     "OCR fallback completed for job %s: %d touches detected",
                     job_id, summary.get("total_touches", 0),
@@ -919,6 +1374,8 @@ def _run_broadcast_analysis(
                     weapon=_jobs[job_id].get("weapon"),
                     source_type="tv_broadcast",
                 )
+                if _jobs[job_id]["status"] == "completed" and _jobs[job_id]["result"]:
+                    _persist_report(job_id, _jobs[job_id]["result"])
 
     except Exception as exc:
         _jobs[job_id]["status"] = "failed"

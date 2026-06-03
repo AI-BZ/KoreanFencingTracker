@@ -1,11 +1,20 @@
 /**
- * FencingMind Analytics - Report chart initialization
+ * FencingMind Analytics - Report chart initialization (Dark Theme)
  * Reads REPORT_DATA (injected by Jinja2) and creates Chart.js charts.
  */
 (function () {
     'use strict';
 
     if (typeof REPORT_DATA === 'undefined') return;
+
+    // -- Dark theme defaults --
+    Chart.defaults.color = '#b4b4c4';
+    Chart.defaults.borderColor = 'rgba(255, 255, 255, 0.08)';
+    Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(18, 18, 26, 0.95)';
+    Chart.defaults.plugins.tooltip.titleColor = '#ffffff';
+    Chart.defaults.plugins.tooltip.bodyColor = '#b4b4c4';
+    Chart.defaults.plugins.tooltip.borderColor = 'rgba(255, 255, 255, 0.1)';
+    Chart.defaults.plugins.tooltip.borderWidth = 1;
 
     var ACTION_LABELS_KO = {
         'attack': '공격',
@@ -21,7 +30,7 @@
     };
 
     var ACTION_COLORS = [
-        '#6366f1', '#ef4444', '#f59e0b', '#10b981',
+        '#c9302c', '#ef4444', '#f59e0b', '#10b981',
         '#8b5cf6', '#ec4899', '#14b8a6', '#f97316',
         '#64748b', '#a3a3a3',
     ];
@@ -56,23 +65,25 @@
                             label: leftName,
                             data: leftScores,
                             borderColor: '#3b82f6',
-                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            backgroundColor: 'rgba(59, 130, 246, 0.15)',
                             fill: true,
                             tension: 0.3,
                             pointRadius: 5,
                             pointHoverRadius: 7,
                             borderWidth: 2,
+                            pointBackgroundColor: '#3b82f6',
                         },
                         {
                             label: rightName,
                             data: rightScores,
                             borderColor: '#ef4444',
-                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                            backgroundColor: 'rgba(239, 68, 68, 0.15)',
                             fill: true,
                             tension: 0.3,
                             pointRadius: 5,
                             pointHoverRadius: 7,
                             borderWidth: 2,
+                            pointBackgroundColor: '#ef4444',
                         },
                     ],
                 },
@@ -82,7 +93,11 @@
                     plugins: {
                         legend: {
                             position: 'top',
-                            labels: { usePointStyle: true, padding: 20 },
+                            labels: {
+                                usePointStyle: true,
+                                padding: 20,
+                                color: '#b4b4c4',
+                            },
                         },
                         tooltip: {
                             callbacks: {
@@ -105,11 +120,14 @@
                     scales: {
                         y: {
                             beginAtZero: true,
-                            ticks: { stepSize: 1 },
-                            title: { display: true, text: '점수' },
+                            ticks: { stepSize: 1, color: '#6b6b7b' },
+                            title: { display: true, text: '점수', color: '#b4b4c4' },
+                            grid: { color: 'rgba(255, 255, 255, 0.06)' },
                         },
                         x: {
-                            title: { display: true, text: '터치' },
+                            title: { display: true, text: '터치', color: '#b4b4c4' },
+                            ticks: { color: '#6b6b7b' },
+                            grid: { color: 'rgba(255, 255, 255, 0.06)' },
                         },
                     },
                 },
@@ -141,7 +159,7 @@
                     data: data,
                     backgroundColor: bgColors,
                     borderWidth: 2,
-                    borderColor: '#fff',
+                    borderColor: '#12121a',
                 }],
             },
             options: {
@@ -155,6 +173,7 @@
                             boxWidth: 12,
                             padding: 12,
                             font: { size: 12 },
+                            color: '#b4b4c4',
                         },
                     },
                     tooltip: {

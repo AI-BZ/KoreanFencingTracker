@@ -35,6 +35,20 @@ def generate_demo_report() -> dict:
                 "action_opponent": "parry",
                 "opponent_confidence": 0.72,
                 "description": "김민수의 빠른 런지 공격, 박지현 파리 실패",
+                "pose_analysis": {
+                    "distance_bh": 1.35,
+                    "distance_zone": "lunge",
+                    "footwork_scorer": "lunge",
+                    "footwork_opponent": "retreat",
+                    "parry_detected": False,
+                    "closing_speed_bh": 0.42,
+                    "joint_angles": {
+                        "hip_angle": 125.0,
+                        "front_knee_angle": 108.0,
+                        "trunk_lean_deg": 12.0,
+                        "arm_extension_ratio": 0.88,
+                    },
+                },
             },
             {
                 "touch_number": 2,
@@ -48,6 +62,20 @@ def generate_demo_report() -> dict:
                 "action_opponent": "attack",
                 "opponent_confidence": 0.83,
                 "description": "김민수 공격 후 박지현 파리-리포스트 성공",
+                "pose_analysis": {
+                    "distance_bh": 0.95,
+                    "distance_zone": "extension",
+                    "footwork_scorer": "stationary",
+                    "footwork_opponent": "lunge",
+                    "parry_detected": True,
+                    "closing_speed_bh": 0.18,
+                    "joint_angles": {
+                        "hip_angle": 155.0,
+                        "front_knee_angle": 145.0,
+                        "trunk_lean_deg": 5.0,
+                        "arm_extension_ratio": 0.92,
+                    },
+                },
             },
             {
                 "touch_number": 3,
@@ -61,6 +89,20 @@ def generate_demo_report() -> dict:
                 "action_opponent": "counter_attack",
                 "opponent_confidence": 0.45,
                 "description": "김민수 마르쉬-아탁, 우선권 확보 후 득점",
+                "pose_analysis": {
+                    "distance_bh": 1.62,
+                    "distance_zone": "advance_lunge",
+                    "footwork_scorer": "advance",
+                    "footwork_opponent": "stationary",
+                    "parry_detected": False,
+                    "closing_speed_bh": 0.55,
+                    "joint_angles": {
+                        "hip_angle": 118.0,
+                        "front_knee_angle": 102.0,
+                        "trunk_lean_deg": 18.0,
+                        "arm_extension_ratio": 0.95,
+                    },
+                },
             },
             {
                 "touch_number": 4,
@@ -74,6 +116,20 @@ def generate_demo_report() -> dict:
                 "action_opponent": "attack",
                 "opponent_confidence": 0.74,
                 "description": "김민수 준비 동작 중 박지현 카운터 어택 성공",
+                "pose_analysis": {
+                    "distance_bh": 1.10,
+                    "distance_zone": "extension",
+                    "footwork_scorer": "advance",
+                    "footwork_opponent": "advance",
+                    "parry_detected": False,
+                    "closing_speed_bh": 0.65,
+                    "joint_angles": {
+                        "hip_angle": 140.0,
+                        "front_knee_angle": 135.0,
+                        "trunk_lean_deg": 8.0,
+                        "arm_extension_ratio": 0.82,
+                    },
+                },
             },
             {
                 "touch_number": 5,
@@ -87,6 +143,20 @@ def generate_demo_report() -> dict:
                 "action_opponent": "attack",
                 "opponent_confidence": 0.76,
                 "description": "김민수 파리 4번 후 리포스트 득점",
+                "pose_analysis": {
+                    "distance_bh": 0.72,
+                    "distance_zone": "infighting",
+                    "footwork_scorer": "stationary",
+                    "footwork_opponent": "lunge",
+                    "parry_detected": True,
+                    "closing_speed_bh": 0.10,
+                    "joint_angles": {
+                        "hip_angle": 160.0,
+                        "front_knee_angle": 150.0,
+                        "trunk_lean_deg": 3.0,
+                        "arm_extension_ratio": 0.78,
+                    },
+                },
             },
             {
                 "touch_number": 6,
@@ -100,6 +170,20 @@ def generate_demo_report() -> dict:
                 "action_opponent": "parry",
                 "opponent_confidence": 0.41,
                 "description": "김민수 플레쉬 공격, 박지현 반응 지연",
+                "pose_analysis": {
+                    "distance_bh": 1.78,
+                    "distance_zone": "advance_lunge",
+                    "footwork_scorer": "fleche",
+                    "footwork_opponent": "retreat",
+                    "parry_detected": False,
+                    "closing_speed_bh": 0.82,
+                    "joint_angles": {
+                        "hip_angle": 110.0,
+                        "front_knee_angle": 95.0,
+                        "trunk_lean_deg": 25.0,
+                        "arm_extension_ratio": 0.97,
+                    },
+                },
             },
             {
                 "touch_number": 7,
@@ -113,6 +197,20 @@ def generate_demo_report() -> dict:
                 "action_opponent": "attack",
                 "opponent_confidence": 0.80,
                 "description": "김민수 공격 실패 후 박지현 정확한 리포스트",
+                "pose_analysis": {
+                    "distance_bh": 0.85,
+                    "distance_zone": "extension",
+                    "footwork_scorer": "stationary",
+                    "footwork_opponent": "lunge",
+                    "parry_detected": True,
+                    "closing_speed_bh": 0.15,
+                    "joint_angles": {
+                        "hip_angle": 150.0,
+                        "front_knee_angle": 140.0,
+                        "trunk_lean_deg": 6.0,
+                        "arm_extension_ratio": 0.90,
+                    },
+                },
             },
             {
                 "touch_number": 8,
@@ -126,6 +224,20 @@ def generate_demo_report() -> dict:
                 "action_opponent": "attack",
                 "opponent_confidence": 0.69,
                 "description": "박지현 마지막 공격에 김민수 카운터 어택으로 결승점",
+                "pose_analysis": {
+                    "distance_bh": 1.05,
+                    "distance_zone": "extension",
+                    "footwork_scorer": "advance",
+                    "footwork_opponent": "fleche",
+                    "parry_detected": False,
+                    "closing_speed_bh": 0.72,
+                    "joint_angles": {
+                        "hip_angle": 135.0,
+                        "front_knee_angle": 128.0,
+                        "trunk_lean_deg": 10.0,
+                        "arm_extension_ratio": 0.85,
+                    },
+                },
             },
         ],
         "left_fencer": {
@@ -199,6 +311,48 @@ def generate_demo_report() -> dict:
                 "evidence": "터치 1~4: 1:23 소요(균등), 터치 5~8: 0:56 소요(가속). 후반 밀도 2.4배",
             },
         ],
+        "fencer_profile": {
+            "left": {
+                "distance_stats": {
+                    "zone_distribution": {"lunge": 2, "extension": 2, "infighting": 1, "advance_lunge": 1},
+                    "zone_success_rate": {"lunge": 1.0, "extension": 0.5, "infighting": 1.0, "advance_lunge": 0.5},
+                    "preferred_zone": "lunge",
+                },
+                "footwork_stats": {
+                    "type_distribution": {"lunge": 1, "advance": 2, "stationary": 1, "fleche": 1},
+                    "preferred_footwork": "advance",
+                },
+                "joint_angle_stats": {
+                    "avg_hip_angle": 128.0,
+                    "avg_front_knee": 112.0,
+                    "avg_trunk_lean": 13.6,
+                    "avg_arm_extension": 0.89,
+                },
+                "parry_rate": 0.2,
+                "weaknesses": ["advance 비율 40% — 상대에게 예측 가능한 패턴"],
+                "strengths": ["lunge 거리 성공률 100% — 적정 거리 관리 우수", "infighting 성공률 100% — 근접전 강함"],
+            },
+            "right": {
+                "distance_stats": {
+                    "zone_distribution": {"extension": 2, "advance_lunge": 1},
+                    "zone_success_rate": {"extension": 0.67, "advance_lunge": 0.0},
+                    "preferred_zone": "extension",
+                },
+                "footwork_stats": {
+                    "type_distribution": {"stationary": 2, "advance": 1, "lunge": 1},
+                    "preferred_footwork": "stationary",
+                },
+                "joint_angle_stats": {
+                    "avg_hip_angle": 148.0,
+                    "avg_front_knee": 140.0,
+                    "avg_trunk_lean": 6.3,
+                    "avg_arm_extension": 0.88,
+                },
+                "parry_rate": 0.4,
+                "weaknesses": ["공격 주도 부족 — 카운터/리포스트 의존도 높음"],
+                "strengths": ["빠라드-리포스트 전환 우수 — 파리 2회 중 리포스트 2회 성공"],
+            },
+        },
         "meta": {
             "phase": 2,
             "pose_model": "yolo11n-pose",

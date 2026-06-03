@@ -26,6 +26,7 @@ class DownloadResult:
     output_path: Optional[Path]
     success: bool
     error: Optional[str] = None
+    title: Optional[str] = None
 
 
 class VideoDownloader:
@@ -76,7 +77,7 @@ class VideoDownloader:
 
         cmd = [
             "yt-dlp",
-            "--format", f"bestvideo[height<={self.quality}][ext={self.format}]+bestaudio[ext=m4a]/best[height<={self.quality}]",
+            "--format", f"bestvideo[height<={self.quality}]+bestaudio/best[height<={self.quality}]/best",
             "--merge-output-format", self.format,
             "--output", output_template,
             "--no-playlist",
@@ -95,6 +96,18 @@ class VideoDownloader:
 
         cmd.append(url)
 
+        # Extract title separately (lightweight, no download)
+        video_title = None
+        try:
+            title_cmd = ["yt-dlp", "--print", "title", "--no-download", url]
+            title_result = subprocess.run(
+                title_cmd, capture_output=True, text=True, timeout=30,
+            )
+            if title_result.returncode == 0 and title_result.stdout.strip():
+                video_title = title_result.stdout.strip()
+        except Exception:
+            pass  # Title extraction is best-effort
+
         try:
             result = subprocess.run(
                 cmd,
@@ -110,6 +123,7 @@ class VideoDownloader:
                     url=url,
                     output_path=output_path,
                     success=True,
+                    title=video_title,
                 )
             else:
                 return DownloadResult(
@@ -117,6 +131,7 @@ class VideoDownloader:
                     output_path=None,
                     success=False,
                     error=result.stderr[:500],
+                    title=video_title,
                 )
 
         except subprocess.TimeoutExpired:

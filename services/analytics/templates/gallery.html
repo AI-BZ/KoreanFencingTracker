@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t('gallery.title') if t else '분석 데모' }} - FencingMind Analytics{% endblock %}
+
+{% block nav_gallery %}active{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    <div class="text-center mb-12">
+        <h1 class="text-3xl font-bold text-white">{{ t('gallery.title') if t else '분석 데모' }}</h1>
+        <p class="mt-3 text-gray-400">{{ t('gallery.subtitle') if t else '실제 경기 영상 AI 분석 결과를 확인해 보세요.' }}</p>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-6 max-w-4xl mx-auto">
+        {% for report in reports %}
+        <div class="glass-card overflow-hidden group">
+            <div class="p-6">
+                <!-- Header: weapon badge + score -->
+                <div class="flex items-center justify-between mb-4">
+                    <span class="weapon-badge-{{ report.weapon }} inline-flex px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">
+                        {{ report.weapon }}
+                    </span>
+                    {% if report.bout_type %}
+                    <span class="text-xs text-gray-500 uppercase font-medium">
+                        {{ t('gallery.bout_' + report.bout_type) if t else report.bout_type }}
+                    </span>
+                    {% endif %}
+                </div>
+
+                <!-- Score -->
+                <div class="text-center mb-4">
+                    <p class="text-4xl font-bold text-white">{{ report.score }}</p>
+                </div>
+
+                <!-- Title -->
+                <h3 class="font-semibold text-white text-base mb-2">{{ report.title }}</h3>
+                <p class="text-sm text-gray-400 mb-4">{{ report.description }}</p>
+
+                <!-- Stats -->
+                <div class="grid grid-cols-3 gap-3 text-center text-xs mb-4">
+                    <div class="bg-white/5 rounded-lg py-2 px-1">
+                        <p class="font-semibold text-white">{{ report.touches }}</p>
+                        <p class="text-gray-500">{{ t('gallery.touches') if t else '터치' }}</p>
+                    </div>
+                    <div class="bg-white/5 rounded-lg py-2 px-1">
+                        <p class="font-semibold text-white">{{ report.exchanges if report.exchanges else '-' }}</p>
+                        <p class="text-gray-500">{{ t('gallery.exchanges') if t else '교환' }}</p>
+                    </div>
+                    <div class="bg-white/5 rounded-lg py-2 px-1">
+                        <p class="font-semibold text-white">{{ report.duration }}</p>
+                        <p class="text-gray-500">{{ t('gallery.duration') if t else '시간' }}</p>
+                    </div>
+                </div>
+
+                <!-- CTA -->
+                <a href="/report/saved/{{ report.id }}"
+                   class="block text-center py-2.5 bg-brand-600 text-white font-medium rounded-lg
+                          hover:bg-brand-500 transition-colors text-sm">
+                    {{ t('gallery.btn_view') if t else '분석 보기' }} &rarr;
+                </a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

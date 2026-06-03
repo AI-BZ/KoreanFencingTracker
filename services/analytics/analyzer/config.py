@@ -204,3 +204,101 @@ OVERLAY_YELLOW_LOWER = [20, 100, 200]   # Yellow card
 OVERLAY_YELLOW_UPPER = [35, 255, 255]
 OVERLAY_BLUE_LOWER = [85, 50, 100]       # Time/period digits (blue/cyan)
 OVERLAY_BLUE_UPPER = [130, 255, 255]
+
+
+# ==================================================================
+# Phase 5c: Pose-based Analysis (footwork, parry, distance)
+# ==================================================================
+
+# --- COCO 17 Keypoint Indices ---
+KP_NOSE = 0
+KP_LEFT_EYE = 1
+KP_RIGHT_EYE = 2
+KP_LEFT_EAR = 3
+KP_RIGHT_EAR = 4
+KP_LEFT_SHOULDER = 5
+KP_RIGHT_SHOULDER = 6
+KP_LEFT_ELBOW = 7
+KP_RIGHT_ELBOW = 8
+KP_LEFT_WRIST = 9
+KP_RIGHT_WRIST = 10
+KP_LEFT_HIP = 11
+KP_RIGHT_HIP = 12
+KP_LEFT_KNEE = 13
+KP_RIGHT_KNEE = 14
+KP_LEFT_ANKLE = 15
+KP_RIGHT_ANKLE = 16
+
+# --- Distance Zones (BH = Body Height units) ---
+DISTANCE_ZONE_THRESHOLDS = {
+    "out": 1.8,          # > 1.8 BH = out of distance
+    "adv_lunge": 1.5,    # 1.5-1.8 BH = advance-lunge range
+    "lunge": 1.2,        # 1.2-1.5 BH = lunge range
+    "extension": 0.8,    # 0.8-1.2 BH = arm extension range
+    # < 0.8 BH = infighting
+}
+DISTANCE_SMOOTHING_WINDOW = 5  # frames for moving average
+
+# --- Footwork Detection Thresholds ---
+FOOTWORK_LUNGE_HIP_DROP_MIN = 10.0       # px: minimum hip drop for lunge
+FOOTWORK_LUNGE_FRONT_FOOT_RATIO = 3.0    # front/rear foot displacement ratio
+FOOTWORK_FLECHE_BOTH_ADVANCE_MIN = 20.0  # px: min displacement for both feet
+FOOTWORK_MIN_DISPLACEMENT_PX = 15.0      # px: below this = stationary
+FOOTWORK_ANALYSIS_WINDOW = 15            # frames before touch to analyze
+
+# --- Parry Detection Thresholds ---
+PARRY_WRIST_LATERAL_MIN_PX = 20.0   # px: min lateral displacement for parry
+PARRY_WRIST_SPEED_MIN_PX = 8.0      # px/frame: min wrist speed for parry
+PARRY_DETECTION_WINDOW = 10         # frames before touch to check
+
+# --- Pose Analysis ---
+POSE_ANALYSIS_FPS = 30.0             # assumed video FPS for speed calcs
+POSE_ANALYSIS_REMISE_WINDOW_SEC = 2.0  # seconds window for remise detection
+
+# Camera cut / frame jump detection (TV broadcast clips)
+CAMERA_CUT_HIP_JUMP_PX = 100.0   # hip center jump > this between consecutive frames = camera cut
+CAMERA_CUT_MAX_RATIO = 0.3       # if > 30% of frames are camera cuts, analysis quality is low
+
+
+# ==================================================================
+# Phase 6: Exchange Detection + Continuous Analysis + Threshold Tuning
+# ==================================================================
+
+# --- Exchange detection (continuous analysis) ---
+EXCHANGE_MIN_APPROACH_FRAMES = 3          # min frames of decreasing distance to start exchange
+EXCHANGE_DISTANCE_DECREASE_THRESHOLD = 0.05  # BH/frame: approach detection
+EXCHANGE_MIN_DISTANCE_CHANGE_BH = 0.2    # min total distance change for valid exchange
+EXCHANGE_MERGE_SEPARATION_FRAMES = 10    # if re-approach within N frames of separation → merge into same exchange
+CONTINUOUS_SAMPLE_EVERY_N = 5            # analyze every N frames
+CONTINUOUS_MAX_FRAMES = 10800            # max frames to analyze (6min @30fps)
+
+# --- Clock state tracking (Allez/Halt proxy) ---
+CLOCK_RUNNING_CONFIRM_FRAMES = 3   # N consecutive frames with time decrease = clock running (Allez)
+CLOCK_STOPPED_CONFIRM_FRAMES = 5   # N consecutive frames with time unchanged = clock stopped (Halt)
+
+# --- Joint kinematics tracking ---
+KINEMATICS_TRACKED_JOINTS = [
+    "left_wrist", "right_wrist",
+    "left_ankle", "right_ankle",
+    "left_hip", "right_hip",
+    "left_shoulder", "right_shoulder",
+]
+KINEMATICS_JOINT_TO_KP = {
+    "left_wrist": KP_LEFT_WRIST,
+    "right_wrist": KP_RIGHT_WRIST,
+    "left_ankle": KP_LEFT_ANKLE,
+    "right_ankle": KP_RIGHT_ANKLE,
+    "left_hip": KP_LEFT_HIP,
+    "right_hip": KP_RIGHT_HIP,
+    "left_shoulder": KP_LEFT_SHOULDER,
+    "right_shoulder": KP_RIGHT_SHOULDER,
+}
+
+# --- Threshold tuning (ratio-based footwork) ---
+FOOTWORK_LUNGE_HIP_DROP_RATIO_MIN = 0.005  # BH ratio: min hip drop for lunge (0.5% — TV clips have subtle drops)
+FOOTWORK_FLECHE_BOTH_ADVANCE_MIN_TUNED = 50.0  # px: raised from 40 to reduce fleche false positives
+FOOTWORK_FLECHE_MAX_RATIO = 2.5            # max front/rear ratio for fleche (above this → lunge-like, not fleche)
+FOOTWORK_USE_RATIO_BASED_HIP_DROP = True   # use ratio-based hip drop (True) vs absolute px (False)
+
+# --- Scoring frame tolerance (OCR delay compensation) ---
+SCORING_FRAME_TOLERANCE_SEC = 2.0  # seconds: OCR score change delay tolerance

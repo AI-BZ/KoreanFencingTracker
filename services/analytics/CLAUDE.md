@@ -2,8 +2,8 @@
 
 **서브도메인:** analytics.fencingmind.ai
 **포트:** 76
-**상태:** Phase 5a 구현 완료 (TV 오버레이 OCR + 파인튜닝 데이터 수집 파이프라인)
-**마지막 세션:** 2026-05-27
+**상태:** Phase 7b 완료 (프레이즈 다름 경계 탐지 6항목 전체 구현), Phase 8 준비
+**마지막 세션:** 2026-06-03
 **브랜치:** `feature/analytics/main`
 
 ---
@@ -34,15 +34,17 @@ services/analytics/
 │   ├── server.py                    # FastAPI 앱 (모든 엔드포인트 + 데모 모드) [Phase 4a]
 │   ├── filming_guide.py             # 촬영 가이드 (유형별 권장사항, 한국어/영어) [Phase 3]
 │   ├── demo.py                      # 데모 리포트 생성 (Pool 5-3 + DE 15-11, 선수 이름) [Phase 4c]
+│   ├── tv_report_converter.py       # TVScoreTracker → MatchReport dict 변환 [Phase 5a+/5b]
+│   ├── metadata_parser.py           # 무기/성별/연령대 자동 감지 (파일명/제목) [Phase 5b]
 │   ├── upload.py                    # 영상 업로드 처리 (파일 저장, 검증) [Phase 4a]
 │   ├── credits.py                   # 크레딧 시스템 (잔액/차감/충전, in-memory) [Phase 4a]
 │   ├── report_renderer.py           # HTML 리포트 렌더링 로직 [Phase 4a]
 │   └── pdf_exporter.py              # PDF 내보내기 스캐폴드 [Phase 4a]
 ├── analyzer/                        # v3 분석기 모듈 분리
 │   ├── __init__.py
-│   ├── models.py                    # Phase 1+2+3 데이터클래스 (REMISE, direction 추가)
+│   ├── models.py                    # Phase 1+2+3+5c+7b 데이터클래스 (ActionState, FrameActionState, JointKinematics, FrameKinematics, PhraseAnnotation 추가)
 │   ├── report_models.py             # 리포트 데이터 모델 (MatchReport, FencerStats 등)
-│   ├── config.py                    # 임계값, HSV 범위, 7-segment 패턴, FACTS 라벨맵
+│   ├── config.py                    # 임계값, HSV 범위, 7-segment 패턴, FACTS 라벨맵, COCO 키포인트, 포즈 분석 상수, 키네마틱/시계 OCR 상수
 │   ├── lamp_detector.py             # LED 램프 감지 (밝기 + 색상 기반)
 │   ├── score_reader.py              # 7세그먼트 OCR (템플릿 매칭 + 세그먼트 분석)
 │   ├── video_processor.py           # 메인 영상 처리 루프 (GUI + headless)
@@ -65,6 +67,9 @@ services/analytics/
 │   ├── video_source_detector.py     # 영상 유형 자동 감지 (휴리스틱) [Phase 3]
 │   ├── quality_gate.py              # 영상 품질 평가 (유형별 프로파일) [Phase 3]
 │   ├── tv_analyzer.py               # TV 중계 교육 분석 파이프라인 [Phase 3]
+│   ├── pose_analyzer.py             # 풋워크/빠라드/거리 분석 (키네마틱 규칙, ML 불필요) [Phase 5c]
+│   ├── fencer_profile.py            # FencerProfileBuilder: bout/continuous 결과 집계 [Phase 6]
+│   ├── clip_overlay.py             # ClipOverlayGenerator: 포즈 오버레이 클립 생성 [Phase 7a]
 │   ├── training/                    # VideoMAE 파인튜닝 파이프라인
 │   │   ├── __init__.py
 │   │   ├── config.py                # FACTS 8클래스 라벨맵 + 학습 하이퍼파라미터
@@ -79,7 +84,8 @@ services/analytics/
 │   ├── landing.html                 # 랜딩 페이지 (히어로, 3단계 설명, 기능, 가격표) [Phase 4c]
 │   ├── upload.html                  # 영상 업로드 페이지
 │   ├── dashboard.html               # 분석 대시보드 (작업 목록, 크레딧 잔액)
-│   └── report.html                  # 분석 리포트 (선수 이름, 한국어 동작명, 차트, 인사이트)
+│   ├── report.html                  # 분석 리포트 (선수 이름, 한국어 동작명, 차트, 인사이트)
+│   └── labeling.html                # 포즈 분석 라벨링 UI (거리/풋워크/빠라드 패널, 'A' 수락 단축키) [Phase 5c]
 ├── static/                          # 정적 파일 [Phase 4a]
 │   ├── css/
 │   │   └── analytics.css            # 커스텀 스타일
@@ -93,7 +99,14 @@ services/analytics/
 │   ├── raw/                         # 다운로드 원본
 │   ├── clips/                       # 추출된 클립
 │   └── labeled/                     # 라벨링 완료 (L/R/T 서브디렉토리)
-├── tests/                           # 259개 테스트
+├── scripts/                         # 유틸리티 스크립트
+│   ├── run_pose_analysis.py         # 배치 포즈 분석 (YOLO11-Pose → PoseAnalyzer → JSON) [Phase 5c]
+│   ├── generate_continuous_report.py # 연속 분석 리포트 생성 (영상→포즈→교환→JSON) [Phase 6+7b]
+│   ├── generate_phrase_dataset.py   # 프레이즈 경계 어노테이션 데이터셋 생성 [Phase 7b]
+│   ├── labeling_server.py           # 웹 라벨링 리뷰 도구 (Pose+Gemini 듀얼 소스) [Phase 5c]
+│   ├── gemini_labeler.py            # Gemini Vision 자동 라벨링 (deprecated by PoseAnalyzer)
+│   └── active_learning.py           # Active Learning 스크립트
+├── tests/                           # 531개 테스트
 │   ├── conftest.py                  # pytest 설정 (경로, fixture)
 │   ├── test_analyzer.py             # Phase 1 모듈 임포트 + 유닛 (24)
 │   ├── test_pose_estimator.py       # 포즈 추정 (11)
@@ -110,7 +123,12 @@ services/analytics/
 │   ├── test_upload.py               # 업로드 처리 (7) [Phase 4a]
 │   ├── test_report_rendering.py     # 리포트 렌더링 (9) [Phase 4a]
 │   ├── test_subscription.py         # 구독 시스템 (6) [Phase 4a]
-│   └── test_tv_overlay_ocr.py       # TV 오버레이 OCR + 트래커 (31) [Phase 5a]
+│   ├── test_tv_overlay_ocr.py       # TV 오버레이 OCR + 트래커 + 시계 이벤트 (35) [Phase 5a+7b]
+│   ├── test_metadata_parser.py      # 메타데이터 파서 (42) [Phase 5b]
+│   ├── test_tv_report_converter.py  # 리포트 변환기 (12) [Phase 5b]
+│   ├── test_pose_analyzer.py        # 포즈 분석기 (92) [Phase 5c+6+7b]
+│   ├── test_fencer_profile.py       # FencerProfile 테스트 (6) [Phase 6]
+│   └── test_clip_overlay.py        # ClipOverlay 테스트 (19) [Phase 7a]
 ├── requirements.txt
 ├── .gitignore
 └── CLAUDE.md                        # 이 파일
@@ -118,15 +136,40 @@ services/analytics/
 
 ## 서버 실행
 
+### 개발 서버 (로컬 테스트)
 ```bash
-# 프로젝트 루트에서 실행
-cd /Users/gyejinpark/Documents/GitHub/FencingMind-analytics
-PYTHONPATH="services/analytics" python3 -m uvicorn app.server:app --host 0.0.0.0 --port 76
-
-# 또는 services/analytics 내에서
-cd services/analytics
-PYTHONPATH=. python3 -m uvicorn app.server:app --host 0.0.0.0 --port 76
+cd /Users/gyejinpark/Documents/GitHub/FencingMind-analytics/services/analytics
+PYTHONPATH=. .venv/bin/python3 -m uvicorn app.server:app --host 0.0.0.0 --port 76
+# → http://localhost:76/
 ```
+
+### 프로덕션 서버 (analytics.fencingmind.ai)
+```bash
+# 프로덕션은 같은 디렉토리에서 포트 9076으로 실행
+# Nginx(9090) → analytics.fencingmind.ai → localhost:9076
+cd /Users/gyejinpark/Documents/GitHub/FencingMind-analytics/services/analytics
+PYTHONPATH=. .venv/bin/python3 -m uvicorn app.server:app --host 0.0.0.0 --port 9076
+```
+
+### 🔴 프로덕션 배포 절차 (PRODUCTION DEPLOYMENT)
+데모 영상 분석 후 갤러리에 추가할 때는 **즉시 프로덕션 배포**까지 완료해야 함.
+
+```bash
+# 1. 프로덕션 서버 재시작 (코드 변경 반영)
+kill $(lsof -ti:9076) 2>/dev/null
+cd /Users/gyejinpark/Documents/GitHub/FencingMind-analytics/services/analytics
+PYTHONPATH=. .venv/bin/python3 -m uvicorn app.server:app --host 0.0.0.0 --port 9076 &
+
+# 2. 확인
+curl -s -o /dev/null -w "%{http_code}" http://localhost:9076/gallery  # → 200
+curl -s http://localhost:9076/gallery | grep "새로_추가한_리포트_ID"     # → 존재 확인
+```
+
+**규칙:**
+- 데모 영상 분석 완료 시: `gallery.py` 수정 + `data/reports/` JSON 추가 → **프로덕션 서버 재시작**까지 한 번에 완료
+- 프로덕션 포트: **9076** (개발: 76)
+- 프로덕션 URL: `https://analytics.fencingmind.ai/gallery`
+- 프로덕션은 개발과 같은 디렉토리(`services/analytics/`)에서 실행됨 — 코드 변경이 재시작만으로 반영됨
 
 ---
 
@@ -137,11 +180,39 @@ PYTHONPATH=. python3 -m uvicorn app.server:app --host 0.0.0.0 --port 76
 | 모듈 | 원본 메서드 | 역할 |
 |------|------------|------|
 | `models.py` | 데이터클래스들 | Phase 1: ScoreState, StableScore, LampState, MatchEvent / Phase 2: PoseKeypoint, FencerPose, PoseResult, Weapon, FencingAction, ActionPrediction, ActionResult, EnrichedMatchEvent |
-| `config.py` | `__init__` 상수들 | HSV 범위, 임계값, 7-segment 패턴맵, POSE_*, ACTION_*, DEVICE_*, ENRICHED_* |
+| `config.py` | `__init__` 상수들 | HSV 범위, 임계값, 7-segment 패턴맵, POSE_*, ACTION_*, DEVICE_*, ENRICHED_*, COCO KP 인덱스, 거리/풋워크/빠라드 상수 |
 | `lamp_detector.py` | `detect_lamp()` | 밝기 + HSV 색상으로 LED ON/OFF 감지 |
 | `score_reader.py` | `read_7segment_digit()`, `match_digit_template()`, `get_score_roi_mask()` 등 | 7세그먼트 OCR, 템플릿 학습/매칭, 시계 읽기 |
 | `video_processor.py` | `process_video()`, 이벤트 처리 로직 | 메인 루프, ROI 선택, 이벤트 추적, JSON/CSV 저장 |
 | `tv_overlay_ocr.py` | Phase 5a 신규 | TVOverlayOCR (Tesseract OCR), TVScoreTracker (디바운스), OverlayData/TVTouchEvent |
+
+### ml/ — ML + 분석 모듈
+
+| 모듈 | 역할 |
+|------|------|
+| `pose_estimator.py` | YOLO11-Pose 래퍼 (관절 17개 추출) |
+| `action_classifier.py` | VideoMAE 행동 분류 + FACTS 방향 매핑 |
+| `integrated_analyzer.py` | 2-pass 통합 분석 (LED/OCR + Pose/Action) |
+| `report_generator.py` | 분석 결과 → MatchReport 변환 |
+| `video_source_detector.py` | 영상 유형 자동 감지 (휴리스틱) |
+| `quality_gate.py` | 영상 품질 평가 (유형별 프로파일) |
+| `tv_analyzer.py` | TV 중계 교육 분석 파이프라인 |
+| `pose_analyzer.py` | **[Phase 5c+7b]** 풋워크/빠라드/거리 분석 + 관절 키네마틱 + 프레임별 동작 상태 분류 (규칙 기반, ML 불필요) |
+| `fencer_profile.py` | **[Phase 6]** FencerProfileBuilder: bout/continuous 결과 집계, 강점/약점 자동 생성 |
+| `clip_overlay.py` | **[Phase 7a]** ClipOverlayGenerator: YOLO 스켈레톤 + HUD 텍스트 오버레이 mp4 클립 생성 |
+
+### app/ — 웹 서비스 모듈
+
+| 모듈 | 역할 |
+|------|------|
+| `server.py` | FastAPI 메인 앱, 모든 엔드포인트 + 3-tier broadcast 분석 폴백 |
+| `demo.py` | 데모 리포트 생성 (Pool 5-3 + DE 15-11) |
+| `tv_report_converter.py` | TVScoreTracker 출력 → MatchReport dict 변환 (OCR 인사이트 포함) [Phase 5a+] |
+| `upload.py` | 영상 업로드 처리 (파일 저장, 검증) |
+| `credits.py` | 크레딧 시스템 (in-memory) |
+| `report_renderer.py` | HTML 리포트 렌더링 |
+| `pdf_exporter.py` | PDF 내보내기 스캐폴드 |
+| `filming_guide.py` | 촬영 가이드 (유형별, 한국어/영어) |
 
 ### pipeline/ — fencing-AI에서 포팅
 
@@ -287,18 +358,263 @@ PYTHONPATH=. python3 -m uvicorn app.server:app --host 0.0.0.0 --port 76
 - [x] **31개 테스트** — OCR/트래커/직렬화/레이아웃/설정 검증
 - [x] **350개 테스트** 전체 (Phase 1-4c: 319 + Phase 5a: 31)
 
-### Phase 5b: 서비스 연결 + AI 파인튜닝 (예정)
+### Phase 5a+: TV OCR 대시보드 연동 + 실제 영상 검증 (완료 — 2026-05-27)
+- [x] **tv_report_converter.py** — TVScoreTracker 출력을 MatchReport dict 형식으로 변환 (`app/tv_report_converter.py`)
+  - `tv_ocr_to_match_report()`: 이벤트 목록 + summary → report.html/report.js 호환 dict
+  - OCR 전용 인사이트 자동 생성: 점수 흐름 분석, 연속 득점 감지, 역전 감지
+  - `meta.source_type = "tv_broadcast"`, `meta.analysis_mode = "ocr_only"`
+- [x] **server.py 3-tier 폴백** — `_run_broadcast_analysis()` 수정
+  - 1순위: TVBroadcastAnalyzer (ML 기반) → 실패 시
+  - 2순위: TVOverlayOCR 파이프라인 (Tesseract OCR) → 실패 시
+  - 3순위: mock 데이터 (데모용)
+  - OCR 진행률 실시간 반영 (`progress_pct` 20~80%)
+- [x] **ultralytics 설치 완료** — `.venv`에 `ultralytics>=8.4.0` 설치, 테스트 0 skip
+  - `HAS_ULTRALYTICS` skipif 가드 유지 (CI 환경 대응)
+- [x] **실제 영상 OCR 검증** — USA Fencing 샘플 (8:49, 1280×720, 30fps)
+  - 선수: KHOTLINE Daniel vs GERSTMANN Max
+  - 감지: 19 터치, 최종 점수 10-14 (실제 10-15, 마지막 1점 미감지)
+  - 이름 OCR: 100% 정확
+  - 분석 시간: 1,363초 (~23분) for 15,892 프레임 (Tesseract 병목)
+  - GERSTMANN 4연속 터치 감지 (momentum insight)
+- [x] **353개 테스트** 전체 (Phase 1-4c: 319 + Phase 5a: 31 + ultralytics 2 복원 + Phase 5a+: 1)
+
+### Phase 5b: 버그 수정 + 매치 타임 + 무기 자동 감지 + 경고 시스템 (완료 — 2026-05-28)
+- [x] **동점 승자 버그 수정** — 13-13 동점 시 "Draw" 표시 (기존: 항상 right 선택)
+- [x] **match_time_remaining** — TVTouchEvent에 점수판 시간 필드 추가, 리포트에서 점수판 시간 우선 표시
+- [x] **영상 잘림 감지** — expected_final_score 대비 최종 점수 미달 시 warning 생성
+- [x] **metadata_parser.py** — 파일명/YouTube 제목에서 무기/성별/연령대/bout_type 자동 감지
+  - 3종 무기: foil/epee/sabre (영문+한국어)
+  - 성별: men/women (영문+한국어, word boundary 처리)
+  - 연령대: cadet/junior/senior/veteran/Y10/Y12/Y14
+  - 경기 유형: pool(5점)/de(15점) 자동 추론
+- [x] **server.py 메타데이터 연동** — OCR 분석 시 파일명에서 무기/성별/연령대 자동 추출 + 리포트 주입
+- [x] **DownloadResult.title** — YouTube 제목 추출 (yt-dlp `--print title`)
+- [x] **tv_data_collector.py** — labels.csv에 weapon 컬럼 추가
+- [x] **report.html** — warnings 섹션 (amber 경고 UI) + 성별/연령대 뱃지 추가
+- [x] **테스트 54개** — metadata_parser(42) + tv_report_converter(12)
+- [x] **407개 테스트** 전체 (Phase 1-5a+: 353 + Phase 5b: 54)
+
+### Phase 5c: 포즈 기반 라벨링 시스템 (완료 — 2026-05-28)
+- [x] **PoseAnalyzer 핵심 모듈** — `ml/pose_analyzer.py` (ML 모델 불필요, 키네마틱 규칙)
+  - 거리 계산: Body Height (BH) 단위 — 어깨~발목 높이 기준 상대 거리
+  - 5단계 거리 구간: OUT(>1.8), ADV_LUNGE(1.5-1.8), LUNGE(1.2-1.5), EXTENSION(0.8-1.2), INFIGHTING(<0.8)
+  - 풋워크 감지: LUNGE(앞발+엉덩이하강), FLECHE(양발전진), ADVANCE, RETREAT, STATIONARY
+  - 빠라드 감지: 비득점자 무기팔 손목 Y축 급변위 (사이드뷰 기준)
+  - 라벨 제안: 빠라드→riposte, 2초내 재득점→remise, 고속접근→counter_attack, 기본→attack
+- [x] **데이터 모델 확장** — `analyzer/models.py`
+  - FootworkType, DistanceZone enum
+  - FootworkResult, ParryResult, DistanceResult, PoseAnalysisResult dataclass
+  - EnrichedMatchEvent에 pose_analysis 필드 추가
+- [x] **설정 상수** — `analyzer/config.py`
+  - COCO 17 키포인트 인덱스 (KP_LEFT_SHOULDER~KP_RIGHT_ANKLE)
+  - 거리 구간/풋워크/빠라드 감지 임계값 14개
+- [x] **배치 분석 스크립트** — `scripts/run_pose_analysis.py`
+  - YOLO11-Pose → PoseAnalyzer → `data/labeled/pose_analysis_results.json`
+  - CLI: `--clips-dir`, `--output`, `--max-clips`
+- [x] **라벨링 서버 업데이트** — `scripts/labeling_server.py`
+  - 듀얼 데이터 소스: pose_analysis_results.json (primary) + gemini_results.json (fallback)
+  - API에 포즈 분석 결과 포함 (거리/풋워크/빠라드/제안)
+- [x] **라벨링 UI 업데이트** — `templates/labeling.html`
+  - Gemini 박스 → 포즈 분석 패널 (거리 BH+구간 뱃지, 풋워크, 빠라드, 제안 라벨)
+  - `A` 키 단축키: 제안 라벨 수락 (액션+방향 자동 입력)
+  - Gemini 데이터는 접이식 `<details>` 섹션으로 이동
+- [x] **47개 테스트** — `tests/test_pose_analyzer.py` (합성 PoseResult 데이터, 영상 불필요)
+  - 거리(13), 풋워크(10), 빠라드(8), 라벨 제안(8), 통합(5), 직렬화(3)
+- [x] **454개 테스트** 전체 (Phase 1-5b: 407 + Phase 5c: 47) → Phase 6에서 481개로 확장
+- [x] **실제 클립 검증 + 임계값 튜닝** (2026-05-29)
+  - **카메라컷 필터링**: `filter_camera_cuts()` — 연속 프레임 간 엉덩이 100px 이상 점프 감지, 잘라낸 프레임만으로 분석
+  - **터치 시점 탐색**: `find_touch_moment()` — 클린 프레임 중 최소 거리 프레임을 터치 시점으로 사용
+  - **상대 빠라드 변위**: 절대 손목 Y변위 → 상대 변위(손목Δ - 엉덩이Δ)로 전환, 프레임 갭>3 스킵
+  - **10클립 테스트**: 거리 정확도 향상 (7/10 out_of_distance → 0/10), 빠라드 오탐 해소 (200-285px → 20-57px)
+  - **30클립 검증**: 3개 영상, attack:57% / riposte:40% / counter_attack:3% (Gemini의 100% attack에서 대폭 개선)
+  - 알려진 한계: 런지 0건 (hip_drop 임계값 10px이 TV 클립에서 과다), 일부 영상 OOD 8/30
+
+### Phase 5c+: 분석 역량 평가 + 컨설팅 서비스 설계 (2026-05-29)
+- [x] **기술 역량 분석 보고서** — 3가지 핵심 질문에 대한 종합 답변:
+  - Q1: 실패 공격/방어 성공 분석 → **✅ 구현 완료** (`analyze_continuous()` + 풀 경기 E2E 검증)
+  - Q2: 선수별 상세 분석 (거리별 성공률, 자세, 약점) → **✅ 구현 완료** (`FencerProfileBuilder`)
+  - Q3: 컨설팅 서비스 (박소윤 분석 + 경쟁 선수 분석) → 인프라 90% 존재, Supabase 연동 필요
+- [x] **FencerProfile 컨설팅 서비스 아키텍처 설계 + 구현** — `ml/fencer_profile.py`, 풀 경기 E2E 검증 완료
+
+### Phase 5d: 서비스 연결 + AI 파인튜닝 (예정)
+- [ ] **라벨링 세션 실행** — labeling_server.py로 사람 검수 → labels_reviewed.csv 생성
 - [ ] Supabase 실적용 — in-memory → DB (analytics_* 8 테이블 실제 적용)
 - [ ] 인증 연동 — members 테이블 + 크레딧 실제 결제
 - [ ] FACTS 데이터셋 확보 + 실제 파인튜닝 실행 (Mac Studio MPS)
-- [ ] 비디오 스트리밍/재생 + 포즈 오버레이 UI
+- [x] ~~비디오 스트리밍/재생 + 포즈 오버레이 UI~~ → Phase 7a에서 구현 완료 (clip_overlay.py)
 - [ ] PDF 내보내기 실제 구현 (weasyprint 또는 reportlab)
 
-### Phase 6: 고도화 (예정)
+### Phase 6: 고도화 + FencerProfile + 연속 분석 (완료 — 2026-05-29)
+- [x] **FencerProfileBuilder** — `ml/fencer_profile.py`: bout/continuous 결과 집계, DistanceStats/FootworkStats/JointAngleStats
+  - `add_bout()`: 터치별 PoseAnalysisResult → 거리/풋워크/빠라드/관절 각도 누적
+  - `add_continuous()`: ContinuousAnalysisResult → 공격/방어 성공률 누적
+  - `build()`: 자동 강점/약점/추천 생성
+- [x] **연속 포즈 분석 모델** — `analyzer/models.py` 확장
+  - `JointAngles`: hip_angle, front_knee_angle, rear_knee_angle, trunk_lean_deg, arm_extension_ratio
+  - `ContinuousAnalysisResult`: exchanges, total_exchanges, my_fencer_summary
+  - `NonScoringEventType`: FAILED_ATTACK, SUCCESSFUL_DEFENSE, MUTUAL_RETREAT
+  - `ExchangeEvent`: non-scoring 교환 데이터 모델
+- [x] **임계값 튜닝** — PoseAnalyzer 카메라컷 필터링 + 상대 빠라드 변위
+- [x] **my_fencer 지정** — 특정 선수 분석 모드 (컨설팅 서비스 기반)
+- [x] **CLI 확장** — `run_pose_analysis.py` + `run_batch_analysis.py` 배치 처리
+- [x] **데모 데이터** — demo.py에 pose_analysis + fencer_profile 포함
+- [x] **대시보드 표시** — report.html에 포즈 분석 상세 섹션 (관절 각도, 거리 분포, 풋워크, 강점/약점)
+- [x] **27개 신규 테스트** — test_pose_analyzer.py (47→68, +21) + test_fencer_profile.py (6)
+- [x] **481개 테스트** 전체 통과
+- [x] **실측 검증: 10클립 터치 분석** — 3.3초/클립, attack:1 / riposte:5+3 분포
+- [x] **실측 검증: 풀 경기 연속 분석 E2E** (2개 영상):
+  - `usaf_7Amgqc5HJR0.mp4` (3.8분): 16 exchanges (11 failed_attack, 5 successful_defense), 51.8초
+  - `usaf_3XTpDrDSvUs.mp4` (6.7분): 45 exchanges (34 failed_attack, 11 successful_defense), 73.2초
+  - 처리 속도: **0.18-0.2x realtime** (5x 실시간보다 빠름)
+  - ~~알려진 한계: 공격 성공률 0%~~ → **해결됨** (Phase 7b Step 2: scoring_frames tolerance 매칭, 64.3% 달성)
+
+### Phase 7a: 리포트 UI 개선 + 영상 구간 재생 (완료 — 2026-05-29)
+
+- [x] **경기 이벤트 탭 UI** — "교환 타임라인" → "경기 이벤트 분석" 탭 구조로 전면 교체
+  - 탭 1: 전체 (득점 + 비득점 교환 통합)
+  - 탭 2: 어택 성공 (터치/득점만)
+  - 탭 3: 어택 실패 (비득점 교환만, 유형별 분포 포함)
+- [x] **공격자/방어자 표시** — 교환별 attacker/defender 풋워크 기반 추론 + 선수 이름 표시
+- [x] **선수별 교환 통계** — fencer_stats (공격 N회, 방어 N회) 카드, my_fencer 0% 카드 제거
+- [x] **OCR 머지 확장** — weapon/bout_type/gender/age_group 필드 OCR 리포트에서 자동 병합
+- [x] **포일 영상 분석 완료** — `usaf_hKUXgUsDOKE.mp4` (Jr Foil Final, 11:49)
+  - 224 exchanges, 22 OCR touches, 15-7, 167.2초 (0.24x realtime)
+- [x] **영상 구간 재생 + 포즈 오버레이** — 이벤트 클릭 시 해당 구간 영상 재생
+  - `ml/clip_overlay.py` — ClipOverlayGenerator (YOLO skeleton + cv2 text HUD + mp4 encoding)
+  - YOLO `result.plot()` — 관절 스켈레톤 자동 오버레이
+  - 거리(BH)/풋워크/빠라드 텍스트 HUD 오버레이 (`cv2.putText`, 반투명 배경)
+  - 이벤트당 +-2초 패딩, `data/clips/overlay/` 캐싱
+  - `GET /api/analytics/clips/{report_id}/{event_type}/{event_number}` — on-demand 클립 스트리밍
+  - `POST /api/analytics/clips/{report_id}/generate` — 배치 클립 생성 (background task)
+  - report.html 이벤트 카드에 ▶ 재생 버튼 + 비디오 모달 (로딩/에러/재생 상태)
+  - `--with-overlays` / `--overlays-all` CLI 플래그 (`generate_continuous_report.py`)
+  - **19개 신규 테스트** — annotation, HUD, clip generation, endpoint, template 검증
+- [x] **500개 테스트** 전체 통과 (481 + 19)
+
+### Phase 7b: 리포트 2-패널 + 클립 인라인 + 프레이즈 다름 경계 탐지 (완료 — 2026-06-01)
+- [x] **2-패널 레이아웃 재설계** — `report.html` 전면 교체
+  - 왼쪽 패널(440px sticky): 경기 영상 + 인라인 클립 재생
+  - 오른쪽 패널(flex-1): 분석 콘텐츠 (summary, chart, table, stats, events)
+  - `max-w-[1600px] flex flex-col lg:flex-row lg:gap-8` 외곽 그리드
+  - `lg:sticky lg:top-20 lg:self-start lg:max-h-[calc(100vh-6rem)]` 왼쪽 패널 고정
+- [x] **모바일 sticky 수정** — `lg:sticky` → `sticky top-16 lg:top-20`
+  - 모바일: `max-h-[60vh]` (영상이 화면 60% 차지)
+  - 데스크톱: `max-h-[calc(100vh-6rem)]` (navbar 제외)
+  - `z-10` stacking context 추가
+- [x] **클립 인라인 재생** — 모달 방식 → 왼쪽 패널 인라인 재생으로 전환
+  - `<div id="clip-player-container">` 인라인 비디오 플레이어
+  - `fetch(url)` GET + blob URL 패턴 (HEAD 미지원 문제 해결)
+  - 서버 에러 JSON 파싱, 로딩/에러 상태 표시
+  - ▶ 클릭 시 `scrollIntoView({ behavior: 'smooth' })` 자동 스크롤
+- [x] **영상 타이틀 제거** — sticky 상태에서 공간 확보 (`p-4` → `p-2`)
+- [x] **CSS 업데이트** — `static/css/analytics.css`
+  - `.report-left-panel` 스크롤바 스타일 (4px, 반투명)
+  - `@media print` 단일 컬럼 오버라이드
+- [x] **클립 플레이어 검증** — Playwright 브라우저 테스트
+  - 2-패널 레이아웃 데스크톱/모바일 확인
+  - ▶ 클릭 → YOLO 포즈 오버레이 클립 인라인 재생 확인
+  - 405 에러 수정 (HEAD → GET + blob URL)
+- [x] **프레이즈 다름(Phrase d'armes) 경계 탐지 — 6항목 전체 구현** (2026-05-31~06-01)
+  - **Step 2: scoring_frames 연동** — OCR 터치 이벤트 → `analyze_continuous(scoring_frames=...)` 전달
+    - tolerance 기반 매칭: `SCORING_FRAME_TOLERANCE_SEC = 2.0` (OCR 점수 변화가 실제 터치보다 0.5-2초 지연)
+    - `generate_continuous_report.py`: OCR 리포트 로드 → scoring_frames 추출 → 샘플링 보정 → 전달
+    - 공격 성공률 0% → 64.3% (PRIMUS vs KOVALEV 검증)
+  - **Step 3: 짧은 SEPARATION 병합** — `EXCHANGE_MERGE_SEPARATION_FRAMES = 10`
+    - `_detect_exchanges()` 상태 기계에서 10프레임 이내 재접근 → 같은 교환으로 병합
+    - 연속 공격(마르쉬→런지→리포스트) 시퀀스가 하나의 교환으로 유지됨
+  - **Step 4: 시계 OCR → Allez/Halt 감지** — `TVScoreTracker._update_clock_state()`
+    - `CLOCK_RUNNING_CONFIRM_FRAMES = 3`, `CLOCK_STOPPED_CONFIRM_FRAMES = 5`
+    - 시계 상태 기계: unknown → running(Allez) → stopped(Halt) 전환
+    - `get_clock_events()` → `[{"frame": N, "event": "allez"|"halt", "time": "M:SS"}]`
+    - 파이프라인 전파: `tv_data_collector.py` → `server.py` → 리포트 JSON
+  - **Step 5: 관절별 속도/가속도 프로파일** — `JointKinematics`, `FrameKinematics` dataclass
+    - `compute_joint_kinematics()`: 8개 관절 (양쪽 wrist/ankle/hip/shoulder)
+    - velocity_px (px/frame), velocity_bh (BH/frame), acceleration_px (px/frame²)
+    - 카메라컷 필터링 적용 (hip 점프 > 100px → 스킵)
+  - **Step 6: 프레임별 동작 상태 분류** — `ActionState` enum (9가지 + UNKNOWN)
+    - EN_GARDE, MARCHE, RETRAITE, FENTE, FLECHE, PARADE, RIPOSTE, PREPARATION, RECOVERY
+    - `classify_frame_action()`: kinematics + footwork + parry 조합 → 프레임별 상태 결정
+    - `classify_action_sequence()`: 전체 시퀀스 분류
+    - `analyze_continuous()`에서 양쪽 선수 action_state_summary 자동 계산
+  - **Step 7: Phrase 경계 annotated 데이터셋** — `scripts/generate_phrase_dataset.py`
+    - `PhraseAnnotation` dataclass: video_id, phrase_id, start/end_frame, trigger, outcome, action_sequence
+    - continuous report JSON → exchange 경계 → phrase 어노테이션 JSON 변환
+    - `data/datasets/phrase_boundaries.json` 출력
+  - **E2E 검증**: PRIMUS vs KOVALEV (B6k6SoJFAr8) 재분석 완료
+    - scoring_frames: 22개, 공격 성공률: 64.3% (left), 방어 성공률: 42.9%
+    - action_state_summary: left(en_garde 52.1%), right(en_garde 34.5%)
+    - 프로덕션 배포 완료 (port 9076)
+- [x] **531개 테스트** 전체 통과 (500 + 31 신규)
+  - test_pose_analyzer.py: 68→92 (+24: scoring_frames 4개, SEPARATION 병합 4개, kinematics 4개, action_state 8개, phrase 4개)
+  - test_tv_overlay_ocr.py: 31→35 (+4: clock state tracking)
+  - test_integration.py: +3 (clock events 연동)
+
+### Phase 8: 미구현 항목 (예정)
 - [ ] 종목별 분석 로직 (Weapon-specific analyzer: foil/epee/sabre)
-- [ ] 풋워크/방어 동작 분류 (포즈 궤적 분석 — Layer 2)
-- [ ] 오디오 터치 감지 검토 (Allez Go 논문: 89.1% 정확도)
 - [ ] Active Learning — low-confidence 예측 수동 검수 큐
+- [ ] Supabase 실적용 — in-memory → DB (analytics_* 8 테이블)
+- [ ] 인증 연동 — members 테이블 + 크레딧 실제 결제
+- [ ] FACTS 데이터셋 확보 + 실제 파인튜닝 실행 (Mac Studio MPS)
+- [ ] PDF 내보내기 실제 구현 (weasyprint 또는 reportlab)
+
+### Phase 7b 연구: 프레이즈 다름(Phrase d'armes) 경계 탐지 (2026-05-31, 구현 완료 2026-06-01)
+
+**문제 정의**: 클립 재생 시 점수 변화 프레임 기준 ±2초 대칭 패딩 → 실제 공격 동작이 아닌 선수 복귀 장면이 재생됨
+
+> **상태**: 3-tier 모두 구현 완료 (Step 2~7). Tier 1(Clock OCR) + Tier 2(거리/속도 상태 기계) + scoring_frames 연동 + 키네마틱 + 프레임별 동작 분류 + 데이터셋 생성까지 전체 파이프라인 구축됨.
+
+**타임라인 분석**:
+```
+실제 시간 순서:
+  선수 접근(Allez) → 연속 동작(마르쉬/런지/팡트 etc) → 램프 점등 → 심판 판정 → 점수 변경(OCR 감지) → 복귀
+  ────────── 분석 대상 ──────────── ← 0.5-2초 → ← OCR 감지 시점
+
+현재 클립 패딩:
+  [OCR프레임 - 2초] ─────── [OCR프레임] ─────── [OCR프레임 + 2초]
+                                  ↑ 점수 변화 시점 기준
+                    ← 복귀 장면 포함 →        ← 완전히 복귀 장면 →
+```
+
+**연구 결과 — 3-tier 하이브리드 접근법**:
+
+| Tier | 방법 | 정확도 | 적용 조건 |
+|------|------|--------|----------|
+| **1** | Clock OCR (Allez/Halt 프록시) | 높음 | TV 중계 (점수판에 시계 표시) |
+| **2** | 거리/속도 기반 상태 기계 | 중간 | 모든 영상 (보편적 폴백) |
+| **3** | 비대칭 패딩 (경험적) | 낮음 | 즉시 적용 가능 |
+
+**Tier 1: Clock OCR (TV 중계 전용)**
+- TV 점수판의 시계가 움직이는 구간 = 경기 진행 중 (Allez 이후)
+- 시계 정지 = Halt (프레이즈 종료)
+- TVOverlayOCR에 이미 시간 읽기 기능 있음 → `is_clock_running()` 메서드 추가 가능
+- 한계: 시계 해상도 1초, OCR 오류 가능
+
+**Tier 2: 거리/속도 기반 상태 기계 (보편적)**
+- PoseAnalyzer의 `compute_distance_series()` 활용
+- 상태: IDLE → APPROACH (closing_speed > threshold) → ACTION (min distance) → SEPARATION
+- 프레이즈 시작 = IDLE→APPROACH 전환점 (접근 시작)
+- 프레이즈 종료 = 램프 점등 or 최소 거리 후 급격한 분리
+- 실패 공격: APPROACH → 최소 거리 미달 → 바로 SEPARATION
+- 한계: 비가시적 동작(플뢰레 내선/외선), 느린 접근 구별 어려움
+
+**Tier 3: 비대칭 패딩 (즉시 적용)**
+- 현재: `pad_seconds = 2.0` (대칭, `clip_overlay.py`)
+- 개선: `pad_before = 3.0`, `pad_after = 0.5` (비대칭)
+- 근거: 점수 변화는 실제 터치보다 0.5-2초 후에 발생 → 앞으로 더 많이 패딩
+- 즉시 구현 가능, 완벽하지 않지만 현재보다 확실히 개선
+
+**구현 우선순위** (전체 완료 2026-06-01):
+1. ~~Tier 3 (비대칭 패딩)~~ — 비대칭 패딩 대신 scoring_frames tolerance 기반 매칭으로 대체 (Step 2)
+2. ~~Tier 2 (거리 기반)~~ — ✅ SEPARATION 병합 + 키네마틱 + 프레임별 동작 분류 구현 (Step 3,5,6)
+3. ~~Tier 1 (Clock OCR)~~ — ✅ `TVScoreTracker._update_clock_state()` + `get_clock_events()` 구현 (Step 4)
+
+**분석 대상 케이스 분류**:
+| 케이스 | 현상 | 분석 대상 |
+|--------|------|----------|
+| 공격 성공 | 점수 올라감 + 색 램프 | 프레이즈 시작 → 램프 점등 |
+| 공격 실패 (백색 램프) | 점수 불변 + 백 램프 | 프레이즈 시작 → 백 램프 |
+| Halt (점수 불변) | 점수 불변 + 심판 정지 | 프레이즈 시작 → Halt |
+| 연속 교환 | 빠른 공격-방어-리포스트 | 전체 프레이즈 (다중 동작) |
 
 ---
 
@@ -514,9 +830,9 @@ GET /api/analytics/status → capabilities + phase
 │  ATTACK, RIPOSTE, COUNTER_ATTACK, REMISE (4종 × left/right)   │
 │  → 파인튜닝 파이프라인 준비 완료, FACTS 데이터셋 확보 필요       │
 ├───────────────────────────────────────────────────────────────┤
-│ Layer 2: 풋워크/방어 (포즈 궤적 분석) — Phase 4 예정            │
-│  LUNGE, FLECHE, ADVANCE, RETREAT, PARRY                       │
-│  → 관절 좌표 시계열 분석 필요 (VideoMAE 불가)                   │
+│ Layer 2: 풋워크/방어 (포즈 궤적 분석) — Phase 5c 구현 완료       │
+│  LUNGE, FLECHE, ADVANCE, RETREAT, STATIONARY + PARRY 감지      │
+│  → PoseAnalyzer: COCO 키포인트 궤적 분석 (ML 불필요, 규칙 기반) │
 └───────────────────────────────────────────────────────────────┘
 ```
 
@@ -639,6 +955,99 @@ Step 5: 배포 ─────────────────────�
 - **인프라**: Mac Studio M1 Max MPS (모델 329MB, 학습 ~1.3GB — 클라우드 GPU 불필요)
 - **자동 전환**: `ACTION_FINETUNED_PATH` 설정 시 ActionClassifier가 자동으로 파인튜닝 모델 사용
 
+### 결정 15: TV 중계 분석 3-tier 폴백 (2026-05-27)
+- **이유**: ML 모델(TVBroadcastAnalyzer)이 불안정할 때 사용자에게 빈 결과를 보여주면 안 됨
+- **결정**: ML → OCR → mock 순서의 graceful degradation
+  - 1순위: TVBroadcastAnalyzer (VideoMAE + Pose) — 정밀 동작 분류 가능
+  - 2순위: TVOverlayOCR (Tesseract) — 점수/이름만, 동작 분류 불가
+  - 3순위: mock 데이터 — 데모 데이터로 UI 동작 확인용
+- **근거**: 실제 서비스에서 OCR만으로도 유의미한 분석 제공 가능 (점수 흐름, 연속 득점, 역전 등)
+
+### 결정 16: OCR 모드에서 동작 분류 불가 수용 (2026-05-27)
+- **이유**: TV 오버레이 OCR은 점수판 숫자만 읽을 수 있음, 선수의 블레이드 동작은 영상 분석 필요
+- **결정**: OCR 결과의 action 필드를 "unknown"으로 설정, report.html에서 빈 차트 정상 표시
+- **해결 경로**: FACTS 데이터셋 → VideoMAE 파인튜닝 → OCR + ML 결합 → 동작 분류 활성화
+
+### 결정 17: Gemini Vision → PoseAnalyzer 전환 (2026-05-28)
+- **이유**: Gemini Vision이 30개 클립 전부 "attack" (100%)로 분류 — 블레이드 접촉(빠라드)을 시각적으로 구별 못함
+- **근본 원인**: 득점자의 최종 동작만 보면 attack이든 riposte든 시각적으로 동일
+- **결정**: Gemini 대신 YOLO11-Pose 관절 좌표의 키네마틱 분석으로 전환
+  - 비득점자가 빠라드 → 득점자 액션은 riposte
+  - 같은 선수 2초 내 재득점 → remise
+  - 양쪽 고속 접근 → counter_attack 가능성
+- **구현**: `ml/pose_analyzer.py` — ML 모델 없이 규칙 기반 (풋워크 + 빠라드 + 거리)
+- **검증 완료** (2026-05-29): 30클립 검증 — attack:57%, riposte:40%, counter_attack:3%
+
+### 결정 18: 카메라컷 필터링 + 상대 빠라드 변위 (2026-05-29)
+- **이유**: 실제 TV 클립 검증 시 두 가지 문제 발견
+  1. 카메라 전환 시 관절 좌표 점프 → 거리/풋워크/빠라드 전부 왜곡
+  2. 빠라드 감지에서 절대 손목 변위 사용 → 접근 중 신체 이동이 200+px로 오탐
+- **결정 1 (카메라컷)**: `filter_camera_cuts()` — 연속 프레임 간 hip_center 100px 이상 점프 = 카메라컷으로 마킹
+  - `find_touch_moment()` — 클린 프레임 중 최소 거리 프레임을 터치 시점으로 사용
+  - 거리 정확도: 7/10 out_of_distance → 0/10
+- **결정 2 (상대 변위)**: `detect_parry()` 내에서 absolute wrist_y → relative (wrist_delta - hip_delta)로 변경
+  - 프레임 갭 > 3인 쌍 스킵 (카메라컷 잔여 영향 방지)
+  - 빠라드 오탐: 200-285px → 20-57px로 대폭 감소
+- **실측 결과 (30클립)**: attack:17(57%), riposte:12(40%), counter_attack:1(3%)
+- **알려진 한계**:
+  - 런지 0건 (hip_drop_min=10px이 TV 클립에서 과다 — 향후 튜닝)
+  - 일부 영상(0qllx-vYhGE)에서 8/30 out_of_distance 잔존
+
+### 결정 19: 클립 인라인 재생 + fetch GET + blob URL (2026-05-31)
+- **이유**: 기존 모달 방식은 분석 컨텍스트를 가리고, video 엘리먼트의 onerror가 HTTP 404/500을 안정적으로 처리하지 못함
+- **결정 1 (모달→인라인)**: 클립을 `fixed inset-0` 모달 대신 왼쪽 패널 내 인라인 비디오로 재생
+- **결정 2 (HEAD→GET)**: FastAPI `@app.get`이 HEAD 미지원(405) → `fetch(url)` GET + blob URL 패턴
+  - `const blob = await resp.blob(); const blobUrl = URL.createObjectURL(blob);`
+  - 서버 에러 시 JSON 파싱 (`resp.json().detail`) → 사용자 친화적 에러 메시지
+- **검증**: Playwright 브라우저 테스트로 YOLO 포즈 오버레이 클립 인라인 재생 확인
+
+### 결정 20: 프레이즈 다름 경계 탐지 — 3-tier 하이브리드 접근법 (2026-05-31)
+- **이유**: 클립 재생이 점수 변화 시점 기준 ±2초 대칭 패딩 → 복귀 장면만 보임
+- **근본 원인**: OCR 점수 변화 = 심판이 점수판 업데이트 시점 (실제 터치보다 0.5-2초 후)
+- **결정**: 3단계 점진적 개선 전략
+  - Tier 3 (즉시): 비대칭 패딩 (`pad_before=3.0, pad_after=0.5`)
+  - Tier 2 (중기): 거리/속도 상태 기계 (`detect_phrase_boundaries()`)
+  - Tier 1 (장기): Clock OCR로 Allez/Halt 구간 추적
+- **참고 논문**: Allez Go (2024) — 오디오 Allez/Halt 감지 89.1%
+- **한계**: 시각적 방법만으로는 연속 동작의 시작점 정확 탐지 어려움 (마르쉬→런지→팡트 연속)
+
+### 결정 21: 2-패널 리포트 레이아웃 (2026-05-31)
+- **이유**: 단일 컬럼에서 영상→분석 스크롤이 너무 김, 영상 참조하면서 분석 읽기 불가
+- **결정**: 왼쪽(440px sticky 영상) + 오른쪽(flex-1 분석) 2-패널 레이아웃
+- **모바일**: `< lg`에서 `flex-col` → 영상 상단 60vh sticky, 분석 하단
+- **데스크톱**: `>= lg`에서 `flex-row` → 영상 왼쪽 고정, 분석 스크롤
+
+### 결정 22: scoring_frames tolerance 매칭 (2026-06-01)
+- **이유**: OCR 점수 변화 감지 시점이 실제 터치보다 0.5-2초 늦음 (심판 판정 → 점수판 업데이트 지연)
+- **결정**: `SCORING_FRAME_TOLERANCE_SEC = 2.0` — 교환의 min_dist_frame 기준 ±2초 윈도우 내에 scoring_frame이 있으면 매칭
+- **구현**: `_build_my_fencer_summary()`와 `_classify_exchange()`에서 tolerance 기반 매칭 적용
+- **결과**: 공격 성공률 0% → 64.3% (PRIMUS vs KOVALEV 검증)
+- **trade-off**: 2초 윈도우가 넓으면 false positive 가능 → 실측에서 문제 없음 확인
+
+### 결정 23: 짧은 SEPARATION 병합 (2026-06-01)
+- **이유**: `_detect_exchanges()` 상태 기계에서 연속 공격(마르쉬→런지→리포스트) 시퀀스가 여러 개의 짧은 교환으로 쪼개짐
+- **결정**: `EXCHANGE_MERGE_SEPARATION_FRAMES = 10` — 10프레임(~0.3초) 이내 재접근 시 같은 교환으로 병합
+- **구현**: SEPARATION 상태에서 거리가 다시 줄기 시작할 때 분리 지속 시간 체크 → 짧으면 APPROACH 복귀
+- **근거**: 실제 프레이즈 다름은 2-5초 지속, 0.3초 분리는 동일 프레이즈 내 전환
+
+### 결정 24: Clock OCR 상태 기계 (2026-06-01)
+- **이유**: TV 중계에서 시계가 움직이는 구간 = Allez(경기 진행), 시계 정지 = Halt(프레이즈 종료)
+- **결정**: `CLOCK_RUNNING_CONFIRM_FRAMES = 3`, `CLOCK_STOPPED_CONFIRM_FRAMES = 5` — 연속 N프레임 확인 후 상태 전환
+- **구현**: `TVScoreTracker._update_clock_state()` — unknown/running/stopped 상태 기계, 디바운싱 적용
+- **파이프라인**: tv_data_collector → server.py → continuous report JSON에 `clock_events` 저장
+- **한계**: 시계 해상도 1초, OCR 오류 시 spurious 이벤트 가능 → confirm_frames로 완화
+
+### 결정 25: 규칙 기반 프레임별 동작 분류 — ML 미사용 (2026-06-01)
+- **이유**: VideoMAE 파인튜닝 없이도 프레이즈 경계 탐지에 필요한 동작 분류 가능
+- **결정**: kinematics(관절 속도/가속도) + footwork(전진/후퇴/런지) + parry 조합으로 9가지 ActionState 분류
+- **분류 규칙**:
+  - EN_GARDE: velocity_max < threshold AND 적정 거리
+  - FENTE: 앞발 전진 + hip drop (런지 패턴)
+  - PARADE: 비득점자 손목 횡방향 급변위
+  - RIPOSTE: 파라드 직후 전진
+- **구현**: `classify_frame_action()` + `classify_action_sequence()` → `analyze_continuous()`에서 호출
+- **한계**: threshold 기반이므로 영상 스타일/거리에 따라 정확도 변동 → 향후 ML 모델로 대체 가능
+
 ### 결정 6: 종목(Weapon) 공통 개발 → 종목별 분석 분리 (2026-05-21)
 - **이유**: 3종목(foil/epee/sabre)은 유효면, 우선권, 경기 템포가 다름
 - **결정**: Phase 2는 공통 레이어 (Pose + Action = 사실 기록), 종목별 해석은 향후 별도 레이어
@@ -715,6 +1124,38 @@ Phase 2 (이벤트만)  ██    ██     ██   ██      ██    █�
 
 → **실시간보다 빠름** (0.49x realtime) — 3분 영상을 88초에 분석
 
+### TV OCR 분석 모드 (Phase 5a+ 실측)
+
+TVOverlayOCR + TVScoreTracker를 이용한 TV 중계 영상 점수 추적:
+
+| 영상 | 길이 | 프레임 | sample_interval | 분석 시간 | 배율 | 결과 |
+|------|------|--------|----------------|----------|------|------|
+| USA Fencing 샘플 | 8:49 | 15,892 | 5 | 1,363초 (~23분) | 2.6x | 19터치, 10-14 (실제 10-15) |
+
+- **병목**: Tesseract OCR (~85ms/프레임, sample_interval=5이면 매 5프레임마다)
+- **정확도**: 이름 100%, 점수 76% 읽기율, 최종 점수 1점 차이
+- **최적화 기회**: EasyOCR 전환, sample_interval 증가(10~15), ROI 캐싱
+
+### 연속 포즈 분석 모드 (Phase 6 실측, 2026-05-29)
+
+`PoseAnalyzer.analyze_continuous()` — 매 sample_every_n 프레임 YOLO11-Pose 실행:
+
+| 영상 | 길이 | 샘플 프레임 | 교환 감지 | 처리 시간 | 배율 |
+|------|------|-----------|----------|----------|------|
+| usaf_7Amgqc5HJR0 | 3.8분 (228초) | 2,282 | 16 교환 | 51.8초 | **0.23x** |
+| usaf_3XTpDrDSvUs | 6.7분 (404초) | 4,036 | 45 교환 | 73.2초 | **0.18x** |
+
+→ **5x 실시간보다 빠름** — 풀 경기 6.7분을 73초에 분석
+→ sample_every_n=3 (매 3프레임), YOLO11-Pose batch 처리
+
+**Phase 7b 이후 (scoring_frames + kinematics + action_state 포함)**:
+
+| 영상 | 길이 | 교환 | 공격 성공률 | 처리 시간 | 추가 데이터 |
+|------|------|------|----------|----------|-----------|
+| usaf_B6k6SoJFAr8 (PRIMUS vs KOVALEV) | 9:35 | 63교환 | 64.3% (left) | ~120초 | scoring_frames:22, action_state_summary, kinematics |
+
+→ scoring_frames 연동으로 공격 성공률 정상 계산 (이전 0% → 64.3%)
+
 ### 전체 프레임 분석 모드 (TV/선수 전용)
 
 TV 중계나 선수 촬영은 Phase 1 이벤트가 없으므로 모든 프레임에 Pose 실행:
@@ -752,31 +1193,160 @@ TV 중계나 선수 촬영은 Phase 1 이벤트가 없으므로 모든 프레임
 
 ## 기술 스택
 
-| 영역 | Phase 1 | Phase 2 | Phase 3 | Phase 4a | Phase 4c | Phase 5a (현재) | Phase 5b 예정 |
-|------|---------|---------|---------|----------|---------|----------------|-------------|
-| 영상 처리 | OpenCV 4.x | 유지 | 유지 | 유지 | 유지 | + Tesseract OCR | + FFmpeg |
-| LED/점수 | 7-segment OCR | 유지 | 유지 | 유지 | 유지 | + TV 오버레이 OCR | 유형별 최적화 |
-| 다운로드 | yt-dlp | 유지 | 유지 | 유지 | 유지 | + anti-bot, 클립 분할 | 유지 |
-| 포즈 추정 | — | YOLO11-Pose | 유지 | 유지 | 유지 | 유지 | 유지 |
-| 행동 인식 | — | VideoMAE (K400) | FACTS 정렬 | Mock fallback | 유지 | 유지 | FACTS 파인튜닝 |
-| 영상 감지 | — | — | VideoSourceDetector | 유지 | 유지 | 유지 | 유지 |
-| 품질 관리 | — | — | QualityGate | 유지 | 유지 | 유지 | 유지 |
-| TV 분석 | — | — | TVBroadcastAnalyzer | 유지 | 유지 | + TVOverlayOCR | 유지 |
-| 데이터 수집 | — | — | — | — | — | TVDataCollector | 유지 |
-| 종목 분석 | — | Weapon enum | 유지 | 유지 | 유지 | 유지 | 종목별 Analyzer |
-| 웹 UI | — | — | — | Jinja2/Tailwind/Chart.js | + 랜딩/DE/한국어 | 유지 | + Supabase 연결 |
-| DB | — | — | — | in-memory (스키마) | 유지 | 유지 | Supabase 적용 |
-| GPU | — | Apple Metal (MPS) | 유지 | 유지 | 유지 | 유지 | 파인튜닝도 MPS |
+| 영역 | Phase 1 | Phase 2 | Phase 3 | Phase 4a | Phase 5a+ | Phase 5c | Phase 6 | Phase 7b (현재) |
+|------|---------|---------|---------|----------|----------------|-------------|-------------|-------------|
+| 영상 처리 | OpenCV 4.x | 유지 | 유지 | 유지 | + Tesseract OCR | 유지 | 유지 | 유지 |
+| LED/점수 | 7-segment OCR | 유지 | 유지 | 유지 | + TV 오버레이 OCR | 유지 | 유지 | + **Clock OCR (Allez/Halt)** |
+| 포즈 추정 | — | YOLO11-Pose | 유지 | 유지 | 유지 | + PoseAnalyzer | 유지 | 유지 |
+| 행동 인식 | — | VideoMAE (K400) | FACTS 정렬 | Mock fallback | 유지 | 유지 | 유지 | + **ActionState 분류 (규칙 기반)** |
+| 풋워크/빠라드 | — | — | — | — | — | **PoseAnalyzer** | 유지 | + **SEPARATION 병합** |
+| 키네마틱 | — | — | — | — | — | — | JointAngles | + **JointKinematics (속도/가속도)** |
+| 선수 프로필 | — | — | — | — | — | — | **FencerProfileBuilder** | + scoring_frames 연동 |
+| 프레이즈 경계 | — | — | — | — | — | — | — | **PhraseAnnotation + 데이터셋** |
+| TV 분석 | — | — | TVBroadcastAnalyzer | 유지 | + TVOverlayOCR | 유지 | 유지 | + **clock_events 파이프라인** |
+| 웹 UI | — | — | — | Jinja2/Tailwind/Chart.js | 유지 | + 라벨링 UI | + 포즈 상세 | + **2-패널 + 인라인 클립** |
+| DB | — | — | — | in-memory (스키마) | 유지 | 유지 | 유지 | 유지 |
+| GPU | — | Apple Metal (MPS) | 유지 | 유지 | 유지 | 유지 | 유지 | 유지 |
 
 ---
 
-## 세션 재개 가이드 (2026-05-27 기준)
+## 🔴 분석 역량 평가 + 컨설팅 서비스 아키텍처 (2026-05-29)
+
+### 현재 분석 가능 범위 vs 확장 가능 범위
+
+| 분석 항목 | 현재 상태 | 난이도 | 필요 작업 |
+|-----------|----------|--------|----------|
+| 득점 시점 분석 (who scored) | ✅ 동작 | — | 완료 |
+| 풋워크/빠라드/거리 (터치별) | ✅ 동작 | — | 30클립 검증 완료 |
+| 실패 공격 감지 | ✅ 구현 완료 | — | `analyze_continuous()` — 풀 경기 E2E 검증 완료 |
+| 방어 성공 (비득점) 감지 | ✅ 구현 완료 | — | `analyze_continuous()` — 풀 경기 E2E 검증 완료 |
+| 선수별 거리별 성공률 | ✅ 구현 완료 | — | `FencerProfileBuilder` — DistanceStats 집계 |
+| 선수별 풋워크 패턴 | ✅ 구현 완료 | — | `FencerProfileBuilder` — FootworkStats 집계 |
+| 페이크 vs 진짜 공격 구분 | ❌ 미구현 | 높음 | 관절 속도 프로파일 분석 필요 |
+| 경쟁 선수 분석 (상대 프로필) | ⚠️ 코드 준비됨 | 중간 | FencerProfile 완료, Supabase 연동 필요 |
+
+### Q1: 실패 공격 / 방어 성공 분석 — ✅ 구현 완료
+
+**구현 완료**: `PoseAnalyzer.analyze_continuous()` — 풀 경기 연속 포즈 분석
+
+```
+분석 방식: ████████████████████████████████████  ← 전체 경기
+           ████████████████████████████████████  ← 매 N프레임 포즈 분석
+           → 접근(closing_speed >0) → 빠른 후퇴 = 실패 공격
+           → 빠라드 감지 + 후퇴 = 방어 성공
+```
+
+**구현 내용**:
+- `PoseAnalyzer.analyze_continuous()` — 매 sample_every_n 프레임 포즈 분석
+- `_detect_exchanges()` — 상태 기계 (IDLE→APPROACH→SEPARATION)로 교환 감지
+- `_classify_exchange()` — failed_attack, successful_defense, mutual_retreat, off_target 분류
+- `_build_my_fencer_summary()` — 특정 선수 관점 공격/방어 통계
+
+**풀 경기 E2E 실측 결과 (2026-05-29)**:
+| 영상 | 길이 | 교환 | failed_attack | successful_defense | 처리 시간 | 배율 |
+|------|------|------|---------------|-------------------|----------|------|
+| usaf_7Amgqc5HJR0 | 3.8분 | 16 | 11 | 5 | 51.8초 | 0.23x |
+| usaf_3XTpDrDSvUs | 6.7분 | 45 | 34 | 11 | 73.2초 | 0.18x |
+
+~~**알려진 한계**: scoring_frames 데이터 미연동 → 공격 성공률이 0%로 표시.~~ → **Phase 7b Step 2에서 해결** (tolerance 기반 scoring_frames 매칭, PRIMUS vs KOVALEV 검증: 공격 성공률 64.3%)
+
+### Q2: 선수별 상세 분석 — ✅ 구현 완료
+
+**구현 완료**: `ml/fencer_profile.py` — `FencerProfileBuilder` 클래스
+
+PoseAnalyzer 수집 데이터 → FencerProfileBuilder가 집계:
+- `DistanceStats`: zone_distribution, zone_success_rate, preferred_zone, avg_closing_speed
+- `FootworkStats`: type_distribution, type_success_rate, preferred_footwork
+- `JointAngleStats`: avg_hip_angle, avg_front_knee, avg_trunk_lean, avg_arm_extension
+- `parry_rate`, `parry_success_to_riposte`
+- 자동 생성: `strengths`, `weaknesses`, `recommendations` (한국어)
+
+**사용법**:
+```python
+builder = FencerProfileBuilder("left")
+builder.add_bout(result, scored=True)   # 터치별 결과 누적
+builder.add_continuous(continuous_result) # 연속 분석 결과 누적
+profile = builder.build()               # 프로필 생성 + 자동 인사이트
+```
+
+### Q3: 컨설팅 서비스 아키텍처
+
+**서비스 대상**: 박소윤 (예시) → 본인 분석 + 경쟁 선수 분석
+
+**구현 로드맵**:
+```
+Phase A: 본인 분석 (인프라 70% 존재)
+  ├── 영상 수집: TVDataCollector로 박소윤 경기 클립 수집
+  ├── 포즈 분석: run_pose_analysis.py로 배치 처리
+  ├── 프로필 생성: FencerProfile 집계 → Supabase 저장
+  └── 리포트: 거리별 성공률, 풋워크 패턴, 빠라드 반응, 약점/개선점
+
+Phase B: 경쟁 선수 분석 (추가 개발 필요)
+  ├── 경쟁 선수 영상 수집 (대한펜싱협회 대회 결과 → 상위 선수 특정)
+  ├── 동일 파이프라인 처리
+  ├── 대조 분석: 박소윤 vs 경쟁 선수 FencerProfile 비교
+  └── 전략 리포트: 상대 약점, 공략 포인트, 주의점
+
+Phase C: 대회 전 브리핑
+  ├── 대진표 공개 → 상대 선수 FencerProfile 자동 조회
+  ├── 상대별 맞춤 전략 제안 (거리 관리, 풋워크 대응)
+  └── 코치/선수 앱에서 실시간 열람
+```
+
+**핵심 의존성**:
+1. Supabase `analytics_player_metrics` 테이블 활성화
+2. 선수 식별: `players` 테이블과 영상 내 선수 매칭 (OCR 이름 or 수동)
+3. 최소 5경기 이상 데이터 축적 → 통계적 유의미성
+
+### 30클립 포즈 분석 검증 결과 (실측, 2026-05-29)
+
+```
+영상 3개 × 10클립씩 = 30클립 (USA Fencing TV 중계)
+  - usaf_0HeqT9us5wA (10클립): 주로 infighting
+  - usaf_0qllx-vYhGE (11클립): OOD 집중 (카메라 스타일 다름)
+  - usaf_6MCRWT7GmaU (9클립): 다양한 거리 분포
+
+라벨 분포:
+  attack_left:  7 (23%)     riposte_left:  7 (23%)
+  attack_right: 10 (33%)    riposte_right: 5 (17%)
+                            counter_attack_right: 1 (3%)
+  → attack: 17 (57%), riposte: 12 (40%), counter_attack: 1 (3%)
+
+거리 분포 (터치 시점):
+  infighting: 11 (37%) | extension: 5 (17%) | lunge: 3 (10%)
+  advance_lunge: 3 (10%) | out_of_distance: 8 (27%)
+
+풋워크 분포 (양 선수 합산 60):
+  fleche: 20 (33%) | unknown: 13 (22%) | stationary: 12 (20%)
+  retreat: 9 (15%) | advance: 6 (10%) | lunge: 0 (0%)
+
+빠라드:
+  감지 비율: ~40% 클립에서 최소 한쪽 감지
+  오탐 개선: 절대 변위 200-285px → 상대 변위 20-57px
+
+알려진 이슈:
+  - 런지 0건: FOOTWORK_LUNGE_HIP_DROP_MIN=10px이 TV 클립에서 과다 (hip_drop이 음수인 경우 다수)
+  - OOD 8건: 0qllx-vYhGE 영상에 집중 (카메라 각도/거리가 다른 방송 스타일)
+  - fleche 과다: 양발 전진 임계값 20px이 너무 낮을 수 있음
+```
+
+---
+
+## 세션 재개 가이드 (2026-06-03 기준)
 
 ### 현재 상태 요약
 - **브랜치**: `feature/analytics/main`
-- **Phase 5a 완료**: TV 오버레이 OCR + 파인튜닝 데이터 수집 파이프라인
-- **서버 실행 확인됨**: 모든 페이지 HTTP 200, 데모 콘텐츠 정상 렌더링
-- **테스트**: 350개 (319기존 + 31신규, ultralytics 미설치 2개만 실패 — 기존 이슈)
+- **Phase 7b 완료**: 2-패널 레이아웃 + 클립 인라인 재생 + 프레이즈 다름 경계 탐지 6항목 전체 구현
+- **프레이즈 다름 구현 완료** (Step 2~7):
+  - scoring_frames tolerance 매칭 (공격 성공률 0% → 64.3%)
+  - 짧은 SEPARATION 병합 (10프레임 이내 재접근 = 같은 교환)
+  - Clock OCR Allez/Halt 감지 (시계 상태 기계)
+  - 관절별 키네마틱 (8개 관절 속도/가속도)
+  - 프레임별 동작 상태 분류 (EN_GARDE~RECOVERY 9가지)
+  - Phrase 경계 어노테이션 데이터셋 생성 스크립트
+- **E2E 검증 완료**: PRIMUS vs KOVALEV (B6k6SoJFAr8) 재분석 + 프로덕션 배포
+- **테스트**: 531개 전체 통과
+- **프로덕션 서버**: port 9076 동작 중 (analytics.fencingmind.ai)
 
 ### 작동하는 것 (투자자 데모 플로우)
 | 기능 | 상태 | 엔드포인트 |
@@ -789,7 +1359,11 @@ TV 중계나 선수 촬영은 Phase 1 이벤트가 없으므로 모든 프레임
 | 분석 대시보드 | ✅ | `GET /dashboard` |
 | Health/Status API | ✅ | `GET /health`, `GET /api/analytics/status` |
 | 촬영 가이드 API | ✅ | `GET /api/analytics/filming-guide` |
-| Mock fallback | ✅ | ML 미설치 시 자동으로 데모 데이터 반환 |
+| TV OCR 분석 (실제) | ✅ | `POST /api/analytics/analyze-broadcast` — OCR 폴백으로 실제 점수 추적 |
+| TV OCR 리포트 | ✅ | `GET /report/{job_id}` — 선수 이름, 스코어 타임라인, 인사이트 렌더링 |
+| 갤러리 (6개 데모 리포트) | ✅ | `GET /gallery` — 실제 분석 리포트 6개 (포일/에페/사브르) |
+| 연속 분석 리포트 | ✅ | `GET /report/saved/{id}` — scoring_frames + action_state_summary 포함 |
+| Mock fallback | ✅ | ML/OCR 모두 실패 시 자동으로 데모 데이터 반환 |
 
 ### 데모 플로우 (투자자/고객 프레젠테이션)
 ```
@@ -797,31 +1371,75 @@ TV 중계나 선수 촬영은 Phase 1 이벤트가 없으므로 모든 프레임
                         → /demo/de (DE 15-11, 이준호 vs 최서연)
                         → /demo/dashboard (100 크레딧, 3 작업)
                         → /upload (실제 업로드 시연)
+
+실제 분석 플로우:
+  POST /api/analytics/analyze-broadcast {"video_path": "data/raw/usa_fencing_sample_0HeqT9us5wA.mp4"}
+  → job_id 반환 → OCR 분석 (~23분) → /report/{job_id} (실제 선수 이름 + 스코어 + 인사이트)
 ```
 
 ### 스캐폴드 (구조만 있고 실제 동작 X)
 | 기능 | 이유 | 해결 방법 |
 |------|------|----------|
-| 실제 영상 분석 | VideoMAE가 모두 "unknown" 반환 | FACTS 파인튜닝 필요 |
+| 동작 분류 | VideoMAE가 모두 "unknown" 반환 (OCR은 점수만 읽음) | FACTS 파인튜닝 필요 |
 | DB 영속성 | in-memory dict 사용 중 | 007 마이그레이션 Supabase 적용 |
 | 크레딧 결제 | 메모리 잔액만, 결제 없음 | Stripe/토스 연동 필요 |
 | PDF 내보내기 | 함수 시그니처만 존재 | weasyprint/reportlab 구현 필요 |
 | 인증 | 없음, 공개 접근 | members 테이블 + JWT 연동 |
 
+### 동작하는 것 (실제 분석)
+| 기능 | 상태 | 비고 |
+|------|------|------|
+| TV 오버레이 OCR | ✅ | 점수/이름/시간 읽기, USA Fencing 레이아웃 |
+| 터치 이벤트 감지 | ✅ | 디바운싱, 점수 증가만 인정 |
+| Clock OCR (Allez/Halt) | ✅ | 시계 상태 기계, running→stopped 이벤트 생성 |
+| 3-tier 폴백 | ✅ | ML → OCR → mock 순서 |
+| 리포트 렌더링 | ✅ | OCR 결과도 report.html에서 정상 표시 |
+| 포즈 분석 (30클립 검증) | ✅ | 카메라컷 필터링, 상대 빠라드 변위, 라벨 분포 57/40/3 |
+| 연속 분석 (풀 경기 E2E) | ✅ | scoring_frames 연동, 공격 성공률 64.3% (이전 0%) |
+| 프레임별 동작 분류 | ✅ | ActionState 9가지, 양쪽 선수 action_state_summary |
+| 관절 키네마틱 | ✅ | 8개 관절 속도/가속도, BH 정규화, 카메라컷 필터링 |
+| FencerProfile 생성 | ✅ | 거리/풋워크/관절각도 집계, 강점/약점/추천 자동 생성 |
+| 라벨링 UI (포즈 패널) | ✅ | BH 거리, 풋워크, 빠라드, 제안 라벨 + 'A' 수락 단축키 |
+| 2-패널 리포트 레이아웃 | ✅ | 왼쪽(영상 sticky) + 오른쪽(분석), 모바일/데스크톱 반응형 |
+| 클립 인라인 재생 | ✅ | 모달 제거, fetch GET + blob URL, YOLO 오버레이 확인됨 |
+| Phrase 데이터셋 생성 | ✅ | continuous report → phrase_boundaries.json 변환 |
+
 ### 핵심 블로커
-1. **FACTS 데이터셋 미확보** — 논문 저자 연락 또는 USA Fencing 스트림에서 자체 수집 (TVDataCollector 준비됨)
-2. **Supabase 마이그레이션 미적용** — `007_analytics_tables.sql` 준비됨, 적용 필요
-3. **ultralytics 미설치** (.venv) — pose_estimator 2개 테스트 실패 원인 (나머지 350 통과)
+1. ~~**PoseAnalyzer 실제 클립 검증 미완**~~ → **해결됨** (2026-05-29, 30클립 검증 + 카메라컷/빠라드 수정)
+2. **FACTS 데이터셋 미확보** — 논문 저자 연락 또는 USA Fencing 스트림에서 자체 수집 (TVDataCollector 준비됨)
+3. **Supabase 마이그레이션 미적용** — `007_analytics_tables.sql` 준비됨, 적용 필요
+4. ~~**ultralytics 미설치**~~ → **해결됨** (2026-05-27)
+5. ~~**Gemini Vision attack 100% 문제**~~ → **해결됨** (2026-05-28, PoseAnalyzer로 전환)
+6. ~~**런지 감지 미동작**~~ → **튜닝 완료** (2026-05-29, Phase 6 임계값 조정)
+7. ~~**FencerProfile 집계 모듈 미구현**~~ → **구현 완료** (2026-05-29, ml/fencer_profile.py)
+8. ~~**연속 분석 미검증**~~ → **E2E 검증 완료** (2026-05-29, 풀 경기 2개 → 16+45 교환 감지)
+9. ~~**연속 분석 + OCR/LED 통합 미완**~~ → **해결됨** (2026-06-01, scoring_frames tolerance 매칭, 공격 성공률 64.3%)
+10. ~~**클립 타이밍 부정확**~~ → **해결됨** (2026-06-01, 프레이즈 다름 경계 탐지 6항목 구현 + Clock OCR)
+11. ~~**클립 인라인 재생 미동작**~~ → **해결됨** (2026-05-31, fetch GET + blob URL 패턴)
 
 ### 다음 세션 우선순위
-1. **USA Fencing 스트림 스캔** — TVDataCollector로 실제 YouTube 스트림 처리, 학습 데이터 수집
-2. **Supabase 연결** — 007 마이그레이션 적용 → server.py의 in-memory를 DB로 교체
-3. **FACTS 파인튜닝** — 수집된 데이터로 VideoMAE 파인튜닝 실행 (Mac Studio MPS)
-4. **인증** — members 연동, 크레딧 실제 소유자 연결
-5. **PDF 내보내기** — weasyprint/reportlab 구현
+1. **클립 타이밍 개선** — 프레이즈 경계 데이터를 클립 패딩에 활용
+   - Clock OCR allez/halt 이벤트 → 클립 시작/종료를 프레이즈 경계에 맞춤
+   - 거리 기반 APPROACH 시작 → 클립 시작점으로 사용
+   - 현재 ±2초 대칭 패딩 → 프레이즈 기반 동적 패딩으로 전환
+2. **라벨링 세션 실행** — labeling_server.py → http://localhost:7600
+   - 포즈 분석 결과 기반으로 사람이 30개 클립 검수 (ground truth 확립)
+   - labels_reviewed.csv 생성 → 학습 데이터
+3. **USA Fencing YouTube 대량 수집** — TVDataCollector로 플레이리스트 처리 (`process_playlist()`)
+   - USA Fencing 채널 → OCR → 클립 추출 → heuristic labels → labels.csv
+4. **FACTS 파인튜닝** — 수집된 데이터 + FACTS 데이터셋으로 VideoMAE 파인튜닝 (Mac Studio MPS)
+5. **Supabase 연결** — 007 마이그레이션 적용 → server.py의 in-memory를 DB로 교체
+6. **인증** — members 연동, 크레딧 실제 소유자 연결
+7. **종목별 분석기** — FoilAnalyzer, EpeeAnalyzer, SabreAnalyzer 구현
+8. **PDF 내보내기** — weasyprint 또는 reportlab 구현
 
 ### 커밋 이력 (이 브랜치)
 ```
+1f931e6 Merge branch 'feature/shared/i18n-theme' into feature/analytics/main
+7ffbf7b Add shared packages: i18n, auth, UI design system, logos
+2a39131 Fix clip player: use GET+blob URL instead of HEAD, parse server error JSON
+3242b9d Add 2-panel report layout with mobile sticky and inline clip player
+a69cf12 Add Phase 4c+5a+5a+: TV OCR dashboard, broadcast analysis fallback, ultralytics fix
 6e90480 Add analytics Phase 4b: auto-ROI detection, Supabase DB layer, heuristic labeler, E2E integration
 ea2f969 Update CLAUDE.md: Phase 4a completion status and session resume guide
 2837ff5 Fix Jinja2 template rendering on Python 3.14
@@ -833,14 +1451,130 @@ e9795e2 Add demo mode and integration tests for analytics web service
 e0ec750 Refactor to monorepo structure for FencingMind multi-subdomain architecture
 ```
 
+> **참고**: Phase 7b 프레이즈 다름 구현(Step 2~7)은 아직 미커밋 상태. 커밋 필요.
+
 ### 서버 실행 커맨드
 ```bash
 cd /Users/gyejinpark/Documents/GitHub/FencingMind-analytics/services/analytics
+
+# 메인 서버 (분석 + 데모)
 PYTHONPATH=. .venv/bin/python3 -m uvicorn app.server:app --host 0.0.0.0 --port 76
 # 브라우저: http://localhost:76/
 # 데모 플로우: http://localhost:76/demo → /demo/de → /demo/dashboard
+
+# 라벨링 서버 (포즈 분석 기반 검수)
+PYTHONPATH=. .venv/bin/python3 scripts/labeling_server.py
+# 브라우저: http://localhost:7600/
+# 사전 필요: data/labeled/pose_analysis_results.json (run_pose_analysis.py로 생성)
+
+# 배치 포즈 분석 (클립 → 포즈 분석 결과)
+PYTHONPATH=. .venv/bin/python3 scripts/run_pose_analysis.py --clips-dir data/clips
+
+# 연속 분석 리포트 재생성 (영상 → 포즈 → 교환 → JSON)
+PYTHONPATH=. .venv/bin/python3 scripts/generate_continuous_report.py \
+    data/raw/jr_saber_final_primus_kovalev_B6k6SoJFAr8.mp4 \
+    --my-fencer left --sample-every 3 \
+    --merge-ocr data/reports/B6k6SoJFAr8_report.json
+
+# 프레이즈 경계 데이터셋 생성
+PYTHONPATH=. .venv/bin/python3 scripts/generate_phrase_dataset.py data/reports/
 ```
+
+### 갤러리 데모 리포트 (6개)
+| ID | 영상 | 종목 | 점수 | 터치 | 교환 |
+|----|------|------|------|------|------|
+| usaf_hKUXgUsDOKE | Jr Foil Final (USA Fencing) | foil | 15-7 | 22 | 224 |
+| usaf_Jiq1kQLftjw | Sabre DE Thriller | sabre | 15-14 | 29 | 88 |
+| gdOdpDyaWrw | Women's Y14 Foil | foil | 15-13 | 28 | — |
+| VzlH8O7EsCM | Sabre Comeback | sabre | 14-15 | 27 | — |
+| usaf_UzQ8Ci7lft8 | Div 1 Epee Final | epee | 13-15 | 22 | 334 |
+| usaf_B6k6SoJFAr8 | Jr Sabre Final (PRIMUS vs KOVALEV) | sabre | 10-15 | 22 | 63 |
 
 ### 알려진 호환성 이슈
 - **Python 3.14.4** + **Jinja2 3.1.x**: LRU 캐시 해싱 버그 → `cache_size=0`으로 해결됨
 - **Starlette 1.0.1**: TemplateResponse 시그니처 변경 → `(request, name, context)` 형식으로 수정됨
+- **Tesseract OCR 병목**: ~85ms/프레임, 8분 영상에 ~23분 소요 → EasyOCR 전환 또는 sample_interval 조정 검토 필요
+
+### OCR 분석 실측 결과 (2026-05-27)
+```
+영상: USA Fencing 샘플 (0HeqT9us5wA, 8:49, 1280×720, 30fps)
+선수: KHOTLINE Daniel vs GERSTMANN Max
+결과: 19 터치 감지, 최종 10-14 (실제 10-15)
+정확도: 이름 100%, 점수 읽기율 76%
+인사이트: GERSTMANN 4연속 터치 (momentum), 점수 흐름 분석
+소요: 1,363초 (15,892프레임, sample_interval=5)
+meta: source_type=tv_broadcast, analysis_mode=ocr_only
+```
+
+### 포즈 분석 실측 결과 (2026-05-29)
+```
+대상: 3개 USA Fencing TV 영상 × 10클립 = 30클립
+  - usaf_0HeqT9us5wA: 10클립 (epee)
+  - usaf_0qllx-vYhGE: 11클립
+  - usaf_6MCRWT7GmaU: 9클립
+
+수정 사항:
+  1. 카메라컷 필터링 (filter_camera_cuts, find_touch_moment)
+  2. 상대 빠라드 변위 (wristΔ - hipΔ, 프레임갭>3 스킵)
+
+결과 라벨 분포:
+  attack: 17/30 (57%) — attack_left:7, attack_right:10
+  riposte: 12/30 (40%) — riposte_left:7, riposte_right:5
+  counter_attack: 1/30 (3%) — counter_attack_right:1
+  → Gemini Vision의 100% attack 대비 대폭 개선
+
+거리 (터치 시점): infighting:11, extension:5, lunge:3, adv_lunge:3, OOD:8
+풋워크 (60건): fleche:20, unknown:13, stationary:12, retreat:9, advance:6, lunge:0
+빠라드: ~40% 클립에서 최소 한쪽 감지, 변위 범위 20-57px (이전: 200-285px)
+
+알려진 한계:
+  - 런지 0건 (hip_drop 임계값 과다)
+  - OOD 8건 (특정 영상에 집중)
+  - fleche 과감지 (양발전진 임계값 20px 낮음)
+```
+
+### 풀 경기 연속 분석 E2E 실측 결과 (2026-05-29)
+```
+대상: 2개 USA Fencing 풀 경기 영상 (다운로드 원본)
+
+영상 1: usaf_7Amgqc5HJR0.mp4 (3.8분, 8.5MB)
+  샘플링: 매 3프레임 → 2,282 프레임 분석
+  교환 감지: 16 exchanges
+    - failed_attack: 11 (69%)
+    - successful_defense: 5 (31%)
+  Left fencer: 공격 9회 시도/0 성공, 방어 1회 시도/0 성공
+  처리 시간: 51.8초 (0.23x realtime)
+
+영상 2: usaf_3XTpDrDSvUs.mp4 (6.7분, 14.5MB)
+  샘플링: 매 3프레임 → 4,036 프레임 분석
+  교환 감지: 45 exchanges
+    - failed_attack: 34 (76%)
+    - successful_defense: 11 (24%)
+  Left fencer: 공격 27회 시도/0 성공, 방어 8회 시도/2 성공 (25%)
+  처리 시간: 73.2초 (0.18x realtime)
+
+핵심 발견:
+  1. 연속 분석 교환 감지 정상 동작 — 거리 기반 상태 기계 작동
+  2. ~~공격 성공률 0% 문제~~ → Phase 7b Step 2에서 해결 (scoring_frames tolerance 매칭)
+  3. 처리 속도 우수 — 0.18-0.23x realtime (5x 실시간보다 빠름)
+  4. FencerProfile 생성 확인 — 실제 데이터에서 강점/약점/추천 자동 생성
+```
+
+### Phase 7b 프레이즈 다름 구현 후 검증 (2026-06-01)
+```
+대상: usaf_B6k6SoJFAr8 (PRIMUS vs KOVALEV, Jr Sabre Final, 9:35)
+
+scoring_frames 연동 결과:
+  OCR 터치: 22개 (scoring_frames)
+  tolerance: SCORING_FRAME_TOLERANCE_SEC = 2.0
+  my_fencer (left): 공격 성공률 64.3% (9/14), 방어 성공률 42.9% (3/7)
+
+action_state_summary:
+  Left: en_garde 52.1%, marche 12.3%, preparation 10.8%, retraite 9.4%, ...
+  Right: en_garde 34.5%, marche 15.2%, preparation 13.1%, ...
+
+clock_events: 0 (이 영상에서는 시계 OCR 불가 — 레이아웃 미매칭)
+
+generate_continuous_report.py 버그 수정:
+  video_stem → video_path.stem (line 141, UnboundLocalError 수정)
+```

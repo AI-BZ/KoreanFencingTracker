@@ -1,0 +1,258 @@
+/* FencingMind Analytics - Dark Theme */
+/* Extracted from data.fencingmind.ai dark-theme.css (Tailwind-safe: no resets, no .container) */
+
+:root {
+    /* Dark Theme Colors */
+    --bg-primary: #0a0a0f;
+    --bg-secondary: #12121a;
+    --bg-tertiary: #1a1a25;
+    --bg-card: rgba(18, 18, 26, 0.85);
+    --bg-card-hover: rgba(26, 26, 37, 0.9);
+
+    /* Accent Colors - Korean Flag inspired */
+    --accent-primary: #c9302c;
+    --accent-secondary: #1e3a8a;
+    --accent-gold: #d4a574;
+    --accent-silver: #9ca3af;
+    --accent-bronze: #cd7f32;
+
+    /* Text Colors */
+    --text-primary: #ffffff;
+    --text-secondary: #b4b4c4;
+    --text-muted: #6b6b7b;
+    --text-accent: #c9302c;
+
+    /* Border & Effects */
+    --border-color: rgba(255, 255, 255, 0.08);
+    --border-light: rgba(255, 255, 255, 0.15);
+    --glow-primary: rgba(201, 48, 44, 0.3);
+    --glow-secondary: rgba(30, 58, 138, 0.3);
+
+    /* Shadows */
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.5);
+
+    /* Status Colors */
+    --success-color: #10b981;
+    --warning-color: #f59e0b;
+    --danger-color: #ef4444;
+    --info-color: #3b82f6;
+}
+
+/* Parallax Background */
+.parallax-bg {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -2;
+    background-image: url('/static/images/fencer-bg.png');
+    background-size: cover;
+    background-position: center top;
+    background-repeat: no-repeat;
+    will-change: background-position-y;
+}
+
+.parallax-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+        180deg,
+        rgba(10, 10, 15, 0.75) 0%,
+        rgba(10, 10, 15, 0.85) 30%,
+        rgba(10, 10, 15, 0.92) 60%,
+        rgba(10, 10, 15, 0.98) 100%
+    );
+}
+
+/* Glassmorphism Navbar */
+.dark-navbar {
+    background: rgba(10, 10, 15, 0.95);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border-color);
+}
+
+/* Glass Card */
+.glass-card {
+    background: var(--bg-card);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--border-color);
+    border-radius: 1rem;
+    transition: all 0.3s ease;
+}
+
+.glass-card:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--border-light);
+    box-shadow: var(--shadow-md);
+}
+
+/* Logo gradient text */
+.logo-gradient {
+    background: linear-gradient(135deg, var(--text-primary), var(--accent-gold));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+/* Language Switcher */
+.lang-switcher {
+    display: flex;
+    gap: 4px;
+    padding: 2px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.lang-btn {
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+
+.lang-btn:hover {
+    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.lang-btn.active {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.1);
+}
+
+/* Dark nav links */
+.dark-nav-link {
+    color: var(--text-secondary);
+    transition: all 0.3s ease;
+    border: 1px solid transparent;
+}
+
+.dark-nav-link:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.05);
+    border-color: var(--border-light);
+}
+
+.dark-nav-link.active {
+    color: var(--accent-primary);
+    background: rgba(201, 48, 44, 0.1);
+}
+
+/* Dark footer */
+.dark-footer {
+    background: rgba(10, 10, 15, 0.95);
+    border-top: 1px solid var(--border-color);
+    color: var(--text-muted);
+}
+
+.dark-footer a {
+    color: var(--text-secondary);
+    transition: color 0.2s ease;
+}
+
+.dark-footer a:hover {
+    color: var(--accent-primary);
+}
+
+/* Gallery weapon badges */
+.weapon-badge-foil {
+    background: rgba(59, 130, 246, 0.15);
+    color: #60a5fa;
+    border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.weapon-badge-epee {
+    background: rgba(139, 92, 246, 0.15);
+    color: #a78bfa;
+    border: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+.weapon-badge-sabre {
+    background: rgba(251, 146, 60, 0.15);
+    color: #fb923c;
+    border: 1px solid rgba(251, 146, 60, 0.3);
+}
+
+/* Dark select/input overrides */
+.dark-select {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+}
+
+.dark-select:focus {
+    border-color: var(--accent-primary);
+    outline: none;
+    box-shadow: 0 0 0 2px var(--glow-primary);
+}
+
+.dark-select option {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+/* Dark drop zone */
+.dark-drop-zone {
+    border-color: var(--border-light);
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.dark-drop-zone:hover {
+    border-color: var(--accent-primary);
+    background: rgba(201, 48, 44, 0.05);
+}
+
+.dark-drop-zone.drag-over {
+    border-color: var(--accent-primary);
+    background: rgba(201, 48, 44, 0.1);
+    transform: scale(1.01);
+}
+
+/* Dark table */
+.dark-table thead {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.dark-table th {
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.dark-table td {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.dark-table tbody tr:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+/* Credit gradient card override */
+.credit-card-dark {
+    background: linear-gradient(135deg, var(--accent-primary), #8b1a17);
+}
+
+/* Print overrides */
+@media print {
+    .parallax-bg, .parallax-overlay, .dark-navbar, .dark-footer {
+        display: none !important;
+    }
+    body {
+        background: white !important;
+        color: #111 !important;
+    }
+    .glass-card {
+        background: white !important;
+        border: 1px solid #ddd !important;
+    }
+}

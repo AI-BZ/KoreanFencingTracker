@@ -4,11 +4,16 @@ Data models for the fencing video analyzer.
 Phase 1: ScoreState, StableScore, LampState, MatchEvent, EventType, MatchClock
 Phase 2: PoseKeypoint, FencerPose, PoseResult, FencingAction, ActionPrediction,
          ActionResult, EnrichedMatchEvent
+Phase 5c: FootworkType, DistanceZone, FootworkResult, ParryResult,
+          DistanceResult, PoseAnalysisResult
+Phase 6:  NonScoringEventType, ExchangePhase, JointAngles, ExchangeEvent,
+          MyFencerSummary, ContinuousAnalysisResult
+Phase 7:  PhraseAnnotation
 """
 
 from dataclasses import dataclass, asdict, field
 from enum import Enum
-from typing import Optional, List
+from typing import Dict, Optional, List
 
 
 class EventType(Enum):
@@ -236,6 +241,9 @@ class EnrichedMatchEvent:
             description=event.description,
         )
 
+    # Phase 5c: Pose-based analysis
+    pose_analysis: Optional["PoseAnalysisResult"] = None
+
     def to_dict(self) -> dict:
         """Serialize to dict. Omits None pose/action fields for backward compat."""
         d: dict = {
@@ -264,4 +272,361 @@ class EnrichedMatchEvent:
             d["pose_sequence"] = [p.to_dict() for p in self.pose_sequence]
         if self.action_result is not None:
             d["action_result"] = self.action_result.to_dict()
+        if self.pose_analysis is not None:
+            d["pose_analysis"] = self.pose_analysis.to_dict()
         return d
+
+
+# ------------------------------------------------------------------
+# Phase 5c: Pose-based Analysis models (footwork, parry, distance)
+# ------------------------------------------------------------------
+
+
+class FootworkType(Enum):
+    """Footwork classification from pose trajectory."""
+    LUNGE = "lunge"            # Rear foot fixed + front foot forward + hip drop
+    FLECHE = "fleche"          # Both feet advance + body lean + running
+    ADVANCE = "advance"        # Sequential forward steps
+    RETREAT = "retreat"        # Sequential backward steps
+    STATIONARY = "stationary"  # No movement
+    UNKNOWN = "unknown"
+
+
+class DistanceZone(Enum):
+    """Distance zone between fencers in Body Height (BH) units."""
+    OUT_OF_DISTANCE = "out_of_distance"    # >1.8 BH — safe, preparation
+    ADVANCE_LUNGE = "advance_lunge"        # 1.5-1.8 BH — attack initiation
+    LUNGE = "lunge"                        # 1.2-1.5 BH — danger zone
+    EXTENSION = "extension"                # 0.8-1.2 BH — arm extension only
+    INFIGHTING = "infighting"              # <0.8 BH — corps-a-corps risk
+
+
+@dataclass
+class FootworkResult:
+    """Footwork detection result for one fencer."""
+    footwork_type: FootworkType
+    confidence: float
+    hip_drop_px: float = 0.0
+    front_foot_displacement_px: float = 0.0
+    rear_foot_displacement_px: float = 0.0
+
+    def to_dict(self) -> dict:
+        return {
+            "footwork_type": self.footwork_type.value,
+            "confidence": round(self.confidence, 3),
+            "hip_drop_px": round(self.hip_drop_px, 1),
+            "front_foot_displacement_px": round(self.front_foot_displacement_px, 1),
+            "rear_foot_displacement_px": round(self.rear_foot_displacement_px, 1),
+        }
+
+
+@dataclass
+class ParryResult:
+    """Parry detection result for one fencer."""
+    parry_detected: bool
+    confidence: float
+    wrist_lateral_displacement_px: float = 0.0
+    parry_frame_idx: Optional[int] = None
+
+    def to_dict(self) -> dict:
+        d: dict = {
+            "parry_detected": self.parry_detected,
+            "confidence": round(self.confidence, 3),
+            "wrist_lateral_displacement_px": round(self.wrist_lateral_displacement_px, 1),
+        }
+        if self.parry_frame_idx is not None:
+            d["parry_frame_idx"] = self.parry_frame_idx
+        return d
+
+
+@dataclass
+class DistanceResult:
+    """Distance measurement between two fencers."""
+    distance_bh: float
+    distance_zone: DistanceZone
+    closing_speed_bh: float = 0.0  # BH/sec, positive=closing
+
+    def to_dict(self) -> dict:
+        return {
+            "distance_bh": round(self.distance_bh, 3),
+            "distance_zone": self.distance_zone.value,
+            "closing_speed_bh": round(self.closing_speed_bh, 3),
+        }
+
+
+@dataclass
+class JointAngles:
+    """2D joint angles computed from COCO keypoints (degrees)."""
+    hip_angle: Optional[float] = None            # shoulder-hip-knee angle
+    front_knee_angle: Optional[float] = None     # hip-knee-ankle (front leg)
+    rear_knee_angle: Optional[float] = None      # hip-knee-ankle (rear leg)
+    trunk_lean_deg: Optional[float] = None       # trunk deviation from vertical
+    arm_extension_ratio: Optional[float] = None  # elbow angle / 180 (0~1)
+
+    def to_dict(self) -> dict:
+        d: dict = {}
+        if self.hip_angle is not None:
+            d["hip_angle"] = round(self.hip_angle, 1)
+        if self.front_knee_angle is not None:
+            d["front_knee_angle"] = round(self.front_knee_angle, 1)
+        if self.rear_knee_angle is not None:
+            d["rear_knee_angle"] = round(self.rear_knee_angle, 1)
+        if self.trunk_lean_deg is not None:
+            d["trunk_lean_deg"] = round(self.trunk_lean_deg, 1)
+        if self.arm_extension_ratio is not None:
+            d["arm_extension_ratio"] = round(self.arm_extension_ratio, 3)
+        return d
+
+
+@dataclass
+class JointKinematics:
+    """Per-joint velocity and acceleration for a frame pair."""
+    joint_name: str
+    velocity_px: float = 0.0      # px/frame
+    velocity_bh: float = 0.0      # BH/frame (normalized)
+    acceleration_px: float = 0.0  # px/frame²
+
+    def to_dict(self) -> dict:
+        return {
+            "joint_name": self.joint_name,
+            "velocity_px": round(self.velocity_px, 2),
+            "velocity_bh": round(self.velocity_bh, 3),
+            "acceleration_px": round(self.acceleration_px, 2),
+        }
+
+
+@dataclass
+class FrameKinematics:
+    """Kinematics for all tracked joints at a given frame."""
+    frame_index: int
+    joints: Dict[str, JointKinematics] = field(default_factory=dict)
+    max_velocity_px: float = 0.0
+    dominant_joint: str = ""  # joint with max velocity
+
+    def to_dict(self) -> dict:
+        return {
+            "frame_index": self.frame_index,
+            "joints": {k: v.to_dict() for k, v in self.joints.items()},
+            "max_velocity_px": round(self.max_velocity_px, 2),
+            "dominant_joint": self.dominant_joint,
+        }
+
+
+@dataclass
+class PoseAnalysisResult:
+    """Complete pose-based analysis result for a touch event."""
+    footwork_left: Optional[FootworkResult] = None
+    footwork_right: Optional[FootworkResult] = None
+    parry_left: Optional[ParryResult] = None
+    parry_right: Optional[ParryResult] = None
+    distance_at_touch: Optional[DistanceResult] = None
+    suggested_label: Optional[str] = None
+    suggestion_confidence: float = 0.0
+    suggestion_reasoning: str = ""
+    # Phase 6: joint angles and my_fencer narrative
+    joint_angles_left: Optional[JointAngles] = None
+    joint_angles_right: Optional[JointAngles] = None
+    my_fencer_narrative: str = ""
+
+    def to_dict(self) -> dict:
+        d: dict = {}
+        if self.footwork_left is not None:
+            d["footwork_left"] = self.footwork_left.to_dict()
+        if self.footwork_right is not None:
+            d["footwork_right"] = self.footwork_right.to_dict()
+        if self.parry_left is not None:
+            d["parry_left"] = self.parry_left.to_dict()
+        if self.parry_right is not None:
+            d["parry_right"] = self.parry_right.to_dict()
+        if self.distance_at_touch is not None:
+            d["distance_at_touch"] = self.distance_at_touch.to_dict()
+        if self.suggested_label is not None:
+            d["suggested_label"] = self.suggested_label
+        d["suggestion_confidence"] = round(self.suggestion_confidence, 3)
+        if self.suggestion_reasoning:
+            d["suggestion_reasoning"] = self.suggestion_reasoning
+        if self.joint_angles_left is not None:
+            d["joint_angles_left"] = self.joint_angles_left.to_dict()
+        if self.joint_angles_right is not None:
+            d["joint_angles_right"] = self.joint_angles_right.to_dict()
+        if self.my_fencer_narrative:
+            d["my_fencer_narrative"] = self.my_fencer_narrative
+        return d
+
+
+# ------------------------------------------------------------------
+# Phase 6: Continuous Analysis models (exchange, non-scoring events)
+# ------------------------------------------------------------------
+
+
+class NonScoringEventType(Enum):
+    """Non-scoring exchange outcomes."""
+    FAILED_ATTACK = "failed_attack"
+    SUCCESSFUL_DEFENSE = "successful_defense"
+    MUTUAL_RETREAT = "mutual_retreat"
+    OFF_TARGET = "off_target"
+    MISSED_ENTIRELY = "missed_entirely"
+    UNKNOWN_EXCHANGE = "unknown_exchange"
+
+
+class ExchangePhase(Enum):
+    """State machine phases for exchange detection."""
+    APPROACH = "approach"
+    ENGAGEMENT = "engagement"
+    SEPARATION = "separation"
+
+
+@dataclass
+class ExchangeEvent:
+    """A single exchange (scoring or non-scoring) between fencers."""
+    start_frame: int
+    end_frame: int
+    min_distance_frame: int
+    min_distance_bh: float
+    event_type: NonScoringEventType
+    footwork_left: Optional[FootworkResult] = None
+    footwork_right: Optional[FootworkResult] = None
+    parry_left: Optional[ParryResult] = None
+    parry_right: Optional[ParryResult] = None
+    joint_angles_left: Optional[JointAngles] = None
+    joint_angles_right: Optional[JointAngles] = None
+    kinematics_left: Optional[List[FrameKinematics]] = None
+    kinematics_right: Optional[List[FrameKinematics]] = None
+
+    def to_dict(self) -> dict:
+        d: dict = {
+            "start_frame": self.start_frame,
+            "end_frame": self.end_frame,
+            "min_distance_frame": self.min_distance_frame,
+            "min_distance_bh": round(self.min_distance_bh, 3),
+            "event_type": self.event_type.value,
+        }
+        if self.footwork_left is not None:
+            d["footwork_left"] = self.footwork_left.to_dict()
+        if self.footwork_right is not None:
+            d["footwork_right"] = self.footwork_right.to_dict()
+        if self.parry_left is not None:
+            d["parry_left"] = self.parry_left.to_dict()
+        if self.parry_right is not None:
+            d["parry_right"] = self.parry_right.to_dict()
+        if self.joint_angles_left is not None:
+            d["joint_angles_left"] = self.joint_angles_left.to_dict()
+        if self.joint_angles_right is not None:
+            d["joint_angles_right"] = self.joint_angles_right.to_dict()
+        if self.kinematics_left is not None:
+            d["kinematics_left"] = [fk.to_dict() for fk in self.kinematics_left]
+        if self.kinematics_right is not None:
+            d["kinematics_right"] = [fk.to_dict() for fk in self.kinematics_right]
+        return d
+
+
+@dataclass
+class MyFencerSummary:
+    """Aggregated stats from my_fencer's perspective."""
+    side: str  # "left" or "right"
+    attacks_attempted: int = 0
+    attacks_succeeded: int = 0
+    attacks_failed: int = 0
+    defenses_attempted: int = 0
+    defenses_succeeded: int = 0
+    attack_success_rate: float = 0.0
+    defense_success_rate: float = 0.0
+    narratives: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return {
+            "side": self.side,
+            "attacks_attempted": self.attacks_attempted,
+            "attacks_succeeded": self.attacks_succeeded,
+            "attacks_failed": self.attacks_failed,
+            "defenses_attempted": self.defenses_attempted,
+            "defenses_succeeded": self.defenses_succeeded,
+            "attack_success_rate": round(self.attack_success_rate, 3),
+            "defense_success_rate": round(self.defense_success_rate, 3),
+            "narratives": self.narratives,
+        }
+
+
+class ActionState(Enum):
+    """Per-frame action state classification."""
+    EN_GARDE = "en_garde"
+    MARCHE = "marche"
+    RETRAITE = "retraite"
+    FENTE = "fente"
+    FLECHE = "fleche"
+    PARADE = "parade"
+    RIPOSTE = "riposte"
+    PREPARATION = "preparation"
+    RECOVERY = "recovery"
+    UNKNOWN = "unknown"
+
+
+@dataclass
+class FrameActionState:
+    """Action state for a single frame."""
+    frame_index: int
+    state: ActionState
+    confidence: float = 0.0
+    velocity_max: float = 0.0
+    distance_bh: Optional[float] = None
+
+    def to_dict(self) -> dict:
+        d: dict = {
+            "frame_index": self.frame_index,
+            "state": self.state.value,
+            "confidence": round(self.confidence, 2),
+        }
+        if self.distance_bh is not None:
+            d["distance_bh"] = round(self.distance_bh, 3)
+        return d
+
+
+@dataclass
+class ContinuousAnalysisResult:
+    """Result of analyzing the full bout (not just scoring moments)."""
+    exchanges: List[ExchangeEvent] = field(default_factory=list)
+    total_exchanges: int = 0
+    scoring_exchanges: int = 0
+    non_scoring_exchanges: int = 0
+    my_fencer_summary: Optional[MyFencerSummary] = None
+    frame_actions: Optional[Dict[str, List[FrameActionState]]] = None
+
+    def to_dict(self) -> dict:
+        d: dict = {
+            "total_exchanges": self.total_exchanges,
+            "scoring_exchanges": self.scoring_exchanges,
+            "non_scoring_exchanges": self.non_scoring_exchanges,
+            "exchanges": [e.to_dict() for e in self.exchanges],
+        }
+        if self.my_fencer_summary is not None:
+            d["my_fencer_summary"] = self.my_fencer_summary.to_dict()
+        if self.frame_actions is not None:
+            d["frame_actions"] = {
+                side: [fa.to_dict() for fa in states]
+                for side, states in self.frame_actions.items()
+            }
+        return d
+
+
+# ==================================================================
+# Phase 7: Phrase Boundary Annotation
+# ==================================================================
+
+
+@dataclass
+class PhraseAnnotation:
+    """A single phrase d'armes annotation for dataset generation."""
+    video_id: str
+    phrase_id: int
+    start_frame: int
+    end_frame: int
+    start_time: str           # "M:SS"
+    end_time: str
+    trigger: str              # "distance", "clock", "scoring"
+    outcome: str              # "touch_left", "touch_right", "halt", "off_target"
+    action_sequence: List[str] = field(default_factory=list)
+    confidence: float = 0.0
+    reviewed: bool = False    # human review status
+
+    def to_dict(self) -> dict:
+        return asdict(self)

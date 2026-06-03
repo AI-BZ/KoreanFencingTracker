@@ -19,6 +19,7 @@ from pipeline.action_heuristic_labeler import (
     ActionHeuristicLabeler,
     TouchEvent as HeuristicTouchEvent,
 )
+from app.metadata_parser import parse_fencing_metadata
 
 
 class TVDataCollector:
@@ -66,8 +67,14 @@ class TVDataCollector:
         Returns:
             Dict with keys: events, clips, labels, summary.
         """
-        # Step 1: Scan video with OCR → touch events
-        events = self._scan_video(video_path)
+        import os
+        # Extract weapon metadata from filename
+        filename = os.path.basename(video_path)
+        metadata = parse_fencing_metadata(filename)
+        weapon = metadata.get("weapon", "unknown")
+
+        # Step 1: Scan video with OCR → touch events + clock events
+        events, clock_events = self._scan_video(video_path)
 
         if not events:
             return {
@@ -75,6 +82,7 @@ class TVDataCollector:
                 "events": [],
                 "clips": [],
                 "labels": [],
+                "clock_events": clock_events,
                 "summary": {"total_touches": 0},
             }
 
@@ -91,7 +99,7 @@ class TVDataCollector:
         labels = self._label_events(events, clips)
 
         # Step 4: Write labels.csv
-        self._write_labels_csv(labels)
+        self._write_labels_csv(labels, weapon=weapon)
 
         tracker = TVScoreTracker()
         # Replay events to get summary
@@ -110,6 +118,7 @@ class TVDataCollector:
             "events": [e.to_dict() for e in events],
             "clips": [str(c) for c in clips],
             "labels": labels,
+            "clock_events": clock_events,
             "summary": summary,
         }
 
@@ -135,7 +144,15 @@ class TVDataCollector:
                 "summary": {"total_touches": 0},
             }
 
-        return self.process_video(str(result.output_path))
+        pipe_result = self.process_video(str(result.output_path))
+
+        # Extract weapon metadata from title
+        title_text = result.title or ""
+        if title_text:
+            metadata = parse_fencing_metadata(title_text)
+            pipe_result["metadata"] = metadata
+
+        return pipe_result
 
     def process_playlist(
         self,
@@ -193,12 +210,17 @@ class TVDataCollector:
 
     # ── Internal methods ──
 
-    def _scan_video(self, video_path: str) -> List[TVTouchEvent]:
-        """Scan a video for touch events using overlay OCR."""
+    def _scan_video(self, video_path: str) -> tuple:
+        """Scan a video for touch events using overlay OCR.
+
+        Returns:
+            Tuple of (touch_events, clock_events) where touch_events is a list
+            of TVTouchEvent and clock_events is a list of allez/halt dicts.
+        """
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
             print(f"  Cannot open video: {video_path}")
-            return []
+            return [], []
 
         fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -228,8 +250,9 @@ class TVDataCollector:
         cap.release()
 
         events = tracker.get_all_events()
-        print(f"  Scan complete: {len(events)} touch events in {frame_num} frames")
-        return events
+        clock_events = tracker.get_clock_events()
+        print(f"  Scan complete: {len(events)} touch events, {len(clock_events)} clock events in {frame_num} frames")
+        return events, clock_events
 
     def _label_events(
         self,
@@ -270,18 +293,21 @@ class TVDataCollector:
 
         return results
 
-    def _write_labels_csv(self, labels: list):
+    def _write_labels_csv(self, labels: list, weapon: str = "unknown"):
         """Append labeled data to labels.csv."""
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         file_exists = self.labels_path.exists()
-        fieldnames = ["clip_path", "action", "confidence", "reason", "timestamp", "scorer"]
+        fieldnames = ["clip_path", "action", "confidence", "reason", "timestamp", "scorer", "weapon"]
 
         with open(self.labels_path, "a", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             if not file_exists:
                 writer.writeheader()
             for row in labels:
-                writer.writerow(row)
+                row_with_weapon = dict(row)
+                if "weapon" not in row_with_weapon:
+                    row_with_weapon["weapon"] = weapon
+                writer.writerow(row_with_weapon)
 
         print(f"  Wrote {len(labels)} labels to {self.labels_path}")

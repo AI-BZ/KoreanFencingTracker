@@ -90,6 +90,16 @@ class TestPageRoutes:
         assert resp.status_code == 200
         assert "text/html" in resp.headers["content-type"]
 
+    def test_lang_switch_sets_cookie(self, client):
+        resp = client.get("/lang/en", follow_redirects=False)
+        assert resp.status_code == 303
+        assert "lang=en" in resp.headers.get("set-cookie", "")
+
+    def test_lang_switch_invalid_defaults_to_ko(self, client):
+        resp = client.get("/lang/fr", follow_redirects=False)
+        assert resp.status_code == 303
+        assert "lang=ko" in resp.headers.get("set-cookie", "")
+
     def test_report_page_404_for_missing_job(self, client):
         resp = client.get("/report/nonexistent-id")
         assert resp.status_code == 404
@@ -124,40 +134,20 @@ class TestPageRoutes:
 
 
 class TestDemoEndpoints:
-    def test_demo_report_page(self, client):
-        resp = _get_template_page(client, "/demo")
+    def test_gallery_page(self, client):
+        resp = _get_template_page(client, "/gallery")
         assert resp.status_code == 200
         assert "text/html" in resp.headers["content-type"]
-        assert "5-3" in resp.text
-        assert "foil" in resp.text.lower() or "플뢰레" in resp.text
 
-    def test_demo_report_contains_fencer_names(self, client):
-        resp = _get_template_page(client, "/demo")
-        assert resp.status_code == 200
-        assert "김민수" in resp.text
-        assert "박지현" in resp.text
+    def test_demo_redirects_to_gallery(self, client):
+        resp = client.get("/demo", follow_redirects=False)
+        assert resp.status_code == 303
+        assert "/gallery" in resp.headers["location"]
 
-    def test_demo_report_populates_job_store(self, client):
-        resp = _get_template_page(client, "/demo")
-        assert "demo-001" in _jobs
-        assert _jobs["demo-001"]["status"] == "completed"
-
-    def test_demo_de_report_page(self, client):
-        resp = _get_template_page(client, "/demo/de")
-        assert resp.status_code == 200
-        assert "text/html" in resp.headers["content-type"]
-        assert "15-11" in resp.text
-
-    def test_demo_de_report_contains_fencer_names(self, client):
-        resp = _get_template_page(client, "/demo/de")
-        assert resp.status_code == 200
-        assert "이준호" in resp.text
-        assert "최서연" in resp.text
-
-    def test_demo_de_populates_job_store(self, client):
-        resp = _get_template_page(client, "/demo/de")
-        assert "demo-de-001" in _jobs
-        assert _jobs["demo-de-001"]["status"] == "completed"
+    def test_demo_de_redirects_to_gallery(self, client):
+        resp = client.get("/demo/de", follow_redirects=False)
+        assert resp.status_code == 303
+        assert "/gallery" in resp.headers["location"]
 
     def test_demo_dashboard_page(self, client):
         resp = _get_template_page(client, "/demo/dashboard")

@@ -39,6 +39,8 @@ from analyzer.config import (
     OVERLAY_YELLOW_UPPER,
     OVERLAY_BLUE_LOWER,
     OVERLAY_BLUE_UPPER,
+    CLOCK_RUNNING_CONFIRM_FRAMES,
+    CLOCK_STOPPED_CONFIRM_FRAMES,
 )
 
 
@@ -98,6 +100,7 @@ class TVTouchEvent:
     score_before: str         # "2-1"
     score_after: str          # "3-1"
     period: Optional[int] = None
+    match_time_remaining: Optional[str] = None  # "2:28" from scoreboard
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -541,8 +544,15 @@ class TVScoreTracker:
         self._pending_score: Optional[Tuple[int, int]] = None
         self._pending_since: int = 0
         self._pending_period: Optional[int] = None
+        self._pending_time_remaining: Optional[str] = None
         self._events: List[TVTouchEvent] = []
         self._last_fps: float = 30.0
+        # Clock state tracking (Allez/Halt proxy)
+        self._clock_state: str = "unknown"  # "running" | "stopped" | "unknown"
+        self._clock_consecutive_same: int = 0
+        self._clock_consecutive_diff: int = 0
+        self._clock_last_seconds: Optional[float] = None
+        self._clock_events: List[dict] = []
 
     def update(self, frame_num: int, data: OverlayData, fps: float = 30.0) -> Optional[TVTouchEvent]:
         """Process a new frame's overlay data.
@@ -556,6 +566,7 @@ class TVScoreTracker:
             TVTouchEvent if a new touch is confirmed, None otherwise.
         """
         self._last_fps = fps
+        self._update_clock_state(frame_num, data)
         left = data.left_score
         right = data.right_score
 
@@ -590,6 +601,7 @@ class TVScoreTracker:
             self._pending_score = current
             self._pending_since = frame_num
             self._pending_period = data.period
+            self._pending_time_remaining = data.time_remaining
             return None
 
         # Same pending score: check debounce window
@@ -645,7 +657,87 @@ class TVScoreTracker:
         self._pending_score = None
         self._pending_since = 0
         self._pending_period = None
+        self._pending_time_remaining = None
         self._events = []
+        self._clock_state = "unknown"
+        self._clock_consecutive_same = 0
+        self._clock_consecutive_diff = 0
+        self._clock_last_seconds = None
+        self._clock_events = []
+
+    # ── Clock state tracking ──
+
+    def _parse_time_seconds(self, time_str: Optional[str]) -> Optional[float]:
+        """Convert time string ("M:SS" or "SS") to seconds.
+
+        Args:
+            time_str: Time string from overlay OCR.
+
+        Returns:
+            Time in seconds, or None if unparseable.
+        """
+        if not time_str:
+            return None
+        if ":" in time_str:
+            parts = time_str.split(":")
+            if len(parts) == 2 and all(p.isdigit() for p in parts if p):
+                return int(parts[0]) * 60 + int(parts[1])
+        elif time_str.isdigit():
+            return float(time_str)
+        return None
+
+    def _update_clock_state(self, frame_num: int, data: OverlayData) -> None:
+        """Track clock running/stopped transitions from time_remaining changes.
+
+        Clock running (time decreasing) → "allez" event proxy.
+        Clock stopped (time unchanged) → "halt" event proxy.
+        """
+        seconds = self._parse_time_seconds(data.time_remaining)
+        if seconds is None:
+            return
+
+        if self._clock_last_seconds is None:
+            self._clock_last_seconds = seconds
+            return
+
+        if seconds < self._clock_last_seconds:
+            # Time decreased → clock is running
+            self._clock_consecutive_diff += 1
+            self._clock_consecutive_same = 0
+            if (self._clock_consecutive_diff >= CLOCK_RUNNING_CONFIRM_FRAMES
+                    and self._clock_state != "running"):
+                self._clock_state = "running"
+                self._clock_events.append({
+                    "frame": frame_num,
+                    "event": "allez",
+                    "time": data.time_remaining,
+                })
+        elif seconds == self._clock_last_seconds:
+            # Time unchanged → clock may be stopped
+            self._clock_consecutive_same += 1
+            self._clock_consecutive_diff = 0
+            if (self._clock_consecutive_same >= CLOCK_STOPPED_CONFIRM_FRAMES
+                    and self._clock_state != "stopped"):
+                self._clock_state = "stopped"
+                self._clock_events.append({
+                    "frame": frame_num,
+                    "event": "halt",
+                    "time": data.time_remaining,
+                })
+        else:
+            # Time increased → OCR error or period change, reset counters
+            self._clock_consecutive_same = 0
+            self._clock_consecutive_diff = 0
+
+        self._clock_last_seconds = seconds
+
+    def get_clock_events(self) -> List[dict]:
+        """Return clock state change events (Allez/Halt proxy).
+
+        Returns:
+            List of {"frame": int, "event": "allez"|"halt", "time": str}
+        """
+        return list(self._clock_events)
 
     def _create_event(
         self,
@@ -678,6 +770,7 @@ class TVScoreTracker:
             score_before=score_before,
             score_after=score_after,
             period=period,
+            match_time_remaining=self._pending_time_remaining,
         )
         self._events.append(event)
         return event

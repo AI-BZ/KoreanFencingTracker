@@ -454,3 +454,122 @@ class TestOverlayConfig:
 
     def test_sample_interval(self):
         assert OVERLAY_OCR_SAMPLE_INTERVAL > 0
+
+
+# ── Clock state tracking tests ──
+
+class TestClockStateTracking:
+    """Test Allez/Halt proxy detection via clock time changes."""
+
+    def test_time_decrease_triggers_allez(self):
+        """Consecutive time decreases → allez event detected."""
+        tracker = TVScoreTracker(debounce_frames=15)
+        # Initial score
+        tracker.update(0, _make_overlay_data(left_score=0, right_score=0, time="2:00"))
+
+        # Clock running: time decreasing each frame
+        times = ["1:59", "1:58", "1:57", "1:56", "1:55"]
+        for i, t in enumerate(times):
+            tracker.update(i + 1, _make_overlay_data(
+                left_score=0, right_score=0, time=t,
+            ))
+
+        events = tracker.get_clock_events()
+        assert len(events) >= 1
+        allez_events = [e for e in events if e["event"] == "allez"]
+        assert len(allez_events) == 1
+        assert allez_events[0]["event"] == "allez"
+
+    def test_time_unchanged_triggers_halt(self):
+        """Consecutive unchanged time → halt event detected."""
+        tracker = TVScoreTracker(debounce_frames=15)
+        # Start with clock running
+        tracker.update(0, _make_overlay_data(left_score=0, right_score=0, time="1:30"))
+        for i in range(1, 5):
+            tracker.update(i, _make_overlay_data(
+                left_score=0, right_score=0, time=f"1:{30 - i:02d}",
+            ))
+        # Now clock should be running (allez detected)
+        assert tracker._clock_state == "running"
+
+        # Clock stops: same time for many frames
+        for i in range(5, 15):
+            tracker.update(i, _make_overlay_data(
+                left_score=0, right_score=0, time="1:26",
+            ))
+
+        events = tracker.get_clock_events()
+        halt_events = [e for e in events if e["event"] == "halt"]
+        assert len(halt_events) == 1
+        assert halt_events[0]["time"] == "1:26"
+
+    def test_mixed_sequence_allez_halt_alternation(self):
+        """Mixed running/stopped → correct allez/halt alternation."""
+        tracker = TVScoreTracker(debounce_frames=15)
+        frame = 0
+
+        # Phase 1: clock starts (time decreasing) → allez
+        times_running1 = ["2:00", "1:59", "1:58", "1:57", "1:56"]
+        for t in times_running1:
+            tracker.update(frame, _make_overlay_data(
+                left_score=0, right_score=0, time=t,
+            ))
+            frame += 1
+
+        # Phase 2: clock stops → halt
+        for _ in range(7):
+            tracker.update(frame, _make_overlay_data(
+                left_score=0, right_score=0, time="1:56",
+            ))
+            frame += 1
+
+        # Phase 3: clock resumes (time decreasing again) → allez
+        times_running2 = ["1:55", "1:54", "1:53", "1:52"]
+        for t in times_running2:
+            tracker.update(frame, _make_overlay_data(
+                left_score=0, right_score=0, time=t,
+            ))
+            frame += 1
+
+        events = tracker.get_clock_events()
+        event_types = [e["event"] for e in events]
+        # Should have: allez, halt, allez
+        assert event_types == ["allez", "halt", "allez"]
+
+    def test_no_events_without_time_data(self):
+        """No clock events when time_remaining is None."""
+        tracker = TVScoreTracker(debounce_frames=15)
+        data = OverlayData(
+            left_score=0, right_score=0,
+            left_name="A", right_name="B",
+            time_remaining=None,
+        )
+        for i in range(10):
+            tracker.update(i, data)
+
+        events = tracker.get_clock_events()
+        assert len(events) == 0
+
+
+class TestParseTimeSeconds:
+    """Test the _parse_time_seconds helper."""
+
+    def test_minutes_seconds(self):
+        tracker = TVScoreTracker()
+        assert tracker._parse_time_seconds("2:30") == 150.0
+        assert tracker._parse_time_seconds("1:00") == 60.0
+        assert tracker._parse_time_seconds("0:45") == 45.0
+
+    def test_seconds_only(self):
+        tracker = TVScoreTracker()
+        assert tracker._parse_time_seconds("30") == 30.0
+        assert tracker._parse_time_seconds("0") == 0.0
+
+    def test_none_returns_none(self):
+        tracker = TVScoreTracker()
+        assert tracker._parse_time_seconds(None) is None
+
+    def test_invalid_returns_none(self):
+        tracker = TVScoreTracker()
+        assert tracker._parse_time_seconds("abc") is None
+        assert tracker._parse_time_seconds("") is None

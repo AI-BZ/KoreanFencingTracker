@@ -20,6 +20,7 @@ def tv_ocr_to_match_report(
     analysis_time_sec: float,
     total_frames: int,
     fps: float = 30.0,
+    expected_final_score: Optional[int] = None,
 ) -> dict:
     """Convert TVScoreTracker results to a MatchReport dict.
 
@@ -47,12 +48,13 @@ def tv_ocr_to_match_report(
     # Build touches list
     touches = []
     for i, evt in enumerate(events, start=1):
-        ts_str = _format_timestamp(evt.timestamp)
+        video_ts = _format_timestamp(evt.timestamp)
+        match_ts = evt.match_time_remaining if hasattr(evt, "match_time_remaining") and evt.match_time_remaining else video_ts
         touches.append({
             "touch_number": i,
             "frame": evt.frame,
-            "video_timestamp": ts_str,
-            "match_time": ts_str,
+            "video_timestamp": video_ts,
+            "match_time": match_ts,
             "scorer": evt.scorer,
             "score_after": evt.score_after,
             "action_scorer": "unknown",
@@ -94,6 +96,9 @@ def tv_ocr_to_match_report(
         left_touches, right_touches, final_score,
     )
 
+    # Generate analysis warnings
+    warnings = _generate_warnings(final_score, expected_final_score)
+
     return {
         "summary": {
             "video_path": video_path,
@@ -104,11 +109,14 @@ def tv_ocr_to_match_report(
             "analysis_time_sec": round(analysis_time_sec, 1),
             "weapon": "unknown",
             "bout_type": "unknown",
+            "gender": "unknown",
+            "age_group": "unknown",
         },
         "touches": touches,
         "left_fencer": left_fencer,
         "right_fencer": right_fencer,
         "insights": insights,
+        "warnings": warnings,
         "meta": {
             "phase": 5,
             "pose_model": None,
@@ -166,15 +174,29 @@ def _generate_ocr_insights(
         left_pct = round(100 * left_touches / total, 1)
         right_pct = round(100 * right_touches / total, 1)
 
-        # Determine winner
-        winner = left_name if left_touches > right_touches else right_name
+        # Determine winner or draw
+        if left_touches > right_touches:
+            winner = left_name
+            msg = (
+                f"{winner} won {final_score} "
+                f"({left_name} {left_pct}% vs {right_name} {right_pct}% scoring rate)"
+            )
+        elif right_touches > left_touches:
+            winner = right_name
+            msg = (
+                f"{winner} won {final_score} "
+                f"({left_name} {left_pct}% vs {right_name} {right_pct}% scoring rate)"
+            )
+        else:
+            winner = "both"
+            msg = (
+                f"Match ended in a draw {final_score} "
+                f"({left_name} {left_pct}% vs {right_name} {right_pct}% scoring rate)"
+            )
         insights.append({
             "category": "score_flow",
             "target": winner,
-            "message": (
-                f"{winner} won {final_score} "
-                f"({left_name} {left_pct}% vs {right_name} {right_pct}% scoring rate)"
-            ),
+            "message": msg,
             "severity": "info",
             "evidence": (
                 f"{left_name}: {left_touches} touches scored, "
@@ -217,6 +239,33 @@ def _generate_ocr_insights(
     })
 
     return insights
+
+
+def _generate_warnings(
+    final_score: str,
+    expected_final_score: Optional[int],
+) -> list:
+    """Generate analysis warnings (e.g., video truncation)."""
+    warnings = []
+
+    if expected_final_score:
+        parts = final_score.split("-")
+        try:
+            max_score = max(int(p) for p in parts if p.isdigit())
+        except ValueError:
+            max_score = 0
+
+        if max_score < expected_final_score:
+            warnings.append({
+                "type": "video_truncated",
+                "message": (
+                    f"Video appears truncated. Final score {final_score} "
+                    f"did not reach expected {expected_final_score} points."
+                ),
+                "severity": "warning",
+            })
+
+    return warnings
 
 
 def _find_longest_run(events: list) -> tuple:

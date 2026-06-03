@@ -1,32 +1,29 @@
 {% extends "base.html" %}
 
-{% block title %}FencingMind Analytics - AI 펜싱 경기 분석{% endblock %}
+{% block title %}FencingMind Analytics - AI {{ t('landing.hero_title').split('\n')[0] if t else '펜싱 경기 분석' }}{% endblock %}
 
 {% block content %}
 <!-- Hero Section -->
-<section class="relative overflow-hidden bg-gradient-to-br from-brand-700 via-brand-800 to-brand-900">
-    <div class="absolute inset-0 opacity-10">
-        <div class="absolute top-0 left-1/4 w-96 h-96 bg-white rounded-full blur-3xl"></div>
-        <div class="absolute bottom-0 right-1/4 w-72 h-72 bg-brand-300 rounded-full blur-3xl"></div>
-    </div>
+<section class="relative overflow-hidden">
     <div class="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 lg:py-28">
         <div class="text-center">
             <h1 class="text-4xl sm:text-5xl lg:text-6xl font-bold text-white leading-tight">
-                AI로 펜싱 경기를<br>분석하세요
+                {% set lines = (t('landing.hero_title') if t else 'AI로 펜싱 경기를\n분석하세요').split('\n') %}
+                {{ lines[0] }}<br>{{ lines[1] if lines|length > 1 else '' }}
             </h1>
-            <p class="mt-6 text-lg sm:text-xl text-brand-200 max-w-2xl mx-auto">
-                영상을 업로드하면 포즈 추정, 기술 분류, 스코어 추적, 코칭 인사이트까지 — 자동으로 분석합니다.
+            <p class="mt-6 text-lg sm:text-xl text-gray-400 max-w-2xl mx-auto">
+                {{ t('landing.hero_subtitle') if t else '영상을 업로드하면 포즈 추정, 기술 분류, 스코어 추적, 코칭 인사이트까지 — 자동으로 분석합니다.' }}
             </p>
             <div class="mt-10 flex flex-col sm:flex-row gap-4 justify-center">
-                <a href="/demo"
-                   class="px-8 py-3.5 bg-white text-brand-700 font-semibold rounded-xl shadow-lg
-                          hover:bg-brand-50 transition-all text-base">
-                    데모 리포트 보기
+                <a href="/gallery"
+                   class="px-8 py-3.5 bg-brand-600 text-white font-semibold rounded-xl shadow-lg
+                          hover:bg-brand-500 transition-all text-base border border-brand-500/50">
+                    {{ t('landing.cta_demo') if t else '데모 갤러리 보기' }}
                 </a>
                 <a href="/upload"
-                   class="px-8 py-3.5 bg-brand-500 text-white font-semibold rounded-xl border border-brand-400
-                          hover:bg-brand-400 transition-all text-base">
-                    영상 업로드
+                   class="px-8 py-3.5 bg-white/5 text-white font-semibold rounded-xl
+                          border border-white/20 hover:bg-white/10 transition-all text-base">
+                    {{ t('landing.cta_upload') if t else '영상 업로드' }}
                 </a>
             </div>
         </div>
@@ -34,260 +31,126 @@
 </section>
 
 <!-- 3-Step Process -->
-<section class="py-16 bg-white">
+<section class="py-16">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <h2 class="text-2xl font-bold text-center text-gray-900 mb-12">3단계로 분석 완료</h2>
+        <h2 class="text-2xl font-bold text-center text-white mb-12">{{ t('landing.steps_title') if t else '3단계로 분석 완료' }}</h2>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <!-- Step 1 -->
-            <div class="text-center">
-                <div class="w-16 h-16 mx-auto bg-brand-100 rounded-2xl flex items-center justify-center mb-4">
-                    <svg class="w-8 h-8 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div class="text-center glass-card p-8">
+                <div class="w-16 h-16 mx-auto bg-blue-500/10 rounded-2xl flex items-center justify-center mb-4 border border-blue-500/20">
+                    <svg class="w-8 h-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                               d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
                     </svg>
                 </div>
                 <div class="inline-flex items-center justify-center w-8 h-8 bg-brand-600 text-white text-sm font-bold rounded-full mb-3">1</div>
-                <h3 class="text-lg font-semibold text-gray-900 mb-2">영상 업로드</h3>
-                <p class="text-gray-500 text-sm">펜싱 경기 영상을 업로드하세요. 코치 촬영, 학부모 촬영 모두 지원합니다.</p>
+                <h3 class="text-lg font-semibold text-white mb-2">{{ t('landing.step1_title') if t else '영상 업로드' }}</h3>
+                <p class="text-gray-400 text-sm">{{ t('landing.step1_desc') if t else '펜싱 경기 영상을 업로드하세요. 코치 촬영, 학부모 촬영 모두 지원합니다.' }}</p>
             </div>
-            <!-- Step 2 -->
-            <div class="text-center">
-                <div class="w-16 h-16 mx-auto bg-purple-100 rounded-2xl flex items-center justify-center mb-4">
-                    <svg class="w-8 h-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div class="text-center glass-card p-8">
+                <div class="w-16 h-16 mx-auto bg-purple-500/10 rounded-2xl flex items-center justify-center mb-4 border border-purple-500/20">
+                    <svg class="w-8 h-8 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                               d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
                     </svg>
                 </div>
                 <div class="inline-flex items-center justify-center w-8 h-8 bg-purple-600 text-white text-sm font-bold rounded-full mb-3">2</div>
-                <h3 class="text-lg font-semibold text-gray-900 mb-2">AI 분석</h3>
-                <p class="text-gray-500 text-sm">YOLO11-Pose와 VideoMAE가 선수 동작을 프레임 단위로 분석합니다.</p>
+                <h3 class="text-lg font-semibold text-white mb-2">{{ t('landing.step2_title') if t else 'AI 분석' }}</h3>
+                <p class="text-gray-400 text-sm">{{ t('landing.step2_desc') if t else 'YOLO11-Pose와 VideoMAE가 선수 동작을 프레임 단위로 분석합니다.' }}</p>
             </div>
-            <!-- Step 3 -->
-            <div class="text-center">
-                <div class="w-16 h-16 mx-auto bg-green-100 rounded-2xl flex items-center justify-center mb-4">
-                    <svg class="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div class="text-center glass-card p-8">
+                <div class="w-16 h-16 mx-auto bg-green-500/10 rounded-2xl flex items-center justify-center mb-4 border border-green-500/20">
+                    <svg class="w-8 h-8 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                               d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                     </svg>
                 </div>
                 <div class="inline-flex items-center justify-center w-8 h-8 bg-green-600 text-white text-sm font-bold rounded-full mb-3">3</div>
-                <h3 class="text-lg font-semibold text-gray-900 mb-2">코칭 리포트</h3>
-                <p class="text-gray-500 text-sm">터치별 분석, 동작 통계, 전략 제안이 포함된 리포트를 받으세요.</p>
+                <h3 class="text-lg font-semibold text-white mb-2">{{ t('landing.step3_title') if t else '코칭 리포트' }}</h3>
+                <p class="text-gray-400 text-sm">{{ t('landing.step3_desc') if t else '터치별 분석, 동작 통계, 전략 제안이 포함된 리포트를 받으세요.' }}</p>
             </div>
         </div>
     </div>
 </section>
 
 <!-- Core Features -->
-<section class="py-16 bg-gray-50">
+<section class="py-16">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <h2 class="text-2xl font-bold text-center text-gray-900 mb-4">핵심 기능</h2>
-        <p class="text-center text-gray-500 mb-12 max-w-xl mx-auto">최신 컴퓨터 비전과 딥러닝으로 펜싱 경기를 정밀 분석합니다.</p>
+        <h2 class="text-2xl font-bold text-center text-white mb-4">{{ t('landing.features_title') if t else '핵심 기능' }}</h2>
+        <p class="text-center text-gray-400 mb-12 max-w-xl mx-auto">{{ t('landing.features_subtitle') if t else '최신 컴퓨터 비전과 딥러닝으로 펜싱 경기를 정밀 분석합니다.' }}</p>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            <!-- Feature 1 -->
-            <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
-                <div class="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center mb-4">
-                    <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div class="glass-card p-6">
+                <div class="w-10 h-10 bg-blue-500/10 rounded-xl flex items-center justify-center mb-4 border border-blue-500/20">
+                    <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                               d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
                     </svg>
                 </div>
-                <h3 class="font-semibold text-gray-900 mb-1">포즈 추정</h3>
-                <p class="text-sm text-gray-500">YOLO11-Pose로 17개 관절을 실시간 추적. 자세와 풋워크를 정밀 분석합니다.</p>
+                <h3 class="font-semibold text-white mb-1">{{ t('landing.feat_pose') if t else '포즈 추정' }}</h3>
+                <p class="text-sm text-gray-400">{{ t('landing.feat_pose_desc') if t else 'YOLO11-Pose로 17개 관절을 실시간 추적. 자세와 풋워크를 정밀 분석합니다.' }}</p>
             </div>
-            <!-- Feature 2 -->
-            <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
-                <div class="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center mb-4">
-                    <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div class="glass-card p-6">
+                <div class="w-10 h-10 bg-purple-500/10 rounded-xl flex items-center justify-center mb-4 border border-purple-500/20">
+                    <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                               d="M13 10V3L4 14h7v7l9-11h-7z"/>
                     </svg>
                 </div>
-                <h3 class="font-semibold text-gray-900 mb-1">기술 분류</h3>
-                <p class="text-sm text-gray-500">VideoMAE 기반 행동 인식으로 공격, 리포스트, 카운터어택, 르미즈를 자동 분류합니다.</p>
+                <h3 class="font-semibold text-white mb-1">{{ t('landing.feat_action') if t else '기술 분류' }}</h3>
+                <p class="text-sm text-gray-400">{{ t('landing.feat_action_desc') if t else 'VideoMAE 기반 행동 인식으로 공격, 리포스트, 카운터어택, 르미즈를 자동 분류합니다.' }}</p>
             </div>
-            <!-- Feature 3 -->
-            <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
-                <div class="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center mb-4">
-                    <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div class="glass-card p-6">
+                <div class="w-10 h-10 bg-green-500/10 rounded-xl flex items-center justify-center mb-4 border border-green-500/20">
+                    <svg class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                               d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
                     </svg>
                 </div>
-                <h3 class="font-semibold text-gray-900 mb-1">스코어 추적</h3>
-                <p class="text-sm text-gray-500">LED 감지 + 7-segment OCR로 점수를 자동 인식. 터치별 타임라인을 생성합니다.</p>
+                <h3 class="font-semibold text-white mb-1">{{ t('landing.feat_score') if t else '스코어 추적' }}</h3>
+                <p class="text-sm text-gray-400">{{ t('landing.feat_score_desc') if t else 'LED 감지 + 7-segment OCR로 점수를 자동 인식. 터치별 타임라인을 생성합니다.' }}</p>
             </div>
-            <!-- Feature 4 -->
-            <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
-                <div class="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center mb-4">
-                    <svg class="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div class="glass-card p-6">
+                <div class="w-10 h-10 bg-amber-500/10 rounded-xl flex items-center justify-center mb-4 border border-amber-500/20">
+                    <svg class="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                               d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
                     </svg>
                 </div>
-                <h3 class="font-semibold text-gray-900 mb-1">코칭 인사이트</h3>
-                <p class="text-sm text-gray-500">패턴 분석, 약점 진단, 훈련 제안까지. 데이터 기반 코칭을 지원합니다.</p>
+                <h3 class="font-semibold text-white mb-1">{{ t('landing.feat_insight') if t else '코칭 인사이트' }}</h3>
+                <p class="text-sm text-gray-400">{{ t('landing.feat_insight_desc') if t else '패턴 분석, 약점 진단, 훈련 제안까지. 데이터 기반 코칭을 지원합니다.' }}</p>
             </div>
         </div>
     </div>
 </section>
 
-<!-- Pricing -->
-<section class="py-16 bg-white">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <h2 class="text-2xl font-bold text-center text-gray-900 mb-4">요금제</h2>
-        <p class="text-center text-gray-500 mb-12">필요에 맞는 요금제를 선택하세요.</p>
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 max-w-5xl mx-auto">
-            <!-- Free -->
-            <div class="bg-white rounded-2xl border border-gray-200 p-6">
-                <h3 class="font-semibold text-gray-900">Free</h3>
-                <p class="text-3xl font-bold text-gray-900 mt-2">무료</p>
-                <p class="text-sm text-gray-500 mt-1">월 2회 분석</p>
-                <ul class="mt-6 space-y-3 text-sm text-gray-600">
-                    <li class="flex items-center gap-2">
-                        <svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                        Pool bout 분석
-                    </li>
-                    <li class="flex items-center gap-2">
-                        <svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                        기본 리포트
-                    </li>
-                    <li class="flex items-center gap-2">
-                        <svg class="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                        <span class="text-gray-400">PDF 내보내기</span>
-                    </li>
-                </ul>
-                <a href="/upload"
-                   class="block mt-6 text-center py-2.5 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-colors text-sm">
-                    시작하기
-                </a>
-            </div>
-            <!-- Basic -->
-            <div class="bg-white rounded-2xl border border-gray-200 p-6">
-                <h3 class="font-semibold text-gray-900">Basic</h3>
-                <p class="text-3xl font-bold text-gray-900 mt-2">$19.99<span class="text-sm font-normal text-gray-500">/건</span></p>
-                <p class="text-sm text-gray-500 mt-1">건별 결제</p>
-                <ul class="mt-6 space-y-3 text-sm text-gray-600">
-                    <li class="flex items-center gap-2">
-                        <svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                        Pool + DE bout
-                    </li>
-                    <li class="flex items-center gap-2">
-                        <svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                        코칭 인사이트
-                    </li>
-                    <li class="flex items-center gap-2">
-                        <svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                        PDF 내보내기
-                    </li>
-                </ul>
-                <a href="/upload"
-                   class="block mt-6 text-center py-2.5 bg-brand-600 text-white font-medium rounded-lg hover:bg-brand-700 transition-colors text-sm">
-                    구매하기
-                </a>
-            </div>
-            <!-- Pro -->
-            <div class="bg-brand-50 rounded-2xl border-2 border-brand-500 p-6 relative">
-                <span class="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 bg-brand-600 text-white text-xs font-bold rounded-full">인기</span>
-                <h3 class="font-semibold text-gray-900">Pro</h3>
-                <p class="text-3xl font-bold text-gray-900 mt-2">$99<span class="text-sm font-normal text-gray-500">/월</span></p>
-                <p class="text-sm text-gray-500 mt-1">무제한 분석</p>
-                <ul class="mt-6 space-y-3 text-sm text-gray-600">
-                    <li class="flex items-center gap-2">
-                        <svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                        무제한 분석
-                    </li>
-                    <li class="flex items-center gap-2">
-                        <svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                        상대 전적 분석
-                    </li>
-                    <li class="flex items-center gap-2">
-                        <svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                        우선 처리
-                    </li>
-                </ul>
-                <a href="/upload"
-                   class="block mt-6 text-center py-2.5 bg-brand-600 text-white font-medium rounded-lg hover:bg-brand-700 transition-colors text-sm">
-                    구독하기
-                </a>
-            </div>
-            <!-- Team -->
-            <div class="bg-white rounded-2xl border border-gray-200 p-6">
-                <h3 class="font-semibold text-gray-900">Team</h3>
-                <p class="text-3xl font-bold text-gray-900 mt-2">$499<span class="text-sm font-normal text-gray-500">/월</span></p>
-                <p class="text-sm text-gray-500 mt-1">팀 전체 분석</p>
-                <ul class="mt-6 space-y-3 text-sm text-gray-600">
-                    <li class="flex items-center gap-2">
-                        <svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                        선수 10명까지
-                    </li>
-                    <li class="flex items-center gap-2">
-                        <svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                        팀 통계 대시보드
-                    </li>
-                    <li class="flex items-center gap-2">
-                        <svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                        전담 기술 지원
-                    </li>
-                </ul>
-                <a href="/upload"
-                   class="block mt-6 text-center py-2.5 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-colors text-sm">
-                    문의하기
-                </a>
-            </div>
-        </div>
-    </div>
-</section>
+{# Pricing section hidden — pricing plan not finalized yet #}
 
-<!-- Demo Preview -->
-<section class="py-16 bg-gray-50">
+<!-- Gallery Preview -->
+{% if gallery_reports %}
+<section class="py-16">
     <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        <h2 class="text-2xl font-bold text-center text-gray-900 mb-4">데모 리포트 미리보기</h2>
-        <p class="text-center text-gray-500 mb-8">실제 분석 결과를 확인해 보세요.</p>
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-            <div class="flex items-center justify-center gap-8 mb-6">
-                <div class="text-center">
-                    <p class="text-sm font-semibold text-blue-600 mb-1">김민수</p>
-                    <p class="text-[10px] text-blue-400">최병철펜싱클럽</p>
-                    <p class="text-4xl font-bold text-blue-600 mt-1">5</p>
+        <h2 class="text-2xl font-bold text-center text-white mb-4">{{ t('gallery.title') if t else '분석 데모' }}</h2>
+        <p class="text-center text-gray-400 mb-8">{{ t('gallery.subtitle') if t else '실제 경기 영상 AI 분석 결과를 확인해 보세요.' }}</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {% for r in gallery_reports[:2] %}
+            <a href="/report/saved/{{ r.id }}" class="glass-card p-6 block group">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="weapon-badge-{{ r.weapon }} inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase">{{ r.weapon }}</span>
+                    <span class="text-2xl font-bold text-white">{{ r.score }}</span>
                 </div>
-                <div>
-                    <span class="text-2xl font-light text-gray-300">:</span>
-                    <div class="mt-2">
-                        <span class="inline-block px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-xs font-medium">플뢰레</span>
-                    </div>
+                <h3 class="font-semibold text-white text-sm mb-1 group-hover:text-brand-400 transition-colors">{{ r.title }}</h3>
+                <div class="flex gap-4 text-xs text-gray-500 mt-2">
+                    <span>{{ r.touches }} {{ t('gallery.touches') if t else '터치' }}</span>
+                    <span>{{ r.duration }}</span>
                 </div>
-                <div class="text-center">
-                    <p class="text-sm font-semibold text-red-600 mb-1">박지현</p>
-                    <p class="text-[10px] text-red-400">서울펜싱클럽</p>
-                    <p class="text-4xl font-bold text-red-600 mt-1">3</p>
-                </div>
-            </div>
-            <div class="grid grid-cols-3 gap-4 text-center text-sm mb-6">
-                <div class="bg-gray-50 rounded-lg py-3">
-                    <p class="font-semibold text-gray-900">8</p>
-                    <p class="text-gray-500 text-xs">총 터치</p>
-                </div>
-                <div class="bg-gray-50 rounded-lg py-3">
-                    <p class="font-semibold text-gray-900">2:47</p>
-                    <p class="text-gray-500 text-xs">경기 시간</p>
-                </div>
-                <div class="bg-gray-50 rounded-lg py-3">
-                    <p class="font-semibold text-gray-900">6개</p>
-                    <p class="text-gray-500 text-xs">코칭 인사이트</p>
-                </div>
-            </div>
-            <div class="flex flex-col sm:flex-row gap-3 justify-center">
-                <a href="/demo"
-                   class="px-6 py-2.5 bg-brand-600 text-white font-medium rounded-lg hover:bg-brand-700 transition-colors text-sm text-center">
-                    전체 리포트 보기
-                </a>
-                <a href="/demo/de"
-                   class="px-6 py-2.5 bg-white text-gray-700 font-medium rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors text-sm text-center">
-                    DE 데모 (15-11) 보기
-                </a>
-            </div>
+            </a>
+            {% endfor %}
+        </div>
+        <div class="text-center mt-6">
+            <a href="/gallery" class="text-brand-400 hover:text-brand-300 text-sm font-medium transition-colors">
+                {{ t('gallery.btn_view') if t else '전체 갤러리 보기' }} &rarr;
+            </a>
         </div>
     </div>
 </section>
+{% endif %}
 {% endblock %}
