@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="{{ lang|default('ko') }}" data-theme="{{ theme|default('dark') }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}FencingMind{% endblock %}</title>
+
+    <!-- PWA -->
+    <link rel="manifest" href="/static/manifest.json">
+    <meta name="theme-color" content="#c9302c">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="/static/images/icons/icon-192.png">
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" sizes="192x192" href="/static/images/icons/icon-192.png">
+
+    <!-- Fonts: Pretendard (Korean) + Inter (English) -->
+    <link rel="preconnect" href="https://cdn.jsdelivr.net">
+    {% if lang|default('ko') == 'ko' %}
+    <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" rel="stylesheet">
+    {% endif %}
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-tertiary: #1a1a25;
+            --bg-card: rgba(18, 18, 26, 0.85);
+            --bg-card-hover: rgba(26, 26, 37, 0.9);
+            --accent-primary: #c9302c;
+            --accent-secondary: #1e3a8a;
+            --accent-gold: #d4a574;
+            --text-primary: #ffffff;
+            --text-secondary: #b4b4c4;
+            --text-muted: #6b6b7b;
+            --border-color: rgba(255, 255, 255, 0.08);
+            --border-light: rgba(255, 255, 255, 0.15);
+            --glow-primary: rgba(201, 48, 44, 0.3);
+            --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+            --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.4);
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --danger-color: #ef4444;
+            --info-color: #3b82f6;
+        }
+
+        [data-theme="light"] {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f5f5f7;
+            --bg-tertiary: #f0f0f5;
+            --bg-card: #ffffff;
+            --bg-card-hover: #f9f9fb;
+            --text-primary: #191f28;
+            --text-secondary: #4e5968;
+            --text-muted: #8b95a1;
+            --border-color: rgba(0, 0, 0, 0.08);
+            --border-light: rgba(0, 0, 0, 0.12);
+            --glow-primary: transparent;
+            --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
+            --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: 'Pretendard Variable', 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            font-weight: 400;
+            letter-spacing: -0.01em;
+            overflow-x: hidden;
+        }
+
+        /* Parallax Background */
+        .parallax-bg {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: -2;
+            background: linear-gradient(135deg, #0a0a0f 0%, #12121a 50%, #0f0f1a 100%);
+        }
+        .parallax-overlay {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: radial-gradient(ellipse at 50% 0%, rgba(201, 48, 44, 0.08) 0%, transparent 60%),
+                        radial-gradient(ellipse at 80% 80%, rgba(30, 58, 138, 0.06) 0%, transparent 50%);
+        }
+
+        /* Navbar */
+        .navbar {
+            background: rgba(10, 10, 15, 0.95);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border-color);
+            padding: 12px 0;
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            z-index: 1000;
+        }
+        .navbar .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .logo {
+            display: flex;
+            align-items: center;
+            text-decoration: none;
+        }
+        .logo img { height: 28px; width: auto; }
+        .nav-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .nav-link {
+            color: var(--text-secondary);
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            border: 1px solid transparent;
+        }
+        .nav-link:hover {
+            color: var(--text-primary);
+            background: rgba(255, 255, 255, 0.05);
+            border-color: var(--border-light);
+        }
+
+        /* Language Switcher */
+        .lang-switcher { display: inline-flex; gap: 4px; }
+        .lang-switcher a {
+            color: var(--text-muted);
+            text-decoration: none;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        .lang-switcher a.active {
+            color: var(--text-primary);
+            background: rgba(255, 255, 255, 0.1);
+        }
+        .lang-switcher a:hover { color: var(--text-primary); }
+
+        /* Main Content */
+        .main-content {
+            min-height: calc(100vh - 200px);
+            padding-top: 80px;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Footer */
+        .site-footer {
+            background: var(--bg-secondary);
+            border-top: 1px solid var(--border-color);
+            padding: 30px 0;
+            text-align: center;
+            position: relative;
+            z-index: 1;
+        }
+        .footer-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+        .footer-links { margin-bottom: 10px; }
+        .footer-links a {
+            color: var(--accent-gold);
+            text-decoration: none;
+            font-size: 0.85rem;
+        }
+        .footer-links .sep {
+            color: var(--text-muted);
+            margin: 0 8px;
+        }
+        .footer-copyright {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+        }
+
+        /* Light theme overrides */
+        [data-theme="light"] .parallax-bg,
+        [data-theme="light"] .parallax-overlay { display: none; }
+        [data-theme="light"] body { background: #ffffff; }
+        [data-theme="light"] .navbar {
+            background: rgba(255, 255, 255, 0.95);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+        [data-theme="light"] .nav-link { color: #4e5968; }
+        [data-theme="light"] .nav-link:hover {
+            color: #191f28;
+            background: rgba(0, 0, 0, 0.04);
+        }
+        [data-theme="light"] .lang-switcher a { color: #8b95a1; }
+        [data-theme="light"] .lang-switcher a.active {
+            color: #191f28;
+            background: rgba(0, 0, 0, 0.06);
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .nav-right { gap: 8px; }
+            .nav-link { padding: 6px 10px; font-size: 0.85rem; }
+            .lang-switcher a { padding: 3px 6px; font-size: 0.7rem; }
+        }
+    </style>
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <!-- Background -->
+    <div class="parallax-bg">
+        <div class="parallax-overlay"></div>
+    </div>
+
+    <!-- Navbar -->
+    <nav class="navbar">
+        <div class="container">
+            <a href="/" class="logo">
+                {% if theme == 'light' %}
+                <img src="/static/images/logo/FencingMind_logo_long.png" alt="FencingMind" height="28">
+                {% else %}
+                <img src="/static/images/logo/FencingMind_logo_long_white.png" alt="FencingMind" height="28">
+                {% endif %}
+            </a>
+            <div class="nav-right">
+                <a href="https://data.fencingmind.ai" class="nav-link">{{ t('common.nav.data')|default('Data') }}</a>
+                <div class="lang-switcher">
+                    {% for sl in supported_langs|default(['ko', 'en', 'fr', 'it', 'ja', 'zh', 'tr']) %}
+                    <a href="?lang={{ sl }}" class="{% if sl == lang|default('ko') %}active{% endif %}" title="{{ language_names[sl]|default(sl|upper) if language_names is defined else sl|upper }}">{{ sl|upper }}</a>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="site-footer">
+        <div class="footer-container">
+            <div class="footer-links">
+                <a href="https://account.fencingmind.ai/legal/terms">{{ t('common.footer.terms')|default('Terms') }}</a>
+                <span class="sep">|</span>
+                <a href="https://account.fencingmind.ai/legal/privacy">{{ t('common.footer.privacy')|default('Privacy') }}</a>
+                <span class="sep">|</span>
+                <a href="mailto:privacy@fencingmind.ai">{{ t('common.footer.privacy_inquiry')|default('Privacy Inquiry') }}</a>
+            </div>
+            <div class="footer-copyright">&copy; 2024-2026 FencingMind LLC</div>
+        </div>
+    </footer>
+
+    <!-- Service Worker Registration -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/service-worker.js', { scope: '/' })
+                    .then((reg) => {
+                        console.log('SW registered, scope:', reg.scope);
+                    })
+                    .catch((err) => {
+                        console.warn('SW registration failed:', err);
+                    });
+            });
+        }
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>
