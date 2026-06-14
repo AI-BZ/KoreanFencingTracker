@@ -68,6 +68,9 @@ services/app/
 │   ├── manifest.json                  # PWA manifest (아이콘, 테마색, standalone)
 │   ├── service-worker.js              # SW (캐시 전략, 푸시 수신, 오프라인 폴백)
 │   ├── offline.html                   # 오프라인 폴백 페이지
+│   ├── js/
+│   │   ├── push.js                    # Phase 4: 웹 푸시 구독/해제
+│   │   └── install.js                 # Phase 5: iOS 설치 안내 배너 + beforeinstallprompt 중앙화
 │   └── images/
 │       ├── icons/
 │       │   ├── icon-192.png           # PWA 아이콘 192x192
@@ -113,7 +116,7 @@ PYTHONPATH="${PWD}:${PWD}/packages:${PWD}/services/app" \
 | 2 | `feature/app/notifications` | 알림 구독 UI + 설정 페이지 | 없음 | ✅ 완료 |
 | 3 | `feature/app/pipeline` | EventPoller + NotificationDispatcher | 없음 | ✅ 완료 |
 | **4** | **`feature/app/fcm`** | **FCM 웹 푸시 발송 + 권한요청(클릭 제스처 내) + iOS 16.4+ 감지** | **Firebase 프로젝트 (VAPID 키), pywebpush** | **🔨 코드 완료 / 키·패키지 대기** |
-| 5 | `feature/app/pwa-install` | 설치 프롬프트 최적화 + **iOS Safari "홈 화면에 추가" 안내 배너** | 없음 | 📋 |
+| **5** | **`feature/app/pwa-install`** | **설치 프롬프트 최적화 + iOS Safari "홈 화면에 추가" 안내 배너** | **없음** | **✅ 완료** |
 | 6 | `feature/app/kakao-alimtalk` | 카카오 알림톡 발송 | 비즈니스 채널 | 📋 |
 | 7 | `feature/app/offline` | 오프라인 지원 강화 | 없음 | 📋 |
 
@@ -126,9 +129,9 @@ iOS는 Android와 달리 PWA 푸시에 강한 제약이 있다. 아래 항목을
 
 | # | iOS 제약 | 대응 | 처리 Phase | 현재 |
 |---|----------|------|-----------|------|
-| 1 | "홈 화면에 추가" 후 **그 아이콘으로 실행**해야만 알림 권한 요청·수신 가능 | iOS Safari 감지 → 공유→"홈 화면에 추가" **설치 안내 배너** (iOS엔 `beforeinstallprompt` 없음) | **5** | ❌ 미구현 |
+| 1 | "홈 화면에 추가" 후 **그 아이콘으로 실행**해야만 알림 권한 요청·수신 가능 | iOS Safari 감지 → 공유→"홈 화면에 추가" **설치 안내 배너** (iOS엔 `beforeinstallprompt` 없음) | **5** | ✅ 구현 (`static/js/install.js` + `base.html` 배너) |
 | 2 | 권한 요청은 **사용자 제스처(버튼 클릭) 핸들러 내부**에서만 호출 가능 | `Notification.requestPermission()`을 `#push-toggle-btn` onclick 안에서만 호출 (페이지 로드 시 자동 호출 안 함) | **4** | ✅ 구현 (`static/js/push.js`) |
-| 3 | **iOS 16.4+ + standalone 모드**에서만 Web Push 동작 | `push.js`가 iOS 감지 + `display-mode: standalone` 감지 → 미충족 시 버튼 비활성화 + 설치 안내 인라인 메시지 (배너는 Phase 5) | **4/5** | ✅ 감지·안내 구현 / 배너 Phase 5 |
+| 3 | **iOS 16.4+ + standalone 모드**에서만 Web Push 동작 | `push.js`가 iOS 감지 + `display-mode: standalone` 감지 → 미충족 시 버튼 비활성화 + 설치 안내 인라인 메시지. 사이트 전역 설치 안내 배너는 `install.js`(Phase 5) | **4/5** | ✅ 감지·안내 + 전역 배너 구현 |
 | 4 | manifest `display: standalone` + 아이콘 + `apple-touch-icon` | 이미 충족 | 1.5 | ✅ 완료 |
 | 5 | VAPID 키 + SW `push`/`notificationclick` 핸들러 | SW 핸들러 작성 완료, 프론트/백엔드 발송 코드 완료. **VAPID 키는 사람이 Firebase에서 발급 후 env 설정 필요** | 4 | ⚠️ 키 대기 (코드 완료) |
 

@@ -167,31 +167,55 @@
 
 {% block scripts %}
 <script>
-    // PWA install prompt
-    let deferredPrompt = null;
-    const installBtn = document.getElementById('installBtn');
-    const installHint = document.getElementById('installHint');
+    // PWA install prompt — reuses the centralized deferred prompt captured in
+    // install.js (loaded from base.html). install.js fires 'fm-install-available'
+    // when a beforeinstallprompt has been captured.
+    (function () {
+        const installBtn = document.getElementById('installBtn');
+        const installHint = document.getElementById('installHint');
+        if (!installBtn || !installHint) return;
 
-    window.addEventListener('beforeinstallprompt', (e) => {
-        e.preventDefault();
-        deferredPrompt = e;
-        installBtn.classList.add('visible');
-    });
+        const I18N = {
+            success: '{{ t("app.home.install_success", "App installed successfully!") }}',
+            already: '{{ t("app.home.already_installed", "App is already installed.") }}',
+        };
 
-    installBtn.addEventListener('click', async () => {
-        if (!deferredPrompt) return;
-        deferredPrompt.prompt();
-        const result = await deferredPrompt.userChoice;
-        if (result.outcome === 'accepted') {
-            installBtn.classList.remove('visible');
-            installHint.textContent = '{{ t("app.home.install_success", "App installed successfully!") }}';
+        function showButtonIfAvailable() {
+            const prompt = (typeof window.fmGetInstallPrompt === 'function')
+                ? window.fmGetInstallPrompt() : null;
+            if (prompt) installBtn.classList.add('visible');
         }
-        deferredPrompt = null;
-    });
 
-    // Detect if already installed
-    if (window.matchMedia('(display-mode: standalone)').matches) {
-        installHint.textContent = '{{ t("app.home.already_installed", "App is already installed.") }}';
-    }
+        // React when install.js captures a prompt.
+        window.addEventListener('fm-install-available', showButtonIfAvailable);
+        // In case the prompt fired before this listener attached.
+        showButtonIfAvailable();
+
+        installBtn.addEventListener('click', async () => {
+            const prompt = (typeof window.fmGetInstallPrompt === 'function')
+                ? window.fmGetInstallPrompt() : null;
+            if (!prompt) return;
+            prompt.prompt();
+            const result = await prompt.userChoice;
+            if (result && result.outcome === 'accepted') {
+                installBtn.classList.remove('visible');
+                installHint.textContent = I18N.success;
+            }
+            if (typeof window.fmClearInstallPrompt === 'function') {
+                window.fmClearInstallPrompt();
+            }
+        });
+
+        window.addEventListener('appinstalled', () => {
+            installBtn.classList.remove('visible');
+            installHint.textContent = I18N.success;
+        });
+
+        // Detect if already installed
+        if (window.matchMedia('(display-mode: standalone)').matches ||
+            window.navigator.standalone === true) {
+            installHint.textContent = I18N.already;
+        }
+    })();
 </script>
 {% endblock %}
