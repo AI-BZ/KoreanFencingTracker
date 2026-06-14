@@ -112,10 +112,28 @@ PYTHONPATH="${PWD}:${PWD}/packages:${PWD}/services/app" \
 | 1.5 | `feature/app/pwa-base` | manifest + SW + offline + base.html + home.html | 없음 | ✅ 완료 |
 | 2 | `feature/app/notifications` | 알림 구독 UI + 설정 페이지 | 없음 | ✅ 완료 |
 | **3** | **`feature/app/pipeline`** | **EventPoller + NotificationDispatcher** | **없음** | **⬅️ 다음** |
-| 4 | `feature/app/fcm` | FCM 웹 푸시 발송 | Firebase 프로젝트 | 📋 |
-| 5 | `feature/app/pwa-install` | 설치 프롬프트 최적화 + 아이콘 | 없음 | 📋 |
+| 4 | `feature/app/fcm` | FCM 웹 푸시 발송 + **권한요청(클릭 제스처 내)** + **iOS 16.4+ 감지** | Firebase 프로젝트 | 📋 |
+| 5 | `feature/app/pwa-install` | 설치 프롬프트 최적화 + **iOS Safari "홈 화면에 추가" 안내 배너** | 없음 | 📋 |
 | 6 | `feature/app/kakao-alimtalk` | 카카오 알림톡 발송 | 비즈니스 채널 | 📋 |
 | 7 | `feature/app/offline` | 오프라인 지원 강화 | 없음 | 📋 |
+
+---
+
+## 🍎 iOS PWA 제약 & 대응 (필수 체크리스트)
+
+iOS는 Android와 달리 PWA 푸시에 강한 제약이 있다. 아래 항목을 Phase 4/5에서 반드시 처리한다.
+(미처리 시 iOS 사용자는 푸시를 전혀 못 받는다.)
+
+| # | iOS 제약 | 대응 | 처리 Phase | 현재 |
+|---|----------|------|-----------|------|
+| 1 | "홈 화면에 추가" 후 **그 아이콘으로 실행**해야만 알림 권한 요청·수신 가능 | iOS Safari 감지 → 공유→"홈 화면에 추가" **설치 안내 배너** (iOS엔 `beforeinstallprompt` 없음) | **5** | ❌ 미구현 |
+| 2 | 권한 요청은 **사용자 제스처(버튼 클릭) 핸들러 내부**에서만 호출 가능 | `Notification.requestPermission()`을 버튼 onclick 안에서만 호출 (페이지 로드 시 자동 호출 금지) | **4** | ❌ 미구현 |
+| 3 | **iOS 16.4+ + standalone 모드**에서만 Web Push 동작 | UA/버전 + `display-mode: standalone` 감지 → 미충족 시 설치 안내 또는 카카오 알림톡 폴백 유도 | **4/5** | ❌ 미구현 |
+| 4 | manifest `display: standalone` + 아이콘 + `apple-touch-icon` | 이미 충족 | 1.5 | ✅ 완료 |
+| 5 | VAPID 키 + SW `push`/`notificationclick` 핸들러 | 키는 Firebase 발급(Phase 4), SW 핸들러는 이미 작성됨 | 4 | ⚠️ 키 대기 |
+
+> **이중 채널 설계 의도**: PWA 푸시(iOS는 설치 필요) + 카카오 알림톡(설치 불필요)으로
+> iOS 제약을 보완. 미설치 사용자에게는 알림톡이 백업 도달 경로.
 
 ---
 

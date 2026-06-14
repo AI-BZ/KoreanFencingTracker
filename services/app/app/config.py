@@ -33,5 +33,8 @@ class AppSettings:
     # 이벤트 폴링 간격 (초)
     EVENT_POLL_INTERVAL: int = int(os.getenv("EVENT_POLL_INTERVAL", "30"))
 
+    # 이벤트 폴러 활성화 (Phase 3). 테스트/로컬에서 끄려면 APP_ENABLE_POLLER=false
+    ENABLE_POLLER: bool = os.getenv("APP_ENABLE_POLLER", "true").lower() == "true"
+
 
 settings = AppSettings()

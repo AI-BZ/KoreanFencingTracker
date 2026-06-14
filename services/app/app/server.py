@@ -6,6 +6,9 @@ PWA/알림 허브 서비스 (app.fencingmind.ai, port 77)
 - data 서비스 이벤트 폴링 → 알림 디스패치
 - PWA manifest + service worker 호스팅
 """
+import asyncio
+import logging
+from contextlib import asynccontextmanager
 from urllib.parse import quote
 
 from fastapi import FastAPI, Request
@@ -19,16 +22,43 @@ from pathlib import Path
 from shared_core.i18n import LanguageMiddleware, create_language_context
 
 from .auth.router import router as auth_router
+from .config import settings
 from .notifications.router import router as notifications_router
+from .pipeline import EventPoller
+
+logger = logging.getLogger("app")
 
 SERVICE_DIR = Path(__file__).parent.parent
 TEMPLATES_DIR = SERVICE_DIR / "templates"
 STATIC_DIR = SERVICE_DIR / "static"
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """앱 수명주기: 시작 시 이벤트 폴러 기동, 종료 시 graceful stop (Phase 3)."""
+    poller_task = None
+    if settings.ENABLE_POLLER:
+        poller = EventPoller(interval=settings.EVENT_POLL_INTERVAL)
+        poller_task = asyncio.create_task(poller.run())
+        logger.info("이벤트 폴러 활성화 (interval=%ss)", settings.EVENT_POLL_INTERVAL)
+    else:
+        logger.info("이벤트 폴러 비활성화 (APP_ENABLE_POLLER=false)")
+    try:
+        yield
+    finally:
+        if poller_task is not None:
+            poller_task.cancel()
+            try:
+                await poller_task
+            except asyncio.CancelledError:
+                pass
+
+
 app = FastAPI(
     title="FencingMind App",
     description="PWA/알림 허브 서비스",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 # Language detection middleware (must be before CORS)

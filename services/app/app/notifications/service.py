@@ -91,6 +91,34 @@ def CATEGORY_KEYS_ORDERED() -> list[str]:
     return [c["category"] for c in NOTIFICATION_CATEGORIES]
 
 
+def get_member_preference(member_id: str, category: str, supabase: Any = None) -> dict[str, bool]:
+    """단일 회원·카테고리의 채널 설정을 반환 (저장된 행 없으면 기본값).
+
+    파이프라인(dispatcher)이 발송 전 채널 on/off를 확인할 때 사용한다.
+    supabase 클라이언트를 주입하면 그걸 사용 (테스트/일관성), 없으면 싱글톤.
+    """
+    defaults = _DEFAULTS.get(
+        category, {"web_push": False, "kakao_alimtalk": False, "in_app": True}
+    )
+    supabase = supabase or get_supabase_client()
+    res = (
+        supabase.table("app_notification_preferences")
+        .select("web_push, kakao_alimtalk, in_app")
+        .eq("member_id", member_id)
+        .eq("category", category)
+        .limit(1)
+        .execute()
+    )
+    row = res.data[0] if res.data else None
+    channels = {
+        ch: (bool(row[ch]) if row is not None and row.get(ch) is not None else defaults[ch])
+        for ch in CHANNELS
+    }
+    if category in LOCKED_CATEGORIES:
+        channels["in_app"] = True
+    return channels
+
+
 def update_preference(member_id: str, category: str, channels: dict[str, bool]) -> dict[str, Any]:
     """단일 카테고리의 채널 설정을 upsert.
 
