@@ -237,7 +237,8 @@
                 {% endif %}
             </a>
             <div class="nav-right">
-                <a href="https://data.fencingmind.ai" class="nav-link">{{ t('common.nav.data')|default('Data') }}</a>
+                <a href="/notifications/settings" class="nav-link">{{ t('app.notif.nav', '알림 설정') }}</a>
+                <a href="https://data.fencingmind.ai" class="nav-link">{{ t('common.nav.data', 'Data') }}</a>
                 <div class="lang-switcher">
                     {% for sl in supported_langs|default(['ko', 'en', 'fr', 'it', 'ja', 'zh', 'tr']) %}
                     <a href="?lang={{ sl }}" class="{% if sl == lang|default('ko') %}active{% endif %}" title="{{ language_names[sl]|default(sl|upper) if language_names is defined else sl|upper }}">{{ sl|upper }}</a>
@@ -254,11 +255,11 @@
     <footer class="site-footer">
         <div class="footer-container">
             <div class="footer-links">
-                <a href="https://account.fencingmind.ai/legal/terms">{{ t('common.footer.terms')|default('Terms') }}</a>
+                <a href="https://account.fencingmind.ai/legal/terms">{{ t('common.footer.terms', 'Terms') }}</a>
                 <span class="sep">|</span>
-                <a href="https://account.fencingmind.ai/legal/privacy">{{ t('common.footer.privacy')|default('Privacy') }}</a>
+                <a href="https://account.fencingmind.ai/legal/privacy">{{ t('common.footer.privacy', 'Privacy') }}</a>
                 <span class="sep">|</span>
-                <a href="mailto:privacy@fencingmind.ai">{{ t('common.footer.privacy_inquiry')|default('Privacy Inquiry') }}</a>
+                <a href="mailto:privacy@fencingmind.ai">{{ t('common.footer.privacy_inquiry', 'Privacy Inquiry') }}</a>
             </div>
             <div class="footer-copyright">&copy; 2024-2026 FencingMind LLC</div>
         </div>

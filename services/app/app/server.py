@@ -19,6 +19,7 @@ from pathlib import Path
 from shared_core.i18n import LanguageMiddleware, create_language_context
 
 from .auth.router import router as auth_router
+from .notifications.router import router as notifications_router
 
 SERVICE_DIR = Path(__file__).parent.parent
 TEMPLATES_DIR = SERVICE_DIR / "templates"
@@ -59,6 +60,7 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 # Routers
 app.include_router(auth_router)
+app.include_router(notifications_router)
 
 
 @app.exception_handler(HTTPException)

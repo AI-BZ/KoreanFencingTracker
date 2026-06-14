@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+
+{% set CAT_LABELS = {
+    'competition_result': t('app.notif.cat.competition_result', '대회 결과'),
+    'ranking_change':      t('app.notif.cat.ranking_change', '랭킹 변동'),
+    'club_notice':         t('app.notif.cat.club_notice', '클럽 공지'),
+    'attendance_reminder': t('app.notif.cat.attendance_reminder', '출석 알림'),
+    'system':              t('app.notif.cat.system', '시스템 공지'),
+} %}
+{% set CAT_DESCS = {
+    'competition_result': t('app.notif.desc.competition_result', '참가한 대회의 결과가 발표되면 알려드립니다.'),
+    'ranking_change':      t('app.notif.desc.ranking_change', '내 랭킹이 변동되면 알려드립니다.'),
+    'club_notice':         t('app.notif.desc.club_notice', '소속 클럽의 공지사항을 받습니다.'),
+    'attendance_reminder': t('app.notif.desc.attendance_reminder', '수업 출석 관련 알림을 받습니다.'),
+    'system':              t('app.notif.desc.system', '서비스 점검·보안 등 중요 공지 (해제 불가).'),
+} %}
+
+{% block title %}{{ t('app.notif.title', '알림 설정') }} · FencingMind{% endblock %}
+
+{% block head %}
+<style>
+    .settings-wrap { max-width: 720px; margin: 0 auto; padding: 40px 20px 80px; }
+    .settings-head { margin-bottom: 28px; }
+    .settings-head h1 {
+        font-size: 1.6rem; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 8px;
+    }
+    .settings-head p { color: var(--text-secondary); font-size: 0.92rem; }
+
+    .channel-note {
+        display: flex; align-items: center; gap: 8px;
+        background: var(--bg-tertiary); border: 1px solid var(--border-color);
+        border-radius: 10px; padding: 12px 16px; margin-bottom: 24px;
+        color: var(--text-muted); font-size: 0.82rem;
+    }
+
+    .pref-card {
+        background: var(--bg-card); border: 1px solid var(--border-color);
+        border-radius: 12px; padding: 22px 22px 10px; margin-bottom: 16px;
+    }
+    [data-theme="light"] .pref-card { box-shadow: var(--shadow-sm); }
+    .pref-card-head { margin-bottom: 14px; }
+    .pref-card-title {
+        display: flex; align-items: center; gap: 8px;
+        font-size: 1.05rem; font-weight: 600; margin-bottom: 4px;
+    }
+    .pref-card-desc { color: var(--text-secondary); font-size: 0.85rem; }
+    .lock-badge {
+        font-size: 0.68rem; font-weight: 600; color: var(--text-muted);
+        background: var(--bg-tertiary); border: 1px solid var(--border-color);
+        padding: 2px 8px; border-radius: 20px;
+    }
+
+    .channel-row {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 12px 0; border-top: 1px solid var(--border-color);
+    }
+    .channel-label { display: flex; align-items: center; gap: 10px; }
+    .channel-label .name { font-size: 0.92rem; font-weight: 500; }
+    .soon-badge {
+        font-size: 0.65rem; font-weight: 600; color: var(--accent-gold);
+        background: rgba(212, 165, 116, 0.12); border: 1px solid rgba(212, 165, 116, 0.3);
+        padding: 1px 7px; border-radius: 20px;
+    }
+
+    /* Toggle switch */
+    .switch { position: relative; display: inline-block; width: 46px; height: 26px; flex-shrink: 0; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider {
+        position: absolute; cursor: pointer; inset: 0;
+        background: var(--bg-tertiary); border: 1px solid var(--border-light);
+        transition: 0.25s; border-radius: 26px;
+    }
+    .slider:before {
+        position: absolute; content: ""; height: 18px; width: 18px;
+        left: 3px; bottom: 3px; background: var(--text-muted);
+        transition: 0.25s; border-radius: 50%;
+    }
+    .switch input:checked + .slider {
+        background: var(--accent-primary); border-color: var(--accent-primary);
+    }
+    .switch input:checked + .slider:before { transform: translateX(20px); background: #fff; }
+    .switch input:disabled + .slider { opacity: 0.5; cursor: not-allowed; }
+
+    .save-status {
+        min-height: 20px; font-size: 0.8rem; margin-top: 4px;
+        text-align: right; transition: opacity 0.3s; opacity: 0;
+    }
+    .save-status.show { opacity: 1; }
+    .save-status.ok { color: var(--success-color); }
+    .save-status.err { color: var(--danger-color); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="settings-wrap">
+    <div class="settings-head">
+        <h1>{{ t('app.notif.title', '알림 설정') }}</h1>
+        <p>{{ t('app.notif.subtitle', '받고 싶은 알림과 채널을 선택하세요.') }}</p>
+    </div>
+
+    <div class="channel-note">
+        <span>&#x2139;&#xFE0F;</span>
+        <span>{{ t('app.notif.channel_note', '웹 푸시와 카카오 알림톡은 준비 중입니다. 지금 설정해두면 출시 시 바로 적용됩니다.') }}</span>
+    </div>
+
+    {% for pref in preferences %}
+    <div class="pref-card" data-category="{{ pref.category }}">
+        <div class="pref-card-head">
+            <div class="pref-card-title">
+                {{ CAT_LABELS[pref.category] }}
+                {% if pref.locked %}<span class="lock-badge">{{ t('app.notif.required', '필수') }}</span>{% endif %}
+            </div>
+            <div class="pref-card-desc">{{ CAT_DESCS[pref.category] }}</div>
+        </div>
+
+        {# in_app: Phase 2 (active) #}
+        <div class="channel-row">
+            <div class="channel-label">
+                <span class="name">{{ t('app.notif.channel.in_app', '인앱 알림') }}</span>
+            </div>
+            <label class="switch">
+                <input type="checkbox" data-channel="in_app"
+                       {% if pref.in_app %}checked{% endif %}
+                       {% if pref.locked %}disabled{% endif %}>
+                <span class="slider"></span>
+            </label>
+        </div>
+
+        {# web_push: Phase 4 (coming soon) #}
+        <div class="channel-row">
+            <div class="channel-label">
+                <span class="name">{{ t('app.notif.channel.web_push', '웹 푸시') }}</span>
+                <span class="soon-badge">{{ t('app.notif.soon', '준비 중') }}</span>
+            </div>
+            <label class="switch">
+                <input type="checkbox" data-channel="web_push"
+                       {% if pref.web_push %}checked{% endif %}>
+                <span class="slider"></span>
+            </label>
+        </div>
+
+        {# kakao_alimtalk: Phase 6 (coming soon) #}
+        <div class="channel-row">
+            <div class="channel-label">
+                <span class="name">{{ t('app.notif.channel.kakao_alimtalk', '카카오 알림톡') }}</span>
+                <span class="soon-badge">{{ t('app.notif.soon', '준비 중') }}</span>
+            </div>
+            <label class="switch">
+                <input type="checkbox" data-channel="kakao_alimtalk"
+                       {% if pref.kakao_alimtalk %}checked{% endif %}>
+                <span class="slider"></span>
+            </label>
+        </div>
+
+        <div class="save-status"></div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const SAVED_TEXT = "{{ t('app.notif.saved', '저장됨') }}";
+    const ERROR_TEXT = "{{ t('app.notif.save_error', '저장 실패') }}";
+
+    function showStatus(card, ok) {
+        const el = card.querySelector('.save-status');
+        el.textContent = ok ? SAVED_TEXT : ERROR_TEXT;
+        el.className = 'save-status show ' + (ok ? 'ok' : 'err');
+        clearTimeout(el._t);
+        el._t = setTimeout(() => { el.className = 'save-status'; }, 1800);
+    }
+
+    async function savePref(card) {
+        const category = card.dataset.category;
+        const get = (ch) => {
+            const input = card.querySelector(`input[data-channel="${ch}"]`);
+            return input ? input.checked : false;
+        };
+        const body = {
+            category,
+            in_app: get('in_app'),
+            web_push: get('web_push'),
+            kakao_alimtalk: get('kakao_alimtalk'),
+        };
+        const inputs = card.querySelectorAll('input[type="checkbox"]:not(:disabled)');
+        inputs.forEach((i) => { i.disabled = true; });
+        try {
+            const res = await fetch('/api/notifications/prefs', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify(body),
+            });
+            showStatus(card, res.ok);
+        } catch (e) {
+            showStatus(card, false);
+        } finally {
+            inputs.forEach((i) => { i.disabled = false; });
+        }
+    }
+
+    document.querySelectorAll('.pref-card').forEach((card) => {
+        card.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+            if (input.disabled) return;
+            input.addEventListener('change', () => savePref(card));
+        });
+    });
+</script>
+{% endblock %}

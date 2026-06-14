@@ -2,6 +2,8 @@
 
 **서브도메인:** app.fencingmind.ai
 **포트:** 77
+**워크트리:** `/Users/gyejinpark/Documents/GitHub/FencingMind-app`
+**브랜치:** `feature/app/pwa-base`
 **상태:** 🔨 개발 중
 
 ---
@@ -41,30 +43,52 @@ Data Service                    App Service                   User
 
 ---
 
-## 폴더 구조
+## 폴더 구조 (현재)
 ```
 services/app/
+├── CLAUDE.md                          # 이 파일
 ├── app/
-│   ├── server.py          # FastAPI 앱 (port 77), health check
-│   ├── config.py          # AppSettings
-│   └── auth/
-│       └── router.py      # Auth shim (data 서비스 패턴 복사)
-├── templates/             # Jinja2 템플릿
+│   ├── server.py                      # FastAPI 앱 (port 77)
+│   │                                  #   GET / → home.html
+│   │                                  #   GET /service-worker.js → SW (root scope)
+│   │                                  #   GET /offline.html → 오프라인 폴백
+│   │                                  #   GET /health → 헬스체크
+│   ├── config.py                      # AppSettings (FCM, 카카오, 폴링 설정)
+│   ├── auth/
+│   │   └── router.py                  # Auth shim → account 서비스 리다이렉트
+│   └── notifications/                 # Phase 2: 알림 설정/구독
+│       ├── service.py                 # Supabase CRUD (prefs, push subscriptions)
+│       └── router.py                  # 설정 페이지 + prefs/subscribe API
+├── templates/
+│   ├── base.html                      # 공통 레이아웃 (navbar, footer, i18n, SW 등록)
+│   ├── home.html                      # 메인 페이지 (기능 소개, PWA 설치 프롬프트)
+│   └── notifications/
+│       └── settings.html              # 알림 설정 UI (카테고리×채널 토글)
 ├── static/
-│   └── images/logo/       # 로고 (account과 동일)
+│   ├── manifest.json                  # PWA manifest (아이콘, 테마색, standalone)
+│   ├── service-worker.js              # SW (캐시 전략, 푸시 수신, 오프라인 폴백)
+│   ├── offline.html                   # 오프라인 폴백 페이지
+│   └── images/
+│       ├── icons/
+│       │   ├── icon-192.png           # PWA 아이콘 192x192
+│       │   └── icon-512.png           # PWA 아이콘 512x512
+│       └── logo/
+│           ├── FencingMind_logo_long.png        # Light 테마
+│           └── FencingMind_logo_long_white.png   # Dark 테마
 └── tests/
 ```
 
 ## 서버 실행
 ```bash
-cd /path/to/project/root
+cd /Users/gyejinpark/Documents/GitHub/FencingMind-app
 PYTHONPATH="${PWD}:${PWD}/packages:${PWD}/services/app" \
   python -m uvicorn services.app.app.server:app --host 0.0.0.0 --port 77
 ```
 
 ---
 
-## DB 테이블 (소유)
+## DB 테이블 (소유) — Migration 021
+
 **이 서비스가 주인인 테이블:**
 - `app_push_subscriptions` - FCM 토큰 + 카카오 사용자 ID 저장
 - `app_notification_preferences` - 카테고리별 채널 opt-in/opt-out
@@ -80,18 +104,199 @@ PYTHONPATH="${PWD}:${PWD}/packages:${PWD}/services/app" \
 
 ---
 
-## 구현 순서 (각 단계별 별도 브랜치)
-1. `feature/app/init` - 스캐폴드 + 카카오 로그인 (auth shim) -- 현재
-2. `feature/app/notifications` - 알림 구독 UI + 설정
-3. `feature/app/pipeline` - data<->app 이벤트 폴러 + NotificationDispatcher
-4. `feature/app/fcm` - FCM 웹 푸시
-5. `feature/app/pwa` - manifest.json + service worker
-6. `feature/app/kakao-alimtalk` - 카카오 알림톡 (비즈니스 채널 필요)
-7. `feature/app/offline` - 오프라인 지원
+## 구현 로드맵
+
+| Phase | 브랜치 | 내용 | 외부 의존성 | 상태 |
+|-------|--------|------|------------|------|
+| 1 | `feature/app/init` | 스캐폴드 + auth shim | 없음 | ✅ 완료 |
+| 1.5 | `feature/app/pwa-base` | manifest + SW + offline + base.html + home.html | 없음 | ✅ 완료 |
+| 2 | `feature/app/notifications` | 알림 구독 UI + 설정 페이지 | 없음 | ✅ 완료 |
+| **3** | **`feature/app/pipeline`** | **EventPoller + NotificationDispatcher** | **없음** | **⬅️ 다음** |
+| 4 | `feature/app/fcm` | FCM 웹 푸시 발송 | Firebase 프로젝트 | 📋 |
+| 5 | `feature/app/pwa-install` | 설치 프롬프트 최적화 + 아이콘 | 없음 | 📋 |
+| 6 | `feature/app/kakao-alimtalk` | 카카오 알림톡 발송 | 비즈니스 채널 | 📋 |
+| 7 | `feature/app/offline` | 오프라인 지원 강화 | 없음 | 📋 |
 
 ---
 
-## Git 브랜치 규칙
-- 이 서비스의 코드는 `feature/app/*` 브랜치에서만 수정
-- 다른 서비스 코드 수정 금지
-- 공유 패키지 수정 시 `feature/shared/*` 브랜치 사용
+## Phase 2 상세: 알림 구독 UI + 설정 (다음 작업)
+
+### 목표
+로그인한 회원이 알림 카테고리별로 on/off 설정하고, 푸시 구독을 관리하는 UI + API
+
+### 생성할 파일
+```
+services/app/
+├── app/
+│   └── notifications/
+│       ├── __init__.py
+│       ├── router.py          # 알림 설정 API
+│       │   GET  /notifications/settings     → 설정 페이지
+│       │   GET  /api/notifications/prefs    → 현재 설정 조회
+│       │   PATCH /api/notifications/prefs   → 설정 변경
+│       │   POST /api/notifications/subscribe   → 푸시 구독 등록
+│       │   DELETE /api/notifications/subscribe → 푸시 구독 해제
+│       └── service.py         # 비즈니스 로직 (Supabase CRUD)
+├── templates/
+│   └── notifications/
+│       └── settings.html      # 알림 설정 UI
+```
+
+### 알림 카테고리 (app_notification_preferences)
+| category | 설명 | 기본값 |
+|----------|------|--------|
+| `competition_result` | 대회 결과 발표 | on |
+| `ranking_change` | 랭킹 변동 | on |
+| `club_notice` | 클럽 공지사항 | on |
+| `attendance_reminder` | 출석 알림 | on |
+| `system` | 시스템 공지 | on (해제 불가) |
+
+### 채널별 설정 (channel)
+| channel | 설명 | Phase |
+|---------|------|-------|
+| `web_push` | FCM 웹 푸시 | Phase 4 |
+| `kakao_alimtalk` | 카카오 알림톡 | Phase 6 |
+| `in_app` | 인앱 알림 (notifications 테이블) | Phase 2 |
+
+### UI 패턴
+- account 서비스의 base.html 패턴 그대로 사용 (이미 templates/base.html에 적용됨)
+- 카드 형태로 카테고리별 토글 스위치
+- 로그인 필수 (미로그인 시 /auth/login 리다이렉트)
+- CSS 변수 사용 (하드코딩 금지)
+
+### Supabase 연동 (실제 스키마 — Migration 021)
+> ⚠️ `app_notification_preferences`는 **카테고리당 1행**이며 채널은 boolean 컬럼
+> (`web_push`, `kakao_alimtalk`, `in_app`)이다. `channel`/`enabled` 컬럼은 없다.
+> UNIQUE(member_id, category) → upsert는 `on_conflict="member_id,category"`.
+```python
+# 설정 조회
+supabase.table("app_notification_preferences") \
+    .select("category, web_push, kakao_alimtalk, in_app") \
+    .eq("member_id", member.id) \
+    .execute()
+
+# 설정 변경 (upsert — 채널 전체를 전달)
+supabase.table("app_notification_preferences") \
+    .upsert({
+        "member_id": member.id,
+        "category": category,        # competition_result, ranking_change, ...
+        "web_push": True,
+        "kakao_alimtalk": False,
+        "in_app": True,
+    }, on_conflict="member_id,category") \
+    .execute()
+```
+> 구현: `app/notifications/service.py` (`get_preferences`, `update_preference`,
+> `save_push_subscription`, `remove_push_subscription`).
+> `system` 카테고리는 locked → 인앱 알림 해제 불가.
+> Migration 021은 프로덕션 Supabase에 적용 완료 (2026-06-14).
+
+### 참고할 기존 코드
+- `services/account/app/profile/router.py` — 로그인 필수 페이지 패턴
+- `services/data/app/auth/router.py` — auth shim 패턴 (이미 복사됨)
+- `packages/shared_core/auth/jwt.py` — `get_current_member()` 사용법
+- `packages/shared_core/i18n/` — `create_language_context(request)` 사용법
+
+---
+
+## Phase 3 상세: EventPoller + NotificationDispatcher
+
+### 목표
+data 서비스의 `data_events` 테이블을 폴링하여 알림을 생성/디스패치
+
+### 생성할 파일
+```
+services/app/
+├── app/
+│   └── pipeline/
+│       ├── __init__.py
+│       ├── poller.py          # EventPoller (30초 간격, 워터마크 기반)
+│       ├── dispatcher.py      # NotificationDispatcher (채널별 분기)
+│       └── event_types.py     # 이벤트 타입 정의 (competition_result, ranking_change 등)
+```
+
+### 폴링 로직
+```python
+# 1. 마지막 처리 위치 조회
+cursor = supabase.table("app_event_cursor").select("last_event_id").single().execute()
+
+# 2. 새 이벤트 조회
+events = supabase.table("data_events") \
+    .select("*") \
+    .gt("id", cursor.data["last_event_id"]) \
+    .order("id") \
+    .limit(100) \
+    .execute()
+
+# 3. 이벤트별 알림 생성 + 디스패치
+for event in events.data:
+    targets = determine_targets(event)  # 대상 회원 결정
+    for member in targets:
+        prefs = get_notification_prefs(member.id, event.category)
+        if prefs.in_app:
+            create_notification(member.id, event)
+        if prefs.web_push:
+            send_fcm(member.id, event)  # Phase 4
+        if prefs.kakao:
+            send_alimtalk(member.id, event)  # Phase 6
+
+# 4. 워터마크 업데이트
+supabase.table("app_event_cursor").update({"last_event_id": last_id}).eq(...).execute()
+```
+
+### 실행 방식
+- FastAPI lifespan event로 백그라운드 태스크 시작
+- `asyncio.create_task()`로 30초 간격 폴링 루프
+- 서버 종료 시 graceful shutdown
+
+---
+
+## 공통 규칙
+
+### Import 패턴
+```python
+# 인증
+from shared_core.auth.jwt import get_current_member
+from shared_core.auth.dependencies import require_member
+
+# i18n
+from shared_core.i18n import LanguageMiddleware, create_language_context
+
+# DB
+from shared_core.db.client import get_supabase_client
+
+# 타입
+from shared_core.types.member import MemberResponse
+```
+
+### 템플릿 컨텍스트
+```python
+from shared_core.i18n import create_language_context
+
+@router.get("/some-page")
+async def some_page(request: Request):
+    return templates.TemplateResponse("some.html", {
+        "request": request,
+        **create_language_context(request),
+    })
+```
+
+### CSS 규칙
+- CSS 변수 사용 필수 (`var(--bg-primary)` 등), 하드코딩 금지
+- 테마: 언어 기반 자동 결정 (수동 토글 없음)
+- base.html의 CSS 변수가 account 서비스와 동일
+
+### Git 브랜치 규칙
+- 이 서비스 코드는 `feature/app/*` 브랜치에서만 수정
+- 다른 서비스(`services/data/`, `services/account/` 등) 코드 수정 금지
+- 공유 패키지(`packages/shared_core/` 등) 수정 시 `feature/shared/*` 브랜치 사용
+- 수정 가능 범위: `services/app/` 내부만
+
+### 외부 의존성 (향후 필요)
+| 의존성 | 필요 시점 | 비고 |
+|--------|----------|------|
+| Firebase 프로젝트 (FCM) | Phase 4 | VAPID 키 발급 |
+| 카카오 비즈니스 채널 | Phase 6 | 알림톡 템플릿 승인 필요 |
+| Cloudflare DNS CNAME | 배포 시 | `app.fencingmind.ai` |
+| Cloudflare Tunnel 업데이트 | 배포 시 | app 서비스 라우팅 추가 |
+| `pywebpush` 패키지 | Phase 4 | `arch -arm64 python3 -m pip install pywebpush` |

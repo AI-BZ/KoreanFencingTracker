@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}FencingMind - {{ t('app.home.title')|default('Notifications Hub') }}{% endblock %}
+{% block title %}FencingMind - {{ t('app.home.title', 'Notifications Hub') }}{% endblock %}
 
 {% block head %}
 <style>
@@ -133,33 +133,33 @@
 {% block content %}
 <section class="hero">
     <div class="hero-badge">PWA</div>
-    <h1>{{ t('app.home.heading')|default('Stay updated with fencing') }}</h1>
-    <p>{{ t('app.home.description')|default('Get real-time notifications for competition results, ranking changes, and club updates. Install FencingMind as an app for the best experience.') }}</p>
+    <h1>{{ t('app.home.heading', 'Stay updated with fencing') }}</h1>
+    <p>{{ t('app.home.description', 'Get real-time notifications for competition results, ranking changes, and club updates. Install FencingMind as an app for the best experience.') }}</p>
 </section>
 
 <section class="features">
     <div class="feature-card">
         <div class="feature-icon">&#x1F514;</div>
-        <h3>{{ t('app.home.feature_push_title')|default('Push Notifications') }}</h3>
-        <p>{{ t('app.home.feature_push_desc')|default('Receive instant alerts when competition results are posted or your ranking changes.') }}</p>
+        <h3>{{ t('app.home.feature_push_title', 'Push Notifications') }}</h3>
+        <p>{{ t('app.home.feature_push_desc', 'Receive instant alerts when competition results are posted or your ranking changes.') }}</p>
     </div>
     <div class="feature-card">
         <div class="feature-icon">&#x1F4F1;</div>
-        <h3>{{ t('app.home.feature_install_title')|default('Install as App') }}</h3>
-        <p>{{ t('app.home.feature_install_desc')|default('Add FencingMind to your home screen for quick access without opening a browser.') }}</p>
+        <h3>{{ t('app.home.feature_install_title', 'Install as App') }}</h3>
+        <p>{{ t('app.home.feature_install_desc', 'Add FencingMind to your home screen for quick access without opening a browser.') }}</p>
     </div>
     <div class="feature-card">
         <div class="feature-icon">&#x1F4E1;</div>
-        <h3>{{ t('app.home.feature_offline_title')|default('Works Offline') }}</h3>
-        <p>{{ t('app.home.feature_offline_desc')|default('Access cached content even when you lose your internet connection.') }}</p>
+        <h3>{{ t('app.home.feature_offline_title', 'Works Offline') }}</h3>
+        <p>{{ t('app.home.feature_offline_desc', 'Access cached content even when you lose your internet connection.') }}</p>
     </div>
 </section>
 
 <section class="install-section">
     <div class="install-card">
-        <h2>{{ t('app.home.install_heading')|default('Install FencingMind') }}</h2>
-        <p>{{ t('app.home.install_desc')|default('Install the app on your device for a native-like experience with push notifications.') }}</p>
-        <button id="installBtn" class="install-btn">{{ t('app.home.install_button')|default('Install App') }}</button>
+        <h2>{{ t('app.home.install_heading', 'Install FencingMind') }}</h2>
+        <p>{{ t('app.home.install_desc', 'Install the app on your device for a native-like experience with push notifications.') }}</p>
+        <button id="installBtn" class="install-btn">{{ t('app.home.install_button', 'Install App') }}</button>
         <div id="installHint" class="install-hint"></div>
     </div>
 </section>
@@ -184,14 +184,14 @@
         const result = await deferredPrompt.userChoice;
         if (result.outcome === 'accepted') {
             installBtn.classList.remove('visible');
-            installHint.textContent = '{{ t("app.home.install_success")|default("App installed successfully!") }}';
+            installHint.textContent = '{{ t("app.home.install_success", "App installed successfully!") }}';
         }
         deferredPrompt = null;
     });
 
     // Detect if already installed
     if (window.matchMedia('(display-mode: standalone)').matches) {
-        installHint.textContent = '{{ t("app.home.already_installed")|default("App is already installed.") }}';
+        installHint.textContent = '{{ t("app.home.already_installed", "App is already installed.") }}';
     }
 </script>
 {% endblock %}
