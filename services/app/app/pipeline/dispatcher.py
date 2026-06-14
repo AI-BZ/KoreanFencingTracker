@@ -6,7 +6,7 @@
     3. 회원별 알림 설정 확인 (notifications.service.get_member_preference)
     4. 채널별 발송:
        - in_app  : notifications 테이블 insert + app_notification_log 기록 (Phase 3 활성)
-       - web_push: Phase 4 (현재 no-op)
+       - web_push: FCM/표준 웹 푸시 발송 (Phase 4 활성 — pywebpush + VAPID)
        - kakao   : Phase 6 (현재 no-op)
 
 멱등성: app_notification_log(event_type, event_id, member_id, channel) 존재 시 재발송 안 함
@@ -14,16 +14,21 @@
 """
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime, timezone
 from typing import Any, Optional
 
 from shared_core.db.client import get_supabase_client
 
+from ..config import settings
 from ..notifications import service as prefs
 from . import event_types as et
 
 logger = logging.getLogger("app.pipeline.dispatcher")
+
+# VAPID 클레임 subject (RFC 8292) — 연락 가능한 mailto/https.
+_VAPID_SUBJECT = "mailto:privacy@fencingmind.ai"
 
 
 def _now_iso() -> str:
@@ -173,8 +178,109 @@ class NotificationDispatcher:
             return False
 
     def _send_web_push(self, member_id: str, event: dict) -> None:
-        """웹 푸시 발송 — Phase 4(FCM)에서 구현. 현재 no-op."""
-        logger.debug("web_push deferred to Phase 4 (member=%s event=%s)", member_id, event.get("id"))
+        """웹 푸시 발송 (FCM은 표준 Web Push 위에서 동작 → pywebpush 사용).
+
+        graceful degradation:
+          - VAPID 비밀키 미설정 / pywebpush 미설치 → 크래시 없이 'pending' 로그 후 종료.
+          - 만료 구독(404/410) → 해당 구독 is_active=false.
+          - 발송 성공 → app_notification_log status='sent'.
+        멱등성: app_notification_log(channel='web_push') 존재 시 재발송 안 함.
+        """
+        if self._already_sent(member_id, "web_push", event):
+            return
+
+        # 1) VAPID 비밀키 확인 (없으면 발송 불가 → pending 로그)
+        private_key = settings.FCM_VAPID_PRIVATE_KEY
+        if not private_key:
+            logger.info("web_push skip member=%s: VAPID key 미설정", member_id)
+            self._log(member_id, "web_push", "pending", event, error="VAPID key 미설정")
+            return
+
+        # 2) pywebpush 지연 import (미설치여도 모듈 import는 깨지지 않음)
+        try:
+            from pywebpush import WebPushException, webpush  # type: ignore
+        except Exception as exc:  # noqa: BLE001 - ImportError 등
+            logger.warning("web_push skip member=%s: pywebpush 미설치 (%s)", member_id, exc)
+            self._log(member_id, "web_push", "pending", event, error="pywebpush 미설치")
+            return
+
+        # 3) 활성 구독 조회
+        try:
+            res = (
+                self.db.table("app_push_subscriptions")
+                .select("id, fcm_endpoint, fcm_p256dh, fcm_auth")
+                .eq("member_id", member_id)
+                .eq("is_active", True)
+                .execute()
+            )
+            subscriptions = res.data or []
+        except Exception as exc:  # noqa: BLE001
+            logger.error("구독 조회 실패 member=%s: %s", member_id, exc)
+            self._log(member_id, "web_push", "failed", event, error=str(exc))
+            return
+
+        if not subscriptions:
+            logger.debug("web_push: 활성 구독 없음 member=%s", member_id)
+            return
+
+        title, body, link = et.build_message(event)
+        payload = json.dumps(
+            {
+                "title": title,
+                "body": body,
+                "url": link or "/",
+                "tag": f"{event.get('event_type', 'fencingmind')}:{event.get('id', '')}",
+            }
+        )
+
+        sent_any = False
+        last_error: Optional[str] = None
+        for sub in subscriptions:
+            endpoint = sub.get("fcm_endpoint")
+            p256dh = sub.get("fcm_p256dh")
+            auth = sub.get("fcm_auth")
+            if not (endpoint and p256dh and auth):
+                continue
+
+            subscription_info = {
+                "endpoint": endpoint,
+                "keys": {"p256dh": p256dh, "auth": auth},
+            }
+            try:
+                webpush(
+                    subscription_info=subscription_info,
+                    data=payload,
+                    vapid_private_key=private_key,
+                    vapid_claims={"sub": _VAPID_SUBJECT},
+                )
+                sent_any = True
+            except WebPushException as exc:  # noqa: PERF203
+                status = getattr(getattr(exc, "response", None), "status_code", None)
+                last_error = f"webpush {status}: {exc}"
+                if status in (404, 410):
+                    # 만료/폐기된 구독 → 비활성화
+                    self._deactivate_subscription(sub.get("id"))
+                    logger.info("만료 구독 비활성화 member=%s sub=%s", member_id, sub.get("id"))
+                else:
+                    logger.warning("web_push 발송 실패 member=%s: %s", member_id, exc)
+            except Exception as exc:  # noqa: BLE001
+                last_error = str(exc)
+                logger.error("web_push 예외 member=%s: %s", member_id, exc)
+
+        if sent_any:
+            self._log(member_id, "web_push", "sent", event)
+        else:
+            self._log(member_id, "web_push", "failed", event, error=last_error or "발송 대상 없음")
+
+    def _deactivate_subscription(self, sub_id: Optional[str]) -> None:
+        if not sub_id:
+            return
+        try:
+            self.db.table("app_push_subscriptions").update({"is_active": False}).eq(
+                "id", sub_id
+            ).execute()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("구독 비활성화 실패 sub=%s: %s", sub_id, exc)
 
     def _send_kakao(self, member_id: str, event: dict) -> None:
         """카카오 알림톡 발송 — Phase 6에서 구현. 현재 no-op."""

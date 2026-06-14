@@ -23,6 +23,7 @@ from pydantic import BaseModel
 from shared_core.auth.jwt import get_current_member
 from shared_core.i18n import create_language_context
 
+from ..config import settings
 from . import service
 
 TEMPLATES_DIR = Path(__file__).resolve().parents[2] / "templates"
@@ -52,6 +53,7 @@ async def settings_page(request: Request):
             "request": request,
             "member": member,
             "preferences": preferences,
+            "vapid_public_key": settings.FCM_VAPID_PUBLIC_KEY,
             **create_language_context(request),
         },
     )

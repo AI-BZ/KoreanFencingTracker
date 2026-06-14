@@ -18,7 +18,43 @@
 {% block title %}{{ t('app.notif.title', '알림 설정') }} · FencingMind{% endblock %}
 
 {% block head %}
+<meta name="vapid-public-key" content="{{ vapid_public_key|default('') }}">
 <style>
+    /* Push enable card */
+    .push-card {
+        background: var(--bg-card); border: 1px solid var(--border-color);
+        border-radius: 12px; padding: 20px 22px; margin-bottom: 24px;
+        display: flex; align-items: center; justify-content: space-between; gap: 16px;
+        flex-wrap: wrap;
+    }
+    [data-theme="light"] .push-card { box-shadow: var(--shadow-sm); }
+    .push-card-info { flex: 1; min-width: 180px; }
+    .push-card-info .name {
+        display: flex; align-items: center; gap: 8px;
+        font-size: 1.0rem; font-weight: 600; margin-bottom: 4px;
+    }
+    .push-card-info .desc { color: var(--text-secondary); font-size: 0.84rem; }
+    .push-btn {
+        appearance: none; cursor: pointer;
+        background: var(--accent-primary); color: #fff;
+        border: 1px solid var(--accent-primary);
+        border-radius: 8px; padding: 10px 18px;
+        font-size: 0.9rem; font-weight: 600; white-space: nowrap;
+        transition: opacity 0.2s, background 0.2s;
+    }
+    .push-btn:hover:not(:disabled) { opacity: 0.9; }
+    .push-btn:disabled {
+        cursor: not-allowed; opacity: 0.55;
+        background: var(--bg-tertiary); color: var(--text-muted);
+        border-color: var(--border-color);
+    }
+    .push-status {
+        width: 100%; font-size: 0.8rem; margin-top: 4px; min-height: 18px;
+    }
+    .push-status.ok { color: var(--success-color); }
+    .push-status.err { color: var(--danger-color); }
+    .push-status.muted { color: var(--text-muted); }
+
     .settings-wrap { max-width: 720px; margin: 0 auto; padding: 40px 20px 80px; }
     .settings-head { margin-bottom: 28px; }
     .settings-head h1 {
@@ -101,6 +137,28 @@
     <div class="channel-note">
         <span>&#x2139;&#xFE0F;</span>
         <span>{{ t('app.notif.channel_note', '웹 푸시와 카카오 알림톡은 준비 중입니다. 지금 설정해두면 출시 시 바로 적용됩니다.') }}</span>
+    </div>
+
+    {# Web Push enable/disable (Phase 4) #}
+    <div class="push-card">
+        <div class="push-card-info">
+            <div class="name">{{ t('app.notif.push.title', '이 기기에서 웹 푸시 받기') }}</div>
+            <div class="desc">{{ t('app.notif.push.desc', '브라우저 알림 권한을 허용하면 이 기기로 푸시를 받습니다.') }}</div>
+        </div>
+        <button type="button" id="push-toggle-btn" class="push-btn"
+                data-txt-enable="{{ t('app.notif.push.enable', '푸시 알림 켜기') }}"
+                data-txt-disable="{{ t('app.notif.push.disable', '푸시 알림 끄기') }}"
+                data-txt-unsupported="{{ t('app.notif.push.unsupported', '이 브라우저는 푸시를 지원하지 않습니다') }}"
+                data-txt-not-configured="{{ t('app.notif.push.not_configured', '푸시 미설정') }}"
+                data-txt-ios-install="{{ t('app.notif.push.ios_install', '먼저 홈 화면에 추가한 뒤 그 아이콘으로 실행해주세요') }}"
+                data-txt-denied="{{ t('app.notif.push.denied', '브라우저 설정에서 알림 권한을 허용해주세요') }}"
+                data-txt-enabled="{{ t('app.notif.push.enabled', '푸시 알림이 켜졌습니다') }}"
+                data-txt-disabled="{{ t('app.notif.push.disabled', '푸시 알림이 꺼졌습니다') }}"
+                data-txt-working="{{ t('app.notif.push.working', '처리 중…') }}"
+                data-txt-failed="{{ t('app.notif.push.failed', '요청에 실패했습니다') }}">
+            {{ t('app.notif.push.enable', '푸시 알림 켜기') }}
+        </button>
+        <div id="push-status" class="push-status"></div>
     </div>
 
     {% for pref in preferences %}
@@ -207,4 +265,5 @@
         });
     });
 </script>
+<script src="/static/js/push.js" defer></script>
 {% endblock %}

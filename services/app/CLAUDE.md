@@ -111,8 +111,8 @@ PYTHONPATH="${PWD}:${PWD}/packages:${PWD}/services/app" \
 | 1 | `feature/app/init` | 스캐폴드 + auth shim | 없음 | ✅ 완료 |
 | 1.5 | `feature/app/pwa-base` | manifest + SW + offline + base.html + home.html | 없음 | ✅ 완료 |
 | 2 | `feature/app/notifications` | 알림 구독 UI + 설정 페이지 | 없음 | ✅ 완료 |
-| **3** | **`feature/app/pipeline`** | **EventPoller + NotificationDispatcher** | **없음** | **⬅️ 다음** |
-| 4 | `feature/app/fcm` | FCM 웹 푸시 발송 + **권한요청(클릭 제스처 내)** + **iOS 16.4+ 감지** | Firebase 프로젝트 | 📋 |
+| 3 | `feature/app/pipeline` | EventPoller + NotificationDispatcher | 없음 | ✅ 완료 |
+| **4** | **`feature/app/fcm`** | **FCM 웹 푸시 발송 + 권한요청(클릭 제스처 내) + iOS 16.4+ 감지** | **Firebase 프로젝트 (VAPID 키), pywebpush** | **🔨 코드 완료 / 키·패키지 대기** |
 | 5 | `feature/app/pwa-install` | 설치 프롬프트 최적화 + **iOS Safari "홈 화면에 추가" 안내 배너** | 없음 | 📋 |
 | 6 | `feature/app/kakao-alimtalk` | 카카오 알림톡 발송 | 비즈니스 채널 | 📋 |
 | 7 | `feature/app/offline` | 오프라인 지원 강화 | 없음 | 📋 |
@@ -127,10 +127,10 @@ iOS는 Android와 달리 PWA 푸시에 강한 제약이 있다. 아래 항목을
 | # | iOS 제약 | 대응 | 처리 Phase | 현재 |
 |---|----------|------|-----------|------|
 | 1 | "홈 화면에 추가" 후 **그 아이콘으로 실행**해야만 알림 권한 요청·수신 가능 | iOS Safari 감지 → 공유→"홈 화면에 추가" **설치 안내 배너** (iOS엔 `beforeinstallprompt` 없음) | **5** | ❌ 미구현 |
-| 2 | 권한 요청은 **사용자 제스처(버튼 클릭) 핸들러 내부**에서만 호출 가능 | `Notification.requestPermission()`을 버튼 onclick 안에서만 호출 (페이지 로드 시 자동 호출 금지) | **4** | ❌ 미구현 |
-| 3 | **iOS 16.4+ + standalone 모드**에서만 Web Push 동작 | UA/버전 + `display-mode: standalone` 감지 → 미충족 시 설치 안내 또는 카카오 알림톡 폴백 유도 | **4/5** | ❌ 미구현 |
+| 2 | 권한 요청은 **사용자 제스처(버튼 클릭) 핸들러 내부**에서만 호출 가능 | `Notification.requestPermission()`을 `#push-toggle-btn` onclick 안에서만 호출 (페이지 로드 시 자동 호출 안 함) | **4** | ✅ 구현 (`static/js/push.js`) |
+| 3 | **iOS 16.4+ + standalone 모드**에서만 Web Push 동작 | `push.js`가 iOS 감지 + `display-mode: standalone` 감지 → 미충족 시 버튼 비활성화 + 설치 안내 인라인 메시지 (배너는 Phase 5) | **4/5** | ✅ 감지·안내 구현 / 배너 Phase 5 |
 | 4 | manifest `display: standalone` + 아이콘 + `apple-touch-icon` | 이미 충족 | 1.5 | ✅ 완료 |
-| 5 | VAPID 키 + SW `push`/`notificationclick` 핸들러 | 키는 Firebase 발급(Phase 4), SW 핸들러는 이미 작성됨 | 4 | ⚠️ 키 대기 |
+| 5 | VAPID 키 + SW `push`/`notificationclick` 핸들러 | SW 핸들러 작성 완료, 프론트/백엔드 발송 코드 완료. **VAPID 키는 사람이 Firebase에서 발급 후 env 설정 필요** | 4 | ⚠️ 키 대기 (코드 완료) |
 
 > **이중 채널 설계 의도**: PWA 푸시(iOS는 설치 필요) + 카카오 알림톡(설치 불필요)으로
 > iOS 제약을 보완. 미설치 사용자에게는 알림톡이 백업 도달 경로.
@@ -266,6 +266,67 @@ supabase.table("app_event_cursor").update({"last_event_id": last_id}).eq(...).ex
 - FastAPI lifespan event로 백그라운드 태스크 시작
 - `asyncio.create_task()`로 30초 간격 폴링 루프
 - 서버 종료 시 graceful shutdown
+
+---
+
+## Phase 4 상세: FCM 웹 푸시 (구현 완료)
+
+### 설계 요점
+- **표준 Web Push API 사용** — FCM은 내부적으로 표준 웹 푸시 위에서 동작하므로
+  Firebase JS SDK 없이 브라우저 `PushManager.subscribe(applicationServerKey=VAPID공개키)`
+  + 서버 `pywebpush`로 발송한다.
+- VAPID 키 쌍(공개/비밀)은 **Firebase 콘솔에서 발급**한 뒤 환경변수로 주입.
+- 키/패키지가 없어도 **graceful degradation** — 폴러가 죽지 않는다.
+
+### 구현 파일
+```
+services/app/
+├── static/js/push.js              # 구독/해제 + iOS 감지 + 권한요청(클릭 핸들러 내)
+├── templates/notifications/settings.html
+│                                  # <meta name="vapid-public-key"> + #push-toggle-btn 카드
+├── app/notifications/router.py    # settings_page 컨텍스트에 vapid_public_key 주입
+├── app/pipeline/dispatcher.py     # _send_web_push 실제 발송 (pywebpush 지연 import)
+└── requirements.txt               # pywebpush>=1.14.0
+```
+
+### 발송 흐름 (`dispatcher._send_web_push`)
+1. 멱등성: `app_notification_log(channel='web_push')` 존재 시 재발송 안 함.
+2. `FCM_VAPID_PRIVATE_KEY` 비어있음 → `status='pending'`, error `"VAPID key 미설정"` 로그 후 종료.
+3. `pywebpush` import 실패 → `status='pending'`, error `"pywebpush 미설치"` 로그 후 종료.
+4. 활성 구독(`app_push_subscriptions.is_active=true`) 조회 → 각 구독에 `webpush(...)`.
+5. 404/410 응답 → 해당 구독 `is_active=false` (만료 정리).
+6. 1건 이상 성공 → `status='sent'`, 전부 실패 → `status='failed'`.
+- payload: `{title, body, url, tag}` (제목/본문은 `event_types.build_message` 재사용).
+- `vapid_claims={"sub": "mailto:privacy@fencingmind.ai"}`.
+
+### iOS 제약 처리 (`push.js`)
+- 권한 요청은 **버튼 클릭 핸들러 안에서만** (`Notification.requestPermission()`).
+- iOS && !standalone → 버튼 비활성화 + "먼저 홈 화면에 추가" 안내 (설치 배너는 Phase 5).
+- VAPID 공개키 미주입 → 버튼 "푸시 미설정" 비활성화 (graceful).
+- 미지원 브라우저(`!('PushManager' in window)`) → 비활성화.
+
+### 🔴 사람이 해야 할 작업 (실제 푸시 동작 활성화)
+1. **Firebase 프로젝트 생성** (또는 기존 사용)
+   → 콘솔 > 프로젝트 설정 > Cloud Messaging > **Web Push 인증서**에서 **키 쌍 생성**.
+   - 공개 키 = `FCM_VAPID_PUBLIC_KEY` (브라우저 applicationServerKey)
+   - 비공개 키 = `FCM_VAPID_PRIVATE_KEY` (서버 서명)
+   > 참고: pywebpush는 표준 VAPID 키만 있으면 동작한다. Firebase가 아닌
+   > `vapid` CLI(`vapid --gen`)나 `py-vapid`로 자체 발급한 키 쌍도 사용 가능.
+2. **환경변수 설정** (배포 환경 / 로컬 `.env`):
+   ```bash
+   export FCM_VAPID_PUBLIC_KEY="<base64url 공개키>"
+   export FCM_VAPID_PRIVATE_KEY="<base64url 또는 PEM 비공개키>"
+   ```
+3. **패키지 설치** (Mac Studio ARM64):
+   ```bash
+   arch -arm64 python3 -m pip install pywebpush
+   # 또는
+   arch -arm64 python3 -m pip install -r services/app/requirements.txt
+   ```
+4. 서버 재시작 → 설정 페이지에서 "푸시 알림 켜기" 클릭 → 권한 허용 → 구독 저장 확인.
+
+> 위 3가지(키 발급/env/패키지)가 갖춰지기 전까지 코드는 안전하게 no-op 동작하며
+> `app_notification_log`에 `pending` 상태로 기록된다.
 
 ---
 
