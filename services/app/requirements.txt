@@ -9,3 +9,8 @@
 # 웹 푸시 (Phase 4) — 표준 Web Push / FCM 발송에 사용.
 # pywebpush가 없으면 dispatcher._send_web_push 는 graceful no-op로 동작합니다.
 pywebpush>=1.14.0
+
+# 카카오 알림톡 (Phase 6) — 발송 대행사 REST API 호출에 사용.
+# httpx가 없으면 dispatcher._send_kakao 는 graceful no-op('pending')로 동작합니다.
+# (supabase-py가 httpx에 의존하므로 통상 이미 설치되어 있음)
+httpx>=0.24.0

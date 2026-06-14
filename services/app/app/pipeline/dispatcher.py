@@ -7,7 +7,8 @@
     4. 채널별 발송:
        - in_app  : notifications 테이블 insert + app_notification_log 기록 (Phase 3 활성)
        - web_push: FCM/표준 웹 푸시 발송 (Phase 4 활성 — pywebpush + VAPID)
-       - kakao   : Phase 6 (현재 no-op)
+       - kakao   : 카카오 알림톡 발송 (Phase 6 wired — 비즈니스 채널/템플릿 승인 대기)
+                   자격증명/템플릿 미설정 시 graceful no-op('pending' 로그).
 
 멱등성: app_notification_log(event_type, event_id, member_id, channel) 존재 시 재발송 안 함
 (폴러 재시작 시 중복 알림 방지).
@@ -283,8 +284,55 @@ class NotificationDispatcher:
             logger.warning("구독 비활성화 실패 sub=%s: %s", sub_id, exc)
 
     def _send_kakao(self, member_id: str, event: dict) -> None:
-        """카카오 알림톡 발송 — Phase 6에서 구현. 현재 no-op."""
-        logger.debug("kakao deferred to Phase 6 (member=%s event=%s)", member_id, event.get("id"))
+        """카카오 알림톡 발송 (Phase 6).
+
+        graceful degradation:
+          - 자격증명/템플릿 미설정 → KakaoAlimtalkSender가 not_configured 반환
+            → 'pending' 로그 후 종료 (폴러 안 죽음).
+          - 수신 전화번호 없음 → 'pending' 로그(error '전화번호 없음') 후 종료.
+          - httpx 미설치 → sender가 'pending' 반환.
+        멱등성: app_notification_log(channel='kakao_alimtalk') 존재 시 재발송 안 함.
+        """
+        if self._already_sent(member_id, "kakao_alimtalk", event):
+            return
+
+        # 1) 수신 전화번호 해석 (members.phone / phone_country_code / contact_phone)
+        try:
+            res = (
+                self.db.table("members")
+                .select("phone, phone_country_code, contact_phone")
+                .eq("id", member_id)
+                .limit(1)
+                .execute()
+            )
+            member_row = (res.data or [None])[0]
+        except Exception as exc:  # noqa: BLE001
+            logger.error("kakao 수신번호 조회 실패 member=%s: %s", member_id, exc)
+            self._log(member_id, "kakao_alimtalk", "failed", event, error=str(exc))
+            return
+
+        from .kakao import KakaoAlimtalkSender, build_recipient_phone
+
+        phone = build_recipient_phone(member_row or {})
+        if not phone:
+            logger.info("kakao skip member=%s: 전화번호 없음", member_id)
+            self._log(member_id, "kakao_alimtalk", "pending", event, error="전화번호 없음")
+            return
+
+        # 2) 발송 (sender는 절대 예외를 던지지 않음)
+        sender = KakaoAlimtalkSender()
+        result = sender.send(to_phone=phone, event=event)
+        status = result.get("status")
+        error = result.get("error")
+
+        # 3) 결과 → 로그 상태 매핑
+        #    not_configured(자격증명/템플릿 없음)은 pending으로 기록 (향후 재시도 가능 상태).
+        if status == "sent":
+            self._log(member_id, "kakao_alimtalk", "sent", event)
+        elif status in ("pending", "not_configured"):
+            self._log(member_id, "kakao_alimtalk", "pending", event, error=error)
+        else:  # 'failed' 또는 알 수 없는 값
+            self._log(member_id, "kakao_alimtalk", "failed", event, error=error or "알 수 없는 오류")
 
     # ------------------------------------------------------------- logging
 

@@ -117,7 +117,7 @@ PYTHONPATH="${PWD}:${PWD}/packages:${PWD}/services/app" \
 | 3 | `feature/app/pipeline` | EventPoller + NotificationDispatcher | 없음 | ✅ 완료 |
 | **4** | **`feature/app/fcm`** | **FCM 웹 푸시 발송 + 권한요청(클릭 제스처 내) + iOS 16.4+ 감지** | **Firebase 프로젝트 (VAPID 키), pywebpush** | **🔨 코드 완료 / 키·패키지 대기** |
 | **5** | **`feature/app/pwa-install`** | **설치 프롬프트 최적화 + iOS Safari "홈 화면에 추가" 안내 배너** | **없음** | **✅ 완료** |
-| 6 | `feature/app/kakao-alimtalk` | 카카오 알림톡 발송 | 비즈니스 채널 | 📋 |
+| **6** | **`feature/app/kakao-alimtalk`** | **카카오 알림톡 발송 (프로바이더 비종속 sender, Solapi 레퍼런스)** | **카카오 비즈니스 채널 + 템플릿 승인 + 발송 대행사 계정** | **🔨 코드 완료 / 외부 승인·계정 대기** |
 | 7 | `feature/app/offline` | 오프라인 지원 강화 | 없음 | 📋 |
 
 ---
@@ -333,6 +333,81 @@ services/app/
 
 ---
 
+## Phase 6 상세: 카카오 알림톡 (코드 완료 / 외부 승인 대기)
+
+### 설계 요점
+- **프로바이더 비종속 sender** — `app/pipeline/kakao.py` 의 `KakaoAlimtalkSender`.
+  자격증명/템플릿 코드가 하나라도 없으면 실제 HTTP 호출 없이 `not_configured`를
+  반환하고, 디스패처는 이를 `app_notification_log`에 `pending`으로 기록한다.
+- **레퍼런스 구현 대상: Solapi (구 CoolSMS)** 알림톡 REST API.
+  - 인증: API Key + Secret 기반 **HMAC-SHA256 서명** 헤더.
+  - 엔드포인트: `POST {base}/messages/v4/send` (단건), `type: "ATA"`(알림톡).
+  - `message.kakaoOptions`에 `pfId`(채널 ID) / `templateId`(승인 템플릿) / `variables`.
+  - 🔴 **이 구현은 Solapi 공개 문서 계약을 따른 것이며 라이브 API로 검증되지 않았다(untested).**
+    운영 전 실제 응답 스키마·서명 규칙을 대행사 문서로 재확인해야 한다.
+  - 다른 대행사(NHN Cloud Toast, Bizm, Aligo 등)를 쓰려면 `kakao.py`에 어댑터 함수를
+    추가하고 `KAKAO_ALIMTALK_PROVIDER` 값으로 분기하면 된다.
+- **알림톡은 kakao_user_id가 아니라 전화번호로 발송**된다(사전 승인 템플릿 경유).
+  수신 번호는 `members` 테이블에서 해석: `phone`(+`phone_country_code`) → `contact_phone`.
+  번호가 없으면 graceful하게 `pending`(error `"전화번호 없음"`) 기록 후 종료.
+- 어떤 경우에도 **폴러를 죽이지 않는다** — sender는 모든 예외를 흡수, 디스패처도 방어.
+
+### 구현 파일
+```
+services/app/
+├── app/pipeline/kakao.py          # KakaoAlimtalkSender + 전화번호 정규화/해석 헬퍼
+├── app/pipeline/dispatcher.py     # _send_kakao 실제 와이어업 (멱등성 + 번호해석 + 로그)
+├── app/config.py                  # 카카오 알림톡 env 설정 + kakao_template_map
+├── requirements.txt               # httpx>=0.24.0 (지연 import)
+└── tests/test_dispatcher_kakao.py # 페이크 Supabase 단위 테스트 (pending/멱등성/번호정규화)
+```
+
+### 발송 흐름 (`dispatcher._send_kakao`)
+1. 멱등성: `app_notification_log(channel='kakao_alimtalk')` 존재 시 재발송 안 함.
+2. `members`에서 수신번호 해석 → 없으면 `status='pending'`(error `"전화번호 없음"`) 후 종료.
+3. `KakaoAlimtalkSender().send(to_phone, event)` 호출 (제목/본문은 `event_types.build_message` 재사용).
+4. 결과 매핑:
+   - `sent` → `app_notification_log status='sent'`.
+   - `pending` / `not_configured`(자격증명·템플릿 없음, httpx 미설치, 미지원 프로바이더) → `status='pending'`.
+   - `failed`(HTTP 오류, 네트워크 오류, 잘못된 번호) → `status='failed'`.
+
+### 환경변수 (모두 비어있으면 안전한 no-op)
+| 변수 | 설명 |
+|------|------|
+| `KAKAO_ALIMTALK_PROVIDER` | 발송 대행사 식별자. 레퍼런스 구현은 `solapi`. |
+| `KAKAO_ALIMTALK_API_KEY` | 대행사 API Key |
+| `KAKAO_ALIMTALK_API_SECRET` | 대행사 API Secret (HMAC 서명용) |
+| `KAKAO_ALIMTALK_BASE_URL` | 대행사 REST 베이스 URL (미지정 시 Solapi 기본값 `https://api.solapi.com`) |
+| `KAKAO_ALIMTALK_SENDER_KEY` | 발신 프로필/발신번호 키 (SMS 대체발송용 from) |
+| `KAKAO_ALIMTALK_PFID` | 카카오 비즈니스 채널 ID(플러스친구/PFID) |
+| `KAKAO_ALIMTALK_TEMPLATE_COMPETITION_RESULT` | 대회 결과 카테고리 승인 템플릿 코드 |
+| `KAKAO_ALIMTALK_TEMPLATE_RANKING_CHANGE` | 랭킹 변동 카테고리 승인 템플릿 코드 |
+
+템플릿 변수는 `#{title}` / `#{body}` / `#{url}` 키로 전달된다 → **승인 템플릿 본문도
+이 변수명을 사용**해야 한다(또는 `kakao.py`의 `variables` 매핑을 템플릿에 맞게 조정).
+
+### 🔴 사람이 해야 할 작업 (실제 알림톡 발송 활성화)
+1. **카카오 비즈니스 채널 개설** (kakao 비즈니스 / 채널 관리자센터)
+   → 채널 ID(PFID) 확보 → `KAKAO_ALIMTALK_PFID`.
+2. **알림톡 템플릿 등록 및 검수 승인** (카테고리별 1개 이상).
+   본문에 `#{title}`, `#{body}`, `#{url}` 변수 포함 → 승인 후 발급된 템플릿 코드를
+   `KAKAO_ALIMTALK_TEMPLATE_COMPETITION_RESULT` / `..._RANKING_CHANGE`에 설정.
+   ⚠️ 알림톡 템플릿은 광고성 문구 금지 등 검수 기준이 까다로움(승인까지 수일 소요 가능).
+3. **발송 대행사 가입** (레퍼런스: **Solapi**). 대행사 콘솔에서 위 카카오 채널/템플릿을
+   연동하고 API Key/Secret 발급 → `KAKAO_ALIMTALK_API_KEY/SECRET`, `KAKAO_ALIMTALK_PROVIDER=solapi`.
+   발신번호 등록 → `KAKAO_ALIMTALK_SENDER_KEY`.
+4. **패키지 설치** (보통 supabase 의존성으로 이미 설치됨):
+   ```bash
+   arch -arm64 python3 -m pip install -r services/app/requirements.txt
+   ```
+5. 서버 재시작 → 알림톡 채널 on인 회원에게 이벤트 발생 시 발송.
+   (라이브 API 응답으로 서명/엔드포인트/응답 스키마 1차 검증 필수 — untested 상태이므로.)
+
+> 위 4가지(채널/템플릿/대행사 계정·키)가 갖춰지기 전까지 코드는 안전하게 no-op로
+> 동작하며 `app_notification_log`에 `pending` 상태로 기록된다.
+
+---
+
 ## 공통 규칙
 
 ### Import 패턴
@@ -378,7 +453,8 @@ async def some_page(request: Request):
 | 의존성 | 필요 시점 | 비고 |
 |--------|----------|------|
 | Firebase 프로젝트 (FCM) | Phase 4 | VAPID 키 발급 |
-| 카카오 비즈니스 채널 | Phase 6 | 알림톡 템플릿 승인 필요 |
+| 카카오 비즈니스 채널 + 템플릿 승인 + 발송 대행사(Solapi 등) 계정 | Phase 6 | 코드는 완료, 외부 승인·계정 대기 |
+| `httpx` 패키지 | Phase 6 | 보통 supabase 의존성으로 이미 설치됨 |
 | Cloudflare DNS CNAME | 배포 시 | `app.fencingmind.ai` |
 | Cloudflare Tunnel 업데이트 | 배포 시 | app 서비스 라우팅 추가 |
 | `pywebpush` 패키지 | Phase 4 | `arch -arm64 python3 -m pip install pywebpush` |

@@ -28,7 +28,43 @@ class AppSettings:
     FCM_VAPID_PRIVATE_KEY: str = os.getenv("FCM_VAPID_PRIVATE_KEY", "")
 
     # 카카오 알림톡 (Phase 6에서 사용)
+    # ─────────────────────────────────────────────────────────────────────
+    # 카카오 알림톡은 (1) 카카오 비즈니스 채널, (2) 사전 승인된 템플릿(코드),
+    # (3) 중계 발송 대행사(릴레이 프로바이더)를 모두 갖춰야 동작한다.
+    # 아래 값이 모두 채워지기 전까지 발송 경로는 안전하게 no-op('pending')으로 동작.
+    #
+    # 레퍼런스 구현 대상 프로바이더: Solapi (구 CoolSMS).
+    #   - 다른 프로바이더(NHN Cloud Toast, Bizm, Aligo 등)는 BASE_URL/PROVIDER만
+    #     바꿔 kakao.py에 어댑터를 추가하는 식으로 확장한다.
     KAKAO_ALIMTALK_SENDER_KEY: str = os.getenv("KAKAO_ALIMTALK_SENDER_KEY", "")
+
+    # 발송 대행사 식별자 (예: 'solapi'). 비어있으면 not_configured.
+    KAKAO_ALIMTALK_PROVIDER: str = os.getenv("KAKAO_ALIMTALK_PROVIDER", "")
+    # 대행사 API 자격증명
+    KAKAO_ALIMTALK_API_KEY: str = os.getenv("KAKAO_ALIMTALK_API_KEY", "")
+    KAKAO_ALIMTALK_API_SECRET: str = os.getenv("KAKAO_ALIMTALK_API_SECRET", "")
+    # 대행사 REST API 베이스 URL (프로바이더별 기본값은 kakao.py에서 보정)
+    KAKAO_ALIMTALK_BASE_URL: str = os.getenv("KAKAO_ALIMTALK_BASE_URL", "")
+    # 카카오 비즈니스 채널 ID (플러스친구 ID, '@'로 시작하는 검색용 ID 또는 PFID)
+    KAKAO_ALIMTALK_PFID: str = os.getenv("KAKAO_ALIMTALK_PFID", "")
+
+    # 카테고리 → 사전 승인된 템플릿 코드 매핑.
+    #   env로 카테고리별 개별 주입 (없으면 빈 문자열 → 해당 카테고리 발송 skip).
+    #   템플릿은 카카오 검수 통과 후 발급된 코드여야 한다.
+    KAKAO_ALIMTALK_TEMPLATE_COMPETITION_RESULT: str = os.getenv(
+        "KAKAO_ALIMTALK_TEMPLATE_COMPETITION_RESULT", ""
+    )
+    KAKAO_ALIMTALK_TEMPLATE_RANKING_CHANGE: str = os.getenv(
+        "KAKAO_ALIMTALK_TEMPLATE_RANKING_CHANGE", ""
+    )
+
+    @property
+    def kakao_template_map(self) -> dict[str, str]:
+        """카테고리 → 템플릿 코드. 빈 값은 그대로 둠(발송 시 누락 처리)."""
+        return {
+            "competition_result": self.KAKAO_ALIMTALK_TEMPLATE_COMPETITION_RESULT,
+            "ranking_change": self.KAKAO_ALIMTALK_TEMPLATE_RANKING_CHANGE,
+        }
 
     # 이벤트 폴링 간격 (초)
     EVENT_POLL_INTERVAL: int = int(os.getenv("EVENT_POLL_INTERVAL", "30"))
