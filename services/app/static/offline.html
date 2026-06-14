@@ -1,70 +1,120 @@
 <!DOCTYPE html>
+<!--
+  Self-contained offline fallback page (served by the service worker when an
+  HTML navigation fails and nothing is cached). Must NOT fetch anything external
+  since it is shown precisely when the network is unavailable. i18n is not
+  available offline, so copy is static bilingual (Korean + English).
+-->
 <html lang="ko" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FencingMind - Offline</title>
+    <meta name="theme-color" content="#c9302c">
+    <title>FencingMind · 오프라인 / Offline</title>
     <style>
         :root {
             --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: rgba(18, 18, 26, 0.85);
+            --accent-primary: #c9302c;
             --text-primary: #ffffff;
             --text-secondary: #b4b4c4;
             --text-muted: #6b6b7b;
-            --accent-primary: #c9302c;
+            --border-color: rgba(255, 255, 255, 0.08);
+            --border-light: rgba(255, 255, 255, 0.15);
+            --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.4);
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-            background: var(--bg-primary);
+            font-family: -apple-system, BlinkMacSystemFont, 'Inter', system-ui, sans-serif;
+            background: linear-gradient(135deg, #0a0a0f 0%, #12121a 50%, #0f0f1a 100%);
             color: var(--text-primary);
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
             text-align: center;
-            padding: 20px;
+            padding: 24px;
+            line-height: 1.6;
+            letter-spacing: -0.01em;
         }
-        .offline-container {
-            max-width: 400px;
+        .offline-card {
+            max-width: 420px;
+            width: 100%;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 40px 28px;
+            box-shadow: var(--shadow-md);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
         }
         .offline-icon {
-            font-size: 4rem;
-            margin-bottom: 24px;
-            opacity: 0.6;
+            width: 56px;
+            height: 56px;
+            margin: 0 auto 22px;
+            color: var(--accent-primary);
+            opacity: 0.9;
         }
         h1 {
-            font-size: 1.5rem;
-            font-weight: 600;
-            margin-bottom: 12px;
+            font-size: 1.4rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            margin-bottom: 6px;
+        }
+        .subtitle-en {
+            font-size: 0.95rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 18px;
         }
         p {
             color: var(--text-secondary);
-            font-size: 0.95rem;
-            line-height: 1.6;
-            margin-bottom: 24px;
+            font-size: 0.92rem;
+            margin-bottom: 6px;
+        }
+        p.en {
+            color: var(--text-muted);
+            font-size: 0.84rem;
+            margin-bottom: 28px;
         }
         .retry-btn {
             display: inline-block;
-            padding: 12px 32px;
+            padding: 12px 36px;
             background: var(--accent-primary);
             color: #fff;
-            border: none;
+            border: 1px solid var(--accent-primary);
             border-radius: 8px;
             font-size: 0.95rem;
-            font-weight: 500;
+            font-weight: 600;
             cursor: pointer;
-            text-decoration: none;
             transition: opacity 0.2s;
         }
-        .retry-btn:hover { opacity: 0.85; }
+        .retry-btn:hover { opacity: 0.88; }
+        .retry-btn:active { opacity: 0.75; }
     </style>
 </head>
 <body>
-    <div class="offline-container">
-        <div class="offline-icon">&#x1F4F6;</div>
-        <h1>You're offline</h1>
-        <p>Please check your internet connection and try again.</p>
-        <button class="retry-btn" onclick="window.location.reload()">Retry</button>
+    <div class="offline-card">
+        <svg class="offline-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M1 1l22 22"></path>
+            <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"></path>
+            <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"></path>
+            <path d="M10.71 5.05A16 16 0 0 1 22.58 9"></path>
+            <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"></path>
+            <path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path>
+            <line x1="12" y1="20" x2="12.01" y2="20"></line>
+        </svg>
+        <h1>오프라인 상태입니다</h1>
+        <div class="subtitle-en">You're offline</div>
+        <p>인터넷 연결을 확인한 뒤 다시 시도해주세요.</p>
+        <p class="en">Please check your connection and try again.</p>
+        <button class="retry-btn" type="button" onclick="window.location.reload()">다시 시도 / Retry</button>
     </div>
+    <script>
+        // Auto-reload once the browser regains connectivity.
+        window.addEventListener('online', function () { window.location.reload(); });
+    </script>
 </body>
 </html>

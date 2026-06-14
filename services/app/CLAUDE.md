@@ -41,6 +41,35 @@ Data Service                    App Service                   User
 - **static/**: cache-first (CACHE_NAME 버전으로 배포시 버스트)
 - **외부 CDN**: 캐시 안 함
 
+> 🔴 **불변 원칙**: API/HTML은 절대 cache-first로 바꾸지 않는다. 이 서비스가 분리된
+> 이유 자체가 data 서비스의 stale-cache 문제 회피이므로 network-first 신선도 유지가 핵심.
+
+### CACHE_NAME 버전 범프 규칙
+`static/service-worker.js`의 `CACHE_NAME = 'fencingmind-app-vN'`을 다음 경우 증가시킨다:
+- `PRECACHE_ASSETS` 목록이 바뀔 때
+- SW 로직(전략, 핸들러)이 바뀔 때
+
+activate 핸들러가 이전 버전 캐시를 자동 purge하므로, 버전만 올리면 배포 시 클린 재캐시된다.
+- `v1` → 초기 (Phase 1.5)
+- `v2` → Phase 7: 앱 셸 JS(`push.js`, `install.js`) 프리캐시 추가
+
+### 오프라인 동작 (Phase 7)
+**오프라인에서 동작하는 것:**
+- 마지막에 방문해 캐시된 HTML 페이지(network-first 성공 응답이 캐시됨) 재열람
+- 프리캐시된 앱 셸 JS(`push.js`, `install.js`)·로고·아이콘
+- 캐시 미스 HTML 내비게이션 → 테마 적용된 `offline.html` 폴백(다시 시도 버튼, online 시 자동 새로고침)
+- 알림 설정 변경: 오프라인 시 localStorage 큐에 적재(`fm_app_pref_queue`, 카테고리당 1행 last-write-wins),
+  `window 'online'` 이벤트에서 포그라운드 replay(PATCH 재전송). "오프라인 — 연결되면 저장됩니다" 상태 표시.
+
+**오프라인에서 동작하지 않는 것 (의도):**
+- `/api/*`, `/auth/*` 요청(network-only — SW가 손대지 않음). 실시간 데이터·인증은 네트워크 필수.
+- 아직 한 번도 방문 안 한 페이지(캐시 없음 → offline.html 폴백).
+- FCM 푸시 수신은 SW `push` 핸들러가 처리하나 발송은 서버(온라인) 측.
+
+**설계 메모:**
+- Background Sync API는 사용 안 함(과설계). 재연결 시 포그라운드 replay로 충분·신뢰성 확보.
+- 서버가 4xx/5xx로 거부하면 큐잉하지 않고 즉시 "저장 실패" 표시(연결 문제와 구분).
+
 ---
 
 ## 폴더 구조 (현재)
@@ -66,11 +95,11 @@ services/app/
 │       └── settings.html              # 알림 설정 UI (카테고리×채널 토글)
 ├── static/
 │   ├── manifest.json                  # PWA manifest (아이콘, 테마색, standalone)
-│   ├── service-worker.js              # SW (캐시 전략, 푸시 수신, 오프라인 폴백)
-│   ├── offline.html                   # 오프라인 폴백 페이지
+│   ├── service-worker.js              # SW (캐시 전략, 푸시 수신, 오프라인 폴백, CACHE_NAME=v2)
+│   ├── offline.html                   # 오프라인 폴백 페이지 (Phase 7: 테마 적용 + 다시 시도 + online 자동 새로고침)
 │   ├── js/
-│   │   ├── push.js                    # Phase 4: 웹 푸시 구독/해제
-│   │   └── install.js                 # Phase 5: iOS 설치 안내 배너 + beforeinstallprompt 중앙화
+│   │   ├── push.js                    # Phase 4: 웹 푸시 구독/해제 (Phase 7: 프리캐시 대상)
+│   │   └── install.js                 # Phase 5: iOS 설치 안내 배너 + beforeinstallprompt 중앙화 (Phase 7: 프리캐시 대상)
 │   └── images/
 │       ├── icons/
 │       │   ├── icon-192.png           # PWA 아이콘 192x192
@@ -118,7 +147,7 @@ PYTHONPATH="${PWD}:${PWD}/packages:${PWD}/services/app" \
 | **4** | **`feature/app/fcm`** | **FCM 웹 푸시 발송 + 권한요청(클릭 제스처 내) + iOS 16.4+ 감지** | **Firebase 프로젝트 (VAPID 키), pywebpush** | **🔨 코드 완료 / 키·패키지 대기** |
 | **5** | **`feature/app/pwa-install`** | **설치 프롬프트 최적화 + iOS Safari "홈 화면에 추가" 안내 배너** | **없음** | **✅ 완료** |
 | **6** | **`feature/app/kakao-alimtalk`** | **카카오 알림톡 발송 (프로바이더 비종속 sender, Solapi 레퍼런스)** | **카카오 비즈니스 채널 + 템플릿 승인 + 발송 대행사 계정** | **🔨 코드 완료 / 외부 승인·계정 대기** |
-| 7 | `feature/app/offline` | 오프라인 지원 강화 | 없음 | 📋 |
+| **7** | **`feature/app/offline`** | **오프라인 지원 강화 (앱 셸 JS 프리캐시 + 오프라인 설정 큐잉/replay + offline.html 개선)** | **없음** | **✅ 완료 (로드맵 전체 완료)** |
 
 ---
 

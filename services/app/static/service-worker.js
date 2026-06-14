@@ -7,10 +7,16 @@
  *   external  → network-only (no caching for CDN fonts etc.)
  */
 
-const CACHE_NAME = 'fencingmind-app-v1';
+// CACHE_NAME bump convention: increment the version (vN) whenever PRECACHE_ASSETS
+// or any SW logic changes, so the activate handler purges the old cache on deploy.
+//   v1 → initial (Phase 1.5)
+//   v2 → Phase 7: precache app-shell JS (push.js, install.js) for offline UI
+const CACHE_NAME = 'fencingmind-app-v2';
 
 const PRECACHE_ASSETS = [
   '/offline.html',
+  '/static/js/push.js',
+  '/static/js/install.js',
   '/static/images/icons/icon-192.png',
   '/static/images/icons/icon-512.png',
   '/static/images/logo/FencingMind_logo_long_white.png',
