@@ -7,7 +7,7 @@
     4. 채널별 발송:
        - in_app  : notifications 테이블 insert + app_notification_log 기록 (Phase 3 활성)
        - web_push: FCM/표준 웹 푸시 발송 (Phase 4 활성 — pywebpush + VAPID)
-       - kakao   : 카카오 알림톡 발송 (Phase 6 wired — 비즈니스 채널/템플릿 승인 대기)
+       - kakao   : 카카오 알림톡 — 현재 계획 보류(hidden). 코드 보존, ENABLE_KAKAO_ALIMTALK로 게이트
                    자격증명/템플릿 미설정 시 graceful no-op('pending' 로그).
 
 멱등성: app_notification_log(event_type, event_id, member_id, channel) 존재 시 재발송 안 함
@@ -83,7 +83,9 @@ class NotificationDispatcher:
                     summary["in_app"] += 1
             if pref.get("web_push"):
                 self._send_web_push(member_id, event)
-            if pref.get("kakao_alimtalk"):
+            # 카카오 알림톡은 현재 계획에서 보류 — ENABLE_KAKAO_ALIMTALK(기본 False)로 게이트.
+            # 코드(_send_kakao, kakao.py)는 재활성화 대비 보존. 플래그를 켜면 다시 동작.
+            if settings.ENABLE_KAKAO_ALIMTALK and pref.get("kakao_alimtalk"):
                 self._send_kakao(member_id, event)
 
         return summary

@@ -137,7 +137,7 @@
 
     <div class="channel-note">
         <span>&#x2139;&#xFE0F;</span>
-        <span>{{ t('app.notif.channel_note', '웹 푸시와 카카오 알림톡은 준비 중입니다. 지금 설정해두면 출시 시 바로 적용됩니다.') }}</span>
+        <span>{{ t('app.notif.channel_note', '웹 푸시는 준비 중입니다. 지금 설정해두면 출시 시 바로 적용됩니다.') }}</span>
     </div>
 
     {# Web Push enable/disable (Phase 4) #}
@@ -198,18 +198,8 @@
             </label>
         </div>
 
-        {# kakao_alimtalk: Phase 6 (coming soon) #}
-        <div class="channel-row">
-            <div class="channel-label">
-                <span class="name">{{ t('app.notif.channel.kakao_alimtalk', '카카오 알림톡') }}</span>
-                <span class="soon-badge">{{ t('app.notif.soon', '준비 중') }}</span>
-            </div>
-            <label class="switch">
-                <input type="checkbox" data-channel="kakao_alimtalk"
-                       {% if pref.kakao_alimtalk %}checked{% endif %}>
-                <span class="slider"></span>
-            </label>
-        </div>
+        {# kakao_alimtalk: 현재 계획에서 보류 — UI 숨김. 코드/컬럼은 보존(재활성화 가능).
+           재활성화 시 이 채널 행을 복원하고 dispatcher의 ENABLE_KAKAO_ALIMTALK 플래그를 켤 것. #}
 
         <div class="save-status"></div>
     </div>
@@ -264,6 +254,8 @@
             category,
             in_app: get('in_app'),
             web_push: get('web_push'),
+            // 카카오 알림톡은 현재 계획에서 보류(UI 숨김) → 항상 false 유지.
+            // 저장된 값을 건드리지 않으려 토글 복원 전까지 false로 전송.
             kakao_alimtalk: get('kakao_alimtalk'),
         };
     }

@@ -27,11 +27,19 @@ class AppSettings:
     FCM_VAPID_PUBLIC_KEY: str = os.getenv("FCM_VAPID_PUBLIC_KEY", "")
     FCM_VAPID_PRIVATE_KEY: str = os.getenv("FCM_VAPID_PRIVATE_KEY", "")
 
-    # 카카오 알림톡 (Phase 6에서 사용)
+    # 카카오 알림톡 (현재 계획 보류 — hidden)
     # ─────────────────────────────────────────────────────────────────────
+    # 🔕 2026-06: 비즈니스 채널 알림톡은 현재 계획에서 제외. 앱 알림(in_app)+웹 푸시
+    #   +이메일로 충분하다고 판단. 코드/설정/DB 컬럼은 재활성화 대비 보존만 한다.
+    #   재활성화: ENABLE_KAKAO_ALIMTALK=true + 아래 자격증명 + settings.html 토글 복원.
+    #   (참고: 코치→회원 개인 카카오 메시지 기능은 club 서비스에서 별도 진행 — 알림톡 아님)
+    #
     # 카카오 알림톡은 (1) 카카오 비즈니스 채널, (2) 사전 승인된 템플릿(코드),
     # (3) 중계 발송 대행사(릴레이 프로바이더)를 모두 갖춰야 동작한다.
     # 아래 값이 모두 채워지기 전까지 발송 경로는 안전하게 no-op('pending')으로 동작.
+    #
+    # 디스패처 게이트: 기본 False → kakao 발송 경로 자체를 호출하지 않음.
+    ENABLE_KAKAO_ALIMTALK: bool = os.getenv("ENABLE_KAKAO_ALIMTALK", "false").lower() == "true"
     #
     # 레퍼런스 구현 대상 프로바이더: Solapi (구 CoolSMS).
     #   - 다른 프로바이더(NHN Cloud Toast, Bizm, Aligo 등)는 BASE_URL/PROVIDER만

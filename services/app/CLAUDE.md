@@ -146,7 +146,8 @@ PYTHONPATH="${PWD}:${PWD}/packages:${PWD}/services/app" \
 | 3 | `feature/app/pipeline` | EventPoller + NotificationDispatcher | 없음 | ✅ 완료 |
 | **4** | **`feature/app/fcm`** | **FCM 웹 푸시 발송 + 권한요청(클릭 제스처 내) + iOS 16.4+ 감지** | **Firebase 프로젝트 (VAPID 키), pywebpush** | **🔨 코드 완료 / 키·패키지 대기** |
 | **5** | **`feature/app/pwa-install`** | **설치 프롬프트 최적화 + iOS Safari "홈 화면에 추가" 안내 배너** | **없음** | **✅ 완료** |
-| **6** | **`feature/app/kakao-alimtalk`** | **카카오 알림톡 발송 (프로바이더 비종속 sender, Solapi 레퍼런스)** | **카카오 비즈니스 채널 + 템플릿 승인 + 발송 대행사 계정** | **🔨 코드 완료 / 외부 승인·계정 대기** |
+| 6 | `feature/app/kakao-alimtalk` | 카카오 알림톡 발송 (코드 보존, 비활성) | — | 🔕 **보류/숨김** (계획 제외, `ENABLE_KAKAO_ALIMTALK=false`) |
+| 보류해제 | `feature/app/hide-kakao` | 카카오 UI 숨김 + 디스패처 게이트 | 없음 | ✅ 적용 |
 | **7** | **`feature/app/offline`** | **오프라인 지원 강화 (앱 셸 JS 프리캐시 + 오프라인 설정 큐잉/replay + offline.html 개선)** | **없음** | **✅ 완료 (로드맵 전체 완료)** |
 
 ---
@@ -164,8 +165,9 @@ iOS는 Android와 달리 PWA 푸시에 강한 제약이 있다. 아래 항목을
 | 4 | manifest `display: standalone` + 아이콘 + `apple-touch-icon` | 이미 충족 | 1.5 | ✅ 완료 |
 | 5 | VAPID 키 + SW `push`/`notificationclick` 핸들러 | SW 핸들러 작성 완료, 프론트/백엔드 발송 코드 완료. **VAPID 키는 사람이 Firebase에서 발급 후 env 설정 필요** | 4 | ⚠️ 키 대기 (코드 완료) |
 
-> **이중 채널 설계 의도**: PWA 푸시(iOS는 설치 필요) + 카카오 알림톡(설치 불필요)으로
-> iOS 제약을 보완. 미설치 사용자에게는 알림톡이 백업 도달 경로.
+> **채널 설계 (2026-06-15 갱신)**: 현재 알림은 **인앱 + 웹 푸시 + 이메일**.
+> 카카오 알림톡(비즈니스 채널)은 **계획에서 보류**(코드는 보존, `ENABLE_KAKAO_ALIMTALK=false`).
+> iOS 미설치 사용자 백업 도달은 향후 **이메일**로 처리. 카카오 백업이 다시 필요하면 보류 해제.
 
 ---
 
@@ -362,7 +364,24 @@ services/app/
 
 ---
 
-## Phase 6 상세: 카카오 알림톡 (코드 완료 / 외부 승인 대기)
+## Phase 6 상세: 카카오 알림톡 (🔕 보류 / 숨김 — 코드 보존)
+
+> ### 🔕 상태: 현재 계획에서 제외 (2026-06-15 결정)
+> - **결정**: 전체 알림을 카카오(비즈니스 채널 알림톡)로 보낼 계획 없음.
+>   현 단계는 **앱 알림(in_app) + 웹 푸시 + 이메일**로 충분.
+> - **처리**: 기능을 삭제하지 않고 **숨김**. 코드/설정/DB 컬럼(`kakao_alimtalk`)은 보존.
+>   - 디스패처 호출을 `settings.ENABLE_KAKAO_ALIMTALK`(기본 `False`)로 게이트 → 호출 안 됨.
+>   - 알림 설정 UI(`settings.html`)에서 카카오 토글 **제거(숨김)**, 안내 문구에서 카카오 언급 삭제.
+>   - `app/pipeline/kakao.py`, `dispatcher._send_kakao`, 카카오 env 설정은 그대로 유지.
+> - **재활성화 방법** (향후 필요 시):
+>   1. `ENABLE_KAKAO_ALIMTALK=true` env 설정
+>   2. `settings.html`에 카카오 채널 토글 행 복원 (해당 위치에 복원 안내 주석 있음)
+>   3. 아래 "사람이 해야 할 작업"(비즈니스 채널/템플릿/대행사) 수행
+> - **별개 계획 (혼동 금지)**: 실제 카카오 메시지 기능은 **club 서비스**에서 진행 예정 —
+>   감독·코치가 **개인 카카오 계정**으로 회원에게 메시지를 보내는 기능.
+>   이는 비즈니스 채널 **알림톡과 무관**하며, app 서비스의 이 코드와도 별개다.
+>
+> 아래 설계/구현 문서는 **재활성화 대비 참고용**으로 보존한다.
 
 ### 설계 요점
 - **프로바이더 비종속 sender** — `app/pipeline/kakao.py` 의 `KakaoAlimtalkSender`.
