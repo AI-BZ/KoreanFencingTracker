@@ -111,11 +111,29 @@ services/app/
 ```
 
 ## 서버 실행
+
+> 🔴 **포트 주의**: **77은 브라우저가 차단**하는 포트다(`ERR_UNSAFE_PORT`). `curl`은 되지만
+> 브라우저(시크릿 포함)에선 **블랭크**로 뜬다. 77은 프로덕션 리버스 프록시 뒤 **내부 포트**일 뿐.
+> **로컬 브라우저 테스트는 포트 9077 사용** (server.py CORS에 `localhost:9077  # app dev`로 이미 등록됨).
+
+**로컬 개발 (브라우저 테스트용 — 권장):**
+```bash
+cd /Users/gyejinpark/Documents/GitHub/FencingMind-app && \
+  PYTHONPATH="$PWD:$PWD/packages:$PWD/services/app" \
+  python3 -m uvicorn services.app.app.server:app --host 0.0.0.0 --port 9077
+# → http://localhost:9077/
+```
+
+**프로덕션/내부 포트 (프록시 뒤):**
 ```bash
 cd /Users/gyejinpark/Documents/GitHub/FencingMind-app
 PYTHONPATH="${PWD}:${PWD}/packages:${PWD}/services/app" \
   python -m uvicorn services.app.app.server:app --host 0.0.0.0 --port 77
 ```
+
+> 환경변수(VAPID/Supabase 키)는 `services/app/.env`에서 자동 로드된다(config.py 경량 로더,
+> python-dotenv 불필요). `.env`는 gitignore 처리되어 커밋되지 않는다. `export` 없이 바로 실행 가능.
+> 차단되는 다른 포트 예: 1·7·9·11·13·15·17·19·20·21·22·23·25·37·42·43·53·69·77·79·87 등.
 
 ---
 
