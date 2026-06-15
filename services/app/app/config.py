@@ -2,6 +2,39 @@
 App Service 설정
 """
 import os
+from pathlib import Path
+
+
+def _load_dotenv() -> None:
+    """services/app/.env 를 읽어 환경변수로 로드 (의존성 없는 경량 로더).
+
+    - 형식: `KEY=value` (선택적으로 `export ` 접두사, 따옴표 허용)
+    - `setdefault` 사용 → 이미 설정된 실제 환경변수(.zshrc export 등)가 우선.
+    - 파일이 없거나 파싱 실패해도 앱을 막지 않는다.
+    """
+    env_path = Path(__file__).resolve().parents[1] / ".env"
+    if not env_path.exists():
+        return
+    try:
+        for raw in env_path.read_text(encoding="utf-8").splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line.startswith("export "):
+                line = line[len("export "):]
+            key, sep, val = line.partition("=")
+            if not sep:
+                continue
+            key = key.strip()
+            val = val.strip().strip('"').strip("'")
+            if key:
+                os.environ.setdefault(key, val)
+    except Exception:
+        pass
+
+
+# 클래스 정의(=os.getenv 평가) 전에 .env 를 먼저 로드해야 한다.
+_load_dotenv()
 
 
 class AppSettings:
