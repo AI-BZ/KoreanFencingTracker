@@ -221,10 +221,19 @@ if starting_round in full_round_order:
 - **자체 계산 이점**: 전체 참가자 포함, 일관된 순위 산출, 중복 없음
 - **적용 시점**: 저장 시(competition_detector) + 표시 시(server.py) 이중 보장
 
+### Pool 기권(Forfeit/Abandon) 처리 — FIE t.95
+- **A 마커**: 해당 선수가 기권 → `is_forfeit: true`, wins/losses 미카운트
+- **X 마커**: 상대가 기권 → bout 미진행, wins/losses 미카운트
+- **기권자 통계 제외**: pool_calculator, server.py pool_stats 모두 기권자 결과 필터링
+- **기권자 순위**: 풀 종합 순위 최하위, `is_forfeit: True` 마킹
+- **상대 선수**: 기권자와의 bout은 승/패 계산에서 완전 제외
+- **검증**: R23 규칙으로 기권 감지 및 잘못된 집계 경고
+
 ### 위반 방지 체크리스트
 - [ ] 같은 지표가 서로 다른 숫자로 표시되지 않는가?
 - [ ] pool_total_ranking이 pool_rounds 선수 수와 일치하는가?
 - [ ] participants 탭의 참가자 수와 헤더의 참가자 수가 같은가?
+- [ ] 기권 선수의 bout이 상대 선수 승/패에 포함되지 않았는가?
 
 ---
 
@@ -233,7 +242,7 @@ if starting_round in full_round_order:
 ### 원칙: 데이터 오류 제로 (ZERO DATA ERRORS)
 데이터 사업에서 **1개의 오류도 있으면 안 된다.** 모든 데이터 수정은 검증을 거쳐야 하며, 새로운 오류 패턴은 반드시 카탈로그에 기록한다.
 
-### 검증 규칙 12개 (R1 ~ R12) 요약
+### 검증 규칙 (R1 ~ R23) 요약
 
 | 규칙 | 검증 대상 | 설명 |
 |------|----------|------|
@@ -249,6 +258,7 @@ if starting_round in full_round_order:
 | R10 | 선수 | 성별 불일치 (동명이인) |
 | R11 | 선수 | 나이그룹 역행 (동명이인) |
 | R12 | 선수 | 무기 3종 이상 (동명이인) |
+| R23 | 이벤트 | Pool 기권(Abandon) 감지 — A/X 마커, 기권 bout 승/패 혼입 |
 
 ### 필수 검증 명령어
 ```bash
@@ -379,3 +389,71 @@ app/server.py                  # API 엔드포인트
 4. **종류**: 개인전 → 단체전
 
 구현: server.py의 `_event_sort_key()` 함수
+
+---
+
+## Dual DE 대진표 구조 (Dual Direct Elimination)
+
+### 개요
+국가대표선발전 등 대규모 대회에서 사용하는 이중 DE 방식.
+First DE(예선 DE)에서 탈락하지 않은 선수들이 Second DE(본선 DE)에 합류하여 결승까지 진행.
+
+### 데이터 구조 (Supabase `events.raw_data.de_bracket`)
+```json
+{
+  "format": "dual_de",
+  "bracket_size": 256,
+  "first_de": {
+    "bracket_size": 256,
+    "starting_round": "256강",
+    "full_bouts": []
+  },
+  "second_de": {
+    "bracket_size": 64,
+    "starting_round": "64강",
+    "full_bouts": []
+  },
+  "full_bouts": [/* 모든 bout이 여기에 저장됨 */],
+  "seeded_players": [...],
+  "first_de_qualifiers": [...]
+}
+```
+
+### Bout 분배 로직 (`bracket_utils.py`)
+일부 dual DE 이벤트에서 모든 bout이 최상위 `de_bracket.full_bouts`에 저장되고
+`first_de.full_bouts`와 `second_de.full_bouts`는 빈 배열인 경우가 있음.
+
+`normalize_dual_de_bracket_data()`에서 자동 분배:
+- **Second DE 시작 라운드 이전** (예: 256강, 128강) → First DE
+- **Second DE 시작 라운드 이후** (예: 32강~결승) → Second DE
+- **공유 라운드** (예: 64강) → `match_num`으로 분리
+  - `match_num ≤ bracket_size/2` → Second DE
+  - `match_num > bracket_size/2` → First DE
+
+### 라운드 매핑
+```
+First DE:  256강 → 128강 → 64강 (일부)
+Second DE: 64강 (일부) → 32강 → 16강 → 8강 → 준결승 → 결승
+```
+
+### FIE 최종순위 규정 (FencingTime 실제 FIE 대회 결과 확인, 2026-06)
+```
+1위       결승 승자
+2위       결승 패자
+3T (동률)  준결승 패자 2명 ← 유일한 동률 순위
+5위       8강 패자 중 시드 1위
+6위       8강 패자 중 시드 2위
+7위       8강 패자 중 시드 3위
+8위       8강 패자 중 시드 4위
+9~16위    16강 패자, 시드 순 개별 순위
+17~32위   32강 패자, 시드 순 개별 순위
+...이하 동일
+```
+⚠️ **동률 순위는 3위(3T)만 존재**. QF(8강) 이하는 모두 풀 시드 기반 개별 순위.
+구현: `server.py: compute_dual_de_final_rankings()`
+
+### 구현 파일
+- `app/bracket_utils.py`: `normalize_dual_de_bracket_data()` - bout 분배 + 정규화
+- `app/server.py`: `compute_dual_de_final_rankings()` - Dual DE 최종순위 계산
+- `templates/event_result.html`: dual DE 탭 UI (First DE / Second DE)
+- `static/css/bracket.css`: 대진표 스타일

@@ -8,8 +8,7 @@
 {% block title %}{{ tr_player(player.name) }} - Korean Fencing Tracker{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="/static/css/components.css">
-<link rel="stylesheet" href="/static/css/fencinglab.css">
+<link rel="stylesheet" href="/static/css/fencinglab.css?v=20260603">
 {% endblock %}
 
 {% block content %}
@@ -34,6 +33,11 @@
             <span class="name-en">{{ player.name_en }}</span>
             {% endif %}
             {% endif %}
+            <button class="follow-btn" id="followBtn" data-player="{{ player.name }}"
+                    onclick="toggleFollow('{{ player.name|replace("'", "\\'") }}')"
+                    title="{{ _t('팔로우') }}">
+                <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
+            </button>
             {% if player.has_disambiguation %}
             <span class="disambiguation-badge">{{ i18n.common.player.same_name_notice|default('Multiple athletes with this name') }}</span>
             {% endif %}
@@ -119,6 +123,53 @@
             {% endfor %}
         </div>
         <div class="rating-date">as of {{ today }}</div>
+
+        <!-- FencingLab Ranking Info -->
+        {% if player.rankings_info %}
+        <div class="player-ranking-section">
+            <div class="ranking-cards">
+                {% for rk in player.rankings_info %}
+                <div class="ranking-card" {% if player.rankings_info|length > 1 %}onclick="this.classList.toggle('expanded')"{% else %}class="ranking-card expanded"{% endif %}>
+                    <div class="ranking-card-summary">
+                        <div class="ranking-position">
+                            <span class="rank-number">#{{ rk.rank }}</span>
+                            <span class="rank-total">/ {{ rk.total }}{{ _t("명") }}</span>
+                        </div>
+                        <div class="ranking-category">
+                            {% if rk.gender == '여' %}{{ _t("여자") }}{% elif rk.gender == '남' %}{{ _t("남자") }}{% endif %}
+                            {{ translate_weapon(rk.weapon) }}
+                            {{ rk.age_group_name }}
+                            {% if rk.category_name %}({{ rk.category_name }}){% endif %}
+                        </div>
+                        <div class="ranking-points">
+                            <span class="points-value">{{ "%.1f"|format(rk.points) }}</span>
+                            <span class="points-label">pts</span>
+                        </div>
+                    </div>
+                    <div class="ranking-card-details">
+                        <div class="ranking-detail-header">
+                            <span>{{ _t("포인트 산출 내역") }} (Best {{ rk.best_results|length }})</span>
+                            <span class="ranking-detail-help" title="{{ _t('랭킹 포인트 = 참가자수 기반포인트 × 순위비율 × 연령가중치. 상위 4개 대회 가중합산 (100%, 70%, 50%, 30%)') }}">?</span>
+                        </div>
+                        <div class="ranking-breakdown-list">
+                            {% set weights = [1.0, 0.7, 0.5, 0.3] %}
+                            {% for br in rk.best_results %}
+                            <div class="ranking-breakdown-item">
+                                <div class="breakdown-rank">{{ br.rank }}{{ _t("위") }}</div>
+                                <div class="breakdown-comp">{{ tr_comp(br.competition) }}</div>
+                                <div class="breakdown-pts">
+                                    {{ br.points }}pts
+                                    <span class="breakdown-weight">×{{ weights[loop.index0] if loop.index0 < weights|length else 0.1 }}</span>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
     </div>
 
     <!-- Tab Navigation -->
@@ -428,47 +479,75 @@
 
     {% endif %}{# end guest/member gate for summary #}
 
-        <!-- 선발 포인트 카드 (해당 선수만 표시 - 접근 등급 무관) -->
+        <!-- 선발 포인트 카드 -->
         {% if player.selection_points %}
         <div class="selection-points-card">
             <h4>{{ _t("선발 포인트") }}</h4>
-            {% if player.selection_points.kkumnamu %}
-            {% set kk = player.selection_points.kkumnamu %}
+
+            {# 선발포인트 내용 매크로 #}
+            {% macro sel_section(data, label, year_label, year_val, link_path) %}
             <div class="sel-card-section">
                 <div class="sel-card-header">
-                    <span class="sel-card-title">{{ _t("꿈나무") }} ({{ kk.school_year }}{{ _t("학년도") }})</span>
-                    <span class="sel-card-rank">{{ _t("순위:") }} {{ kk.rank }}/{{ kk.total_participants }}</span>
+                    <span class="sel-card-title">{{ label }} ({{ year_val }}{{ year_label }})</span>
+                    <span class="sel-card-rank-badge">{{ data.rank }}<small>/{{ data.total_participants }}</small></span>
                 </div>
-                <div class="sel-card-total">{{ _t("총점:") }} <strong>{{ kk.total_points|int }}{{ _t("점") }}</strong></div>
-                <div class="sel-card-breakdown">
-                    {% for item in kk.breakdown %}
-                    <div class="sel-breakdown-row">
-                        <span class="sel-comp-label">{{ item.comp_label }}</span>
-                        <span class="sel-comp-pts">{{ item.points|int }}{{ _t("점") }} ({{ item.rank }}{{ _t("위") }})</span>
-                    </div>
-                    {% endfor %}
-                </div>
-                <a href="/{{ lang|default('ko') }}/selection/kkumnamu?year={{ kk.school_year }}&weapon={{ kk.weapon }}&gender={{ kk.gender }}" class="sel-card-link">{{ _t("전체 순위 보기 →") }}</a>
+                <table class="sel-breakdown-table">
+                    <thead>
+                        <tr>
+                            <th>{{ _t("대회") }}</th>
+                            <th class="sel-pts-col">{{ _t("순위") }}</th>
+                            <th class="sel-pts-col">{{ _t("포인트") }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in data.breakdown %}
+                        <tr>
+                            <td>{{ item.comp_label }}</td>
+                            <td class="sel-pts-col">{{ item.rank }}{{ _t("위") }}</td>
+                            <td class="sel-pts-col"><strong>{{ item.points|int }}{{ _t("점") }}</strong></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr class="sel-total-row">
+                            <td>{{ _t("합계") }}</td>
+                            <td></td>
+                            <td class="sel-pts-col"><strong>{{ data.total_points|int }}{{ _t("점") }}</strong></td>
+                        </tr>
+                    </tfoot>
+                </table>
+                <a href="/{{ lang|default('ko') }}/selection/{{ link_path }}?year={{ year_val }}&weapon={{ data.weapon }}&gender={{ data.gender }}" class="sel-card-link">{{ _t("전체 순위 보기 →") }}</a>
             </div>
+            {% endmacro %}
+
+            {% if access_level == "guest" %}
+            {# guest: 블러 + 로그인 CTA #}
+            <div class="access-gate">
+                <div class="blurred-content">
+                    {% if player.selection_points.kkumnamu %}
+                    {% set kk = player.selection_points.kkumnamu %}
+                    {{ sel_section(kk, _t("꿈나무"), _t("학년도"), kk.school_year, "kkumnamu") }}
+                    {% endif %}
+                    {% if player.selection_points.national_team %}
+                    {% set nt = player.selection_points.national_team %}
+                    {{ sel_section(nt, _t("청소년 대표 선발"), _t("시즌"), nt.season_year, "national-team") }}
+                    {% endif %}
+                </div>
+                <div class="gate-overlay">
+                    <p>{{ _t("선발 포인트 순위와 상세 내역을 확인하려면 로그인하세요.") }}</p>
+                    <a href="{{ login_url }}" class="gate-cta-btn" onclick="localStorage.setItem('fencingmind_login_redirect', window.location.href)">{{ _t("로그인하여 전체 보기") }}</a>
+                </div>
+            </div>
+            {% else %}
+            {# member/verified: 전체 공개 #}
+            {% if player.selection_points.kkumnamu %}
+            {% set kk = player.selection_points.kkumnamu %}
+            {{ sel_section(kk, _t("꿈나무"), _t("학년도"), kk.school_year, "kkumnamu") }}
             {% endif %}
             {% if player.selection_points.national_team %}
             {% set nt = player.selection_points.national_team %}
-            <div class="sel-card-section">
-                <div class="sel-card-header">
-                    <span class="sel-card-title">{{ _t("청소년 대표 선발") }} ({{ nt.season_year }}{{ _t("시즌") }})</span>
-                    <span class="sel-card-rank">{{ _t("순위:") }} {{ nt.rank }}/{{ nt.total_participants }}</span>
-                </div>
-                <div class="sel-card-total">{{ _t("총점:") }} <strong>{{ nt.total_points|int }}{{ _t("점") }}</strong></div>
-                <div class="sel-card-breakdown">
-                    {% for item in nt.breakdown %}
-                    <div class="sel-breakdown-row">
-                        <span class="sel-comp-label">{{ item.comp_label }}</span>
-                        <span class="sel-comp-pts">{{ item.points|int }}{{ _t("점") }} ({{ item.rank }}{{ _t("위") }})</span>
-                    </div>
-                    {% endfor %}
-                </div>
-                <a href="/{{ lang|default('ko') }}/selection/national-team?year={{ nt.season_year }}&weapon={{ nt.weapon }}&gender={{ nt.gender }}" class="sel-card-link">{{ _t("전체 순위 보기 →") }}</a>
-            </div>
+            {{ sel_section(nt, _t("청소년 대표 선발"), _t("시즌"), nt.season_year, "national-team") }}
+            {% endif %}
             {% endif %}
         </div>
         {% endif %}
@@ -1057,7 +1136,7 @@ window.i18n = {
     }
 };
 </script>
-<script src="/static/js/fencinglab.js?v=20250108b"></script>
+<script src="/static/js/fencinglab.js?v=20260603"></script>
 <script>
 // Tab switching
 document.querySelectorAll('.tab-btn').forEach(btn => {

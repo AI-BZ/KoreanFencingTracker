@@ -9,7 +9,7 @@
 접근 제한 요약:
 - 검색 자동완성: guest → 소속 blur / member+ → 전체 공개
 - 선수 프로필: guest → 기본정보만+blur / member → 통계O, H2H·Lab blur / verified → 전체
-- 랭킹: guest → 상위10명 숨김(11위~) / member+ → 전체 공개
+- 랭킹: guest → 상위10명 블러(이름·소속 마스킹) / member+ → 전체 공개
 - FencingLab: verified만 접근 가능
 """
 from typing import Optional, Tuple
@@ -62,8 +62,20 @@ RANKINGS_HIDDEN_TOP_N = 10  # guest에게 숨기는 상위 N명
 
 
 def filter_rankings_for_guest(rankings: list) -> list:
-    """guest용: 상위 10명 숨기고 11위부터 반환"""
-    return rankings[RANKINGS_HIDDEN_TOP_N:]
+    """guest용: 상위 10명은 이름·소속 마스킹, 순위·점수·메달은 유지 (전체 반환)"""
+    return rankings  # 전체 반환, 블러 처리는 RankingEntry 생성 후 적용
+
+
+def blur_ranking_entries(entries: list, count: int = RANKINGS_HIDDEN_TOP_N) -> list:
+    """RankingEntry 리스트에서 상위 N개의 이름·소속을 마스킹"""
+    for i, entry in enumerate(entries):
+        if i < count:
+            entry.name = "????"
+            entry.display_name = "????"
+            entry.teams = ["????"]
+            entry.display_teams = ["????"]
+            entry.blurred = True
+    return entries
 
 
 # =============================================

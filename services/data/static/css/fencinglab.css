@@ -873,3 +873,223 @@
         gap: 6px;
     }
 }
+
+/* ==================== LIGHT THEME (Toss-style) ==================== */
+[data-theme="light"] {
+    --fl-bg-primary: #ffffff;
+    --fl-bg-secondary: #f5f5f7;
+    --fl-bg-card: #ffffff;
+    --fl-bg-card-hover: #f9f9fb;
+    --fl-text-primary: #191f28;
+    --fl-text-secondary: #4e5968;
+    --fl-text-muted: #8b95a1;
+    --fl-accent-green: #059669;
+    --fl-accent-green-dim: rgba(5, 150, 105, 0.08);
+    --fl-accent-blue: #1e3a8a;
+    --fl-accent-blue-dim: rgba(30, 58, 138, 0.08);
+    --fl-accent-red: #c9302c;
+    --fl-accent-yellow: #d97706;
+    --fl-border: #e5e8eb;
+    --fl-glow-green: none;
+    --fl-glow-blue: none;
+}
+
+[data-theme="light"] .fencinglab-container {
+    background: #ffffff;
+}
+
+[data-theme="light"] .fl-player-card {
+    background: #ffffff;
+    border-color: #e5e8eb;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+}
+
+[data-theme="light"] .fl-player-card:hover {
+    background: #f9f9fb;
+    border-color: #059669;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+}
+
+[data-theme="light"] .fl-stat-item {
+    background: #f5f5f7;
+}
+
+[data-theme="light"] .fl-stat-value {
+    text-shadow: none;
+}
+
+[data-theme="light"] .fl-insight-card {
+    background: #f5f5f7;
+}
+
+[data-theme="light"] .fl-history-container {
+    background: #ffffff;
+    border: 1px solid #e5e8eb;
+}
+
+[data-theme="light"] .fl-badge {
+    border-color: #e5e8eb;
+}
+
+/* Header & text */
+[data-theme="light"] .fl-header {
+    color: #191f28;
+}
+
+[data-theme="light"] .fl-logo {
+    color: #191f28;
+}
+
+[data-theme="light"] .fl-logo span {
+    color: #059669;
+    text-shadow: none;
+}
+
+[data-theme="light"] .fl-subtitle {
+    color: #4e5968;
+}
+
+/* Text utility classes */
+[data-theme="light"] .fl-text-primary {
+    color: #191f28 !important;
+}
+
+[data-theme="light"] .fl-text-secondary {
+    color: #4e5968 !important;
+}
+
+[data-theme="light"] .fl-text-muted {
+    color: #8b95a1 !important;
+}
+
+/* Player info */
+[data-theme="light"] .fl-player-name {
+    color: #191f28;
+}
+
+[data-theme="light"] .fl-player-team {
+    color: #4e5968;
+}
+
+[data-theme="light"] .fl-player-avatar {
+    background: linear-gradient(135deg, #059669, #1e3a8a);
+}
+
+/* Stats */
+[data-theme="light"] .fl-stat-value {
+    color: #191f28;
+    text-shadow: none;
+}
+
+[data-theme="light"] .fl-stat-label {
+    color: #8b95a1;
+}
+
+/* Section titles */
+[data-theme="light"] .fl-section-title {
+    color: #191f28;
+}
+
+/* Bars */
+[data-theme="light"] .fl-percent-bar {
+    background: #f0f0f5;
+}
+
+[data-theme="light"] .fl-bar-track {
+    background: #f0f0f5;
+}
+
+[data-theme="light"] .fl-bar-label {
+    color: #4e5968;
+}
+
+[data-theme="light"] .fl-bar-value {
+    color: #191f28;
+}
+
+/* Insight card extra */
+[data-theme="light"] .fl-insight-card h4 {
+    color: #191f28;
+}
+
+[data-theme="light"] .fl-insight-card p {
+    color: #4e5968;
+}
+
+/* Chart container */
+[data-theme="light"] .fl-chart-container {
+    background: #ffffff;
+    border: 1px solid #e5e8eb;
+    border-radius: 12px;
+}
+
+/* CTA link */
+[data-theme="light"] .fl-cta-link,
+[data-theme="light"] .fl-view-link {
+    color: #c9302c;
+}
+
+[data-theme="light"] .fl-cta-link:hover,
+[data-theme="light"] .fl-view-link:hover {
+    color: #a02320;
+}
+
+/* Demo section (landing page) */
+[data-theme="light"] .fl-demo-title h2 {
+    color: #191f28;
+}
+
+[data-theme="light"] .fl-demo-title h2 span {
+    color: #059669;
+}
+
+[data-theme="light"] .fl-demo-title p {
+    color: #4e5968;
+}
+
+[data-theme="light"] .fl-demo-link {
+    background: #c9302c;
+    color: #ffffff;
+}
+
+[data-theme="light"] .fl-demo-link:hover {
+    background: #a02320;
+    box-shadow: 0 4px 12px rgba(201, 48, 44, 0.3);
+}
+
+[data-theme="light"] .fl-demo-card {
+    background: #ffffff;
+    border-color: #e5e8eb;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+[data-theme="light"] .fl-demo-card:hover {
+    border-color: #059669;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+}
+
+[data-theme="light"] .fl-demo-stats {
+    background: #f5f5f7;
+}
+
+[data-theme="light"] .fl-demo-stats .fl-stat .value {
+    color: #191f28;
+}
+
+[data-theme="light"] .fl-demo-stats .fl-stat .value.green {
+    color: #059669;
+}
+
+[data-theme="light"] .fl-demo-stats .fl-stat .label {
+    color: #8b95a1;
+}
+
+[data-theme="light"] .fl-demo-badge {
+    background: #f5f5f7;
+    color: #4e5968;
+}
+
+[data-theme="light"] .fl-demo-badge.strong {
+    background: rgba(5, 150, 105, 0.08);
+    color: #059669;
+}

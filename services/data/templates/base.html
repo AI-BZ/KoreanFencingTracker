@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="{{ lang|default('ko') }}">
+<html lang="{{ lang|default('ko') }}" data-theme="{{ theme|default('dark') }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -25,16 +25,22 @@
     {% endif %}
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 
-    <link rel="stylesheet" href="/static/css/dark-theme.css?v=20250113">
-    <link rel="stylesheet" href="/static/css/components.css?v=20250113">
+    <!-- theme-color (브라우저 주소창 색상) -->
+    <meta name="theme-color" content="{% if theme == 'light' %}#ffffff{% else %}#0a0a0f{% endif %}">
+
+    <!-- shared-ui 디자인 토큰 (light/dark 테마 변수 포함) -->
+    <link rel="stylesheet" href="/static/css/variables.css?v=20260603">
+    <link rel="stylesheet" href="/static/css/dark-theme.css?v=20260614">
+    <link rel="stylesheet" href="/static/css/components.css?v=20260613">
+    <link rel="stylesheet" href="/static/css/mobile-ux.css?v=20260614">
     {% block extra_css %}{% endblock %}
     <style>
     .lang-switcher { position: relative; }
-    .lang-current { background: transparent; border: 1px solid rgba(255,255,255,0.3); color: white; padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; }
-    .lang-dropdown { display: none; position: absolute; right: 0; top: 100%; margin-top: 4px; background: #1a1a2e; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; min-width: 140px; z-index: 1000; overflow: hidden; }
+    .lang-current { background: transparent; border: 1px solid var(--fm-border-light, rgba(255,255,255,0.3)); color: var(--fm-text-primary, white); padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+    .lang-dropdown { display: none; position: absolute; right: 0; top: 100%; margin-top: 4px; background: var(--fm-bg-secondary, #1a1a2e); border: 1px solid var(--fm-border, rgba(255,255,255,0.15)); border-radius: 8px; min-width: 140px; z-index: 1000; overflow: hidden; }
     .lang-dropdown.show { display: block; }
-    .lang-option { display: block; padding: 8px 16px; color: #ccc; text-decoration: none; font-size: 13px; transition: background 0.2s; }
-    .lang-option:hover { background: rgba(255,255,255,0.1); color: white; }
+    .lang-option { display: block; padding: 8px 16px; color: var(--fm-text-secondary, #ccc); text-decoration: none; font-size: 13px; transition: background 0.2s; }
+    .lang-option:hover { background: var(--fm-bg-card-hover, rgba(255,255,255,0.1)); color: var(--fm-text-primary, white); }
     .lang-option.active { color: #6c5ce7; font-weight: 600; }
     </style>
     <script>
@@ -44,14 +50,39 @@
     function _tr_comp(name) { return window.__comp_names[name] || name; }
     function _tr_event(name) {
         if (!name) return name;
+        // Fix missing closing parens
+        var open=name.split('(').length-1, close=name.split(')').length-1;
+        if(open>close) name+=')'.repeat(open-close);
         var g={'여':_t('여')||"Women's",'남':_t('남')||"Men's",'혼성':_t('혼성')||'Mixed'};
         var l={'초':_t('초등학교')||'Elementary','중':_t('중학교')||'Middle School','고':_t('고등학교')||'High School','대':_t('대학교')||'University','실':_t('실업팀')||'Professional','일':_t('일반부')||'Open'};
-        var w={'플뢰레':_t('플뢰레')||'Foil','에뻬':_t('에페')||'Epee','에페':_t('에페')||'Epee','사브르':_t('사브르')||'Sabre'};
-        var tp={'개':_t('개인전')||'Individual','단':_t('단체전')||'Team'};
-        var m=name.match(/^(여|남|혼성)(초|중|고|대|실|일)\s+(플뢰레|에뻬|에페|사브르)\((\S)\)/);
-        if(m) return (g[m[1]]||m[1])+' '+(l[m[2]]||m[2])+' '+(w[m[3]]||m[3])+' '+(tp[m[4]]||m[4]);
-        var m2=name.match(/^(여자|남자)\s+(플뢰레|에뻬|에페|사브르)\((개인|단체)\)/);
-        if(m2){var gk=m2[1][0];return (g[gk]||m2[1])+' '+(w[m2[2]]||m2[2])+' '+(m2[3]==='개인'?tp['개']:tp['단']);}
+        var W='플뢰레|에뻬|에페|플러레|플러러|사브르';
+        var w={'플뢰레':_t('플뢰레')||'Foil','에뻬':_t('에페')||'Epee','에페':_t('에페')||'Epee','플러레':_t('플뢰레')||'Foil','플러러':_t('플뢰레')||'Foil','사브르':_t('사브르')||'Sabre'};
+        var tp={'개':_t('개인전')||'Individual','단':_t('단체전')||'Team','개인':_t('개인전')||'Individual','단체':_t('단체전')||'Team','개인전':_t('개인전')||'Individual','단체전':_t('단체전')||'Team'};
+        var ll={'초등부':'초','초등':'초','중등부':'중','중학부':'중','고등부':'고','고교부':'고','대학부':'대','실업부':'실','일반부':'일','엘리트부':'일','시니어':'일'};
+        // 1) Compact: "여중 에뻬(개)" or "남초 플러레(개)(1-3학년)"
+        var m=name.match(new RegExp('^(여|남|혼성)(초|중|고|대|실|일)\\s+('+W+')(?:\\(([개단])\\))?(?:\\((\\d+[~-]\\d+)학년\\))?$'));
+        if(m){var r1=(g[m[1]]||m[1])+' '+(l[m[2]]||m[2]);if(m[5])r1+=' Grade '+m[5].replace('~','-');r1+=' '+(w[m[3]]||m[3]);if(m[4])r1+=' '+(tp[m[4]]||m[4]);return r1;}
+        // 2) Age-under: "17세이하부 남자 사브르(개)"
+        var m2=name.match(new RegExp('^(\\d+)세이하부\\s+(남자?|여자?|혼성)\\s+('+W+')(?:\\(([개단](?:인|체)?(?:전)?)\\))?$'));
+        if(m2){var gk2=m2[2].replace('자','');return 'U'+m2[1]+' '+(g[gk2]||m2[2])+' '+(w[m2[3]]||m2[3])+(m2[4]?' '+(tp[m2[4]]||m2[4]):'');}
+        // 3) Elem with grade: "초등부(1-3학년) 남자 사브르(개)" or "초등부 1(1~3학년) 남자 플러레"
+        var m3=name.match(new RegExp('^초등부\\s*\\d?\\(?(\\d+[~-]\\d+)학년\\)\\s+(남자?|여자?|혼성)\\s+('+W+')(?:\\(([개단](?:인|체)?(?:전)?)\\))?$'));
+        if(m3){var gk3=m3[2].replace('자','');var gr=m3[1].replace('~','-');return (g[gk3]||m3[2])+' '+(l['초']||'Elementary')+' Grade '+gr+' '+(w[m3[3]]||m3[3])+(m3[4]?' '+(tp[m3[4]]||m3[4]):'');}
+        // 3b) Level with age: "엘리트부(만40세이상) 남자 플러레"
+        var m3b=name.match(new RegExp('^(엘리트부|일반부|시니어)\\(만?(\\d+)세이상\\)\\s+(남자?|여자?|혼성)\\s+('+W+')(?:\\(([개단](?:인|체)?(?:전)?)\\))?$'));
+        if(m3b){var gk3b=m3b[3].replace('자','');var lk3b=ll[m3b[1]]||'일';return m3b[2]+'+ '+(g[gk3b]||m3b[3])+' '+(l[lk3b]||'Open')+' '+(w[m3b[4]]||m3b[4])+(m3b[5]?' '+(tp[m3b[5]]||m3b[5]):'');}
+        // 4) Level-first: "고등부 남자 사브르(개)"
+        var m4=name.match(new RegExp('^(초등[저중고]?부?|중등부?|중학부?|고등부?|고교부?|대학부?|일반부?|실업부?|엘리트부?|시니어)\\s+(남자?|여자?|혼성)\\s+('+W+')(?:\\(([개단](?:인|체)?(?:전)?)\\))?$'));
+        if(m4){var gk4=m4[2].replace('자','');var lk4=ll[m4[1]]||'';return (g[gk4]||m4[2])+' '+(l[lk4]||m4[1])+' '+(w[m4[3]]||m4[3])+(m4[4]?' '+(tp[m4[4]]||m4[4]):'');}
+        // 5) Full: "남자 중등부 에뻬 개인전"
+        var m5=name.match(new RegExp('^(남자?|여자?|혼성)\\s+(초등[저중고]?부?|중등부?|중학부?|고등부?|고교부?|대학부?|일반부?|실업부?|엘리트부?|시니어)\\s+('+W+')(?:\\s+(개인전?|단체전?))?'));
+        if(m5){var gk5=m5[1].replace('자','');var lk5=ll[m5[2]]||'';return (g[gk5]||m5[1])+' '+(l[lk5]||m5[2])+' '+(w[m5[3]]||m5[3])+(m5[4]?' '+(tp[m5[4]]||m5[4]):'');}
+        // 6) Long weapon+type: "남자 플뢰레(개인)"
+        var m6=name.match(new RegExp('^(여자|남자|혼성)\\s+('+W+')\\(([개단](?:인|체)?(?:전)?)\\)'));
+        if(m6){var gk6=m6[1].replace('자','');return (g[gk6]||m6[1])+' '+(w[m6[2]]||m6[2])+' '+(tp[m6[3]]||m6[3]);}
+        // 7) International: "U13 남자 에뻬"
+        var m7=name.match(new RegExp('^(U\\d+)\\s+(남자?|여자?|혼성)\\s+('+W+')'));
+        if(m7){var gk7=m7[2].replace('자','');return m7[1]+' '+(g[gk7]||m7[2])+' '+(w[m7[3]]||m7[3]);}
         return name;
     }
     </script>
@@ -65,7 +96,7 @@
     <nav class="navbar">
         <div class="container">
             <a href="/{{ lang|default('ko') }}/" class="logo">
-                <img src="/static/images/logo/FencingMind_logo_long_Tracker.png"
+                <img src="/static/images/logo/FencingMind_logo_long_Tracker{% if theme == 'dark' %}_white{% endif %}.png"
                      alt="FencingMind Tracker"
                      class="logo-img">
             </a>
@@ -82,7 +113,7 @@
             <div class="search-box">
                 <input type="text" id="global-search" placeholder="{{ _t('선수 또는 팀 검색...') }}">
             </div>
-            <!-- Language Switcher -->
+            <!-- Language Switcher (desktop) -->
             <div class="lang-switcher">
                 <button class="lang-current" id="langToggle">{{ lang|upper }}</button>
                 <div class="lang-dropdown" id="langDropdown">
@@ -94,8 +125,55 @@
                     {% endfor %}
                 </div>
             </div>
+            <!-- Hamburger (mobile) -->
+            <button class="hamburger-btn" onclick="toggleMobileMenu()" aria-label="Menu">
+                <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+            </button>
         </div>
     </nav>
+
+    <!-- Mobile Menu Overlay -->
+    <div class="mobile-menu-backdrop" id="mobileMenuBackdrop" onclick="closeMobileMenu()"></div>
+    <div class="mobile-menu-overlay" id="mobileMenuOverlay">
+        <div class="mobile-menu-header">
+            <img src="/static/images/logo/FencingMind_logo_long_Tracker{% if theme == 'dark' %}_white{% endif %}.png" alt="FencingMind" style="max-height:24px;">
+            <button class="mobile-menu-close" onclick="closeMobileMenu()">&times;</button>
+        </div>
+        <div class="mobile-menu-links">
+            <a href="/{{ lang|default('ko') }}/">
+                <svg viewBox="0 0 24 24"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0h4"/></svg>
+                {{ _t('검색') }}
+            </a>
+            <a href="/{{ lang|default('ko') }}/competitions">
+                <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                {{ _t('대회 목록') }}
+            </a>
+            <a href="/{{ lang|default('ko') }}/rankings">
+                <svg viewBox="0 0 24 24"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6m8 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0h6m2 0V5a2 2 0 012-2h2a2 2 0 012 2v14"/></svg>
+                {{ _t('랭킹') }}
+            </a>
+            <a href="/{{ lang|default('ko') }}/selection/kkumnamu/summary">
+                <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                {{ _t('선발 포인트') }}
+            </a>
+            <a href="/{{ lang|default('ko') }}/fencinglab">
+                <svg viewBox="0 0 24 24"><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+                FencingLab
+            </a>
+        </div>
+        <div class="mobile-menu-divider"></div>
+        <div class="mobile-menu-lang">
+            <div class="mobile-menu-lang-label">Language</div>
+            <div class="mobile-menu-lang-grid">
+                {% for switch_lang in supported_langs|default(['ko', 'en']) %}
+                <a href="/{{ switch_lang }}{{ request.url.path|replace('/' ~ lang, '')|default('/') }}"
+                   class="{% if switch_lang == lang %}active{% endif %}">
+                    {{ lang_names[switch_lang]|default(switch_lang|upper) }}
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
 
     <main class="main-content">
         {% block content %}{% endblock %}
@@ -185,6 +263,32 @@
         document.getElementById('langDropdown')?.classList.remove('show');
     });
     </script>
+    <!-- Mobile Bottom Navigation -->
+    <nav class="mobile-bottom-nav" id="mobileBottomNav">
+        <a href="/{{ lang|default('ko') }}/" class="bnav-item" data-page="home">
+            <svg viewBox="0 0 24 24"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0h4"/></svg>
+            <span class="bnav-label">{{ _t('홈') }}</span>
+        </a>
+        <a href="/{{ lang|default('ko') }}/rankings" class="bnav-item" data-page="rankings">
+            <svg viewBox="0 0 24 24"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6m8 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0h6"/></svg>
+            <span class="bnav-label">{{ _t('랭킹') }}</span>
+        </a>
+        <a href="/{{ lang|default('ko') }}/competitions" class="bnav-item" data-page="competitions">
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+            <span class="bnav-label">{{ _t('대회') }}</span>
+        </a>
+        <a href="/{{ lang|default('ko') }}/" class="bnav-item" data-page="search">
+            <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+            <span class="bnav-label">{{ _t('검색') }}</span>
+        </a>
+        <button class="bnav-item" data-page="more" onclick="toggleMobileMenu()">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.5" fill="currentColor" stroke="none"/></svg>
+            <span class="bnav-label">{{ _t('더보기') }}</span>
+        </button>
+    </nav>
+
+    <script src="/static/js/mobile-ux.js?v=20260613"></script>
+    <!-- PWA는 app.fencingmind.ai에서 구현 예정 (CLAUDE.md 참조) -->
     {% block extra_js %}{% endblock %}
 </body>
 </html>

@@ -269,11 +269,59 @@ from app.auth.privacy import mask_korean_name  # → shared_core.privacy.masking
    - 데이터 불일치 → 사용자 신뢰 상실 → 사업 실패
    - 모든 데이터 수정 작업은 파이프라인 전파 검증 필수
 
+5. **대회 최종순위 KFA 일치 검증 (MANDATORY)**
+   - **원칙**: 대회 종료 후 우리 시스템의 최종순위는 반드시 대한펜싱협회(KFA) 공식 순위와 일치해야 한다
+   - **KFA가 진실의 원천**: 최종순위는 KFA 사이트에서 스크래핑한 데이터를 그대로 사용. 자체 계산으로 대체 금지
+   - **자체 계산 허용 조건**: KFA 최종순위가 아직 게시되지 않았거나, 스크래핑 실패한 경우에만 `compute_full_final_rankings()`로 임시 계산. 이 경우 `final_rankings_source: "computed"` 표시 필수
+   - **검증 절차**:
+     1. 대회 종료 + 스크래핑 완료 시, KFA 최종순위와 우리 데이터 비교
+     2. 불일치 발견 시 KFA 데이터로 덮어쓰기 (우리 계산 폐기)
+     3. 불일치 로그 기록 (`validation_logs` 테이블)
+   - **FIE 최종순위 규정 (2026-06 확인 - FencingTime 실제 FIE 대회 결과 기준)**:
+     - 1위, 2위: 결승 결과
+     - **3위 (동률 3T)**: 준결승 패자 2명 — 유일하게 동률 처리되는 순위
+     - **5~8위 (개별)**: 8강 패자 4명, 풀 시드 순으로 개별 순위 (5, 6, 7, 8)
+     - **9~16위 (개별)**: 16강 패자, 풀 시드 순으로 개별 순위
+     - 이하 동일 패턴 (17~32, 33~64 등)
+     - ⚠️ 동률 순위는 3위(3T)만 존재. QF 이하는 모두 시드 기반 개별 순위
+   - **구현 위치**: `server.py: compute_dual_de_final_rankings()`, `data_validator.py`에 R24 규칙 추가 예정
+
 ### 구현 체크리스트
 - [ ] 선수 프로필 수정 시 members 테이블 자동 동기화
 - [ ] 동명이인 분리/병합 시 연관 데이터 재계산
 - [ ] 캐시 무효화 메커니즘 구현
 - [ ] 데이터 변경 로그 기록
+- [ ] R24: 대회 최종순위 KFA 일치 검증 자동화
+
+---
+
+## 🎯🎯🎯 제2원칙: 사용자 선호 우선 (USER-PREFERENCE-FIRST DESIGN) 🎯🎯🎯
+
+**핵심 시나리오**: 학부모가 "내 딸은 에페 중학생리그 선수"라서 온보딩에서 여자/에페/중등을 선택했다면, 우리는 그 사람에게 **여자 에페 중학생리그와 관련된 모든 데이터를 우선적으로** 보여준다.
+
+### 원칙
+1. **리그 중심 필터링**: 사용자가 선택한 무기/성별/나이그룹 조합이 포함된 **모든 대회**의 관련 이벤트를 표시
+2. **다연령 대회 포함**: 국가대표선발대회처럼 여러 나이 리그가 혼합된 대회에서도 해당 무기/성별 이벤트를 표시
+   - 예: 여자 플뢰레 중등부 선택 → 국가대표선발대회의 "여자 플뢰레" 이벤트도 표시
+3. **대회 레벨 불문**: 대회의 레벨(NATIONAL/ELITE/AMATEUR)에 관계없이, 사용자가 선택한 무기/성별에 해당하는 이벤트가 있으면 표시
+4. **연령 필터 유연성**: 국가대표 대회 등 다연령 대회는 나이그룹 필터를 적용하지 않음 (해당 대회는 모든 연령에 해당)
+
+### 구현 규칙
+```
+사용자 선택: weapon=에페, gender=여, age_group=Y14(중등부)
+
+필터링 결과에 포함되는 이벤트:
+✅ 제64회 전국남녀종별대회 → 여중 에페(개) (정확한 매칭)
+✅ 국가대표선발대회 → 여자 에페 (다연령 대회 - 무기/성별 매칭)
+✅ 회장배 → 여자 에페 U13/U17 (U17↔Y14 양방향 매핑)
+❌ 제64회 전국남녀종별대회 → 남중 에페(개) (성별 불일치)
+❌ 제64회 전국남녀종별대회 → 여중 플뢰레(개) (무기 불일치)
+```
+
+### 코드 위치
+- `server.py: api_events()` — 이벤트 필터링 로직
+- `templates/index.html: autoLoadFromPreferences()` — 온보딩 선호 → 필터 적용
+- `static/js/mobile-ux.js: applyPreferencesToHomepage()` — 랭킹 미리보기 적용
 
 ---
 
@@ -292,15 +340,15 @@ from app.auth.privacy import mask_korean_name  # → shared_core.privacy.masking
 - **모든 순위 데이터**: `Supabase > rankings` 테이블
 - **회원 데이터**: `Supabase > members` 테이블
 
-### 📊 현재 Supabase 데이터 현황 (2025-12-22)
+### 📊 현재 Supabase 데이터 현황 (2026-06-06)
 | 테이블 | 데이터 수 | 설명 |
 |--------|----------|------|
-| competitions | 132 | 2019-2025 대회 (익산 포함) |
-| events | 2,500 | 모든 종목 |
-| players | 11,786 | 모든 선수 |
-| rankings | 964 | 최종 순위 |
+| competitions | 132+ | 2019-2026 대회 (스케줄러 자동 수집) |
+| events | 2,500+ | 모든 종목 |
+| players | 11,786+ | 모든 선수 (영문명 번역 포함) |
+| rankings | 964+ | 최종 순위 |
 | members | 11 | 클럽 회원 |
-| organizations | 507 | 팀/클럽/학교 |
+| organizations | 507+ | 팀/클럽/학교 |
 
 ### 🔧 데이터 조회 방법
 ```python
@@ -320,18 +368,39 @@ mcp__supabase__execute_sql("SELECT * FROM players WHERE team_name LIKE '%최병�
 
 ## Project Overview
 대한펜싱협회(fencing.sports.or.kr) 대회 결과 데이터를 수집하여 웹사이트로 제공하는 프로젝트
+- **프로덕션 URL**: https://data.fencingmind.ai
+- **서버**: Mac Studio (Cloudflare Tunnel → nginx:9090 → FastAPI:9071)
+- **스케줄러**: `run_scheduler.py --multichannel` (자동 스크래핑 + 변경 감지)
 
-## Current Status (2025-12-22)
+## Current Status (2026-06-06)
 
 ### Scraping Status
 | 연도 | 상태 | 비고 |
 |------|------|------|
-| 2019~2025 | ✅ 완료 | Supabase에 업로드 완료 |
+| 2019~2026 | ✅ 완료 | Supabase에 업로드 완료, 스케줄러로 자동 수집 |
 | 2018 이전 | ❌ 불필요 | 텍스트 공지 형태만 (디지털 결과 없음) |
 
 ### Database Status
 - **Supabase**: ✅ 모든 데이터 업로드 완료
 - 테이블: competitions, events, players, matches, rankings, scrape_logs, organizations, members, attendance, fees 등
+
+### 구현 완료 기능 요약
+| 기능 | 상태 | 구현 시점 |
+|------|------|----------|
+| 대회/종목/선수 DB | ✅ | 2025-12 |
+| 랭킹 시스템 (무기/성별/나이) | ✅ | 2025-12 |
+| 실시간 선수 검색 (동명이인 처리) | ✅ | 2025-12 |
+| Head-to-Head 상대 전적 | ✅ | 2026-05 |
+| 7개 언어 i18n (ko/en/ja/fr/it/zh/tr) | ✅ | 2026-05 |
+| 선수명 로마자 변환 + 영문명 수정 API | ✅ | 2026-05 |
+| 언어별 테마 분기 (ko/ja/zh→light, en/fr/it/tr→dark) | ✅ | 2026-06 |
+| FencingLab 선수 분석 대시보드 | ✅ | 2026-06 |
+| 모바일 UX (하단 내비, 반응형) | ✅ | 2026-06 |
+| 3단계 접근 제어 (guest/member/verified) | ✅ | 2026-06 |
+| Data Guardian 자동 무결성 검증 | ✅ | 2026-05 |
+| 자동 스크래핑 스케줄러 | ✅ | 2026-05 |
+| 클럽 관리 SaaS (출석/레슨/비용) | ✅ | 2026-01 |
+| PWA 제거 (data 서비스) | ✅ | 2026-06 |
 
 ## Supabase MCP 사용 가이드
 
@@ -382,28 +451,78 @@ database/migrations/
 
 ### Components
 ```
-FencingCommunityDropShipping/
+services/data/
 ├── app/
-│   ├── server.py          # FastAPI 웹 서버
-│   └── ai_chat.py         # AI 검색 기능
+│   ├── server.py              # FastAPI 웹 서버 (146 라우트)
+│   ├── access_control.py      # 3단계 접근 제어 (guest/member/verified)
+│   ├── auth/                  # JWT 인증, OAuth, 역할 기반 접근
+│   ├── club/                  # 클럽 관리 SaaS (출석/레슨/비용)
+│   ├── i18n/                  # 7개 언어 번역 시스템
+│   │   ├── auto_translate.py  # LLM 기반 자동 번역
+│   │   ├── event_translator.py # 펜싱 용어 번역
+│   │   └── translations/     # ko/en/ja/fr/it/zh/tr
+│   ├── player_identity.py     # 동명이인 처리
+│   ├── data_guardian.py       # 데이터 무결성 자동 검증
+│   └── data_validator.py      # 12개 검증 규칙 (R1-R12)
 ├── scraper/
-│   ├── playwright_scraper.py  # Playwright 기반 스크래퍼 (메인)
-│   ├── client.py          # API 클라이언트 (httpx 기반)
-│   └── models.py          # Pydantic 모델
-├── database/
-│   └── supabase_client.py # Supabase 연동
-├── templates/             # Jinja2 HTML 템플릿
-├── static/                # CSS, JS 정적 파일
-└── scheduler/             # 자동 업데이트 스케줄러
+│   ├── full_scraper.py        # 메인 스크래퍼 (Playwright)
+│   ├── client.py              # API 클라이언트
+│   └── backup/                # deprecated 스크래퍼
+├── ranking/                   # 랭킹 계산 엔진
+├── scheduler/                 # 자동 스크래핑 + 변경 감지
+├── templates/                 # 32개 Jinja2 HTML 템플릿
+├── static/
+│   ├── css/                   # 8개 (variables, dark-theme, components, mobile-ux 등)
+│   ├── js/                    # 5개 (main, fencinglab, player-search, mobile-ux 등)
+│   └── images/                # 로고, 파비콘
+└── scripts/                   # 24개 유지보수/관리 스크립트
 ```
 
-### Key Endpoints
-- `/` - 메인 페이지 (대회 목록)
-- `/competition/{event_cd}` - 대회 상세
-- `/search` - 선수 검색
-- `/chat` - AI 검색
-- `/api/competitions` - 대회 목록 API
-- `/api/chat` - AI 채팅 API
+### Key Pages
+| 경로 | 템플릿 | 기능 |
+|------|--------|------|
+| `/` | index.html | 홈 (선수 검색, 필터) |
+| `/{lang}/competitions` | competitions.html | 대회 목록 (정렬/필터) |
+| `/competition/{event_cd}` | competition.html | 대회 상세 (Pool/DE/순위) |
+| `/{lang}/rankings` | rankings.html | 랭킹 (무기/성별/나이 3단 필터) |
+| `/player/{name}` | player_profile.html | 선수 프로필 (통계/이력) |
+| `/player/{name}/h2h/{opponent}` | h2h.html | H2H 상대 전적 |
+| `/fencinglab` | fencinglab.html | 선수 분석 대시보드 (verified only) |
+| `/fencinglab/player/{name}` | fencinglab_player.html | 개별 선수 심층 분석 |
+| `/club/` | dashboard.html | 클럽 관리 대시보드 |
+| `/selection/kkumnamu/summary` | selection pages | 대표선발 포인트 |
+
+### Key API Endpoints (주요 146개 중)
+```
+# 선수/검색
+GET  /api/players/autocomplete        실시간 검색 제안
+GET  /api/player/{name}               선수 프로필
+GET  /api/players/{name}/head-to-head/{opponent}  H2H 전적
+PUT  /api/player/{name}/english-name  영문명 수정
+
+# 대회/종목
+GET  /api/competitions                대회 목록
+GET  /api/competition/{event_cd}      대회 상세
+GET  /api/events                      종목 목록
+
+# 랭킹
+GET  /api/rankings                    필터링 랭킹
+GET  /api/rankings/options            필터 옵션
+
+# FencingLab
+GET  /api/fencinglab/player/{name}    선수 분석 데이터
+GET  /api/fencinglab/demo             비회원 데모 데이터
+
+# 클럽 관리
+POST /api/club/check-in              출석 체크인
+GET  /api/club/members               회원 목록
+POST /api/club/lessons               레슨 생성/관리
+GET  /api/club/accounting/summary    비용 대시보드
+
+# 시스템
+GET  /api/status                     서버 상태
+GET  /api/data/quality               데이터 품질 모니터링
+```
 
 ## Scraper Details
 
@@ -453,6 +572,19 @@ scraper/backup/
 - de_bracket은 있지만 full_bouts 없음
 ```
 
+**Pool 기권(Forfeit/Abandon) 처리 — FIE t.95**
+```
+KFA 사이트 마커:
+- 'A' = Abandon — 해당 선수가 기권
+- 'X' = 상대가 기권 — 해당 bout 미진행
+
+처리 규칙:
+- A/X 셀은 wins/losses에 카운트하지 않음
+- 기권자(is_forfeit: true)는 풀 종합 순위 최하위
+- 기권자와의 bout은 상대 선수 승/패에서 완전 제외
+- pool_calculator, server.py pool_stats 모두 기권 필터링
+```
+
 ### full_scraper.py (메인 스크래퍼)
 - JavaScript 렌더링이 필요한 사이트용 Playwright 기반 스크래퍼
 - 페이지 네비게이션: 클릭 방식 (URL 직접 접근 불가)
@@ -472,9 +604,14 @@ python scraper/full_scraper.py --competition-id 123
 
 ## Server Configuration
 ```
-프로덕션 포트: 9071 (Cloudflare Tunnel → nginx:9090 → FastAPI:9071)
-서브도메인 포트 체계: account=9070, data=9071, club=9072, community=9073~9076
+프로덕션 포트 체계:
+  account.fencingmind.ai  = 9070
+  data.fencingmind.ai     = 9071 (Cloudflare Tunnel → nginx:9090 → FastAPI:9071)
+  club.fencingmind.ai     = 9072
+  NLLB 번역 서버          = 8081
+
 관리 스크립트: bash scripts/fencingmind-server.sh {start|stop|restart|status}
+스케줄러: python scripts/run_scheduler.py start --multichannel
 개발 서버: PYTHONPATH=".:../../packages" python -m uvicorn app.server:app --host 0.0.0.0 --port 9071
 ```
 
@@ -487,12 +624,194 @@ MAX_CONCURRENT_REQUESTS=3
 ```
 
 ## Next Steps
+
+### 완료 항목
 1. [x] ~~JSON 데이터를 Supabase에 업로드~~ (완료 - 2025-12-22)
-2. [ ] 서버 코드를 Supabase 전용으로 수정 (JSON 로드 로직 제거)
-3. [ ] 클럽 관리 기능 완성 (로스터, 출석, 비용)
-4. [ ] 카카오 로그인 연동
-5. [x] ~~7개 언어 i18n UI 번역 시스템~~ (완료 - ko/en/ja/fr/it/zh/tr)
-6. [x] ~~선수명 로마자 변환 + 영문명 수정 API~~ (완료 - 2026-05-21)
+2. [x] ~~서버 코드를 Supabase 전용으로 수정~~ (완료 - JSON 로드 로직 제거됨)
+3. [x] ~~클럽 관리 기능 구현~~ (완료 - 출석/레슨/비용/대회참가)
+4. [x] ~~7개 언어 i18n UI 번역 시스템~~ (완료 - 2026-05-18, ko/en/ja/fr/it/zh/tr)
+5. [x] ~~선수명 로마자 변환 + 영문명 수정 API~~ (완료 - 2026-05-21)
+6. [x] ~~H2H 상대 전적 페이지~~ (완료 - 2026-05-25)
+7. [x] ~~언어별 테마 분기 (ko/ja/zh → light, en/fr/it/tr → dark)~~ (완료 - 2026-06-04)
+8. [x] ~~FencingLab 선수 분석 대시보드~~ (완료 - 2026-06)
+9. [x] ~~모바일 UX (하단 내비, 반응형)~~ (완료 - 2026-06)
+10. [x] ~~3단계 접근 제어 (guest/member/verified)~~ (완료 - 2026-06)
+11. [x] ~~Data Guardian 자동 무결성 검증~~ (완료 - 2026-05-13)
+12. [x] ~~자동 스크래핑 스케줄러 + 변경 감지~~ (완료 - 2026-05)
+13. [x] ~~PWA 제거 (data 서비스)~~ (완료 - 2026-06-04, app 서비스로 이동 예정)
+
+### 진행 예정 (data 서비스)
+14. [ ] 카카오 로그인 연동 (OAuth)
+15. [ ] 대표선발 포인트 시스템 고도화 (꿈나무/선수)
+16. [ ] 2026 신규 대회 데이터 지속 수집 (스케줄러 운영)
+
+### 진행 예정 (다른 서비스)
+17. [ ] PWA 구현 → app.fencingmind.ai (아래 PWA 계획 참조)
+18. [ ] app.fencingmind.ai SaaS 플랫폼 개발
+19. [ ] community.fencingmind.ai 커뮤니티
+20. [ ] shop.fencingmind.ai 드롭쉬핑
+21. [ ] blog.fencingmind.ai 콘텐츠
+22. [ ] analytics.fencingmind.ai AI 경기 분석
+
+---
+
+## 📱 PWA (Progressive Web App) 구현 계획
+
+### 현재 상태 (2026-06-04)
+- data 서비스에서 **PWA 제거 완료** — manifest.json, sw.js 참조 삭제
+- 이유: CSS 자주 변경 중 → Service Worker 캐시가 업데이트 방해, 푸시 알림 미사용
+- `static/manifest.json`, `static/sw.js` 파일은 참조만 제거 (파일 자체는 잔류)
+
+### 구현 위치
+- **메인 PWA**: `app.fencingmind.ai` (SaaS 플랫폼) — `feature/app/*` 워크트리
+- **data 서비스 연동**: 대회 알림 등은 data → app 간 API로 연동
+
+### PWA 핵심 기능 (app 서비스)
+
+#### 1. 푸시 알림 (Push Notifications)
+| 알림 유형 | 발신 서비스 | 대상 |
+|----------|-----------|------|
+| 대회 일정 알림 | **data** → app | 선수/학부모 |
+| 대회 결과 알림 | **data** → app | "내 선수" 즐겨찾기 사용자 |
+| 랭킹 변동 알림 | **data** → app | 선수 본인/코치 |
+| 수업 알림 (5분 전) | **app** 자체 | 학생/학부모 |
+| 출석 알림 (미체크인) | **app** 자체 | 학생/학부모 |
+| 비용 청구/납부 알림 | **app** 자체 | 학부모 |
+
+#### 2. 홈화면 설치
+- app.fencingmind.ai 접속 → "홈 화면에 추가" 프롬프트
+- 아이콘: FencingMind 로고
+- standalone 모드 (주소창 없는 앱 느낌)
+
+#### 3. 오프라인 지원
+- 클럽 로스터, 수업 일정 → 오프라인 캐시
+- 출석 체크인 → 오프라인 큐 → 온라인 복귀 시 동기화
+
+#### 4. data ↔ app 알림 파이프라인
+```
+[data 서비스]                    [app 서비스]
+대회 결과 수집 완료               구독자 목록 조회
+    → POST /api/notifications     → 푸시 알림 발송
+      {type: "result",            → 카카오 알림톡 발송
+       competition_id,
+       player_ids: [...]}
+
+랭킹 재계산 완료
+    → POST /api/notifications
+      {type: "ranking_change",
+       player_id, old_rank, new_rank}
+```
+
+### 구현 순서
+1. **카카오 로그인** (선수 식별 필수) → `feature/app/auth`
+2. **알림 구독 시스템** (FCM 또는 Web Push API) → `feature/app/notifications`
+3. **data → app 알림 API** → `feature/shared/notifications`
+4. **manifest.json + Service Worker** → `feature/app/pwa`
+5. **오프라인 지원** → `feature/app/offline`
+
+### 기술 스택
+- **Web Push API** + **FCM (Firebase Cloud Messaging)** — 브라우저 푸시
+- **카카오 알림톡** — 카카오 채널 통한 모바일 알림 (한국 사용자)
+- **Service Worker** — 캐싱, 오프라인, 백그라운드 동기화
+- **IndexedDB** — 오프라인 데이터 저장
+
+## 🔒 접근 제어 시스템 (Access Control)
+
+### 3단계 접근 레벨
+| 레벨 | 인증 상태 | 기능 |
+|------|----------|------|
+| **guest** | 미로그인 | 검색 (소속 블러), 상위 10위 랭킹 (이름 블러), 기본 정보 |
+| **member** | 로그인 | 전체 검색, 전체 랭킹, 통계 표시, H2H/FencingLab 숨김 |
+| **verified** | 선수/코치/학부모/감독 | FencingLab, H2H, 민감 분석 등 전체 접근 |
+
+### 구현 파일
+- `app/access_control.py` - 접근 레벨 판정 및 데이터 게이팅
+- `app/auth/` - JWT 인증, 역할 기반 접근 제어
+
+---
+
+## 🔬 FencingLab 선수 분석
+
+### 기능
+- 승률 추이 라인 차트 (히스토리 진행)
+- 경기 통계 (라운드별 승/패)
+- 무기별 분석, 나이그룹별 분석
+- H2H 대진 성적
+- Chart.js 기반 시각화 (다크/라이트 테마 적응)
+
+### 접근 제한
+- verified 회원만 접근 가능
+- 비회원에게는 데모 데이터 제공 (`/api/fencinglab/demo`)
+
+### 관련 파일
+- `templates/fencinglab.html` - 분석 대시보드
+- `templates/fencinglab_player.html` - 개별 선수 심층 분석
+- `static/js/fencinglab.js` - 차트/시각화 로직
+- `static/css/fencinglab.css` - FencingLab 전용 스타일
+
+---
+
+## 🌐 i18n & 테마 시스템
+
+### 지원 언어 (7개)
+| 언어 | 코드 | 기본 테마 |
+|------|------|----------|
+| 한국어 | ko | Light |
+| 영어 | en | Dark |
+| 일본어 | ja | Light |
+| 프랑스어 | fr | Dark |
+| 이탈리아어 | it | Dark |
+| 중국어 | zh | Light |
+| 터키어 | tr | Dark |
+
+### 번역 함수 (Jinja2 템플릿)
+```jinja2
+{{ _t('키') }}              # 정적 번역 (common.json)
+{{ tr_event(name) }}        # 펜싱 용어 번역
+{{ tr_comp(name) }}         # 대회명 번역
+{{ tr_team(name) }}         # 소속 번역 (캐시)
+{{ tr_player(name) }}       # 선수명 로마자 변환 (캐시)
+```
+
+### 선수명 번역 파이프라인
+1. 서버 시작 → `players.translations.en`에서 전체 캐시 로드 (11,786건)
+2. 캐시 히트 → 즉시 반환
+3. 캐시 미스 → LLM 음역 (비동기) → 캐시 갱신
+4. 실패 → 한국어 원문 표시
+
+### 관련 파일
+```
+app/i18n/
+├── __init__.py              # TranslationManager, 미들웨어
+├── auto_translate.py        # LLM 기반 자동 번역
+├── event_translator.py      # 펜싱 용어 매핑
+├── competition_names.py     # 대회명 라이브러리
+├── middleware.py            # 언어/테마 감지
+└── translations/
+    ├── ko/common.json       # 한국어 (기본 언어)
+    ├── en/common.json       # 영어
+    ├── ja/common.json       # 일본어
+    ├── fr/common.json       # 프랑스어
+    ├── it/common.json       # 이탈리아어
+    ├── zh/common.json       # 중국어
+    └── tr/common.json       # 터키어
+```
+
+---
+
+## 📱 모바일 UX
+
+### 구현 사항
+- 하단 내비게이션 바 (56px, 4탭: Home/Rankings/Competitions/Search)
+- iOS 노치 대응 (safe area padding)
+- 터치 친화적 버튼 (최소 48px)
+- 반응형 브레이크포인트: Mobile(<768px), Tablet(768-1024px), Desktop(>1024px)
+
+### 관련 파일
+- `static/css/mobile-ux.css` - 모바일 전용 스타일
+- `static/js/mobile-ux.js` - 햄버거 메뉴, 온보딩, 바텀시트
+
+---
 
 ## Fencing Terminology (용어 체계)
 
@@ -680,6 +999,32 @@ templates/club/
 └── checkin.html        # 학생용 체크인
 ```
 
+## 🎨 디자인 시스템
+
+### CSS 파일 구조
+| 파일 | 용도 |
+|------|------|
+| `variables.css` | 디자인 토큰 (색상, 타이포, 간격) |
+| `dark-theme.css` | 다크 테마 (태극 컬러) |
+| `components.css` | 재사용 컴포넌트 |
+| `fencinglab.css` | FencingLab 전용 |
+| `bracket.css` | DE 대진표 |
+| `mobile-ux.css` | 모바일 반응형 |
+| `player-search.css` | 검색 UI |
+
+### 핵심 디자인 토큰
+```css
+--fm-accent-primary: #c9302c     /* 태극 빨강 */
+--fm-accent-secondary: #1e3a8a   /* 태극 파랑 */
+--fm-medal-gold: #d4a574         /* 금메달 */
+--fm-medal-silver: #9ca3af       /* 은메달 */
+--fm-medal-bronze: #cd7f32       /* 동메달 */
+```
+
+---
+
 ## Important Notes
 - 2019년 이전 데이터는 디지털 형태로 존재하지 않음 (스크래핑 대상 아님)
 - 사이트 구조상 페이지 네비게이션은 클릭으로만 가능 (JavaScript 상태 의존)
+- data 서비스에서 PWA 제거됨 (2026-06-04) — CSS 변경 빈도 높아 Service Worker 캐시 방해
+- 스케줄러는 `--multichannel` 모드로 자동 스크래핑 + Discord 알림 운영 중

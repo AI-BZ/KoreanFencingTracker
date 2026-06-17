@@ -150,12 +150,11 @@ body {
     height: 36px;
     width: auto;
     object-fit: contain;
-    filter: brightness(0) invert(1); /* White logo for dark theme */
     transition: all 0.3s ease;
 }
 
 .logo:hover .logo-img {
-    filter: brightness(0) invert(1) drop-shadow(0 0 8px var(--glow-primary));
+    filter: drop-shadow(0 0 8px var(--glow-primary));
 }
 
 .nav-links {
@@ -928,9 +927,11 @@ body {
     }
 
     .login-btn {
-        padding: 5px 12px;
+        padding: 6px 14px;
         font-size: 0.75rem;
         white-space: nowrap;
+        line-height: 1;
+        height: 28px;
     }
 
     .profile-btn {
@@ -1387,23 +1388,23 @@ body {
    ===================================================== */
 
 /* Ensure all card-like elements use dark semi-transparent backgrounds */
-.stat-card,
-.event-card,
-.filters,
-.competition-header,
-.event-results,
-.search-results,
-.tabs,
-.pool-container,
-.tournament-container,
-.de-match-card,
-.podium-section,
-.podium-box,
-.final-table,
-.stat-card-large,
-.history-section,
-.result-card,
-.strength-card {
+[data-theme="dark"] .stat-card,
+[data-theme="dark"] .event-card,
+[data-theme="dark"] .filters,
+[data-theme="dark"] .competition-header,
+[data-theme="dark"] .event-results,
+[data-theme="dark"] .search-results,
+[data-theme="dark"] .tabs,
+[data-theme="dark"] .pool-container,
+[data-theme="dark"] .tournament-container,
+[data-theme="dark"] .de-match-card,
+[data-theme="dark"] .podium-section,
+[data-theme="dark"] .podium-box,
+[data-theme="dark"] .final-table,
+[data-theme="dark"] .stat-card-large,
+[data-theme="dark"] .history-section,
+[data-theme="dark"] .result-card,
+[data-theme="dark"] .strength-card {
     background: var(--bg-card) !important;
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
@@ -1411,188 +1412,189 @@ body {
 }
 
 /* Override any remaining white backgrounds */
-.tabs {
+[data-theme="dark"] .tabs {
     background: rgba(18, 18, 26, 0.9) !important;
     /* Ensure tabs stay below search autocomplete dropdown */
     position: relative;
     z-index: 50;
 }
 
-.pool-container,
-.tournament-container {
+[data-theme="dark"] .pool-container,
+[data-theme="dark"] .tournament-container {
     background: rgba(18, 18, 26, 0.85) !important;
 }
 
-.de-match-card {
+[data-theme="dark"] .de-match-card {
     background: rgba(26, 26, 37, 0.9) !important;
 }
 
-.podium-section {
+[data-theme="dark"] .podium-section {
     background: rgba(18, 18, 26, 0.8) !important;
 }
 
-.podium-box {
+[data-theme="dark"] .podium-box {
     background: rgba(26, 26, 37, 0.9) !important;
     color: var(--text-primary);
 }
 
 /* Gold/Silver/Bronze podium boxes keep their gradients */
-.podium-place.first .podium-box {
+[data-theme="dark"] .podium-place.first .podium-box {
     background: linear-gradient(135deg, rgba(255, 215, 0, 0.8), rgba(255, 165, 0, 0.8)) !important;
     color: #1a1a25;
 }
 
-.podium-place.second .podium-box {
+[data-theme="dark"] .podium-place.second .podium-box {
     background: linear-gradient(135deg, rgba(192, 192, 192, 0.8), rgba(160, 160, 160, 0.8)) !important;
     color: #1a1a25;
 }
 
-.podium-place.third .podium-box {
+[data-theme="dark"] .podium-place.third .podium-box {
     background: linear-gradient(135deg, rgba(205, 127, 50, 0.8), rgba(139, 69, 19, 0.8)) !important;
     color: white;
 }
 
-.final-table {
+[data-theme="dark"] .final-table {
     background: rgba(18, 18, 26, 0.85) !important;
 }
 
-.final-table th {
+[data-theme="dark"] .final-table th {
     background: var(--accent-primary) !important;
     color: white !important;
 }
 
-.final-table td {
+[data-theme="dark"] .final-table td {
     background: transparent !important;
     border-bottom: 1px solid var(--border-color) !important;
 }
 
-.history-section {
+[data-theme="dark"] .history-section {
     background: rgba(18, 18, 26, 0.85) !important;
 }
 
-.result-card-header {
+[data-theme="dark"] .result-card-header {
     background: rgba(26, 26, 37, 0.9) !important;
 }
 
-.result-card-header:hover {
+[data-theme="dark"] .result-card-header:hover {
     background: rgba(35, 35, 50, 0.95) !important;
 }
 
-.result-card-detail {
+[data-theme="dark"] .result-card-detail {
     background: rgba(18, 18, 26, 0.9) !important;
 }
 
 /* Pool selector and buttons */
-.pool-selector,
-.de-round-tabs {
+[data-theme="dark"] .pool-selector,
+[data-theme="dark"] .de-round-tabs {
     background: rgba(26, 26, 37, 0.85) !important;
 }
 
-.pool-btn,
-.de-round-tab {
+[data-theme="dark"] .pool-btn,
+[data-theme="dark"] .de-round-tab {
     background: rgba(18, 18, 26, 0.9) !important;
     color: var(--text-secondary) !important;
     border: 1px solid var(--border-color) !important;
 }
 
-.pool-btn:hover,
-.de-round-tab:hover {
+[data-theme="dark"] .pool-btn:hover,
+[data-theme="dark"] .de-round-tab:hover {
     border-color: var(--accent-primary) !important;
     color: var(--accent-primary) !important;
 }
 
-.pool-btn.active,
-.de-round-tab.active {
+[data-theme="dark"] .pool-btn.active,
+[data-theme="dark"] .de-round-tab.active {
     background: var(--accent-primary) !important;
     color: white !important;
     border-color: var(--accent-primary) !important;
 }
 
 /* Seeding content */
-.seeding-content {
+[data-theme="dark"] .seeding-content {
     background: rgba(26, 26, 37, 0.85) !important;
 }
 
-.seeding-item {
+[data-theme="dark"] .seeding-item {
     background: rgba(18, 18, 26, 0.9) !important;
     border-color: var(--border-color) !important;
 }
 
 /* Stats summary box */
-.stats-summary-box {
+[data-theme="dark"] .stats-summary-box {
     background: rgba(26, 26, 37, 0.85) !important;
 }
 
 /* Matrix table cells */
-.matrix-table .player-col,
-.matrix-table .team-col,
-.matrix-table .stats-col {
+[data-theme="dark"] .matrix-table .player-col,
+[data-theme="dark"] .matrix-table .team-col,
+[data-theme="dark"] .matrix-table .stats-col {
     background: rgba(26, 26, 37, 0.9) !important;
 }
 
-.matrix-table .self {
+[data-theme="dark"] .matrix-table .self {
     background: rgba(50, 50, 60, 0.9) !important;
 }
 
 /* Result table cells */
-.result-table th {
+[data-theme="dark"] .result-table th {
     background: rgba(26, 26, 37, 0.95) !important;
     color: var(--text-secondary) !important;
 }
 
-.result-table td {
+[data-theme="dark"] .result-table td {
     background: rgba(18, 18, 26, 0.8) !important;
 }
 
 /* Bout and detail items */
-.bout-list-header,
-.bout-detail-item,
-.pool-summary,
-.tournament-progress {
+[data-theme="dark"] .bout-list-header,
+[data-theme="dark"] .bout-detail-item,
+[data-theme="dark"] .pool-summary,
+[data-theme="dark"] .tournament-progress {
     background: rgba(26, 26, 37, 0.85) !important;
 }
 
-.bout-score {
+[data-theme="dark"] .bout-score {
     background: rgba(35, 35, 50, 0.9) !important;
 }
 
 /* Opponent table */
-.opponent-table {
+[data-theme="dark"] .opponent-table {
     background: rgba(18, 18, 26, 0.85) !important;
 }
 
-.opponent-table th {
+[data-theme="dark"] .opponent-table th {
     background: rgba(26, 26, 37, 0.95) !important;
 }
 
-.opponent-detail {
+[data-theme="dark"] .opponent-detail {
     background: rgba(26, 26, 37, 0.85) !important;
 }
 
-.opponent-match-item {
+[data-theme="dark"] .opponent-match-item {
     background: rgba(18, 18, 26, 0.9) !important;
 }
 
 /* =====================================================
    UNIVERSAL DARK CARD OVERRIDE
-   Forces all pages to use consistent dark theme cards
+   Forces dark theme pages to use consistent dark cards
+   SCOPED to [data-theme="dark"] to avoid breaking light theme
    ===================================================== */
 
 /* Global card background override - targets all common card patterns */
-.card,
-.stat-card,
-.player-card,
-.event-card,
-.lesson-card,
-.member-card,
-.competition-card,
-.result-card,
-.info-card,
-.data-card,
-.summary-card,
-.stats-card,
-[class*="-card"],
-[class*="card-"] {
+[data-theme="dark"] .card,
+[data-theme="dark"] .stat-card,
+[data-theme="dark"] .player-card,
+[data-theme="dark"] .event-card,
+[data-theme="dark"] .lesson-card,
+[data-theme="dark"] .member-card,
+[data-theme="dark"] .competition-card,
+[data-theme="dark"] .result-card,
+[data-theme="dark"] .info-card,
+[data-theme="dark"] .data-card,
+[data-theme="dark"] .summary-card,
+[data-theme="dark"] .stats-card,
+[data-theme="dark"] [class*="-card"],
+[data-theme="dark"] [class*="card-"] {
     background: rgba(18, 18, 26, 0.85) !important;
     backdrop-filter: blur(10px) !important;
     -webkit-backdrop-filter: blur(10px) !important;
@@ -1601,31 +1603,31 @@ body {
 }
 
 /* Card headers */
-.card-header,
-[class*="-card-header"],
-[class*="card-header"] {
+[data-theme="dark"] .card-header,
+[data-theme="dark"] [class*="-card-header"],
+[data-theme="dark"] [class*="card-header"] {
     background: rgba(26, 26, 37, 0.95) !important;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
     color: var(--text-primary) !important;
 }
 
 /* Card bodies */
-.card-body,
-[class*="-card-body"],
-[class*="card-body"] {
+[data-theme="dark"] .card-body,
+[data-theme="dark"] [class*="-card-body"],
+[data-theme="dark"] [class*="card-body"] {
     background: transparent !important;
     color: var(--text-primary) !important;
 }
 
 /* Section containers with white backgrounds */
-.section,
-.content-section,
-.main-section,
-.info-section,
-.stats-section,
-.filter-section,
-.search-section,
-.results-section {
+[data-theme="dark"] .section,
+[data-theme="dark"] .content-section,
+[data-theme="dark"] .main-section,
+[data-theme="dark"] .info-section,
+[data-theme="dark"] .stats-section,
+[data-theme="dark"] .filter-section,
+[data-theme="dark"] .search-section,
+[data-theme="dark"] .results-section {
     background: rgba(18, 18, 26, 0.85) !important;
     backdrop-filter: blur(10px) !important;
     -webkit-backdrop-filter: blur(10px) !important;
@@ -1633,42 +1635,42 @@ body {
 }
 
 /* Tables */
-table,
-.data-table,
-.stats-table,
-.result-table,
-.ranking-table {
+[data-theme="dark"] table,
+[data-theme="dark"] .data-table,
+[data-theme="dark"] .stats-table,
+[data-theme="dark"] .result-table,
+[data-theme="dark"] .ranking-table {
     background: transparent !important;
     border-collapse: collapse !important;
 }
 
-table th,
-.data-table th,
-.stats-table th {
+[data-theme="dark"] table th,
+[data-theme="dark"] .data-table th,
+[data-theme="dark"] .stats-table th {
     background: rgba(26, 26, 37, 0.95) !important;
     color: var(--text-secondary) !important;
     border-color: rgba(255, 255, 255, 0.08) !important;
 }
 
-table td,
-.data-table td,
-.stats-table td {
+[data-theme="dark"] table td,
+[data-theme="dark"] .data-table td,
+[data-theme="dark"] .stats-table td {
     background: rgba(18, 18, 26, 0.5) !important;
     color: var(--text-primary) !important;
     border-color: rgba(255, 255, 255, 0.05) !important;
 }
 
-table tr:hover td {
+[data-theme="dark"] table tr:hover td {
     background: rgba(26, 26, 37, 0.7) !important;
 }
 
 /* Remove table borders for cleaner look */
-table,
-table th,
-table td,
-.data-table,
-.data-table th,
-.data-table td {
+[data-theme="dark"] table,
+[data-theme="dark"] table th,
+[data-theme="dark"] table td,
+[data-theme="dark"] .data-table,
+[data-theme="dark"] .data-table th,
+[data-theme="dark"] .data-table td {
     border: none !important;
 }
 
@@ -1681,8 +1683,8 @@ table td,
 }
 
 /* FencingLab player cards */
-.fl-player-card,
-.fl-player-preview {
+[data-theme="dark"] .fl-player-card,
+[data-theme="dark"] .fl-player-preview {
     background: rgba(18, 18, 26, 0.85) !important;
     backdrop-filter: blur(10px) !important;
     -webkit-backdrop-filter: blur(10px) !important;
@@ -1690,132 +1692,133 @@ table td,
 }
 
 /* Autocomplete and dropdown */
-.autocomplete-dropdown,
-.autocomplete-results,
-.dropdown-menu,
-.search-results {
+[data-theme="dark"] .autocomplete-dropdown,
+[data-theme="dark"] .autocomplete-results,
+[data-theme="dark"] .dropdown-menu,
+[data-theme="dark"] .search-results {
     background: rgba(18, 18, 26, 0.95) !important;
     border: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
 
-.autocomplete-item,
-.autocomplete-item:hover,
-.dropdown-item,
-.dropdown-item:hover {
+[data-theme="dark"] .autocomplete-item,
+[data-theme="dark"] .autocomplete-item:hover,
+[data-theme="dark"] .dropdown-item,
+[data-theme="dark"] .dropdown-item:hover {
     background: rgba(26, 26, 37, 0.9) !important;
     color: var(--text-primary) !important;
 }
 
-.autocomplete-item:hover,
-.dropdown-item:hover {
+[data-theme="dark"] .autocomplete-item:hover,
+[data-theme="dark"] .dropdown-item:hover {
     background: rgba(201, 48, 44, 0.2) !important;
 }
 
 /* Forms and inputs */
-input,
-textarea,
-select {
+[data-theme="dark"] input,
+[data-theme="dark"] textarea,
+[data-theme="dark"] select {
     background: rgba(26, 26, 37, 0.9) !important;
     color: var(--text-primary) !important;
     border: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
 
-input:focus,
-textarea:focus,
-select:focus {
+[data-theme="dark"] input:focus,
+[data-theme="dark"] textarea:focus,
+[data-theme="dark"] select:focus {
     border-color: var(--accent-primary) !important;
     outline: none !important;
     box-shadow: 0 0 0 2px rgba(201, 48, 44, 0.2) !important;
 }
 
-input::placeholder,
-textarea::placeholder {
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder {
     color: var(--text-muted) !important;
 }
 
 /* Buttons - preserve accent colors but ensure dark backgrounds */
-.btn,
-button:not(.filter-btn):not(.active) {
+[data-theme="dark"] .btn,
+[data-theme="dark"] button:not(.filter-btn):not(.active) {
     background: rgba(26, 26, 37, 0.9) !important;
     color: var(--text-primary) !important;
     border: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
 
 /* Primary/accent buttons */
-.btn-primary,
-.btn-accent,
-button.primary,
-button[type="submit"] {
+[data-theme="dark"] .btn-primary,
+[data-theme="dark"] .btn-accent,
+[data-theme="dark"] button.primary,
+[data-theme="dark"] button[type="submit"] {
     background: linear-gradient(135deg, var(--accent-primary) 0%, #a02622 100%) !important;
     color: white !important;
     border: none !important;
 }
 
 /* Modal and popup backgrounds */
-.modal,
-.modal-content,
-.popup,
-.popup-content,
-.dialog,
-.dialog-content {
+[data-theme="dark"] .modal,
+[data-theme="dark"] .modal-content,
+[data-theme="dark"] .popup,
+[data-theme="dark"] .popup-content,
+[data-theme="dark"] .dialog,
+[data-theme="dark"] .dialog-content {
     background: rgba(18, 18, 26, 0.98) !important;
     border: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
 
 /* Tags and badges - ensure visibility */
-.tag,
-.badge,
-.label,
-.chip {
+[data-theme="dark"] .tag,
+[data-theme="dark"] .badge,
+[data-theme="dark"] .label,
+[data-theme="dark"] .chip {
     background: rgba(26, 26, 37, 0.9) !important;
     color: var(--text-primary) !important;
     border: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
 
 /* Weapon tags with specific colors */
-.tag-weapon,
-.weapon-tag {
+[data-theme="dark"] .tag-weapon,
+[data-theme="dark"] .weapon-tag {
     background: rgba(212, 165, 116, 0.2) !important;
     color: var(--accent-gold) !important;
     border: 1px solid rgba(212, 165, 116, 0.3) !important;
 }
 
 /* Text colors override */
-h1, h2, h3, h4, h5, h6,
-.title,
-.heading {
+[data-theme="dark"] h1, [data-theme="dark"] h2, [data-theme="dark"] h3,
+[data-theme="dark"] h4, [data-theme="dark"] h5, [data-theme="dark"] h6,
+[data-theme="dark"] .title,
+[data-theme="dark"] .heading {
     color: var(--text-primary) !important;
 }
 
-p,
-.text,
-.description,
-.content {
+[data-theme="dark"] p,
+[data-theme="dark"] .text,
+[data-theme="dark"] .description,
+[data-theme="dark"] .content {
     color: var(--text-secondary) !important;
 }
 
-.muted,
-.subtitle,
-.meta {
+[data-theme="dark"] .muted,
+[data-theme="dark"] .subtitle,
+[data-theme="dark"] .meta {
     color: var(--text-muted) !important;
 }
 
 /* Rankings page specific */
-.rankings-container,
-.rankings-section,
-.ranking-card,
-.ranking-list {
+[data-theme="dark"] .rankings-container,
+[data-theme="dark"] .rankings-section,
+[data-theme="dark"] .ranking-card,
+[data-theme="dark"] .ranking-list {
     background: rgba(18, 18, 26, 0.85) !important;
     backdrop-filter: blur(10px) !important;
     -webkit-backdrop-filter: blur(10px) !important;
 }
 
 /* Club pages specific */
-.club-card,
-.member-list,
-.attendance-card,
-.lesson-list,
-.fee-card {
+[data-theme="dark"] .club-card,
+[data-theme="dark"] .member-list,
+[data-theme="dark"] .attendance-card,
+[data-theme="dark"] .lesson-list,
+[data-theme="dark"] .fee-card {
     background: rgba(18, 18, 26, 0.85) !important;
     backdrop-filter: blur(10px) !important;
     -webkit-backdrop-filter: blur(10px) !important;
@@ -1823,10 +1826,10 @@ p,
 }
 
 /* Auth pages specific */
-.auth-card,
-.login-card,
-.register-card,
-.auth-form {
+[data-theme="dark"] .auth-card,
+[data-theme="dark"] .login-card,
+[data-theme="dark"] .register-card,
+[data-theme="dark"] .auth-form {
     background: rgba(18, 18, 26, 0.9) !important;
     backdrop-filter: blur(15px) !important;
     -webkit-backdrop-filter: blur(15px) !important;
@@ -1834,27 +1837,27 @@ p,
 }
 
 /* Chat page specific */
-.chat-container,
-.chat-messages,
-.chat-input-area,
-.message-item {
+[data-theme="dark"] .chat-container,
+[data-theme="dark"] .chat-messages,
+[data-theme="dark"] .chat-input-area,
+[data-theme="dark"] .message-item {
     background: rgba(18, 18, 26, 0.85) !important;
 }
 
-.message-user {
+[data-theme="dark"] .message-user {
     background: rgba(201, 48, 44, 0.2) !important;
     border: 1px solid rgba(201, 48, 44, 0.3) !important;
 }
 
-.message-assistant {
+[data-theme="dark"] .message-assistant {
     background: rgba(26, 26, 37, 0.9) !important;
     border: 1px solid rgba(255, 255, 255, 0.08) !important;
 }
 
 /* Search page specific */
-.search-container,
-.search-results-container,
-.player-search-card {
+[data-theme="dark"] .search-container,
+[data-theme="dark"] .search-results-container,
+[data-theme="dark"] .player-search-card {
     background: rgba(18, 18, 26, 0.85) !important;
     backdrop-filter: blur(10px) !important;
     -webkit-backdrop-filter: blur(10px) !important;
@@ -1968,4 +1971,419 @@ p,
 
 .no-data-message {
     color: var(--text-muted, #6b6b7b);
+}
+
+/* ==================== LIGHT THEME OVERRIDES (Toss-style) ==================== */
+/* 언어별 테마: ko/ja/zh → light, en/fr/it/tr → dark */
+
+/* --- CSS Variable Overrides --- */
+[data-theme="light"] {
+    --bg-primary: #ffffff;
+    --bg-secondary: #f5f5f7;
+    --bg-tertiary: #f0f0f5;
+    --bg-card: #ffffff;
+    --bg-card-hover: #f9f9fb;
+    --text-primary: #191f28;
+    --text-secondary: #4e5968;
+    --text-muted: #8b95a1;
+    --text-accent: #c9302c;
+    --border-color: #e5e8eb;
+    --border-light: #d1d6db;
+    --glow-primary: transparent;
+    --glow-secondary: transparent;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+    --shadow-lg: 0 8px 24px rgba(0,0,0,0.12);
+    --accent-gold: #1e3a8a;
+    /* Legacy style.css variables → Toss-style mapping */
+    --primary-color: #c9302c;
+    --secondary-color: #4e5968;
+    --accent-color: #c9302c;
+    --text-color: #191f28;
+    --text-light: #8b95a1;
+    --background: #f5f5f7;
+}
+
+/* --- Body & Background --- */
+[data-theme="light"] body {
+    background: #ffffff;
+    color: #191f28;
+}
+
+[data-theme="light"] .parallax-bg { display: none !important; }
+[data-theme="light"] .parallax-overlay { display: none !important; }
+
+[data-theme="light"] .main-content {
+    color: #191f28;
+}
+
+/* --- Navbar --- */
+[data-theme="light"] .navbar {
+    background: rgba(255,255,255,0.92) !important;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid #e5e8eb !important;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+
+[data-theme="light"] .logo-text {
+    background: linear-gradient(135deg, #191f28, #c9302c) !important;
+    -webkit-background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
+}
+
+[data-theme="light"] .logo-icon {
+    filter: none;
+}
+
+[data-theme="light"] .logo:hover .logo-img {
+    filter: none;
+}
+
+[data-theme="light"] .nav-links a {
+    color: #4e5968;
+}
+
+[data-theme="light"] .nav-links a:hover {
+    color: #191f28;
+    background: #f5f5f7;
+    border-color: #e5e8eb;
+}
+
+[data-theme="light"] .search-box input {
+    background: #f5f5f7;
+    color: #191f28;
+    border-color: #e5e8eb;
+}
+
+[data-theme="light"] .search-box input::placeholder {
+    color: #8b95a1;
+}
+
+[data-theme="light"] .search-box input:focus {
+    border-color: #c9302c;
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(201, 48, 44, 0.1);
+}
+
+/* --- Auth Button --- */
+[data-theme="light"] .profile-btn {
+    color: #fff;
+}
+
+/* --- Hero Section --- */
+[data-theme="light"] .hero {
+    background: #ffffff !important;
+    border: 1px solid #e5e8eb !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06) !important;
+    backdrop-filter: none !important;
+    color: #191f28 !important;
+}
+
+[data-theme="light"] .hero h1 {
+    background: linear-gradient(135deg, #191f28, #c9302c) !important;
+    -webkit-background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
+    background-clip: text !important;
+}
+
+[data-theme="light"] .hero p {
+    color: #4e5968 !important;
+    opacity: 1 !important;
+}
+
+/* --- Stat Cards --- */
+[data-theme="light"] .stat-card {
+    background: #ffffff !important;
+    border: 1px solid #e5e8eb !important;
+    backdrop-filter: none !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+[data-theme="light"] .stat-card:hover {
+    box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+    border-color: #d1d6db !important;
+}
+
+[data-theme="light"] .stat-value {
+    color: #c9302c;
+}
+
+[data-theme="light"] .stat-label {
+    color: #8b95a1;
+}
+
+/* --- Cards (generic) --- */
+[data-theme="light"] .event-card,
+[data-theme="light"] .competition-header,
+[data-theme="light"] .event-results,
+[data-theme="light"] .search-results {
+    background: #ffffff !important;
+    border: 1px solid #e5e8eb !important;
+    backdrop-filter: none !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+[data-theme="light"] .event-card:hover {
+    box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+    border-color: #c9302c !important;
+}
+
+/* --- Filters (dark-theme.css) --- */
+[data-theme="light"] .filters {
+    background: #ffffff !important;
+    border: 1px solid #e5e8eb !important;
+    backdrop-filter: none !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+[data-theme="light"] .filter-group label {
+    color: #4e5968;
+}
+
+[data-theme="light"] .filter-group select,
+[data-theme="light"] .filter-group input {
+    background: #f5f5f7 !important;
+    color: #191f28 !important;
+    border-color: #e5e8eb !important;
+}
+
+[data-theme="light"] .filter-group select option {
+    background: #ffffff;
+    color: #191f28;
+}
+
+[data-theme="light"] .filter-group select:focus,
+[data-theme="light"] .filter-group input:focus {
+    box-shadow: 0 0 0 3px rgba(201, 48, 44, 0.1) !important;
+}
+
+/* --- Data Table --- */
+[data-theme="light"] .data-table {
+    background: #ffffff !important;
+    border: 1px solid #e5e8eb !important;
+    backdrop-filter: none !important;
+}
+
+[data-theme="light"] .data-table th {
+    background: #f5f5f7 !important;
+    color: #4e5968 !important;
+    border-color: #e5e8eb !important;
+}
+
+[data-theme="light"] .data-table td {
+    background: transparent !important;
+    color: #191f28 !important;
+    border-color: #f0f0f5 !important;
+}
+
+[data-theme="light"] .data-table tbody tr:hover td {
+    background: #f9f9fb !important;
+}
+
+[data-theme="light"] .comp-name {
+    color: #191f28;
+}
+
+[data-theme="light"] .comp-name:hover {
+    color: #c9302c;
+}
+
+[data-theme="light"] .comp-date {
+    color: #8b95a1;
+}
+
+[data-theme="light"] .comp-events {
+    color: #1e3a8a;
+}
+
+/* --- Result Table --- */
+[data-theme="light"] .result-table th {
+    background: #f5f5f7 !important;
+    color: #4e5968 !important;
+    border-color: #e5e8eb !important;
+}
+
+[data-theme="light"] .result-table td {
+    background: #ffffff !important;
+    color: #191f28 !important;
+    border-color: #f0f0f5 !important;
+}
+
+[data-theme="light"] .result-table .player-name {
+    color: #191f28;
+}
+
+[data-theme="light"] .result-table .rank {
+    color: #c9302c;
+}
+
+[data-theme="light"] .event-results h3 {
+    color: #191f28;
+    border-bottom-color: #e5e8eb;
+}
+
+[data-theme="light"] .pool-header {
+    background: linear-gradient(135deg, #c9302c, #a02320);
+}
+
+/* --- Competition Header --- */
+[data-theme="light"] .competition-header h1 {
+    color: #191f28;
+}
+
+[data-theme="light"] .meta-item {
+    color: #8b95a1;
+}
+
+[data-theme="light"] .meta-item strong {
+    color: #191f28;
+}
+
+/* --- Event Tags (light-friendly) --- */
+[data-theme="light"] .weapon-tag {
+    background: rgba(30, 58, 138, 0.08);
+    color: #1e3a8a;
+    border-color: rgba(30, 58, 138, 0.2);
+}
+
+[data-theme="light"] .gender-tag {
+    background: rgba(219, 39, 119, 0.08);
+    color: #be185d;
+    border-color: rgba(219, 39, 119, 0.15);
+}
+
+[data-theme="light"] .type-tag {
+    background: rgba(139, 92, 246, 0.08);
+    color: #7c3aed;
+    border-color: rgba(139, 92, 246, 0.15);
+}
+
+/* --- Pagination --- */
+[data-theme="light"] .pagination button {
+    background: #ffffff;
+    border-color: #e5e8eb;
+    color: #4e5968;
+}
+
+[data-theme="light"] .pagination button:hover {
+    background: #f5f5f7;
+    color: #191f28;
+    border-color: #d1d6db;
+}
+
+[data-theme="light"] .pagination button.active {
+    background: #c9302c;
+    color: #ffffff;
+    border-color: #c9302c;
+    box-shadow: 0 2px 8px rgba(201, 48, 44, 0.2);
+}
+
+/* --- Breadcrumb --- */
+[data-theme="light"] .breadcrumb {
+    color: #8b95a1;
+}
+
+[data-theme="light"] .breadcrumb a {
+    color: #1e3a8a;
+}
+
+[data-theme="light"] .breadcrumb a:hover {
+    color: #191f28;
+}
+
+/* --- Search Section --- */
+[data-theme="light"] .search-section h1 {
+    color: #191f28;
+}
+
+[data-theme="light"] .search-form input {
+    background: #ffffff;
+    color: #191f28;
+    border-color: #e5e8eb;
+}
+
+[data-theme="light"] .search-form input::placeholder {
+    color: #8b95a1;
+}
+
+[data-theme="light"] .search-form input:focus {
+    border-color: #c9302c;
+    box-shadow: 0 0 0 3px rgba(201, 48, 44, 0.1);
+}
+
+/* --- Events Section --- */
+[data-theme="light"] .events-section h2 {
+    color: #191f28;
+}
+
+[data-theme="light"] .event-name {
+    color: #191f28 !important;
+}
+
+[data-theme="light"] .event-details .weapon-tag,
+[data-theme="light"] .event-details .gender-tag,
+[data-theme="light"] .event-details .type-tag {
+    border: none;
+}
+
+/* --- Footer --- */
+[data-theme="light"] .footer {
+    background: #f5f5f7;
+    color: #4e5968;
+    border-top: 1px solid #e5e8eb;
+}
+
+[data-theme="light"] .footer a {
+    color: #1e3a8a;
+}
+
+/* --- Mobile Bottom Nav --- */
+[data-theme="light"] .mobile-bottom-nav {
+    background: rgba(255,255,255,0.95) !important;
+    border-top: 1px solid #e5e8eb !important;
+    box-shadow: 0 -1px 4px rgba(0,0,0,0.04);
+}
+
+[data-theme="light"] .bnav-item {
+    color: #8b95a1;
+}
+
+[data-theme="light"] .bnav-item.active {
+    color: #c9302c;
+}
+
+/* --- Mobile Menu --- */
+[data-theme="light"] .mobile-menu-overlay {
+    background: #ffffff !important;
+}
+
+[data-theme="light"] .mobile-menu-links a {
+    color: #191f28;
+    border-bottom-color: #f0f0f5;
+}
+
+[data-theme="light"] .mobile-menu-links a svg {
+    stroke: #4e5968;
+}
+
+/* --- Status Badges --- */
+[data-theme="light"] .status-finished {
+    background: rgba(16, 185, 129, 0.08);
+    border-color: rgba(16, 185, 129, 0.2);
+}
+
+[data-theme="light"] .status-ongoing {
+    background: rgba(245, 158, 11, 0.08);
+    border-color: rgba(245, 158, 11, 0.2);
+}
+
+/* --- Scrollbar --- */
+[data-theme="light"] ::-webkit-scrollbar-track {
+    background: #ffffff;
+}
+
+[data-theme="light"] ::-webkit-scrollbar-thumb {
+    background: #d1d6db;
+    border: 2px solid #ffffff;
 }

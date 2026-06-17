@@ -5408,6 +5408,80 @@ body.authenticated .auth-login-prompt {
     text-decoration: underline;
 }
 
+/* Selection Points - Rank Badge */
+.sel-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.sel-card-rank-badge {
+    background: var(--accent-primary, #c9302c);
+    color: #fff;
+    padding: 4px 10px;
+    border-radius: 16px;
+    font-weight: 700;
+    font-size: 0.9rem;
+    white-space: nowrap;
+}
+
+.sel-card-rank-badge small {
+    font-weight: 400;
+    font-size: 0.75rem;
+    opacity: 0.8;
+}
+
+/* Selection Points - Breakdown Table */
+.sel-breakdown-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    margin-top: 0.5rem;
+}
+
+.sel-breakdown-table th {
+    text-align: left;
+    padding: 0.4rem 0.5rem;
+    color: var(--text-secondary, #9ca3af);
+    font-weight: 500;
+    border-bottom: 1px solid var(--border-color, #374151);
+    font-size: 0.75rem;
+}
+
+.sel-breakdown-table td {
+    padding: 0.4rem 0.5rem;
+    border-bottom: 1px solid rgba(55, 65, 81, 0.3);
+}
+
+.sel-pts-col {
+    text-align: right;
+    min-width: 60px;
+}
+
+.sel-total-row {
+    border-top: 2px solid var(--border-color, #374151);
+    font-weight: 600;
+}
+
+.sel-total-row td {
+    padding-top: 0.5rem;
+}
+
+/* Rankings - Blurred Section */
+.ranking-blurred-section {
+    margin-bottom: 0;
+    border-radius: 12px 12px 0 0;
+}
+
+.ranking-blurred-section + .ranking-table-container {
+    border-radius: 0 0 12px 12px;
+}
+
+.ranking-blurred-section .blurred-content .ranking-table {
+    margin-bottom: 0;
+}
+
 /* Mobile Responsive */
 @media (max-width: 640px) {
     .selection-page {
@@ -5534,4 +5608,1614 @@ body.authenticated .auth-login-prompt {
         font-size: 0.85rem;
         padding: 0.4rem 1rem;
     }
+}
+
+/* ==================== LIGHT THEME COMPONENT OVERRIDES (Toss-style) ==================== */
+
+/* --- Player Header --- */
+[data-theme="light"] .player-header {
+    background: #ffffff !important;
+    backdrop-filter: none !important;
+    border: 1px solid #e5e8eb !important;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06) !important;
+    color: #191f28 !important;
+}
+
+[data-theme="light"] .player-name {
+    color: #191f28 !important;
+}
+
+[data-theme="light"] .name-en {
+    color: #8b95a1 !important;
+}
+
+[data-theme="light"] .player-team {
+    color: #4e5968 !important;
+    opacity: 1 !important;
+}
+
+[data-theme="light"] .team-link {
+    color: #1e3a8a !important;
+}
+
+[data-theme="light"] .team-link:hover {
+    color: #c9302c !important;
+}
+
+/* Rating badges */
+[data-theme="light"] .rating-badge {
+    background: #f5f5f7 !important;
+    border: 1px solid #e5e8eb;
+}
+
+[data-theme="light"] .rating-badge.active {
+    background: #c9302c !important;
+    border-color: #c9302c !important;
+    color: #ffffff !important;
+}
+
+[data-theme="light"] .rating-badge.active .rating-value,
+[data-theme="light"] .rating-badge.active .rating-weapon {
+    color: #ffffff !important;
+}
+
+[data-theme="light"] .rating-value {
+    color: #191f28;
+}
+
+[data-theme="light"] .rating-weapon {
+    color: #4e5968;
+}
+
+[data-theme="light"] .rating-date {
+    color: #8b95a1 !important;
+}
+
+/* Team History */
+[data-theme="light"] .team-history-section {
+    border-color: rgba(0,0,0,0.08) !important;
+}
+
+[data-theme="light"] .team-history-title {
+    color: #8b95a1 !important;
+}
+
+[data-theme="light"] .team-history-item .dates {
+    color: #8b95a1 !important;
+}
+
+/* Disambiguation */
+[data-theme="light"] .disambiguation-section {
+    background: #f5f5f7 !important;
+    border-color: #e5e8eb !important;
+}
+
+[data-theme="light"] .disambiguation-header {
+    color: #191f28 !important;
+}
+
+[data-theme="light"] .other-profile-link {
+    color: #1e3a8a !important;
+    border-color: #e5e8eb !important;
+}
+
+[data-theme="light"] .other-profile-link:hover {
+    background: #f5f5f7 !important;
+}
+
+[data-theme="light"] .disambiguation-badge {
+    background: rgba(245, 158, 11, 0.1) !important;
+    color: #d97706 !important;
+}
+
+/* --- Tabs --- */
+[data-theme="light"] .tabs {
+    background: #ffffff !important;
+    border: 1px solid #e5e8eb !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06) !important;
+}
+
+[data-theme="light"] .tab-btn {
+    color: #4e5968 !important;
+}
+
+[data-theme="light"] .tab-btn:hover {
+    background: #f5f5f7 !important;
+    color: #c9302c !important;
+}
+
+[data-theme="light"] .tab-btn.active {
+    background: #c9302c !important;
+    color: #ffffff !important;
+}
+
+/* --- Result Cards --- */
+[data-theme="light"] .result-card {
+    border-color: #e5e8eb !important;
+    background: #ffffff !important;
+}
+
+[data-theme="light"] .result-card-header:hover {
+    background: #f5f5f7 !important;
+}
+
+[data-theme="light"] .result-info .result-date {
+    color: #8b95a1 !important;
+}
+
+[data-theme="light"] .result-info .result-tournament {
+    color: #191f28 !important;
+}
+
+[data-theme="light"] .result-info .result-event {
+    color: #4e5968 !important;
+}
+
+/* --- Access gate --- */
+[data-theme="light"] .access-gate .gate-overlay {
+    background: linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,0.98) 70%) !important;
+}
+
+[data-theme="light"] .gate-overlay p,
+[data-theme="light"] .gate-preview-text {
+    color: #191f28 !important;
+    text-shadow: none !important;
+}
+
+[data-theme="light"] .gate-cta-btn {
+    background: #c9302c !important;
+    color: #ffffff !important;
+    box-shadow: 0 2px 12px rgba(201, 48, 44, 0.2) !important;
+}
+
+[data-theme="light"] .gate-cta-btn:hover {
+    background: #a82824 !important;
+    box-shadow: 0 4px 16px rgba(201, 48, 44, 0.3) !important;
+}
+
+/* Blurred content in light theme */
+[data-theme="light"] .blurred-content {
+    filter: blur(8px) !important;
+}
+
+/* --- Guest preview --- */
+[data-theme="light"] .guest-preview-section h4 {
+    color: #8b95a1;
+}
+
+[data-theme="light"] .info-notice {
+    background: rgba(59, 130, 246, 0.06) !important;
+    color: #1e3a8a !important;
+    border-color: rgba(59, 130, 246, 0.15) !important;
+}
+
+/* --- Hero Stats Bar --- */
+[data-theme="light"] .hero-stats-bar {
+    background: #f5f5f7 !important;
+}
+
+[data-theme="light"] .hero-stat-card {
+    background: #ffffff !important;
+    border-color: #e5e8eb !important;
+}
+
+[data-theme="light"] .hero-stat-value {
+    color: #191f28 !important;
+}
+
+[data-theme="light"] .hero-stat-label {
+    color: #8b95a1 !important;
+}
+
+/* --- International Links --- */
+[data-theme="light"] .external-link {
+    background: #f5f5f7 !important;
+    color: #1e3a8a !important;
+    border-color: #e5e8eb !important;
+}
+
+[data-theme="light"] .external-link:hover {
+    background: #eef0f4 !important;
+}
+
+/* --- Follow Button --- */
+[data-theme="light"] .follow-btn svg {
+    stroke: #8b95a1;
+}
+
+/* --- Selection nav tabs --- */
+[data-theme="light"] .sel-nav-tab {
+    color: #4e5968;
+}
+
+[data-theme="light"] .sel-nav-tab.active {
+    color: #c9302c;
+    border-color: #c9302c;
+}
+
+/* --- Selection Summary Cards --- */
+[data-theme="light"] .sel-card {
+    background: #ffffff !important;
+    border-color: #e5e8eb !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06) !important;
+}
+
+[data-theme="light"] .sel-card-title {
+    color: #191f28 !important;
+}
+
+/* --- Onboarding --- */
+[data-theme="light"] .onboarding-card {
+    background: #ffffff !important;
+    color: #191f28 !important;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.12) !important;
+}
+
+[data-theme="light"] .weapon-gender-card {
+    background: #f5f5f7 !important;
+    color: #191f28 !important;
+    border-color: #e5e8eb !important;
+}
+
+[data-theme="light"] .weapon-gender-card:hover,
+[data-theme="light"] .weapon-gender-card.selected {
+    border-color: #c9302c !important;
+    background: rgba(201,48,44,0.04) !important;
+}
+
+[data-theme="light"] .age-group-choice {
+    background: #f5f5f7 !important;
+    color: #191f28 !important;
+    border-color: #e5e8eb !important;
+}
+
+[data-theme="light"] .age-group-choice:hover,
+[data-theme="light"] .age-group-choice.selected {
+    border-color: #c9302c !important;
+}
+
+/* --- Player Profile: Stat Values (dark text, not red accent) --- */
+[data-theme="light"] .strength-value {
+    color: #191f28;
+}
+
+[data-theme="light"] .pool-stat-value {
+    color: #191f28;
+}
+
+[data-theme="light"] .result-rating {
+    color: #c9302c;
+}
+
+/* --- Strength Tab --- */
+[data-theme="light"] .strength-card {
+    background: #ffffff !important;
+    border: 1px solid #e5e8eb !important;
+    backdrop-filter: none !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+[data-theme="light"] .detail-section h5 {
+    color: #4e5968;
+}
+
+/* --- Opponent Table --- */
+[data-theme="light"] .opponent-table {
+    background: #ffffff !important;
+    border: 1px solid #e5e8eb !important;
+    backdrop-filter: none !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+[data-theme="light"] .opponent-table th {
+    background: #f5f5f7 !important;
+    color: #4e5968;
+}
+
+[data-theme="light"] .opponent-detail {
+    background: #f5f5f7 !important;
+}
+
+[data-theme="light"] .opponent-match-item {
+    background: #ffffff !important;
+    border: 1px solid #f0f0f5;
+}
+
+/* --- History Section & Cards --- */
+[data-theme="light"] .history-section {
+    background: #ffffff !important;
+    border: 1px solid #e5e8eb !important;
+    backdrop-filter: none !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+/* --- History Filters --- */
+[data-theme="light"] .history-filters select {
+    background: #f5f5f7 !important;
+    color: #191f28 !important;
+    border-color: #e5e8eb !important;
+}
+
+[data-theme="light"] .result-card-detail {
+    background: #f5f5f7 !important;
+    border-top-color: #e5e8eb !important;
+}
+
+/* --- Stat Cards & Hero Stats (player profile) --- */
+[data-theme="light"] .stat-card-large {
+    background: #ffffff !important;
+    border: 1px solid #e5e8eb !important;
+    backdrop-filter: none !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+[data-theme="light"] .stat-card-large h4 {
+    color: #8b95a1 !important;
+}
+
+/* --- Medal Panel --- */
+[data-theme="light"] .medal-detail-panel {
+    background: #ffffff !important;
+    border: 1px solid #e5e8eb;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+}
+
+[data-theme="light"] .medal-rank-label {
+    background: #f5f5f7 !important;
+    color: #8b95a1 !important;
+}
+
+[data-theme="light"] .medal-detail-list a {
+    color: #191f28 !important;
+}
+
+[data-theme="light"] .medal-detail-list a:hover {
+    color: #c9302c !important;
+}
+
+/* --- Pool Bouts --- */
+[data-theme="light"] .pool-bouts-content {
+    background: #f5f5f7 !important;
+}
+
+[data-theme="light"] .pool-bouts-header {
+    background: #f0f0f5 !important;
+    color: #191f28 !important;
+}
+
+[data-theme="light"] .pool-bouts-header:hover {
+    background: #e5e8eb !important;
+}
+
+[data-theme="light"] .bout-detail-item {
+    background: #ffffff !important;
+    border: 1px solid #f0f0f5;
+}
+
+[data-theme="light"] .pool-summary {
+    background: #f0f0f5 !important;
+}
+
+[data-theme="light"] .pool-stat-card {
+    background: #f5f5f7 !important;
+}
+
+[data-theme="light"] .pool-touches-info {
+    background: #f0f0f5 !important;
+}
+
+/* --- Analysis Tab --- */
+[data-theme="light"] .analysis-container {
+    background: #ffffff !important;
+    border: 1px solid #e5e8eb !important;
+    backdrop-filter: none !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+[data-theme="light"] .analysis-notice {
+    background: #f5f5f7 !important;
+    color: #4e5968 !important;
+}
+
+/* --- Performance Bars --- */
+[data-theme="light"] .perf-bar-label {
+    color: #191f28 !important;
+}
+
+[data-theme="light"] .perf-bar-track {
+    background: #f0f0f5 !important;
+}
+
+[data-theme="light"] .perf-bar-stat {
+    color: #191f28 !important;
+}
+
+[data-theme="light"] .perf-bar-detail {
+    color: #8b95a1 !important;
+}
+
+/* --- Tournament Progress --- */
+[data-theme="light"] .tournament-progress {
+    background: #f0f0f5 !important;
+}
+
+[data-theme="light"] .progress-step {
+    background: #e5e8eb !important;
+    color: #191f28 !important;
+}
+
+/* --- Result Place badges --- */
+[data-theme="light"] .result-place {
+    background: #f0f0f5 !important;
+}
+
+/* --- Quick Insights --- */
+[data-theme="light"] .rival-name {
+    color: #191f28 !important;
+}
+
+[data-theme="light"] .rival-name:hover {
+    color: #c9302c !important;
+}
+
+[data-theme="light"] .rating-weapon-sm {
+    color: #191f28 !important;
+}
+
+[data-theme="light"] .rating-date-sm {
+    color: #8b95a1 !important;
+}
+
+/* --- Year Pills (Strength tab) --- */
+[data-theme="light"] .year-pill {
+    background: #ffffff;
+    border-color: #e5e8eb;
+    color: #4e5968;
+}
+
+[data-theme="light"] .year-pill:hover {
+    border-color: #c9302c;
+    color: #c9302c;
+}
+
+[data-theme="light"] .year-pill.active {
+    background: #c9302c;
+    color: #ffffff;
+    border-color: #c9302c;
+}
+
+/* --- H2H Link Badge --- */
+[data-theme="light"] .h2h-link {
+    background: #c9302c;
+}
+
+/* --- Date Range Filter --- */
+[data-theme="light"] .date-range-filter {
+    background: #f5f5f7;
+}
+
+[data-theme="light"] .date-range-filter .filter-btn {
+    background: #c9302c;
+}
+
+[data-theme="light"] .date-range-filter .filter-btn:hover {
+    background: #a82824;
+}
+
+/* --- Gate Feature List (guest view) --- */
+[data-theme="light"] .gate-feature-list p {
+    color: #191f28;
+}
+
+[data-theme="light"] .gate-feature-list ul li {
+    color: #4e5968;
+}
+
+[data-theme="light"] .gate-preview-text {
+    color: #4e5968;
+}
+
+/* ==================== Ranking Preview (Homepage) ==================== */
+.ranking-preview-section {
+    margin: 0.5rem 0 1rem;
+    padding: 0 0;
+}
+
+.ranking-preview-card {
+    background: linear-gradient(135deg, rgba(18, 18, 26, 0.92), rgba(30, 30, 50, 0.88));
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    overflow: hidden;
+}
+
+.ranking-preview-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 1.2rem 1.5rem 0.8rem;
+}
+
+.ranking-preview-trophy {
+    font-size: 1.4rem;
+}
+
+.ranking-preview-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #f0c040;
+    letter-spacing: 0.3px;
+}
+
+.ranking-preview-body {
+    padding: 0 1.5rem;
+}
+
+.ranking-preview-loading {
+    text-align: center;
+    padding: 1.5rem 0;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.9rem;
+}
+
+.ranking-preview-empty {
+    text-align: center;
+    padding: 1.5rem 0;
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 0.9rem;
+}
+
+.ranking-preview-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.7rem 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.ranking-preview-row:last-child {
+    border-bottom: none;
+}
+
+.ranking-preview-medal {
+    font-size: 1.3rem;
+    min-width: 2rem;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.ranking-preview-name {
+    font-weight: 600;
+    color: #ffffff;
+    font-size: 0.95rem;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-decoration: none;
+}
+
+a.ranking-preview-name:hover {
+    color: #f0c040;
+    text-decoration: underline;
+}
+
+.ranking-preview-team {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.85rem;
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ranking-preview-points {
+    font-weight: 700;
+    color: #f0c040;
+    font-size: 0.9rem;
+    white-space: nowrap;
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+.ranking-preview-footer {
+    padding: 0.8rem 1.5rem;
+    text-align: center;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.ranking-preview-view-all {
+    color: rgba(255, 255, 255, 0.7);
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: color 0.2s;
+}
+
+.ranking-preview-view-all:hover {
+    color: #f0c040;
+}
+
+.ranking-preview-login-hint {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.8rem 1.5rem;
+    background: rgba(240, 192, 64, 0.08);
+    border-top: 1px solid rgba(240, 192, 64, 0.15);
+    flex-wrap: wrap;
+}
+
+.ranking-preview-hint-icon {
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+
+.ranking-preview-hint-text {
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 0.85rem;
+    flex: 1;
+    min-width: 0;
+}
+
+.ranking-preview-login-btn {
+    background: #f0c040;
+    color: #191f28;
+    padding: 0.35rem 1rem;
+    border-radius: 20px;
+    text-decoration: none;
+    font-size: 0.8rem;
+    font-weight: 600;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: background 0.2s;
+}
+
+.ranking-preview-login-btn:hover {
+    background: #e0b030;
+}
+
+/* Ranking Preview - Light Theme (Toss style) */
+[data-theme="light"] .ranking-preview-card {
+    background: #ffffff !important;
+    border: 1px solid #e5e8eb !important;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06) !important;
+    backdrop-filter: none !important;
+}
+
+[data-theme="light"] .ranking-preview-title {
+    color: #c9302c !important;
+}
+
+[data-theme="light"] .ranking-preview-loading,
+[data-theme="light"] .ranking-preview-empty {
+    color: #8b95a1 !important;
+}
+
+[data-theme="light"] .ranking-preview-row {
+    border-bottom-color: #f0f0f5 !important;
+}
+
+[data-theme="light"] .ranking-preview-name {
+    color: #191f28 !important;
+}
+
+[data-theme="light"] a.ranking-preview-name:hover {
+    color: #c9302c !important;
+}
+
+[data-theme="light"] .ranking-preview-team {
+    color: #8b95a1 !important;
+}
+
+[data-theme="light"] .ranking-preview-points {
+    color: #c9302c !important;
+}
+
+[data-theme="light"] .ranking-preview-footer {
+    border-top-color: #f0f0f5 !important;
+}
+
+[data-theme="light"] .ranking-preview-view-all {
+    color: #4e5968 !important;
+}
+
+[data-theme="light"] .ranking-preview-view-all:hover {
+    color: #c9302c !important;
+}
+
+[data-theme="light"] .ranking-preview-login-hint {
+    background: rgba(201, 48, 44, 0.04) !important;
+    border-top-color: rgba(201, 48, 44, 0.1) !important;
+}
+
+[data-theme="light"] .ranking-preview-hint-text {
+    color: #4e5968 !important;
+}
+
+[data-theme="light"] .ranking-preview-login-btn {
+    background: #c9302c !important;
+    color: #ffffff !important;
+}
+
+[data-theme="light"] .ranking-preview-login-btn:hover {
+    background: #a02320 !important;
+}
+
+/* Ranking Preview - Mobile */
+@media (max-width: 768px) {
+    .ranking-preview-row {
+        gap: 0.5rem;
+    }
+    .ranking-preview-name {
+        font-size: 0.9rem;
+    }
+    .ranking-preview-team {
+        display: none;
+    }
+    .ranking-preview-points {
+        font-size: 0.85rem;
+    }
+    .ranking-preview-login-hint {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.6rem;
+    }
+    .ranking-preview-login-btn {
+        align-self: center;
+    }
+}
+
+/* ==================== LIGHT THEME - Event Result Page Overrides ==================== */
+
+/* Pool section */
+[data-theme="light"] .pool-selector {
+    background: #f5f5f7;
+}
+
+[data-theme="light"] .pool-btn {
+    background: #ffffff;
+    color: #4e5968;
+    border: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+[data-theme="light"] .pool-btn:hover {
+    border-color: #c9302c;
+    color: #c9302c;
+}
+
+[data-theme="light"] .pool-btn.active {
+    background: #c9302c;
+    color: #ffffff;
+    border-color: #c9302c;
+}
+
+[data-theme="light"] .pool-container {
+    background: #ffffff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="light"] .pool-title h4 {
+    color: #191f28;
+}
+
+[data-theme="light"] .pool-info {
+    color: #8b95a1;
+}
+
+/* Result table (pool results) */
+[data-theme="light"] .result-table {
+    background: #ffffff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+[data-theme="light"] .result-table th {
+    background: #1e3a8a;
+    color: #ffffff;
+}
+
+[data-theme="light"] .result-table td {
+    color: #191f28;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="light"] .result-table tbody tr:hover {
+    background: #f5f5f7;
+}
+
+[data-theme="light"] .result-table .player-name {
+    color: #191f28;
+}
+
+[data-theme="light"] .result-table .rank {
+    color: #c9302c;
+}
+
+/* Matrix table */
+[data-theme="light"] .matrix-table th {
+    background: #1e3a8a;
+    color: #ffffff;
+}
+
+[data-theme="light"] .matrix-table td {
+    border-color: rgba(0, 0, 0, 0.08);
+    color: #191f28;
+}
+
+[data-theme="light"] .matrix-table .player-col {
+    background: #f5f5f7;
+    color: #191f28;
+}
+
+[data-theme="light"] .matrix-table .team-col {
+    background: #f5f5f7;
+    color: #8b95a1;
+}
+
+[data-theme="light"] .matrix-table .victory {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+[data-theme="light"] .matrix-table .defeat {
+    background: #fef2f2;
+    color: #dc2626;
+}
+
+[data-theme="light"] .matrix-table .self {
+    background: #f3f4f6;
+}
+
+[data-theme="light"] .matrix-table .stats-col {
+    background: #f5f5f7;
+    color: #191f28;
+}
+
+/* Bout list */
+[data-theme="light"] .bout-list-header {
+    background: #f5f5f7;
+    color: #191f28;
+}
+
+[data-theme="light"] .bout-list-header:hover {
+    background: #e8e8ed;
+}
+
+[data-theme="light"] .bout-item {
+    border-bottom-color: rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="light"] .bout-player.winner {
+    color: #15803d;
+}
+
+[data-theme="light"] .bout-player.loser {
+    color: #8b95a1;
+}
+
+[data-theme="light"] .bout-score {
+    background: #f5f5f7;
+    color: #191f28;
+}
+
+/* Final table */
+[data-theme="light"] .final-table {
+    background: #ffffff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="light"] .final-table th {
+    background: #1e3a8a;
+    color: #ffffff;
+}
+
+[data-theme="light"] .final-table td {
+    color: #191f28;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="light"] .final-table tbody tr:hover {
+    background: #f5f5f7;
+}
+
+[data-theme="light"] .final-table .name-cell {
+    color: #191f28;
+}
+
+[data-theme="light"] .final-table .place-cell {
+    color: #8b95a1;
+}
+
+[data-theme="light"] .final-table .points-cell {
+    color: #c9302c;
+}
+
+/* Podium */
+[data-theme="light"] .podium-section {
+    background: #f5f5f7;
+}
+
+[data-theme="light"] .podium-section h3 {
+    color: #191f28;
+}
+
+[data-theme="light"] .podium-box {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="light"] .podium-rank {
+    color: #4e5968;
+}
+
+/* Stats summary */
+[data-theme="light"] .stats-summary-box {
+    background: #f5f5f7;
+}
+
+[data-theme="light"] .stat-item .value {
+    color: #c9302c;
+}
+
+[data-theme="light"] .stat-item .label {
+    color: #8b95a1;
+}
+
+/* DE round tabs (legacy) */
+[data-theme="light"] .de-round-tabs {
+    background: #f5f5f7;
+}
+
+[data-theme="light"] .de-round-tab {
+    background: #ffffff;
+    border-color: rgba(0, 0, 0, 0.12);
+    color: #4e5968;
+}
+
+[data-theme="light"] .de-round-tab:hover {
+    border-color: #c9302c;
+    color: #c9302c;
+}
+
+[data-theme="light"] .de-round-tab.active {
+    background: linear-gradient(135deg, #c9302c, #1e3a8a);
+    color: #ffffff;
+    border-color: #c9302c;
+}
+
+/* DE match cards (legacy) */
+[data-theme="light"] .de-match-card {
+    background: #ffffff;
+    border-color: rgba(0, 0, 0, 0.08);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="light"] .de-match-number {
+    background: #f5f5f7;
+    color: #8b95a1;
+}
+
+[data-theme="light"] .de-player.winner {
+    background: linear-gradient(135deg, #dcfce7, #bbf7d0);
+    border-left: 4px solid #22c55e;
+}
+
+[data-theme="light"] .de-player.loser {
+    background: #f5f5f7;
+}
+
+[data-theme="light"] .de-player-name {
+    color: #191f28;
+}
+
+[data-theme="light"] .de-player.winner .de-player-name {
+    color: #166534;
+}
+
+[data-theme="light"] .de-player-team {
+    color: #8b95a1;
+}
+
+[data-theme="light"] .de-score {
+    color: #c9302c;
+}
+
+[data-theme="light"] .de-player.loser .de-score {
+    color: #8b95a1;
+}
+
+[data-theme="light"] .de-match-result {
+    background: #f5f5f7;
+}
+
+/* Tournament container */
+[data-theme="light"] .tournament-container {
+    background: #ffffff;
+}
+
+/* Empty state */
+[data-theme="light"] .empty {
+    color: #8b95a1;
+}
+
+[data-theme="light"] .empty p {
+    color: #8b95a1;
+}
+
+/* ==================== Event Header Podium ==================== */
+.event-header-layout {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1.5rem;
+}
+.event-header-info {
+    flex: 1;
+    min-width: 0;
+}
+.event-header-info h1 {
+    margin-bottom: 18px;
+}
+.event-header-podium {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 160px;
+}
+.podium-entry {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.88rem;
+    line-height: 1.3;
+    white-space: nowrap;
+}
+.podium-medal {
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+.podium-name {
+    font-weight: 600;
+    color: var(--text-primary, #fff);
+}
+.podium-team {
+    color: var(--text-muted, #8899aa);
+    font-size: 0.8rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+@media (max-width: 768px) {
+    .event-header-layout {
+        flex-direction: column;
+    }
+    .event-header-podium {
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 8px;
+        min-width: 0;
+        border-top: 1px solid var(--border-color, rgba(255,255,255,0.08));
+        padding-top: 10px;
+        margin-top: 4px;
+    }
+    .podium-entry {
+        font-size: 0.82rem;
+    }
+}
+
+/* ==================== Event Statistics ==================== */
+.stats-container { padding: 1rem 0; }
+
+.stats-section {
+    margin-bottom: 2rem;
+}
+.stats-section-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border-color, rgba(255,255,255,0.1));
+    color: var(--text-primary, #fff);
+}
+
+.stats-hero-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.stats-hero-card {
+    background: var(--bg-card, rgba(18, 18, 26, 0.85));
+    border: 1px solid var(--border-color, rgba(255,255,255,0.08));
+    border-radius: 12px;
+    padding: 1.25rem;
+    text-align: center;
+}
+.stats-hero-value {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--accent-primary, #00ff88);
+}
+.stats-hero-label {
+    font-size: 0.8rem;
+    color: var(--text-secondary, #8899aa);
+    margin-top: 0.3rem;
+}
+
+.stats-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.6rem;
+}
+.stats-bar-label {
+    min-width: 100px;
+    font-size: 0.85rem;
+    text-align: right;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--text-secondary, #b0b0c0);
+}
+.stats-bar-track {
+    flex: 1;
+    height: 22px;
+    background: var(--bg-secondary, rgba(26,26,37,0.9));
+    border-radius: 4px;
+    overflow: hidden;
+}
+.stats-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.5s ease;
+    display: flex;
+    align-items: center;
+    padding-left: 6px;
+    font-size: 0.75rem;
+    color: #fff;
+}
+.stats-bar-value {
+    min-width: 40px;
+    font-size: 0.85rem;
+    text-align: right;
+    color: var(--text-secondary, #b0b0c0);
+}
+
+/* Funnel visualization */
+.stats-funnel { margin: 1rem 0; }
+.stats-funnel-step {
+    display: flex;
+    align-items: center;
+    margin-bottom: 0.4rem;
+}
+.stats-funnel-label {
+    min-width: 80px;
+    font-size: 0.85rem;
+    text-align: right;
+    margin-right: 0.75rem;
+    color: var(--text-secondary, #b0b0c0);
+}
+.stats-funnel-bar {
+    height: 28px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #000;
+    transition: width 0.6s ease;
+    white-space: nowrap;
+}
+
+/* Chart container */
+.stats-chart-container {
+    max-width: 600px;
+    margin: 1rem auto;
+}
+
+/* Stats loading */
+.stats-loading {
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-muted, #6b6b7b);
+    font-size: 0.9rem;
+}
+
+/* Light theme overrides for statistics */
+[data-theme="light"] .stats-section-title {
+    color: #191f28;
+    border-bottom-color: rgba(0,0,0,0.08);
+}
+[data-theme="light"] .stats-hero-card {
+    background: #ffffff;
+    border: 1px solid rgba(0,0,0,0.08);
+}
+[data-theme="light"] .stats-hero-value {
+    color: var(--accent-primary, #00c471);
+}
+[data-theme="light"] .stats-hero-label {
+    color: #8b95a1;
+}
+[data-theme="light"] .stats-bar-label {
+    color: #4e5968;
+}
+[data-theme="light"] .stats-bar-track {
+    background: #f0f0f5;
+}
+[data-theme="light"] .stats-bar-value {
+    color: #4e5968;
+}
+[data-theme="light"] .stats-funnel-label {
+    color: #4e5968;
+}
+[data-theme="light"] .stats-funnel-bar {
+    color: #fff;
+}
+
+/* Grade-by-Round Table */
+.stats-grade-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 0.75rem;
+    font-size: 0.82rem;
+}
+.stats-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--text-secondary, #8899aa);
+}
+.stats-legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.stats-grade-table {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+.stats-grade-table table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+.stats-grade-table th {
+    padding: 8px 10px;
+    text-align: center;
+    font-weight: 600;
+    font-size: 0.8rem;
+    color: var(--text-secondary, #8899aa);
+    border-bottom: 2px solid var(--border-color, rgba(255,255,255,0.1));
+    white-space: nowrap;
+}
+.stats-grade-table td {
+    padding: 7px 10px;
+    text-align: center;
+    border-bottom: 1px solid var(--border-color, rgba(255,255,255,0.06));
+    white-space: nowrap;
+}
+.stats-grade-round {
+    text-align: left !important;
+    font-weight: 600;
+    color: var(--text-primary, #fff);
+    min-width: 60px;
+}
+.stats-grade-count {
+    font-weight: 600;
+    color: var(--text-primary, #fff);
+}
+.stats-grade-pct {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 400;
+    margin-top: 1px;
+}
+.stats-grade-total {
+    font-weight: 600;
+    border-left: 2px solid var(--border-color, rgba(255,255,255,0.1));
+}
+.stats-grade-row-highlight {
+    background: rgba(255, 215, 0, 0.06);
+}
+.stats-grade-row-highlight .stats-grade-round {
+    color: var(--accent-primary, #00ff88);
+}
+
+/* Light theme overrides for grade table */
+[data-theme="light"] .stats-grade-table th {
+    color: #8b95a1;
+    border-bottom-color: rgba(0,0,0,0.1);
+}
+[data-theme="light"] .stats-grade-table td {
+    border-bottom-color: rgba(0,0,0,0.05);
+}
+[data-theme="light"] .stats-grade-round {
+    color: #191f28;
+}
+[data-theme="light"] .stats-grade-count {
+    color: #191f28;
+}
+[data-theme="light"] .stats-grade-total {
+    border-left-color: rgba(0,0,0,0.1);
+}
+[data-theme="light"] .stats-grade-row-highlight {
+    background: rgba(255, 215, 0, 0.08);
+}
+[data-theme="light"] .stats-grade-row-highlight .stats-grade-round {
+    color: var(--accent-primary, #00c471);
+}
+
+/* Mobile responsive for statistics */
+@media (max-width: 768px) {
+    .stats-hero-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    .stats-hero-card {
+        padding: 1rem;
+    }
+    .stats-hero-value {
+        font-size: 1.5rem;
+    }
+    .stats-bar-label { min-width: 70px; font-size: 0.8rem; }
+    .stats-funnel-label { min-width: 60px; font-size: 0.8rem; }
+    .stats-chart-container { max-width: 100%; }
+    .stats-grade-table { font-size: 0.78rem; }
+    .stats-grade-table th, .stats-grade-table td { padding: 5px 6px; }
+}
+
+/* ==================== Sub-Rankings (National Events) ==================== */
+.sub-rankings-section {
+    margin-top: 2rem;
+}
+.sub-ranking-group {
+    margin-bottom: 0.5rem;
+    border: 1px solid var(--border-color, rgba(255,255,255,0.08));
+    border-radius: 10px;
+    overflow: hidden;
+}
+.sub-ranking-toggle {
+    width: 100%;
+    padding: 12px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--bg-card, rgba(18,18,26,0.85));
+    border: none;
+    color: var(--text-primary, #fff);
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+.sub-ranking-toggle:hover {
+    background: var(--bg-hover, rgba(99,102,241,0.1));
+}
+.sub-ranking-content {
+    display: none;
+}
+.sub-ranking-group.open .sub-ranking-content {
+    display: block;
+}
+.sub-ranking-group.open .toggle-arrow {
+    transform: rotate(180deg);
+}
+.toggle-arrow {
+    transition: transform 0.2s;
+    font-size: 0.75rem;
+}
+[data-theme="light"] .sub-ranking-toggle {
+    background: #f5f5f7;
+    color: #191f28;
+    border-color: #e5e8eb;
+}
+[data-theme="light"] .sub-ranking-toggle:hover {
+    background: #eef0f4;
+}
+[data-theme="light"] .sub-ranking-group {
+    border-color: #e5e8eb;
+}
+
+/* ==================== Rankings Collapsible ==================== */
+.rankings-collapsible {
+    margin-top: 1rem;
+}
+.rankings-collapsible-content {
+    display: none;
+}
+.rankings-collapsible.open .rankings-collapsible-content {
+    display: block;
+}
+.rankings-collapsible.open .toggle-arrow {
+    transform: rotate(180deg);
+}
+.rankings-toggle {
+    width: 100%;
+    padding: 12px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--bg-card, rgba(18,18,26,0.85));
+    border: 1px solid var(--border-color, rgba(255,255,255,0.08));
+    border-radius: 10px;
+    color: var(--text-primary, #fff);
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+.rankings-toggle:hover {
+    background: var(--bg-hover, rgba(99,102,241,0.1));
+}
+.rankings-toggle .toggle-arrow {
+    transition: transform 0.2s;
+    font-size: 0.75rem;
+}
+[data-theme="light"] .rankings-toggle {
+    background: #f5f5f7;
+    color: #191f28;
+    border-color: #e5e8eb;
+}
+[data-theme="light"] .rankings-toggle:hover {
+    background: #eef0f4;
+}
+
+/* ==================== Stats Hero Description ==================== */
+.stats-hero-desc {
+    font-size: 0.7rem;
+    color: var(--text-muted, #6b6b7b);
+    margin-top: 2px;
+    line-height: 1.3;
+}
+
+/* ==================== Player Profile Ranking Section ==================== */
+.player-ranking-section {
+    margin-top: 1rem;
+}
+.ranking-cards {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.ranking-card {
+    flex: 1 1 280px;
+    background: var(--bg-card, rgba(18,18,26,0.85));
+    border: 1px solid var(--border-color, rgba(255,255,255,0.08));
+    border-radius: 10px;
+    padding: 12px 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.ranking-card:hover {
+    border-color: var(--accent-primary, #c9302c);
+}
+.ranking-card-summary {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.ranking-position {
+    flex-shrink: 0;
+}
+.rank-number {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--accent-primary, #c9302c);
+}
+.rank-total {
+    font-size: 0.75rem;
+    color: var(--text-muted, #6b6b7b);
+}
+.ranking-category {
+    flex: 1;
+    font-size: 0.8rem;
+    color: var(--text-secondary, #a0a0b0);
+    line-height: 1.3;
+}
+.ranking-points {
+    flex-shrink: 0;
+    text-align: right;
+}
+.points-value {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary, #fff);
+}
+.points-label {
+    font-size: 0.7rem;
+    color: var(--text-muted, #6b6b7b);
+    margin-left: 2px;
+}
+/* Details (collapsed by default) */
+.ranking-card-details {
+    display: none;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-color, rgba(255,255,255,0.08));
+}
+.ranking-card.expanded .ranking-card-details {
+    display: block;
+}
+.ranking-detail-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.75rem;
+    color: var(--text-muted, #6b6b7b);
+    margin-bottom: 6px;
+}
+.ranking-detail-help {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--border-color, rgba(255,255,255,0.08));
+    font-size: 0.65rem;
+    cursor: help;
+}
+.ranking-breakdown-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.ranking-breakdown-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.78rem;
+    padding: 4px 0;
+}
+.breakdown-rank {
+    flex-shrink: 0;
+    width: 36px;
+    font-weight: 600;
+    color: var(--text-primary, #fff);
+}
+.breakdown-comp {
+    flex: 1;
+    color: var(--text-secondary, #a0a0b0);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.breakdown-pts {
+    flex-shrink: 0;
+    text-align: right;
+    font-weight: 500;
+    color: var(--text-primary, #fff);
+}
+.breakdown-weight {
+    font-size: 0.65rem;
+    color: var(--text-muted, #6b6b7b);
+    margin-left: 2px;
+}
+/* Light theme */
+[data-theme="light"] .ranking-card {
+    background: #f5f5f7;
+    border-color: #e5e8eb;
+}
+[data-theme="light"] .ranking-card:hover {
+    border-color: var(--accent-primary, #c9302c);
+}
+[data-theme="light"] .rank-number {
+    color: #c9302c;
+}
+[data-theme="light"] .points-value {
+    color: #191f28;
+}
+[data-theme="light"] .breakdown-rank,
+[data-theme="light"] .breakdown-pts {
+    color: #191f28;
+}
+/* Single-card auto-expanded: no cursor pointer */
+.ranking-cards > .ranking-card:only-child {
+    cursor: default;
 }

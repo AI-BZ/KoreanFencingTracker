@@ -429,6 +429,159 @@
         .year-tabs { gap: 0.35rem; }
         .year-tab { padding: 0.4rem 0.75rem; font-size: 0.8rem; }
     }
+
+    /* ===== Light Theme (Toss style) ===== */
+    [data-theme="light"] .page-header {
+        color: #191f28;
+    }
+    [data-theme="light"] .page-header p {
+        color: #8b95a1;
+        opacity: 1;
+    }
+
+    /* Upcoming cards - light */
+    [data-theme="light"] .upcoming-card {
+        background: #ffffff;
+        border: 1px solid #e5e8eb;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+    [data-theme="light"] .upcoming-card:hover {
+        box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+        border-color: #c9302c;
+    }
+    [data-theme="light"] .upcoming-card-icon {
+        background: rgba(102, 126, 234, 0.08);
+    }
+    [data-theme="light"] .upcoming-card-icon svg {
+        stroke: #667eea;
+    }
+    [data-theme="light"] .upcoming-card-info h4 {
+        color: #191f28;
+    }
+    [data-theme="light"] .upcoming-card-info p {
+        color: #8b95a1;
+    }
+    [data-theme="light"] .upcoming-card-status {
+        background: #f5f5f7;
+    }
+    [data-theme="light"] .upcoming-card-status .status {
+        color: #c9302c;
+    }
+    [data-theme="light"] .upcoming-card-status .date {
+        color: #8b95a1;
+    }
+
+    /* Controls area - light */
+    [data-theme="light"] .competitions-controls {
+        background: #ffffff;
+        border: 1px solid #e5e8eb;
+        backdrop-filter: none;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+
+    /* Year tabs - light */
+    [data-theme="light"] .year-tab {
+        background: #ffffff;
+        border-color: #e5e8eb;
+        color: #4e5968;
+    }
+    [data-theme="light"] .year-tab:hover {
+        border-color: #c9302c;
+        color: #c9302c;
+        background: #fff5f5;
+    }
+    [data-theme="light"] .year-tab.active {
+        background: #c9302c;
+        color: #ffffff;
+        border-color: #c9302c;
+    }
+
+    /* Search input - light */
+    [data-theme="light"] .comp-search-input {
+        background: #f5f5f7;
+        color: #191f28;
+        border-color: #e5e8eb;
+    }
+    [data-theme="light"] .comp-search-input::placeholder {
+        color: #8b95a1;
+    }
+    [data-theme="light"] .comp-search-input:focus {
+        background: #ffffff;
+        border-color: #c9302c;
+        box-shadow: 0 0 0 3px rgba(201, 48, 44, 0.1);
+    }
+
+    /* Competition cards - light */
+    [data-theme="light"] .comp-card {
+        background: #ffffff;
+        border: 1px solid #e5e8eb;
+        backdrop-filter: none;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+    [data-theme="light"] .comp-card:hover {
+        border-color: #c9302c;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+    }
+    [data-theme="light"] .comp-card-name {
+        color: #191f28;
+    }
+    [data-theme="light"] .comp-card-meta {
+        color: #8b95a1;
+    }
+    [data-theme="light"] .comp-card-date {
+        color: #4e5968;
+    }
+    [data-theme="light"] .comp-card-arrow {
+        color: #d1d6db;
+    }
+
+    /* Results header - light */
+    [data-theme="light"] .results-header h3 {
+        color: #191f28;
+    }
+    [data-theme="light"] .results-count {
+        color: #8b95a1;
+    }
+
+    /* Pagination - light */
+    [data-theme="light"] .page-btn {
+        background: #ffffff;
+        border-color: #e5e8eb;
+        color: #4e5968;
+    }
+    [data-theme="light"] .page-btn:hover {
+        background: #f5f5f7;
+        border-color: #d1d6db;
+        color: #191f28;
+    }
+    [data-theme="light"] .page-btn.active {
+        background: #c9302c;
+        color: #ffffff;
+        border-color: #c9302c;
+        box-shadow: 0 2px 8px rgba(201, 48, 44, 0.2);
+    }
+    [data-theme="light"] .page-btn:disabled {
+        opacity: 0.3;
+    }
+
+    /* Empty state - light */
+    [data-theme="light"] .empty-state {
+        background: #f5f5f7;
+        border-color: #e5e8eb;
+        color: #8b95a1;
+    }
+    [data-theme="light"] .empty-state h4 {
+        color: #191f28;
+    }
+
+    /* Loading - light */
+    [data-theme="light"] .loading {
+        color: #8b95a1;
+    }
+    [data-theme="light"] .loading::after {
+        border-color: #e5e8eb;
+        border-top-color: #c9302c;
+    }
 </style>
 {% endblock %}
 
@@ -617,7 +770,7 @@ function renderPagination(current, total) {
 
     if (start > 1) {
         html += `<button class="page-btn" onclick="goToPage(1)">1</button>`;
-        if (start > 2) html += `<span style="padding: 0.5rem; color: rgba(255,255,255,0.4);">...</span>`;
+        if (start > 2) html += `<span style="padding: 0.5rem; color: var(--text-muted, rgba(255,255,255,0.4));">...</span>`;
     }
 
     for (let i = start; i <= end; i++) {
@@ -625,7 +778,7 @@ function renderPagination(current, total) {
     }
 
     if (end < total) {
-        if (end < total - 1) html += `<span style="padding: 0.5rem; color: rgba(255,255,255,0.4);">...</span>`;
+        if (end < total - 1) html += `<span style="padding: 0.5rem; color: var(--text-muted, rgba(255,255,255,0.4));">...</span>`;
         html += `<button class="page-btn" onclick="goToPage(${total})">${total}</button>`;
     }
 

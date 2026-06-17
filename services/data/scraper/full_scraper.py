@@ -10,6 +10,7 @@ import asyncio
 import json
 import re
 import random
+import time
 from datetime import datetime, date
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass, field, asdict
@@ -960,6 +961,7 @@ class KFFFullScraper:
 
     async def get_full_results(self, event_cd: str, sub_event_cd: str, page_num: int = 1) -> Dict[str, Any]:
         """종목별 전체 경기 결과 조회 (풀 + 순위)"""
+        start_time = time.time()
         page = await self._browser.new_page()
         page.set_default_timeout(15000)
 
@@ -1010,8 +1012,9 @@ class KFFFullScraper:
                 logger.debug(f"종목 선택 오류: {e}")
 
             # 풀 결과 파싱
-            pool_data = await self._parse_pool_results_v2(page)
+            pool_data, pool_diagnostics = await self._parse_pool_results_v2(page)
             results["pool_rounds"] = pool_data
+            results["_pool_diagnostics"] = pool_diagnostics
 
             # 뿔 최종 랭킹 (Pool Total) 파싱
             pool_total = await self._parse_pool_total_ranking(page)
@@ -1203,14 +1206,81 @@ class KFFFullScraper:
         finally:
             await page.close()
 
+        # Post-scrape 교차 검증 (Layer 2)
+        pool_diag = results.get("_pool_diagnostics", {})
+        scrape_warnings = self._validate_scrape_completeness(
+            event_name=f"{event_cd}/{sub_event_cd}",
+            results=results,
+            pool_diagnostics=pool_diag,
+        )
+        results["_scrape_warnings"] = scrape_warnings
+        results["_duration_ms"] = int((time.time() - start_time) * 1000)
+
+        for w in scrape_warnings:
+            if w.get("severity") == "ERROR":
+                logger.error(f"🚨 스크래핑 검증 실패: {w['message']}")
+            elif w.get("severity") == "WARNING":
+                logger.warning(f"⚠️ 스크래핑 경고: {w['message']}")
+
         return results
 
-    async def _parse_pool_results_v2(self, page: Page) -> List[Dict]:
-        """개선된 풀 결과 파싱 v3 - 정확한 풀 구분 및 점수 매트릭스"""
+    def _validate_scrape_completeness(self, event_name: str, results: dict,
+                                      pool_diagnostics: dict = None) -> list:
+        """Post-scrape 교차 검증 — 빈 배열이 '데이터 없음'인지 '수집 실패'인지 판별"""
+        warnings = []
+        pool_total = results.get('pool_total_ranking', [])
+        pool_rounds = results.get('pool_rounds', [])
+        de_bracket = results.get('de_bracket', {})
+        final_rankings = results.get('final_rankings', [])
+        de_bouts = (de_bracket.get('full_bouts') or []) if de_bracket else []
+
+        # CHECK 1: pool_total 있는데 pool_rounds 없음 → 수집 실패
+        if len(pool_total) > 0 and len(pool_rounds) == 0:
+            warnings.append({
+                'type': 'POOL_DATA_INCOMPLETE',
+                'severity': 'ERROR',
+                'event_name': event_name,
+                'message': (f'pool_total_ranking {len(pool_total)}명 존재하지만 '
+                            f'pool_rounds 0개 — 풀 상세 데이터 수집 실패'),
+                'diagnostics': pool_diagnostics,
+            })
+
+        # CHECK 2: pool_diagnostics에서 skip된 풀 있으면 기록
+        if pool_diagnostics and pool_diagnostics.get('pools_skipped'):
+            skipped = pool_diagnostics['pools_skipped']
+            warnings.append({
+                'type': 'POOL_PARSE_SKIPPED',
+                'severity': 'WARNING',
+                'event_name': event_name,
+                'message': f'{len(skipped)}개 풀 파싱 건너뜀: {skipped}',
+            })
+
+        # CHECK 3: DE bouts 있는데 final_rankings 없음 → 아직 진행 중 or 수집 누락
+        if len(de_bouts) > 0 and len(final_rankings) == 0:
+            warnings.append({
+                'type': 'FINAL_RANKINGS_MISSING',
+                'severity': 'INFO',
+                'event_name': event_name,
+                'message': (f'DE {len(de_bouts)}경기 존재하지만 '
+                            f'final_rankings 없음 (대회 진행 중일 수 있음)'),
+            })
+
+        return warnings
+
+    async def _parse_pool_results_v2(self, page: Page) -> tuple:
+        """개선된 풀 결과 파싱 v3 - 정확한 풀 구분 및 점수 매트릭스
+        Returns: (pool_list, diagnostics_dict)
+        """
         try:
             pool_data = await page.evaluate("""
                 () => {
                     const pools = [];
+                    const diagnostics = {
+                        pool_headers_found: 0,
+                        pools_parsed: 0,
+                        pools_skipped: [],
+                        total_rows_processed: 0
+                    };
                     let roundNumber = 1;
 
                     // 풀 헤더 UL 요소들 찾기 (뿔 N 텍스트를 포함하는 UL)
@@ -1231,6 +1301,8 @@ class KFFFullScraper:
                             }
                         }
                     });
+
+                    diagnostics.pool_headers_found = poolHeaders.length;
 
                     // 각 풀 헤더에 대해 바로 다음 테이블 파싱
                     poolHeaders.forEach(({ ul, poolNumber }) => {
@@ -1256,7 +1328,10 @@ class KFFFullScraper:
                             nextElem = nextElem.nextElementSibling;
                         }
 
-                        if (!nextElem || nextElem.tagName !== 'TABLE') return;
+                        if (!nextElem || nextElem.tagName !== 'TABLE') {
+                            diagnostics.pools_skipped.push({pool: poolNumber, reason: 'no_table_found'});
+                            return;
+                        }
 
                         const table = nextElem;
                         const results = [];
@@ -1267,7 +1342,10 @@ class KFFFullScraper:
                         const headerTexts = Array.from(headers).map(h => h.textContent.trim());
 
                         // 풀 결과 테이블인지 확인
-                        if (!headerTexts.includes('이름') || !headerTexts.includes('승률')) return;
+                        if (!headerTexts.includes('이름') || !headerTexts.includes('승률')) {
+                            diagnostics.pools_skipped.push({pool: poolNumber, reason: 'header_mismatch', actual_headers: headerTexts.slice(0, 8)});
+                            return;
+                        }
 
                         // 상대 수 계산 (헤더에서 숫자 컬럼 개수)
                         const numericHeaders = headerTexts.filter(h => /^\\d+$/.test(h));
@@ -1284,6 +1362,8 @@ class KFFFullScraper:
                                 tr => tr.querySelector('td') && !tr.querySelector('th')
                             );
                         }
+
+                        diagnostics.total_rows_processed += rows.length;
 
                         rows.forEach((row, rowIdx) => {
                             const cells = row.querySelectorAll('td');
@@ -1314,6 +1394,14 @@ class KFFFullScraper:
                                     const vScore = scoreText.length === 1 ? 5 : parseInt(scoreText.substring(1)) || 5;
                                     scores.push({ type: 'V', score: vScore });
                                     actualWins++;
+                                } else if (scoreText.toUpperCase() === 'A') {
+                                    // A = Abandon/Forfeit — 이 선수가 기권함 (FIE t.95)
+                                    // 경기 미진행이므로 wins/losses에 카운트하지 않음
+                                    scores.push({ type: 'A', score: null, is_forfeit: true });
+                                } else if (scoreText.toUpperCase() === 'X') {
+                                    // X = 상대가 기권 — 이 bout은 미진행
+                                    // 경기 미진행이므로 wins/losses에 카운트하지 않음
+                                    scores.push({ type: 'X', score: null, is_forfeit: true });
                                 } else if (scoreText === '' || scoreText === '-') {
                                     // 빈 셀 = 경기 미진행 (Not played)
                                     scores.push({ type: 'N', score: null });
@@ -1336,6 +1424,9 @@ class KFFFullScraper:
                             const touches = parseInt(lastCells[2]?.textContent?.trim()) || 0;
                             const rank = parseInt(lastCells[3]?.textContent?.trim()) || 0;
 
+                            // 기권자 감지: scores에 'A' 타입이 있으면 이 선수가 기권함
+                            const isForfeit = scores.some(s => s && s.type === 'A');
+
                             players.push({ no, name, team, scores });
 
                             results.push({
@@ -1347,7 +1438,8 @@ class KFFFullScraper:
                                 losses: losses,
                                 indicator: indicator,
                                 touches: touches,
-                                rank: rank
+                                rank: rank,
+                                is_forfeit: isForfeit
                             });
                         });
 
@@ -1358,9 +1450,9 @@ class KFFFullScraper:
                                 const p1 = players[i];
                                 const p2 = players[j];
 
-                                // p1의 j번째 상대 점수 확인 - 미진행(N) 제외
+                                // p1의 j번째 상대 점수 확인 - 미진행(N), 기권(A/X) 제외
                                 const p1Score = p1.scores[j];
-                                if (p1Score && p1Score !== null && p1Score.type !== 'N') {
+                                if (p1Score && p1Score !== null && p1Score.type !== 'N' && p1Score.type !== 'A' && p1Score.type !== 'X') {
                                     const score1 = p1Score.score;
                                     const p2Score = p2.scores[i];
                                     const score2 = (p2Score && p2Score !== null && p2Score.type !== 'N') ? p2Score.score : 0;
@@ -1379,6 +1471,7 @@ class KFFFullScraper:
                             }
                         }
 
+                        diagnostics.pools_parsed++;
                         pools.push({
                             round_number: roundNumber,
                             pool_number: poolNumber,
@@ -1393,15 +1486,25 @@ class KFFFullScraper:
                     // 풀 번호로 정렬
                     pools.sort((a, b) => a.pool_number - b.pool_number);
 
-                    return pools;
+                    return {pools, diagnostics};
                 }
             """)
 
-            return pool_data
+            if isinstance(pool_data, dict):
+                diagnostics = pool_data.get('diagnostics', {})
+                pools = pool_data.get('pools', [])
+                if diagnostics.get('pools_skipped'):
+                    for skip in diagnostics['pools_skipped']:
+                        logger.warning(f"⚠️ Pool {skip.get('pool')} skipped: {skip.get('reason')}")
+                        if skip.get('actual_headers'):
+                            logger.warning(f"   Actual headers: {skip['actual_headers']}")
+                return pools, diagnostics
+            else:
+                return pool_data if pool_data else [], {}
 
         except Exception as e:
             logger.error(f"풀 결과 파싱 오류: {e}")
-            return []
+            return [], {"error": str(e)}
 
     async def _parse_pool_total_ranking(self, page: Page) -> List[Dict]:
         """뿔 최종 랭킹 (Pool Total) 파싱 - 최종랭킹(진출) + 탈락자랭킹 모두 추출"""

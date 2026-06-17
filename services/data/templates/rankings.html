@@ -363,6 +363,22 @@
         color: #fff;
     }
 
+    .best-finish {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        background: rgba(100, 116, 139, 0.15);
+        color: #94a3b8;
+        white-space: nowrap;
+    }
+    [data-theme="light"] .best-finish {
+        background: rgba(100, 116, 139, 0.1);
+        color: #64748b;
+    }
+
     .points-cell {
         font-weight: 700;
         color: #60a5fa !important;
@@ -485,6 +501,193 @@
         font-size: 0.8rem;
     }
 
+    /* Mobile filter trigger button */
+    .mobile-filter-trigger {
+        display: none;
+        width: 100%;
+        padding: 14px 20px;
+        margin-bottom: 16px;
+        background: var(--bg-card, rgba(18, 18, 26, 0.85));
+        border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+        border-radius: 12px;
+        color: var(--text-primary, #fff);
+        font-size: 0.9375rem;
+        font-weight: 600;
+        cursor: pointer;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+    }
+
+    /* Bottom sheet filter styles */
+    .bottom-sheet-title {
+        font-size: 1.125rem;
+        font-weight: 700;
+        color: var(--text-primary, #fff);
+        margin-bottom: 20px;
+        text-align: center;
+    }
+    .bs-filter-group {
+        margin-bottom: 16px;
+    }
+    .bs-filter-group label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 6px;
+        color: var(--text-secondary, rgba(255,255,255,0.7));
+        font-size: 0.8125rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    .bs-filter-group select {
+        width: 100%;
+        padding: 12px 16px;
+        border: 1px solid var(--border-color, rgba(255,255,255,0.15));
+        border-radius: 10px;
+        font-size: 0.9375rem;
+        background: var(--bg-primary, #0a0a0f);
+        color: var(--text-primary, #fff);
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2394a3b8' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 12px center;
+        padding-right: 36px;
+    }
+    .bs-apply-btn {
+        width: 100%;
+        padding: 14px;
+        margin-top: 8px;
+        background: var(--accent-primary, #c9302c);
+        color: #fff;
+        border: none;
+        border-radius: 12px;
+        font-size: 1rem;
+        font-weight: 700;
+        cursor: pointer;
+        min-height: 48px;
+        position: sticky;
+        bottom: 0;
+        z-index: 1;
+    }
+
+    /* Guest compact header */
+    .ranking-header--compact {
+        padding: 20px 16px;
+        margin-bottom: 16px;
+    }
+    .ranking-header--compact h1 {
+        font-size: 1.75rem;
+    }
+    .ranking-header--compact p {
+        display: none;
+    }
+
+    /* Guest filter toggle (desktop) */
+    .guest-filter-toggle {
+        width: 100%;
+        padding: 10px 20px;
+        background: #f0f4f8;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        color: #475569;
+        font-size: 0.85rem;
+        cursor: pointer;
+        margin-bottom: 16px;
+        text-align: center;
+        transition: all 0.2s ease;
+    }
+    .guest-filter-toggle:hover {
+        background: #e2e8f0;
+        border-color: #cbd5e1;
+    }
+    .guest-filter-toggle .toggle-arrow {
+        display: inline-block;
+        transition: transform 0.2s ease;
+        margin-left: 4px;
+    }
+    .guest-filter-toggle.open .toggle-arrow {
+        transform: rotate(180deg);
+    }
+
+    /* Guest Hero Section */
+    .guest-hero-section {
+        margin-bottom: 24px;
+    }
+    .guest-hero-grid {
+        display: grid;
+        grid-template-columns: 1.5fr 1fr;
+        gap: 20px;
+    }
+    .guest-hero-rankings {
+        border-radius: 16px;
+        overflow: hidden;
+        min-height: 200px;
+    }
+    .guest-hero-rankings .ranking-table th,
+    .guest-hero-rankings .ranking-table td {
+        padding: 12px 16px;
+    }
+    .guest-hero-rankings .gate-overlay {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+    }
+
+    /* Selection points teaser card */
+    .guest-sel-card {
+        background: linear-gradient(135deg, #1a1a2e, #16213e);
+        border-radius: 16px;
+        padding: 24px;
+        color: #fff;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+    }
+    .guest-sel-card h4 {
+        font-size: 1.25rem;
+        margin: 0 0 8px 0;
+    }
+    .guest-sel-card > p {
+        color: rgba(255,255,255,0.7);
+        font-size: 0.9rem;
+        margin: 0 0 16px 0;
+    }
+    .guest-sel-items {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin-bottom: 16px;
+        font-size: 0.9rem;
+    }
+    .guest-sel-items div {
+        padding: 8px 12px;
+        background: rgba(255,255,255,0.08);
+        border-radius: 8px;
+    }
+    .guest-sel-cta {
+        align-self: center;
+    }
+
+    @media (max-width: 768px) {
+        .guest-hero-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    @media (max-width: 640px) {
+        .guest-filter-toggle {
+            display: none;
+        }
+        .guest-hero-rankings .ranking-table th,
+        .guest-hero-rankings .ranking-table td {
+            padding: 10px 8px;
+            font-size: 0.85rem;
+        }
+    }
+
     /* Responsive adjustments */
     @media (max-width: 768px) {
         .ranking-header h1 {
@@ -507,17 +710,215 @@
             font-size: 0.9rem;
         }
     }
+
+    @media (max-width: 640px) {
+        .mobile-filter-trigger {
+            display: flex;
+        }
+        .desktop-filter {
+            display: none !important;
+        }
+        .ranking-container {
+            padding: 12px;
+        }
+        .ranking-header {
+            padding: 24px 16px;
+            margin-bottom: 16px;
+        }
+        .ranking-header h1 {
+            font-size: 1.375rem;
+        }
+        .ranking-info {
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+        .ranking-info h2 {
+            font-size: 1.25rem;
+        }
+    }
+
+    /* ==================== LIGHT THEME (Toss-style) ==================== */
+    [data-theme="light"] .ranking-header {
+        background: linear-gradient(135deg, #f5f5f7 0%, #eef0f4 50%, #e8eaf0 100%) !important;
+    }
+    [data-theme="light"] .ranking-header::before {
+        display: none;
+    }
+    [data-theme="light"] .ranking-header h1 {
+        color: #191f28 !important;
+    }
+    [data-theme="light"] .ranking-header p {
+        color: #4e5968 !important;
+    }
+
+    [data-theme="light"] .ranking-info {
+        background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%) !important;
+    }
+
+    [data-theme="light"] .ranking-table {
+        background: #ffffff !important;
+        border: 1px solid #e5e8eb;
+    }
+    [data-theme="light"] .ranking-table th {
+        background: #f5f5f7 !important;
+        color: #4e5968 !important;
+        border-bottom: 1px solid #e5e8eb !important;
+    }
+    [data-theme="light"] .ranking-table td {
+        color: #191f28 !important;
+        border-bottom: 1px solid #f0f0f5 !important;
+    }
+    [data-theme="light"] .ranking-table tbody tr:hover {
+        background: #f5f5f7 !important;
+    }
+    [data-theme="light"] .ranking-table tbody tr:nth-child(1) {
+        background: linear-gradient(90deg, rgba(255,215,0,0.08) 0%, transparent 100%) !important;
+    }
+    [data-theme="light"] .ranking-table tbody tr:nth-child(2) {
+        background: linear-gradient(90deg, rgba(192,192,192,0.08) 0%, transparent 100%) !important;
+    }
+    [data-theme="light"] .ranking-table tbody tr:nth-child(3) {
+        background: linear-gradient(90deg, rgba(205,127,50,0.08) 0%, transparent 100%) !important;
+    }
+
+    [data-theme="light"] .rank-1 { color: #b8860b; text-shadow: none; }
+    [data-theme="light"] .rank-2 { color: #71717a; text-shadow: none; }
+    [data-theme="light"] .rank-3 { color: #92400e; text-shadow: none; }
+
+    [data-theme="light"] .player-link {
+        color: #191f28 !important;
+    }
+    [data-theme="light"] .player-link:hover {
+        color: #1e3a8a !important;
+    }
+    [data-theme="light"] .points-cell {
+        color: #1e3a8a !important;
+    }
+
+    [data-theme="light"] .team-badge {
+        background: rgba(30, 58, 138, 0.06) !important;
+        color: #1e3a8a !important;
+        border-color: rgba(30, 58, 138, 0.15) !important;
+    }
+
+    /* Ranking page buttons */
+    [data-theme="light"] .page-btn {
+        background: #ffffff !important;
+        color: #4e5968 !important;
+        border-color: #d1d6db !important;
+    }
+    [data-theme="light"] .page-btn:hover:not(.active):not(:disabled) {
+        background: #f5f5f7 !important;
+        border-color: #8b95a1 !important;
+    }
+    [data-theme="light"] .page-btn.active {
+        background: #c9302c !important;
+        color: #ffffff !important;
+        border-color: #c9302c !important;
+        box-shadow: 0 2px 8px rgba(201,48,44,0.2) !important;
+    }
+
+    [data-theme="light"] .ranking-table-container {
+        box-shadow: 0 2px 12px rgba(0,0,0,0.06) !important;
+        border: 1px solid #e5e8eb;
+        border-radius: 16px;
+        overflow: hidden;
+    }
+
+    [data-theme="light"] .mobile-filter-trigger {
+        background: #ffffff !important;
+        border-color: #e5e8eb !important;
+        color: #191f28 !important;
+    }
+
+    /* Filter section */
+    [data-theme="light"] .filter-section {
+        background: #ffffff !important;
+        border: 1px solid #e5e8eb !important;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.06) !important;
+    }
+    [data-theme="light"] .filter-group label {
+        color: #4e5968 !important;
+    }
+    [data-theme="light"] .filter-group select {
+        background: #f5f5f7 !important;
+        color: #191f28 !important;
+        border-color: #e5e8eb !important;
+    }
+    [data-theme="light"] .filter-group select option {
+        background: #ffffff;
+        color: #191f28;
+    }
+    [data-theme="light"] .category-btn {
+        background: #ffffff !important;
+        color: #4e5968 !important;
+        border-color: #e5e8eb !important;
+    }
+    [data-theme="light"] .category-btn:hover:not(.active) {
+        border-color: #c9302c !important;
+        color: #c9302c !important;
+    }
+    [data-theme="light"] .category-btn.active {
+        background: #c9302c !important;
+        color: #ffffff !important;
+        border-color: #c9302c !important;
+    }
+    [data-theme="light"] .excl-btn {
+        background: #ffffff !important;
+        color: #4e5968 !important;
+        border-color: #e5e8eb !important;
+    }
+    [data-theme="light"] .excl-btn.active {
+        background: #fef2f2 !important;
+        color: #dc2626 !important;
+        border-color: #fca5a5 !important;
+    }
+    [data-theme="light"] .exclusion-section .filter-label {
+        color: #4e5968 !important;
+    }
+
+    /* Guest hero / selection card */
+    [data-theme="light"] .guest-sel-card {
+        background: linear-gradient(135deg, #1e3a8a, #2563eb) !important;
+    }
+    [data-theme="light"] .guest-sel-items div {
+        background: rgba(255,255,255,0.15) !important;
+    }
+
+    /* Guest filter toggle */
+    [data-theme="light"] .guest-filter-toggle {
+        background: #f5f5f7 !important;
+        border-color: #e5e8eb !important;
+        color: #4e5968 !important;
+    }
+    [data-theme="light"] .guest-filter-toggle:hover {
+        background: #eef0f4 !important;
+    }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="ranking-container">
-    <div class="ranking-header">
+    <div class="ranking-header {% if access_level == 'guest' %}ranking-header--compact{% endif %}"
         <h1>{{ i18n.common.rankings.title|default('FencingLab Ranking') }}</h1>
         <p>{{ i18n.common.rankings.subtitle|default(_t('FIE + USA Fencing 포인트 시스템 기반 비공식 커뮤니티 랭킹')) }}</p>
     </div>
 
-    <div class="filter-section">
+    <!-- Mobile Filter Trigger Button (visible only on mobile ≤640px) -->
+    <button class="mobile-filter-trigger" id="mobileFilterTrigger">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+        <span>{{ _t('필터') }}</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+    </button>
+
+    {% if access_level == "guest" %}
+    <button class="guest-filter-toggle" id="guestFilterToggle" onclick="(function(btn){ var p=document.getElementById('guestFilterPanel'); var show=p.style.display==='none'; p.style.display=show?'block':'none'; btn.classList.toggle('open',show); })(this)">
+        {{ _t('필터 변경') }} <span class="toggle-arrow">▼</span>
+    </button>
+    <div class="filter-section desktop-filter" style="display:none" id="guestFilterPanel">
+    {% else %}
+    <div class="filter-section desktop-filter">
+    {% endif %}
         <div class="filter-grid">
             <div class="filter-group">
                 <label>{{ i18n.common.filters.weapon|default('Weapon') }}</label>
@@ -570,6 +971,66 @@
         </div>
     </div>
 
+    {% if access_level == "guest" and guest_preview %}
+    <div class="guest-hero-section">
+        <div class="guest-hero-grid">
+            <!-- Left: Blurred ranking preview -->
+            <div class="guest-hero-rankings access-gate">
+                <div class="blurred-content">
+                    <table class="ranking-table">
+                        <thead>
+                            <tr>
+                                <th class="rank-cell">{{ i18n.common.table.rank|default('Rank') }}</th>
+                                <th>{{ i18n.common.table.name|default('Name') }}</th>
+                                <th>{{ i18n.common.table.team|default('Team') }}</th>
+                                <th class="points-cell">{{ i18n.common.table.points|default('Points') }}</th>
+                                <th>{{ i18n.common.table.competition|default('Competition') }}</th>
+                                <th class="medal-cell">🏅</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for r in guest_preview.rankings %}
+                            <tr>
+                                <td class="rank-cell {% if r.rank <= 3 %}rank-{{ r.rank }}{% endif %}">{{ r.rank }}</td>
+                                <td>????</td>
+                                <td><span class="team-badge">????</span></td>
+                                <td class="points-cell">{{ "%.1f"|format(r.points) }}</td>
+                                <td>{{ r.competitions }}</td>
+                                <td class="medal-cell">
+                                    {% if r.gold > 0 %}<span class="medal medal-gold">{{ r.gold }}</span>{% endif %}
+                                    {% if r.silver > 0 %}<span class="medal medal-silver">{{ r.silver }}</span>{% endif %}
+                                    {% if r.bronze > 0 %}<span class="medal medal-bronze">{{ r.bronze }}</span>{% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="gate-overlay">
+                    <p>{{ _t("상위 랭킹 선수를 확인하세요") }}</p>
+                    <a href="{{ login_url }}" class="gate-cta-btn" onclick="localStorage.setItem('fencingmind_login_redirect', window.location.href)">{{ _t("로그인하여 전체 보기") }}</a>
+                </div>
+            </div>
+
+            <!-- Right: Selection points teaser card -->
+            <div class="guest-hero-selection">
+                <div class="guest-sel-card">
+                    <h4>{{ _t("선발 포인트") }}</h4>
+                    <p>{{ _t("꿈나무·청소년 대표 선발 포인트 순위") }}</p>
+                    <div class="guest-sel-items">
+                        <div>🏅 {{ _t("꿈나무 선발") }}</div>
+                        <div>🇰🇷 {{ _t("청소년 대표 선발") }}</div>
+                        <div>📊 {{ _t("6종목 × 2성별 실시간 순위") }}</div>
+                    </div>
+                    <a href="{{ login_url }}" class="gate-cta-btn guest-sel-cta" onclick="localStorage.setItem('fencingmind_login_redirect', window.location.href)">
+                        {{ _t("로그인하여 선발 포인트 보기") }}
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <div class="ranking-info" id="ranking-info">
         <h2 id="ranking-title">-</h2>
         <div class="ranking-info-grid">
@@ -587,6 +1048,52 @@
         </div>
     </div>
 </div>
+
+<!-- Rankings Filter Bottom Sheet (mobile only) -->
+<div class="bottom-sheet-backdrop" id="rankingsFilterSheet-backdrop" onclick="closeBottomSheet('rankingsFilterSheet')"></div>
+<div class="bottom-sheet" id="rankingsFilterSheet">
+    <div class="bottom-sheet-handle"></div>
+    <div class="bottom-sheet-title">{{ _t('필터') }}</div>
+    <div class="bottom-sheet-content">
+        <div class="bs-filter-group">
+            <label>{{ i18n.common.filters.weapon|default('Weapon') }}</label>
+            <select id="bs-weapon-select">
+                <option value="foil">{{ i18n.common.weapons.foil|default('Foil') }}</option>
+                <option value="epee">{{ i18n.common.weapons.epee|default('Epee') }}</option>
+                <option value="sabre">{{ i18n.common.weapons.sabre|default('Sabre') }}</option>
+            </select>
+        </div>
+        <div class="bs-filter-group">
+            <label>{{ i18n.common.filters.gender|default('Gender') }}</label>
+            <select id="bs-gender-select">
+                <option value="남">{{ i18n.common.gender.male|default("Men's") }}</option>
+                <option value="여">{{ i18n.common.gender.female|default("Women's") }}</option>
+            </select>
+        </div>
+        <div class="bs-filter-group">
+            <label>{{ i18n.common.filters.age_group|default('Age Group') }}</label>
+            <select id="bs-age-select">
+                <option value="E1">{{ i18n.common.rankings.elementary_1_2|default('Elementary 1-2 (U9)') }}</option>
+                <option value="E2">{{ i18n.common.rankings.elementary_3_4|default('Elementary 3-4 (U11)') }}</option>
+                <option value="E3">{{ i18n.common.rankings.elementary_5_6|default('Elementary 5-6 (U13)') }}</option>
+                <option value="MS">{{ i18n.common.rankings.middle_school|default('Middle School') }}</option>
+                <option value="HS">{{ i18n.common.rankings.high_school|default('High School') }}</option>
+                <option value="UNI">{{ i18n.common.rankings.university|default('University') }}</option>
+                <option value="SR" selected>{{ i18n.common.rankings.senior|default('Senior') }}</option>
+                <option value="NT">{{ i18n.common.rankings.national_team|default('🇰🇷 National Team') }}</option>
+            </select>
+        </div>
+        <div class="bs-filter-group">
+            <label>{{ i18n.common.filters.season|default('Season') }}</label>
+            <select id="bs-year-select">
+                <option value="">{{ i18n.common.rankings.all_rolling|default('All (Rolling)') }}</option>
+            </select>
+        </div>
+    </div>
+    <button class="bs-apply-btn" onclick="applyBottomSheetFilters()">
+        {{ _t('적용하기') }}
+    </button>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -599,7 +1106,8 @@ document.addEventListener('DOMContentLoaded', function() {
             no_data: '{{ i18n.common.rankings.no_data|default("No ranking data found for this criteria.")|safe }}',
             data_insufficient: '{{ i18n.common.rankings.data_insufficient|default("Data may not be fully collected yet.")|safe }}',
             cannot_load: '{{ i18n.common.rankings.cannot_load|default("Unable to load rankings")|safe }}',
-            year_format: '{{ i18n.common.rankings.year_format|default("{year}")|safe }}'
+            year_format: '{{ i18n.common.rankings.year_format|default("{year}")|safe }}',
+            best_finish: '{{ i18n.common.rankings.best_finish|default("최고 {n}위")|safe }}'
         },
         table: {
             rank: '{{ i18n.common.table.rank|default("Rank")|safe }}',
@@ -620,8 +1128,15 @@ document.addEventListener('DOMContentLoaded', function() {
             'foil': '{{ i18n.common.weapons.foil|default("Foil")|safe }}',
             'epee': '{{ i18n.common.weapons.epee|default("Epee")|safe }}',
             'sabre': '{{ i18n.common.weapons.sabre|default("Sabre")|safe }}'
+        },
+        gate: {
+            login_cta: {{ (i18n.common.gate.login_cta or "로그인하여 전체 보기")|tojson }},
+            signup_cta: {{ (i18n.common.gate.signup_cta or "무료 가입하고 전체 데이터 보기")|tojson }}
         }
     };
+
+    const accessLevel = '{{ access_level|default("guest") }}';
+    const loginUrl = '{{ login_url|default("/auth/login") }}';
 
     const weaponSelect = document.getElementById('weapon-select');
     const genderSelect = document.getElementById('gender-select');
@@ -682,12 +1197,54 @@ document.addEventListener('DOMContentLoaded', function() {
                 opt.textContent = i18n.rankings.year_format.replace('{year}', year);
                 yearSelect.appendChild(opt);
             });
-            // Set default to 2025 (latest competition year)
-            if (data.years.includes(2025)) {
-                yearSelect.value = '2025';
+            // Set default to current year (fall back to latest available)
+            var currentYear = new Date().getFullYear();
+            if (data.years.includes(currentYear)) {
+                yearSelect.value = currentYear.toString();
             } else if (data.years.length > 0) {
                 yearSelect.value = data.years[0];
             }
+
+            // Sync bottom sheet year options
+            var bsYearSelect = document.getElementById('bs-year-select');
+            if (bsYearSelect) {
+                data.years.forEach(function(year) {
+                    var opt = document.createElement('option');
+                    opt.value = year;
+                    opt.textContent = i18n.rankings.year_format.replace('{year}', year);
+                    bsYearSelect.appendChild(opt);
+                });
+                bsYearSelect.value = yearSelect.value;
+            }
+
+            // Apply saved preferences before initial load
+            (function() {
+                try {
+                    var prefs = JSON.parse(localStorage.getItem('fm_preferences'));
+                    if (!prefs || prefs.version !== 2) return;
+                    var AGE_MAP = { elementary:'E3', middle_school:'MS', high_school:'HS', senior:'SR' };
+                    if (prefs.weapon) { weaponSelect.value = prefs.weapon; }
+                    if (prefs.gender) { genderSelect.value = prefs.gender; }
+                    if (prefs.age_group && AGE_MAP[prefs.age_group]) {
+                        ageGroupSelect.value = AGE_MAP[prefs.age_group];
+                    }
+                    // Sync bottom sheet selects
+                    var bsW = document.getElementById('bs-weapon-select');
+                    var bsG = document.getElementById('bs-gender-select');
+                    var bsA = document.getElementById('bs-age-select');
+                    if (bsW && prefs.weapon) bsW.value = prefs.weapon;
+                    if (bsG && prefs.gender) bsG.value = prefs.gender;
+                    if (bsA && prefs.age_group && AGE_MAP[prefs.age_group]) bsA.value = AGE_MAP[prefs.age_group];
+                    // Update category section visibility
+                    var hasCategory = ageGroupSelect.selectedOptions[0].dataset.hasCategory === 'true';
+                    if (hasCategory) {
+                        categorySection.classList.remove('category-hidden');
+                    } else {
+                        categorySection.classList.add('category-hidden');
+                    }
+                } catch(e) {}
+            })();
+
             loadRankings();
         });
 
@@ -788,10 +1345,8 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        let html = `
-            <div class="ranking-table-container">
-                <table class="ranking-table">
-                    <thead>
+        const hasBlurred = data.rankings.some(r => r.blurred);
+        const theadHtml = `<thead>
                         <tr>
                             <th class="rank-cell">${i18n.table.rank}</th>
                             <th>${i18n.table.name}</th>
@@ -800,22 +1355,16 @@ document.addEventListener('DOMContentLoaded', function() {
                             <th>${i18n.table.competition}</th>
                             <th class="medal-cell">🏅</th>
                         </tr>
-                    </thead>
-                    <tbody>
-        `;
+                    </thead>`;
 
-        data.rankings.forEach(r => {
+        function buildRow(r) {
             const rankClass = r.rank <= 3 ? `rank-${r.rank}` : '';
-            // display_teams가 있으면 사용, 없으면 teams 사용
             const teamsToShow = (r.display_teams && r.display_teams.length > 0) ? r.display_teams : r.teams;
             const teams = teamsToShow.slice(0, 2).map(t => `<span class="team-badge">${t}</span>`).join('');
-            // display_name이 있으면 사용, 없으면 name 사용
             const displayName = r.display_name || r.name;
-
-            html += `
-                <tr>
+            return `<tr>
                     <td class="rank-cell ${rankClass}">${r.rank}</td>
-                    <td><a href="/player/${encodeURIComponent(r.name)}" class="player-link">${displayName}</a></td>
+                    <td>${r.blurred ? `<span>${displayName}</span>` : `<a href="/player/${encodeURIComponent(r.name)}" class="player-link">${displayName}</a>`}</td>
                     <td>${teams}</td>
                     <td class="points-cell">${r.points.toFixed(1)}</td>
                     <td>${r.competitions}</td>
@@ -823,16 +1372,39 @@ document.addEventListener('DOMContentLoaded', function() {
                         ${r.gold > 0 ? `<span class="medal medal-gold">${r.gold}</span>` : ''}
                         ${r.silver > 0 ? `<span class="medal medal-silver">${r.silver}</span>` : ''}
                         ${r.bronze > 0 ? `<span class="medal medal-bronze">${r.bronze}</span>` : ''}
+                        ${(r.gold === 0 && r.silver === 0 && r.bronze === 0 && r.best_results && r.best_results.length > 0) ?
+                            `<span class="best-finish">${i18n.rankings.best_finish.replace('{n}', Math.min(...r.best_results.map(b => b.rank)))}</span>` : ''}
                     </td>
-                </tr>
-            `;
-        });
+                </tr>`;
+        }
 
-        html += `
-                    </tbody>
-                </table>
-            </div>
-        `;
+        let html = '';
+
+        if (hasBlurred) {
+            // 블러 영역: 상위 10명 테이블을 access-gate로 감싸기
+            const blurredTableRows = data.rankings.filter(r => r.blurred).map(buildRow).join('');
+            html += `<div class="ranking-blurred-section access-gate">
+                <div class="blurred-content">
+                    <table class="ranking-table">${theadHtml}<tbody>${blurredTableRows}</tbody></table>
+                </div>
+                <div class="gate-overlay">
+                    <p>${i18n.gate.login_cta}</p>
+                    <a href="${loginUrl}" class="gate-cta-btn" onclick="localStorage.setItem('fencingmind_login_redirect', window.location.href)">${i18n.gate.login_cta}</a>
+                </div>
+            </div>`;
+
+            // 일반 영역: 11위부터
+            const normalRows = data.rankings.filter(r => !r.blurred).map(buildRow).join('');
+            html += `<div class="ranking-table-container">
+                <table class="ranking-table">${theadHtml}<tbody>${normalRows}</tbody></table>
+            </div>`;
+        } else {
+            // 전체 공개 (로그인 상태)
+            const allRows = data.rankings.map(buildRow).join('');
+            html += `<div class="ranking-table-container">
+                <table class="ranking-table">${theadHtml}<tbody>${allRows}</tbody></table>
+            </div>`;
+        }
 
         // Pagination
         const totalPages = Math.ceil(data.total / 50);

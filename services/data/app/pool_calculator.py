@@ -29,6 +29,7 @@ def calculate_pool_total_ranking(pool_rounds: List[Dict]) -> List[Dict]:
 
     # 선수별 통계 집계
     player_stats: Dict[str, Dict[str, Any]] = {}
+    forfeit_players: Dict[str, Dict[str, Any]] = {}  # 기권 선수 별도 관리
 
     for pool in pool_rounds:
         results = pool.get("results", [])
@@ -38,6 +39,18 @@ def calculate_pool_total_ranking(pool_rounds: List[Dict]) -> List[Dict]:
                 continue
 
             team = (result.get("team") or "").strip()
+
+            # 기권 선수는 별도 수집 (FIE t.95: 기권자 풀 결과 삭제)
+            if result.get("is_forfeit"):
+                key = f"{name}|{team}"
+                if key not in forfeit_players:
+                    forfeit_players[key] = {
+                        "name": name,
+                        "team": team,
+                        "is_forfeit": True,
+                    }
+                continue
+
             wins = _safe_int(result.get("wins", 0))
             losses = _safe_int(result.get("losses", 0))
             indicator = _safe_int(result.get("indicator", 0))
@@ -60,10 +73,10 @@ def calculate_pool_total_ranking(pool_rounds: List[Dict]) -> List[Dict]:
             stats["indicator"] += indicator
             stats["touches"] += touches
 
-    if not player_stats:
+    if not player_stats and not forfeit_players:
         return []
 
-    # 승률 계산 및 정렬
+    # 승률 계산 및 정렬 (기권 선수 제외)
     rankings = []
     for stats in player_stats.values():
         total_bouts = stats["wins"] + stats["losses"]
@@ -96,6 +109,25 @@ def calculate_pool_total_ranking(pool_rounds: List[Dict]) -> List[Dict]:
                 r["rank"] = i + 1
 
         r["source"] = "calculated"
+
+    # 기권 선수를 최하위에 추가 (FIE t.95: 순위표 맨 뒤, is_forfeit 마킹)
+    if forfeit_players:
+        last_rank = (rankings[-1]["rank"] + 1) if rankings else 1
+        for fp in forfeit_players.values():
+            rankings.append({
+                "name": fp["name"],
+                "team": fp["team"],
+                "wins": 0,
+                "losses": 0,
+                "indicator": 0,
+                "touches": 0,
+                "total_bouts": 0,
+                "win_rate": 0.0,
+                "rank": last_rank,
+                "source": "calculated",
+                "is_forfeit": True,
+            })
+            logger.info(f"Pool 기권 선수: {fp['name']} ({fp['team']}) → 최하위 순위 {last_rank}")
 
     return rankings
 

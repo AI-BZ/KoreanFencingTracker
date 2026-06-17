@@ -771,6 +771,15 @@ class EventBasedScraper:
                     "final_rankings": final_to_save,
                 }
 
+                # Layer 3: 스크래핑 메타데이터 저장
+                raw_data["_scrape_metadata"] = {
+                    "scraped_at": datetime.now().isoformat(),
+                    "scraper_version": "3.1",
+                    "pool_diagnostics": results.get("_pool_diagnostics", {}),
+                    "scrape_warnings": results.get("_scrape_warnings", []),
+                    "duration_ms": results.get("_duration_ms", 0),
+                }
+
                 # 기존 DB 데이터에서 participants 보존
                 if existing_raw.get("participants"):
                     raw_data["participants"] = existing_raw["participants"]
@@ -810,6 +819,27 @@ class EventBasedScraper:
                         logger.debug(f"    종목 저장: {event.name}")
                 except Exception as e:
                     logger.warning(f"    종목 저장 오류 ({event.name}): {e}")
+
+                # Layer 5: ERROR급 스크래핑 경고 시 Discord 알림
+                scrape_warnings = results.get("_scrape_warnings", [])
+                error_warnings = [w for w in scrape_warnings if w.get('severity') == 'ERROR']
+                if error_warnings:
+                    comp_name_for_alert = comp.get("name", "알 수 없는 대회")
+                    for w in error_warnings:
+                        try:
+                            from app.discord_notify import send_alert
+                            await send_alert(
+                                severity="warning",
+                                title="스크래핑 데이터 불완전",
+                                message=w['message'],
+                                fields=[
+                                    {"name": "대회", "value": comp_name_for_alert, "inline": True},
+                                    {"name": "종목", "value": w.get('event_name', ''), "inline": True},
+                                    {"name": "유형", "value": w.get('type', ''), "inline": True},
+                                ],
+                            )
+                        except Exception as notify_err:
+                            logger.debug(f"Discord 알림 오류: {notify_err}")
 
             # 풀 종합 순위 비교 검증
             for item in events_to_save:

@@ -968,3 +968,218 @@ tr.player-highlighted td {
         font-size: 0.8rem;
     }
 }
+
+/* =====================================================
+   LIGHT THEME OVERRIDES
+   ===================================================== */
+[data-theme="light"] .autocomplete-dropdown {
+    background: #ffffff;
+    border-color: #e5e8eb;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.12);
+}
+
+[data-theme="light"] .autocomplete-item {
+    border-bottom-color: #f0f0f5;
+}
+
+[data-theme="light"] .autocomplete-item:hover,
+[data-theme="light"] .autocomplete-item.active {
+    background: #f5f5f7;
+}
+
+[data-theme="light"] .autocomplete-item .player-team {
+    color: #8b95a1;
+}
+
+[data-theme="light"] .player-search-section {
+    background: #ffffff;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-color: #e5e8eb;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="light"] .search-box input {
+    background: #f5f5f7;
+    border-color: #e5e8eb;
+    color: #191f28;
+}
+
+[data-theme="light"] .search-box input::placeholder {
+    color: #8b95a1;
+}
+
+[data-theme="light"] .search-box input:focus {
+    background: #ffffff;
+    border-color: #c9302c;
+}
+
+[data-theme="light"] .clear-btn {
+    background: rgba(239, 68, 68, 0.08);
+    color: #dc2626;
+    border-color: rgba(239, 68, 68, 0.2);
+}
+
+[data-theme="light"] .clear-btn:hover {
+    background: rgba(239, 68, 68, 0.15);
+}
+
+[data-theme="light"] .search-result-panel {
+    background: #f5f5f7;
+    border-color: #e5e8eb;
+}
+
+[data-theme="light"] .result-title {
+    color: #191f28;
+}
+
+[data-theme="light"] .result-count {
+    color: #c9302c;
+}
+
+[data-theme="light"] .player-result-card {
+    background: #ffffff;
+    border-top-color: #e5e8eb;
+    border-right-color: #e5e8eb;
+    border-bottom-color: #e5e8eb;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+}
+
+[data-theme="light"] .player-result-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="light"] .player-result-card .name {
+    color: #191f28;
+}
+
+[data-theme="light"] .player-result-card .team {
+    color: #8b95a1;
+}
+
+[data-theme="light"] .player-result-card .info-item {
+    background: #f5f5f7;
+    border-color: #e5e8eb;
+}
+
+[data-theme="light"] .player-result-card .info-label {
+    color: #8b95a1;
+}
+
+[data-theme="light"] .player-result-card .info-value {
+    color: #191f28;
+}
+
+[data-theme="light"] .player-result-card .pool-link {
+    color: #c9302c;
+}
+
+[data-theme="light"] .player-result-card .pool-link:hover {
+    color: #a02320;
+}
+
+[data-theme="light"] .my-player-panel {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(234, 179, 8, 0.05));
+    border-color: rgba(245, 158, 11, 0.3);
+}
+
+[data-theme="light"] .my-player-label {
+    color: #d97706;
+}
+
+[data-theme="light"] .my-player-name {
+    color: #191f28;
+    background: #f5f5f7;
+    border-color: #e5e8eb;
+}
+
+[data-theme="light"] .de-prediction-section {
+    background: #ffffff;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-color: #e5e8eb;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="light"] .de-prediction-header {
+    border-bottom-color: #e5e8eb;
+}
+
+[data-theme="light"] .de-prediction-header h4 {
+    color: #191f28;
+}
+
+[data-theme="light"] .de-prediction-header .player-info .player-name {
+    color: #c9302c;
+}
+
+[data-theme="light"] .de-prediction-header .player-info .player-team {
+    color: #8b95a1;
+}
+
+[data-theme="light"] .de-prediction-header .player-info .player-seed {
+    background: rgba(99, 102, 241, 0.1);
+    color: #4f46e5;
+}
+
+[data-theme="light"] .de-prediction-header .eliminated-badge {
+    background: rgba(239, 68, 68, 0.1);
+    color: #dc2626;
+}
+
+[data-theme="light"] .de-prediction-header .current-round-badge {
+    background: rgba(34, 197, 94, 0.1);
+    color: #16a34a;
+}
+
+[data-theme="light"] .prediction-round {
+    background: #f5f5f7;
+    border-color: #e5e8eb;
+}
+
+[data-theme="light"] .prediction-round .round-header:hover {
+    background: rgba(0, 0, 0, 0.03);
+}
+
+[data-theme="light"] .prediction-round .round-name {
+    color: #191f28;
+}
+
+[data-theme="light"] .prediction-round .opponent-count {
+    color: #8b95a1;
+}
+
+[data-theme="light"] .prediction-round .toggle-icon {
+    background: rgba(0, 0, 0, 0.05);
+    color: #8b95a1;
+}
+
+[data-theme="light"] .opponents-table th {
+    background: rgba(0, 0, 0, 0.03);
+    color: #8b95a1;
+    border-bottom-color: #e5e8eb;
+}
+
+[data-theme="light"] .opponents-table td {
+    border-bottom-color: #f0f0f5;
+    color: #191f28;
+}
+
+[data-theme="light"] .opponents-table .h2h-cell.positive {
+    color: #16a34a;
+}
+
+[data-theme="light"] .opponents-table .h2h-cell.negative {
+    color: #dc2626;
+}
+
+[data-theme="light"] .remove-btn {
+    background: rgba(239, 68, 68, 0.08);
+    color: #dc2626;
+    border-color: rgba(239, 68, 68, 0.2);
+}
+
+[data-theme="light"] .remove-btn:hover {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: rgba(239, 68, 68, 0.4);
+}

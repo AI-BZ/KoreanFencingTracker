@@ -3,14 +3,14 @@
 {% block title %}Korean Fencing Tracker - Player Search{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="/static/css/fencinglab.css">
+<link rel="stylesheet" href="/static/css/fencinglab.css?v=20260603">
 <style>
     /* Hero - 투명 배경, 테두리 없음 */
     .hero {
         background: transparent !important;
         border: none !important;
         color: white;
-        padding: 3rem 0;
+        padding: 1.5rem 0;
         text-align: center;
     }
     .hero h1 {
@@ -641,11 +641,19 @@
     }
 
     /* 선택된 필터 표시 */
+    .active-filters-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin: 1rem 0;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
     .active-filters {
         display: flex;
         flex-wrap: wrap;
         gap: 0.5rem;
-        margin-bottom: 1rem;
+        flex: 1;
     }
     .active-filter-tag {
         display: inline-flex;
@@ -665,20 +673,408 @@
         opacity: 1;
     }
 
+    /* Advanced Search Toggle */
+    .advanced-search-toggle {
+        background: transparent;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: rgba(255, 255, 255, 0.7);
+        padding: 0.4rem 1rem;
+        border-radius: 20px;
+        cursor: pointer;
+        font-size: 0.85rem;
+        white-space: nowrap;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+    }
+    .advanced-search-toggle:hover {
+        border-color: #c9302c;
+        color: #c9302c;
+    }
+    .advanced-search-toggle .toggle-arrow {
+        transition: transform 0.3s;
+        font-size: 0.7rem;
+    }
+    .advanced-search-toggle.expanded .toggle-arrow {
+        transform: rotate(180deg);
+    }
+
+    /* Collapsible Filter Section */
+    .filter-section-collapsible {
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.3s ease;
+    }
+    .filter-section-collapsible.expanded {
+        max-height: 700px;
+    }
+
+    /* Live/Upcoming pinned event cards */
+    .event-card-live {
+        border-left: 3px solid #ee5a24 !important;
+        text-decoration: none;
+        color: inherit;
+        display: flex;
+    }
+    .event-card-upcoming {
+        border-left: 3px solid #667eea !important;
+        text-decoration: none;
+        color: inherit;
+        display: flex;
+    }
+    .live-indicator {
+        background: #ee5a24;
+        color: white;
+        padding: 0.15rem 0.5rem;
+        border-radius: 10px;
+        font-size: 0.7rem;
+        font-weight: 700;
+        margin-right: 0.5rem;
+        animation: pulse 2s infinite;
+    }
+    .upcoming-indicator {
+        background: #667eea;
+        color: white;
+        padding: 0.15rem 0.5rem;
+        border-radius: 10px;
+        font-size: 0.7rem;
+        font-weight: 700;
+        margin-right: 0.5rem;
+    }
+
+    /* Auto-load preference description */
+    .auto-loaded-desc {
+        color: rgba(255, 255, 255, 0.5);
+        font-size: 0.8rem;
+        margin-top: 0.25rem;
+    }
+
     @media (max-width: 768px) {
         .hero h1 { font-size: 1.8rem; }
         .event-card { flex-direction: column; align-items: flex-start; }
         .event-date { text-align: left; margin-top: 0.5rem; }
         .filter-grid { grid-template-columns: 1fr; }
     }
+
+    /* ==================== LIGHT THEME (Toss-style) ==================== */
+    [data-theme="light"] .hero {
+        background: transparent !important;
+        border: none !important;
+        color: #191f28 !important;
+        box-shadow: none !important;
+    }
+    [data-theme="light"] .hero h1 {
+        color: #191f28;
+        background: none !important;
+        -webkit-text-fill-color: #191f28 !important;
+    }
+    [data-theme="light"] .hero p {
+        color: #4e5968 !important;
+        opacity: 1 !important;
+    }
+
+    /* Player Search */
+    [data-theme="light"] .player-search {
+        background: #ffffff !important;
+        border: 1px solid #e5e8eb !important;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.06) !important;
+        backdrop-filter: none !important;
+    }
+    [data-theme="light"] .player-search h2 {
+        color: #191f28 !important;
+    }
+    [data-theme="light"] .search-input {
+        background: #f5f5f7 !important;
+        color: #191f28 !important;
+        border: 1px solid #e5e8eb !important;
+    }
+    [data-theme="light"] .search-input::placeholder {
+        color: #8b95a1 !important;
+    }
+    [data-theme="light"] .search-input:focus {
+        border-color: #c9302c !important;
+        box-shadow: 0 0 0 3px rgba(201,48,44,0.1) !important;
+        background: #ffffff !important;
+    }
+
+    /* Event Selection / Filter Section */
+    [data-theme="light"] .filter-section {
+        background: #ffffff !important;
+        border: 1px solid #e5e8eb !important;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.06) !important;
+        backdrop-filter: none !important;
+    }
+    [data-theme="light"] .filter-section h3 {
+        color: #191f28 !important;
+    }
+    [data-theme="light"] .filter-group {
+        background: #f5f5f7 !important;
+        border: 1px solid #e5e8eb !important;
+    }
+    [data-theme="light"] .filter-group label {
+        color: #4e5968 !important;
+    }
+    [data-theme="light"] .filter-btn {
+        background: #ffffff !important;
+        color: #4e5968 !important;
+        border: 1px solid #d1d6db !important;
+    }
+    [data-theme="light"] .filter-btn:hover {
+        border-color: #c9302c !important;
+        color: #c9302c !important;
+        background: rgba(201,48,44,0.04) !important;
+    }
+    [data-theme="light"] .filter-btn.active {
+        background: #c9302c !important;
+        color: #ffffff !important;
+        border-color: #c9302c !important;
+    }
+    [data-theme="light"] .filter-btn.weapon-foil.active { background: #e74c3c !important; border-color: #e74c3c !important; color: #fff !important; }
+    [data-theme="light"] .filter-btn.weapon-epee.active { background: #3498db !important; border-color: #3498db !important; color: #fff !important; }
+    [data-theme="light"] .filter-btn.weapon-sabre.active { background: #2ecc71 !important; border-color: #2ecc71 !important; color: #fff !important; }
+
+    /* Filter Actions */
+    [data-theme="light"] .filter-actions {
+        border-top-color: #e5e8eb !important;
+    }
+    [data-theme="light"] .btn-clear {
+        color: #4e5968 !important;
+        border-color: #d1d6db !important;
+    }
+    [data-theme="light"] .btn-clear:hover {
+        color: #c9302c !important;
+        border-color: #c9302c !important;
+    }
+
+    /* Filter Prompt (empty state) */
+    [data-theme="light"] .filter-prompt {
+        background: #f5f5f7 !important;
+        border: 1px solid #e5e8eb !important;
+        color: #4e5968 !important;
+    }
+    [data-theme="light"] .filter-prompt h4 {
+        color: #191f28 !important;
+    }
+    [data-theme="light"] .filter-prompt p {
+        color: #8b95a1 !important;
+    }
+
+    /* Results */
+    [data-theme="light"] .results-header h3 {
+        color: #191f28 !important;
+    }
+    [data-theme="light"] .results-count {
+        color: #8b95a1 !important;
+    }
+
+    /* Event Cards */
+    [data-theme="light"] .event-card {
+        background: #ffffff !important;
+        border: 1px solid #e5e8eb !important;
+        backdrop-filter: none !important;
+    }
+    [data-theme="light"] .event-card:hover {
+        border-color: #c9302c !important;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.08) !important;
+    }
+    [data-theme="light"] .event-name {
+        color: #191f28 !important;
+    }
+    [data-theme="light"] .event-meta {
+        color: #8b95a1 !important;
+    }
+    [data-theme="light"] .event-date {
+        color: #8b95a1 !important;
+    }
+    [data-theme="light"] .event-year {
+        color: #c9302c !important;
+    }
+
+    /* Competitions Toggle (accordion) */
+    [data-theme="light"] .competitions-toggle {
+        background: #ffffff !important;
+        border: 1px solid #e5e8eb !important;
+        backdrop-filter: none !important;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.06) !important;
+    }
+    [data-theme="light"] .toggle-header {
+        color: #191f28 !important;
+    }
+    [data-theme="light"] .toggle-header:hover {
+        background: #f5f5f7 !important;
+    }
+    [data-theme="light"] .competition-item {
+        color: #191f28 !important;
+        border-bottom-color: #f0f0f5 !important;
+    }
+    [data-theme="light"] .competition-item:hover {
+        background: #f5f5f7 !important;
+    }
+
+    /* Page Buttons */
+    [data-theme="light"] .page-btn {
+        background: #ffffff !important;
+        color: #4e5968 !important;
+        border-color: #d1d6db !important;
+    }
+    [data-theme="light"] .page-btn:hover {
+        border-color: #c9302c !important;
+        color: #c9302c !important;
+    }
+    [data-theme="light"] .page-btn.active {
+        background: #c9302c !important;
+        color: #ffffff !important;
+        border-color: #c9302c !important;
+    }
+
+    /* Upcoming Cards */
+    [data-theme="light"] .upcoming-card {
+        background: #ffffff !important;
+        border: 1px solid #e5e8eb;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+    [data-theme="light"] .upcoming-card:hover {
+        box-shadow: 0 4px 16px rgba(0,0,0,0.1) !important;
+    }
+    [data-theme="light"] .upcoming-card-icon {
+        background: rgba(102, 126, 234, 0.08) !important;
+    }
+    [data-theme="light"] .upcoming-card-icon svg {
+        stroke: #667eea !important;
+    }
+    [data-theme="light"] .upcoming-card-info h4 {
+        color: #191f28 !important;
+    }
+    [data-theme="light"] .upcoming-card-info p {
+        color: #8b95a1 !important;
+    }
+    [data-theme="light"] .upcoming-card-status {
+        background: #f5f5f7 !important;
+    }
+    [data-theme="light"] .upcoming-card-status .status {
+        color: #c9302c !important;
+    }
+    [data-theme="light"] .upcoming-card-status .date {
+        color: #8b95a1 !important;
+    }
+
+    /* Light theme: Advanced Search Toggle */
+    [data-theme="light"] .advanced-search-toggle {
+        border-color: #d1d6db !important;
+        color: #4e5968 !important;
+    }
+    [data-theme="light"] .advanced-search-toggle:hover {
+        border-color: #c9302c !important;
+        color: #c9302c !important;
+    }
+
+    /* Light theme: Auto-loaded desc */
+    [data-theme="light"] .auto-loaded-desc {
+        color: #8b95a1 !important;
+    }
+
+    /* Light theme: Live/Upcoming indicators */
+    [data-theme="light"] .event-card-live {
+        border-left-color: #ee5a24 !important;
+    }
+    [data-theme="light"] .event-card-upcoming {
+        border-left-color: #667eea !important;
+    }
 </style>
 {% endblock %}
 
 {% block content %}
+<!-- Onboarding Overlay (first visit) -->
+<div class="onboarding-overlay" id="onboarding-overlay">
+    <div class="onboarding-card">
+        <!-- Step 1: Weapon + Gender (3×2 grid) -->
+        <div class="onboarding-step active" id="onboarding-step1">
+            <img src="/static/images/logo/FencingMind_logo_long_Tracker.png" alt="FencingMind" class="onboarding-logo">
+            <div class="onboarding-title">{{ i18n.common.mobile.welcome_title|default('FencingMind에 오신 걸 환영합니다!') }}</div>
+            <div class="onboarding-subtitle">{{ i18n.common.mobile.select_category|default('나의 종목을 선택하세요') }}</div>
+            <div class="weapon-gender-grid">
+                <button class="weapon-gender-card" onclick="selectWeaponGender(this,'foil','남')">
+                    <span class="weapon-icon">&#9876;</span>
+                    <span class="weapon-name">{{ i18n.common.weapons.foil|default('Foil') }}</span>
+                    <span class="gender-label">{{ i18n.common.gender.male|default('Men') }}</span>
+                </button>
+                <button class="weapon-gender-card" onclick="selectWeaponGender(this,'epee','남')">
+                    <span class="weapon-icon">&#9876;</span>
+                    <span class="weapon-name">{{ i18n.common.weapons.epee|default('Epee') }}</span>
+                    <span class="gender-label">{{ i18n.common.gender.male|default('Men') }}</span>
+                </button>
+                <button class="weapon-gender-card" onclick="selectWeaponGender(this,'sabre','남')">
+                    <span class="weapon-icon">&#9876;</span>
+                    <span class="weapon-name">{{ i18n.common.weapons.sabre|default('Sabre') }}</span>
+                    <span class="gender-label">{{ i18n.common.gender.male|default('Men') }}</span>
+                </button>
+                <button class="weapon-gender-card" onclick="selectWeaponGender(this,'foil','여')">
+                    <span class="weapon-icon">&#9876;</span>
+                    <span class="weapon-name">{{ i18n.common.weapons.foil|default('Foil') }}</span>
+                    <span class="gender-label">{{ i18n.common.gender.female|default('Women') }}</span>
+                </button>
+                <button class="weapon-gender-card" onclick="selectWeaponGender(this,'epee','여')">
+                    <span class="weapon-icon">&#9876;</span>
+                    <span class="weapon-name">{{ i18n.common.weapons.epee|default('Epee') }}</span>
+                    <span class="gender-label">{{ i18n.common.gender.female|default('Women') }}</span>
+                </button>
+                <button class="weapon-gender-card" onclick="selectWeaponGender(this,'sabre','여')">
+                    <span class="weapon-icon">&#9876;</span>
+                    <span class="weapon-name">{{ i18n.common.weapons.sabre|default('Sabre') }}</span>
+                    <span class="gender-label">{{ i18n.common.gender.female|default('Women') }}</span>
+                </button>
+            </div>
+            <button class="onboarding-skip" onclick="skipOnboarding()">{{ i18n.common.mobile.skip|default('건너뛰기') }}</button>
+        </div>
+
+        <!-- Step 2: Age Group (2×2 grid) -->
+        <div class="onboarding-step" id="onboarding-step2">
+            <div class="onboarding-title">{{ i18n.common.mobile.select_league|default('리그를 선택하세요') }}</div>
+            <div class="onboarding-step2-header" id="onboarding-step2-label"></div>
+            <div class="age-group-grid">
+                <button class="age-group-choice" onclick="selectAgeGroup(this,'elementary')">{{ i18n.common.mobile.league_elementary|default('초등부') }}</button>
+                <button class="age-group-choice" onclick="selectAgeGroup(this,'middle_school')">{{ i18n.common.mobile.league_middle|default('중등부') }}</button>
+                <button class="age-group-choice" onclick="selectAgeGroup(this,'high_school')">{{ i18n.common.mobile.league_high|default('고등부') }}</button>
+                <button class="age-group-choice" onclick="selectAgeGroup(this,'senior')">{{ i18n.common.mobile.league_senior|default('일반부') }}</button>
+            </div>
+            <button class="onboarding-cta" id="onboarding-cta" onclick="completeOnboarding()" disabled>{{ i18n.common.mobile.start|default('시작하기') }} &rarr;</button>
+            <button class="onboarding-skip" onclick="skipOnboarding()">{{ i18n.common.mobile.skip_age|default('건너뛰기 - 전체 보기') }}</button>
+        </div>
+    </div>
+</div>
+
 <div class="hero">
     <div class="container">
         <h1>{{ i18n.common.site.title|default('Korean Fencing Tracker') }}</h1>
         <p>{{ i18n.common.site.description|default('Track and analyze your fencing competition records') }}</p>
+    </div>
+</div>
+
+<!-- Ranking Preview (온보딩 후 또는 재방문 시 - Hero 바로 아래) -->
+<div class="ranking-preview-section" id="ranking-preview-section" style="display:none;">
+    <div class="container">
+        <div class="ranking-preview-card">
+            <div class="ranking-preview-header">
+                <span class="ranking-preview-trophy">&#127942;</span>
+                <span class="ranking-preview-title" id="ranking-preview-title"></span>
+            </div>
+            <div class="ranking-preview-body" id="ranking-preview-body">
+                <div class="ranking-preview-loading" id="ranking-preview-loading">
+                    {{ i18n.common.common.loading|default('Loading...') }}
+                </div>
+            </div>
+            <div class="ranking-preview-footer">
+                <a class="ranking-preview-view-all" id="ranking-preview-link" href="#">
+                    {{ i18n.common.home.ranking_preview.view_all|default('View Full Rankings') }} &rarr;
+                </a>
+            </div>
+            <div class="ranking-preview-login-hint" id="ranking-preview-login-hint" style="display:none;">
+                <span class="ranking-preview-hint-icon">&#128161;</span>
+                <span class="ranking-preview-hint-text">{{ i18n.common.home.ranking_preview.login_hint|default('Sign in to see player names and teams.') }}</span>
+                <a class="ranking-preview-login-btn" href="/{{ lang|default('ko') }}/login">{{ i18n.common.home.ranking_preview.login_btn|default('Sign In') }}</a>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -707,7 +1103,31 @@
     </div>
 </div>
 
+{% if access_level is defined and access_level != "guest" %}
+<!-- Favorites Dashboard (member+: 대회 공지 바로 아래) -->
+<div class="favorites-dashboard" id="favoritesDashboard" style="display:none;">
+    <div class="container">
+        <div class="favorites-header">
+            <h3>{{ _t('내 선수') }}</h3>
+            <button class="fav-expand-btn" id="favExpandBtn" style="display:none;" onclick="toggleFavoriteExpand()">
+                {{ _t('더보기') }} (<span id="favMoreCount"></span>)
+            </button>
+        </div>
+        <div class="favorites-cards" id="favoritesCards"></div>
+    </div>
+</div>
+{% else %}
+<!-- Followed Players (guest: localStorage chips) -->
+<div class="favorites-dashboard" id="followedPlayersSection">
+    <div class="container">
+        <div class="followed-players-title">{{ _t('팔로우 선수') }}</div>
+        <div class="followed-players-list"></div>
+    </div>
+</div>
+{% endif %}
+
 <div class="container">
+
     <!-- Player Search -->
     <div class="player-search">
         <h2 style="text-align: center; margin-bottom: 1.5rem;">{{ i18n.common.home.player_search|default('Player Search') }}</h2>
@@ -740,50 +1160,61 @@
         </div>
     </div>
 
-    <!-- Event Selection -->
-    <div class="filter-section">
-        <h3>{{ i18n.common.home.event_selection|default('Event Selection') }}</h3>
+    <!-- Active Filter Tags + Advanced Search Toggle (always visible) -->
+    <div class="active-filters-bar" id="active-filters-bar">
+        <div class="active-filters" id="active-filters"></div>
+        <button class="advanced-search-toggle" id="advanced-search-toggle">
+            {{ i18n.common.home.advanced_search|default('Advanced Search') }}
+            <span class="toggle-arrow">▼</span>
+        </button>
+    </div>
 
-        <div class="filter-grid">
-            <div class="filter-group">
-                <label>{{ i18n.common.filters.weapon|default('Weapon') }}</label>
-                <div class="filter-buttons" id="filter-weapons">
-                    <button class="filter-btn weapon-foil" data-filter="weapon" data-value="foil">{{ i18n.common.weapons.foil|default('Foil') }}</button>
-                    <button class="filter-btn weapon-epee" data-filter="weapon" data-value="epee">{{ i18n.common.weapons.epee|default('Epee') }}</button>
-                    <button class="filter-btn weapon-sabre" data-filter="weapon" data-value="sabre">{{ i18n.common.weapons.sabre|default('Sabre') }}</button>
+    <!-- Collapsible Filter Section -->
+    <div class="filter-section-collapsible" id="filter-section-collapsible">
+        <div class="filter-section">
+            <h3>{{ i18n.common.home.event_selection|default('Event Selection') }}</h3>
+
+            <div class="filter-grid">
+                <div class="filter-group">
+                    <label>{{ i18n.common.filters.weapon|default('Weapon') }}</label>
+                    <div class="filter-buttons" id="filter-weapons">
+                        <button class="filter-btn weapon-foil" data-filter="weapon" data-value="foil">{{ i18n.common.weapons.foil|default('Foil') }}</button>
+                        <button class="filter-btn weapon-epee" data-filter="weapon" data-value="epee">{{ i18n.common.weapons.epee|default('Epee') }}</button>
+                        <button class="filter-btn weapon-sabre" data-filter="weapon" data-value="sabre">{{ i18n.common.weapons.sabre|default('Sabre') }}</button>
+                    </div>
+                </div>
+
+                <div class="filter-group">
+                    <label>{{ i18n.common.filters.gender|default('Gender') }}</label>
+                    <div class="filter-buttons" id="filter-genders">
+                        <button class="filter-btn" data-filter="gender" data-value="남">{{ i18n.common.gender.male|default('Men') }}</button>
+                        <button class="filter-btn" data-filter="gender" data-value="여">{{ i18n.common.gender.female|default('Women') }}</button>
+                    </div>
+                </div>
+
+                <div class="filter-group">
+                    <label>{{ i18n.common.filters.age_group|default('Event') }}</label>
+                    <div class="filter-buttons" id="filter-ages"></div>
+                </div>
+
+                <div class="filter-group">
+                    <label>{{ i18n.common.filters.season|default('Season') }}</label>
+                    <div class="filter-buttons" id="filter-years"></div>
+                </div>
+
+                <div class="filter-group">
+                    <label>{{ i18n.common.filters.event_type|default('Type') }}</label>
+                    <div class="filter-buttons" id="filter-types">
+                        <button class="filter-btn" data-filter="event_type" data-value="개인">{{ i18n.common.event_type.individual|default('Individual') }}</button>
+                        <button class="filter-btn" data-filter="event_type" data-value="단체">{{ i18n.common.event_type.team|default('Team') }}</button>
+                    </div>
                 </div>
             </div>
 
-            <div class="filter-group">
-                <label>{{ i18n.common.filters.gender|default('Gender') }}</label>
-                <div class="filter-buttons" id="filter-genders">
-                    <button class="filter-btn" data-filter="gender" data-value="남">{{ i18n.common.gender.male|default('Men') }}</button>
-                    <button class="filter-btn" data-filter="gender" data-value="여">{{ i18n.common.gender.female|default('Women') }}</button>
-                </div>
+            <div class="filter-actions">
+                <button class="btn-search" id="search-events" disabled>{{ i18n.common.search.button|default('Search') }}</button>
+                <button class="btn-clear" id="clear-filters">{{ i18n.common.search.reset|default('Reset') }}</button>
             </div>
-
-            <div class="filter-group">
-                <label>{{ i18n.common.filters.age_group|default('Event') }}</label>
-                <div class="filter-buttons" id="filter-ages"></div>
-            </div>
-
-            <div class="filter-group">
-                <label>{{ i18n.common.filters.season|default('Season') }}</label>
-                <div class="filter-buttons" id="filter-years"></div>
-            </div>
-
-            <div class="filter-group">
-                <label>{{ i18n.common.filters.event_type|default('Type') }}</label>
-                <div class="filter-buttons" id="filter-types">
-                    <button class="filter-btn" data-filter="event_type" data-value="개인">{{ i18n.common.event_type.individual|default('Individual') }}</button>
-                    <button class="filter-btn" data-filter="event_type" data-value="단체">{{ i18n.common.event_type.team|default('Team') }}</button>
-                </div>
-            </div>
-        </div>
-
-        <div class="filter-actions">
-            <button class="btn-search" id="search-events" disabled>{{ i18n.common.search.button|default('Search') }}</button>
-            <button class="btn-clear" id="clear-filters">{{ i18n.common.search.reset|default('Reset') }}</button>
         </div>
     </div>
 
@@ -792,7 +1223,7 @@
         <div class="results-header">
             <div>
                 <h3>{{ i18n.common.home.search_results|default('Search Results') }}</h3>
-                <div class="active-filters" id="active-filters"></div>
+                <div class="auto-loaded-desc" id="auto-loaded-desc" style="display:none;"></div>
             </div>
             <span class="results-count" id="results-count"></span>
         </div>
@@ -831,11 +1262,16 @@ const i18n = {
         Y8: '{{ i18n.common.age_groups.Y8|default("Y8 (Elem 1-2)") }}',
         Y10: '{{ i18n.common.age_groups.Y10|default("Y10 (Elem 3-4)") }}',
         Y12: '{{ i18n.common.age_groups.Y12|default("Y12 (Elem 5-6)") }}',
+        Y14: '{{ i18n.common.age_groups.Y14|default("Y14 (Middle School)") }}',
+        Cadet: '{{ i18n.common.age_groups.Cadet|default("Cadet (High School)") }}',
+        Junior: '{{ i18n.common.age_groups.Junior|default("Junior (University)") }}',
+        Veteran: '{{ i18n.common.age_groups.Veteran|default("Senior") }}',
+        National: '{{ i18n.common.age_groups.National|default("National Team") }}',
+        U9: '{{ i18n.common.age_groups.U9|default("U9") }}',
+        U11: '{{ i18n.common.age_groups.U11|default("U11") }}',
         U13: '{{ i18n.common.age_groups.U13|default("U13") }}',
-        U15: '{{ i18n.common.age_groups.U15|default("U15 (Middle School)") }}',
         U17: '{{ i18n.common.age_groups.U17|default("U17") }}',
-        U20: '{{ i18n.common.age_groups.U20|default("U20") }}',
-        senior: '{{ i18n.common.age_groups.senior|default("Senior") }}'
+        U20: '{{ i18n.common.age_groups.U20|default("U20") }}'
     },
     weapons: {
         foil: '{{ i18n.common.weapons.foil|default("Foil") }}',
@@ -857,7 +1293,17 @@ const i18n = {
         no_team: '{{ i18n.common.home.no_team|default("No team") }}',
         records: '{{ i18n.common.home.records|default("records") }}',
         select_event: '{{ i18n.common.home.select_event|default("Select an Event") }}',
-        select_event_desc: '{{ i18n.common.home.select_event_desc|default("Select one or more filters above (Weapon, Gender, Event, Season, Type) to view matching events.") }}'
+        select_event_desc: '{{ i18n.common.home.select_event_desc|default("Select one or more filters above (Weapon, Gender, Event, Season, Type) to view matching events.") }}',
+        advanced_search: '{{ i18n.common.home.advanced_search|default("Advanced Search") }}',
+        auto_loaded_desc: '{{ i18n.common.home.auto_loaded_desc|default("Showing events based on your preferences") }}'
+    },
+    ranking_preview: {
+        title: '{{ i18n.common.home.ranking_preview.title|default("TOP 3") }}',
+        view_all: '{{ i18n.common.home.ranking_preview.view_all|default("View Full Rankings") }}',
+        login_hint: '{{ i18n.common.home.ranking_preview.login_hint|default("Sign in to see player names and teams.") }}',
+        login_btn: '{{ i18n.common.home.ranking_preview.login_btn|default("Sign In") }}',
+        no_data: '{{ i18n.common.home.ranking_preview.no_data|default("No ranking data available") }}',
+        loading: '{{ i18n.common.home.ranking_preview.loading|default("Loading rankings...") }}'
     },
     common: {
         loading: '{{ i18n.common.common.loading|default("Loading...") }}'
@@ -871,17 +1317,21 @@ const i18n = {
     }
 };
 
-// Age Group Labels (using i18n)
+// Age Group Labels (using i18n) — KFA/FIE standard codes
 const AGE_GROUP_LABELS = {
     'Y8': i18n.age_groups.Y8,
     'Y10': i18n.age_groups.Y10,
     'Y12': i18n.age_groups.Y12,
+    'Y14': i18n.age_groups.Y14,
+    'Cadet': i18n.age_groups.Cadet,
+    'Junior': i18n.age_groups.Junior,
+    'Veteran': i18n.age_groups.Veteran,
+    'National': i18n.age_groups.National,
+    'U9': i18n.age_groups.U9,
+    'U11': i18n.age_groups.U11,
     'U13': i18n.age_groups.U13,
-    'U15': i18n.age_groups.U15,
     'U17': i18n.age_groups.U17,
-    'U20': i18n.age_groups.U20,
-    'Senior': i18n.age_groups.senior,
-    'senior': i18n.age_groups.senior
+    'U20': i18n.age_groups.U20
 };
 
 // Weapon display mapping (using i18n)
@@ -923,7 +1373,95 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadCompetitions();
     setupEventListeners();
     updateSearchButton();
+
+    // Auto-load events from onboarding preferences
+    autoLoadFromPreferences();
+
+    // 재방문자: 저장된 선호도로 랭킹 프리뷰 표시
+    try {
+        var savedPrefs = localStorage.getItem('fm_preferences');
+        if (savedPrefs) {
+            var p = JSON.parse(savedPrefs);
+            if (p && p.onboarded && p.weapon && p.gender && p.age_group) {
+                fetchAndRenderRankingPreview(p.weapon, p.gender, p.age_group);
+            }
+        }
+    } catch (e) { /* ignore */ }
 });
+
+// Auto-load events based on onboarding preferences
+function autoLoadFromPreferences() {
+    const AGE_MAP = {
+        elementary: 'Y12',
+        middle_school: 'Y14',
+        high_school: 'Cadet',
+        senior: 'Veteran'
+    };
+
+    try {
+        const raw = localStorage.getItem('fm_preferences');
+        if (!raw) return;
+        const prefs = JSON.parse(raw);
+        if (!prefs || !prefs.onboarded || !prefs.weapon || !prefs.gender) return;
+
+        // Set filters from preferences
+        state.filters.weapon = prefs.weapon;
+        state.filters.gender = prefs.gender;
+        if (prefs.age_group && AGE_MAP[prefs.age_group]) {
+            state.filters.age_group = AGE_MAP[prefs.age_group];
+        }
+        // Keep year=null to show all recent events (current+last year naturally via sort)
+        state.filters.year = null;
+        state.filters.event_type = '개인';
+
+        // Activate corresponding filter buttons visually
+        activateFilterButtons();
+
+        // Show auto-loaded description
+        var descEl = document.getElementById('auto-loaded-desc');
+        if (descEl) {
+            descEl.textContent = i18n.home.auto_loaded_desc;
+            descEl.style.display = '';
+        }
+
+        // Load events immediately
+        state.page = 1;
+        loadEvents();
+    } catch(e) { /* ignore parse errors */ }
+}
+
+// Activate filter buttons to match current state (visual sync)
+function activateFilterButtons() {
+    // Clear all active states first
+    document.querySelectorAll('.filter-btn[data-filter]').forEach(btn => {
+        btn.classList.remove('active');
+    });
+
+    // Activate matching buttons
+    if (state.filters.weapon) {
+        var btn = document.querySelector('.filter-btn[data-filter="weapon"][data-value="' + state.filters.weapon + '"]');
+        if (btn) btn.classList.add('active');
+    }
+    if (state.filters.gender) {
+        var btn = document.querySelector('.filter-btn[data-filter="gender"][data-value="' + state.filters.gender + '"]');
+        if (btn) btn.classList.add('active');
+    }
+    if (state.filters.age_group) {
+        var btn = document.querySelector('.filter-btn[data-filter="age_group"][data-value="' + state.filters.age_group + '"]');
+        if (btn) btn.classList.add('active');
+    }
+    if (state.filters.year) {
+        var btn = document.querySelector('.filter-btn[data-filter="year"][data-value="' + state.filters.year + '"]');
+        if (btn) btn.classList.add('active');
+    }
+    if (state.filters.event_type) {
+        var btn = document.querySelector('.filter-btn[data-filter="event_type"][data-value="' + state.filters.event_type + '"]');
+        if (btn) btn.classList.add('active');
+    }
+
+    updateSearchButton();
+    updateActiveFilters();
+}
 
 // 필터 옵션 로드
 async function loadFilters() {
@@ -937,16 +1475,17 @@ async function loadFilters() {
             `<button class="filter-btn" data-filter="age_group" data-value="${age}">${AGE_GROUP_LABELS[age] || age}</button>`
         ).join('');
 
-        // Season (연도) - 현재 연도 기본 선택
+        // Season (연도) - 자동로드 시 연도 미선택 (최근 이벤트 표시)
         const currentYear = new Date().getFullYear();
         const yearsDiv = document.getElementById('filter-years');
+        const hasPrefs = !!localStorage.getItem('fm_preferences');
         yearsDiv.innerHTML = data.years.map(year => {
-            const isCurrentYear = year === currentYear;
+            const isCurrentYear = year === currentYear && !hasPrefs;
             return `<button class="filter-btn${isCurrentYear ? ' active' : ''}" data-filter="year" data-value="${year}">${year}</button>`;
         }).join('');
 
-        // 현재 연도가 데이터에 있으면 기본 선택
-        if (data.years.includes(currentYear)) {
+        // 자동로드 아닐 때만 현재 연도 기본 선택
+        if (!hasPrefs && data.years.includes(currentYear)) {
             state.filters.year = currentYear;
         }
 
@@ -957,6 +1496,9 @@ async function loadFilters() {
         // 기본 선택 상태 반영
         updateSearchButton();
         updateActiveFilters();
+
+        // Signal that filter buttons are ready in DOM
+        document.dispatchEvent(new Event('filtersReady'));
     } catch (e) {
         console.error('Filters error:', e);
     }
@@ -1061,10 +1603,29 @@ async function loadEvents() {
             return;
         }
 
-        cardsDiv.innerHTML = data.events.map(event => `
-            <div class="event-card" onclick="location.href='/competition/${event.event_cd}?event=${event.sub_event_cd}'" style="cursor: pointer;">
+        // Build set of live competition IDs for badge display
+        const liveCompIds = new Set(_liveCompetitions.map(c => c.comp_idx || c.event_cd));
+        const upcomingCompIds = new Set(_upcomingCompetitions.map(c => c.comp_idx || c.event_cd));
+
+        // Track which live/upcoming competitions have events in results
+        const _liveCompsInResults = new Set();
+        const _upcomingCompsInResults = new Set();
+        data.events.forEach(event => {
+            if (liveCompIds.has(event.event_cd)) _liveCompsInResults.add(event.event_cd);
+            if (upcomingCompIds.has(event.event_cd)) _upcomingCompsInResults.add(event.event_cd);
+        });
+
+        cardsDiv.innerHTML = data.events.map(event => {
+            const isLive = liveCompIds.has(event.event_cd);
+            const isUpcoming = upcomingCompIds.has(event.event_cd);
+            const liveComp = isLive ? _liveCompetitions.find(c => (c.comp_idx || c.event_cd) === event.event_cd) : null;
+            const upComp = isUpcoming ? _upcomingCompetitions.find(c => (c.comp_idx || c.event_cd) === event.event_cd) : null;
+            const cardClass = isLive ? 'event-card event-card-live' : (isUpcoming ? 'event-card event-card-upcoming' : 'event-card');
+            const badge = isLive ? '<span class="live-indicator">LIVE</span> ' : (isUpcoming && upComp ? `<span class="upcoming-indicator">D-${upComp.days_until}</span> ` : '');
+            return `
+            <div class="${cardClass}" onclick="location.href='/competition/${event.event_cd}?event=${event.sub_event_cd}'" style="cursor: pointer;">
                 <div class="event-info">
-                    <div class="event-name">${_tr_event(event.name)}</div>
+                    <div class="event-name">${badge}${_tr_event(event.name)}</div>
                     <div class="event-meta">${_tr_comp(event.competition_name)}</div>
                     <div class="event-tags">
                         ${event.weapon ? `<span class="tag tag-weapon">${WEAPON_DISPLAY[event.weapon] || event.weapon}</span>` : ''}
@@ -1077,14 +1638,63 @@ async function loadEvents() {
                     <div class="event-year">${event.year}</div>
                     <div>${event.competition_date}</div>
                 </div>
-            </div>
-        `).join('');
+            </div>`;
+        }).join('');
+
+        // Prepend live/upcoming competition cards only for those NOT already in event results
+        if (state.page === 1) {
+            prependLiveUpcomingCards(_liveCompsInResults, _upcomingCompsInResults);
+        }
 
         // 페이지네이션
         renderPagination(data.page, data.total_pages);
     } catch (e) {
         console.error('Events error:', e);
         cardsDiv.innerHTML = '<div style="color: red; text-align: center; padding: 2rem;">' + i18n.home.data_load_failed + '</div>';
+    }
+}
+
+// Prepend live/upcoming competition cards at top of event results
+// Skip competitions whose individual events are already shown in the list
+function prependLiveUpcomingCards(liveCompsInResults, upcomingCompsInResults) {
+    const cardsDiv = document.getElementById('event-cards');
+    if (!cardsDiv) return;
+    liveCompsInResults = liveCompsInResults || new Set();
+    upcomingCompsInResults = upcomingCompsInResults || new Set();
+    let pinnedHtml = '';
+
+    _liveCompetitions.forEach(comp => {
+        const compId = comp.comp_idx || comp.event_cd;
+        // Skip if individual events from this competition are already in the event list
+        if (liveCompsInResults.has(compId)) return;
+        pinnedHtml += `<a href="/competition/${compId}" class="event-card event-card-live">
+            <div class="event-info">
+                <div class="event-name"><span class="live-indicator">LIVE</span> ${_tr_comp(comp.name)}</div>
+                <div class="event-meta">Day ${comp.day_number}/${comp.total_days} ${comp.venue ? '• ' + comp.venue : ''}</div>
+            </div>
+            <div class="event-date">
+                <div>${formatDateRange(comp.start_date, comp.end_date)}</div>
+            </div>
+        </a>`;
+    });
+
+    _upcomingCompetitions.slice(0, 3).forEach(comp => {
+        const compId = comp.comp_idx || comp.event_cd;
+        // Skip if individual events from this competition are already in the event list
+        if (upcomingCompsInResults.has(compId)) return;
+        pinnedHtml += `<a href="/competition/${compId}" class="event-card event-card-upcoming">
+            <div class="event-info">
+                <div class="event-name"><span class="upcoming-indicator">D-${comp.days_until}</span> ${_tr_comp(comp.name)}</div>
+                <div class="event-meta">${comp.venue || ''}</div>
+            </div>
+            <div class="event-date">
+                <div>${formatDateRange(comp.start_date, comp.end_date)}</div>
+            </div>
+        </a>`;
+    });
+
+    if (pinnedHtml) {
+        cardsDiv.insertAdjacentHTML('afterbegin', pinnedHtml);
     }
 }
 
@@ -1151,6 +1761,14 @@ function goToPage(page) {
 
 // 이벤트 리스너
 function setupEventListeners() {
+    // Advanced Search toggle
+    document.getElementById('advanced-search-toggle').addEventListener('click', () => {
+        const collapsible = document.getElementById('filter-section-collapsible');
+        const toggleBtn = document.getElementById('advanced-search-toggle');
+        collapsible.classList.toggle('expanded');
+        toggleBtn.classList.toggle('expanded');
+    });
+
     // 필터 버튼 (이벤트 위임)
     document.querySelector('.filter-section').addEventListener('click', (e) => {
         const btn = e.target.closest('.filter-btn[data-filter]');
@@ -1193,6 +1811,10 @@ function setupEventListeners() {
         state.hasSearched = false;
         updateSearchButton();
         updateActiveFilters();
+
+        // Hide auto-loaded description
+        var descEl = document.getElementById('auto-loaded-desc');
+        if (descEl) descEl.style.display = 'none';
 
         // Reset to initial state
         document.getElementById('event-cards').innerHTML = `
@@ -1276,9 +1898,14 @@ function goToPlayer(name) {
 }
 
 // NOW/Upcoming 배너: 동적 데이터 로드
+// 진행 중 대회 ID 추적 (중복 방지)
+const _ongoingCompIds = new Set();
+// Store live/upcoming data globally for event results integration
+let _liveCompetitions = [];
+let _upcomingCompetitions = [];
+
 document.addEventListener('DOMContentLoaded', async function() {
     try {
-        // API에서 실시간 대회 정보 가져오기 (언어 파라미터 포함)
         const response = await fetch('/api/competitions/live?lang=' + currentLang);
         const data = await response.json();
 
@@ -1287,9 +1914,14 @@ document.addEventListener('DOMContentLoaded', async function() {
         const upcomingBanner = document.getElementById('upcoming-competitions');
         const upcomingCards = document.getElementById('upcoming-cards');
 
-        // 진행 중인 대회 표시
+        // 진행 중인 대회 표시 + ID 기록
         if (data.ongoing && data.ongoing.length > 0) {
+            _liveCompetitions = data.ongoing;
             liveBanner.style.display = 'block';
+            data.ongoing.forEach(comp => {
+                _ongoingCompIds.add(comp.event_cd);
+                if (comp.comp_idx) _ongoingCompIds.add(comp.comp_idx);
+            });
             liveCards.innerHTML = data.ongoing.map(comp => `
                 <a href="/competition/${comp.comp_idx || comp.event_cd}" class="live-card">
                     <div class="live-card-icon">🏆</div>
@@ -1305,27 +1937,33 @@ document.addEventListener('DOMContentLoaded', async function() {
             `).join('');
         }
 
-        // 예정 대회 표시 (7일 이내)
+        // 예정 대회 표시 (7일 이내, 진행 중 제외)
         if (data.upcoming && data.upcoming.length > 0) {
-            upcomingBanner.style.display = 'block';
-            upcomingCards.innerHTML = data.upcoming.map(comp => `
-                <a href="/competition/${comp.comp_idx || comp.event_cd}" class="upcoming-card">
-                    <div class="upcoming-card-icon">
-                        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M12 2L4 6v6c0 5.55 3.84 10.74 8 12 4.16-1.26 8-6.45 8-12V6l-8-4z"/>
-                            <path d="M9 12l2 2 4-4"/>
-                        </svg>
-                    </div>
-                    <div class="upcoming-card-info">
-                        <h4>${_tr_comp(comp.name)}</h4>
-                        <p>${comp.venue || ''}</p>
-                    </div>
-                    <div class="upcoming-card-status">
-                        <span class="status">D-${comp.days_until}</span>
-                        <div class="date">${formatDateRange(comp.start_date, comp.end_date)}</div>
-                    </div>
-                </a>
-            `).join('');
+            const filteredUpcoming = data.upcoming.filter(comp =>
+                !_ongoingCompIds.has(comp.event_cd) && !_ongoingCompIds.has(comp.comp_idx)
+            );
+            _upcomingCompetitions = filteredUpcoming;
+            if (filteredUpcoming.length > 0) {
+                upcomingBanner.style.display = 'block';
+                upcomingCards.innerHTML = filteredUpcoming.map(comp => `
+                    <a href="/competition/${comp.comp_idx || comp.event_cd}" class="upcoming-card">
+                        <div class="upcoming-card-icon">
+                            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M12 2L4 6v6c0 5.55 3.84 10.74 8 12 4.16-1.26 8-6.45 8-12V6l-8-4z"/>
+                                <path d="M9 12l2 2 4-4"/>
+                            </svg>
+                        </div>
+                        <div class="upcoming-card-info">
+                            <h4>${_tr_comp(comp.name)}</h4>
+                            <p>${comp.venue || ''}</p>
+                        </div>
+                        <div class="upcoming-card-status">
+                            <span class="status">D-${comp.days_until}</span>
+                            <div class="date">${formatDateRange(comp.start_date, comp.end_date)}</div>
+                        </div>
+                    </a>
+                `).join('');
+            }
         }
 
         // 예정 대회도 로드 (30일 이내)
@@ -1336,7 +1974,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 });
 
-// 30일 이내 예정 대회 로드
+// 30일 이내 예정 대회 로드 (진행 중/이미 표시된 대회 제외)
 async function loadUpcomingCompetitions() {
     try {
         const response = await fetch('/api/competitions/upcoming?days=30&limit=5&lang=' + currentLang);
@@ -1345,18 +1983,19 @@ async function loadUpcomingCompetitions() {
         const upcomingBanner = document.getElementById('upcoming-competitions');
         const upcomingCards = document.getElementById('upcoming-cards');
 
-        // 이미 live API에서 표시된 대회 제외하고 추가 표시
         if (data.upcoming && data.upcoming.length > 0) {
-            // live API에서 이미 카드가 렌더링됐는지 확인 (a 태그 유무로 판별)
             const hasExistingCards = upcomingCards.querySelector('.upcoming-card') !== null;
-            const additionalComps = data.upcoming.filter(comp => comp.days_until > 7);
 
-            if (additionalComps.length > 0 || !hasExistingCards) {
+            // 진행 중 대회 + 이미 표시된 7일 이내 대회 제외
+            const additionalComps = data.upcoming.filter(comp =>
+                !_ongoingCompIds.has(comp.event_cd) &&
+                !_ongoingCompIds.has(comp.comp_idx) &&
+                (hasExistingCards ? comp.days_until > 7 : true)
+            );
+
+            if (additionalComps.length > 0) {
                 upcomingBanner.style.display = 'block';
-
-                // 기존 카드 없으면 전체 렌더링, 있으면 7일 초과분만 추가
-                const compsToRender = hasExistingCards ? additionalComps : data.upcoming.slice(0, 5);
-                const newHtml = compsToRender.map(comp => `
+                const newHtml = additionalComps.slice(0, 5).map(comp => `
                     <a href="/competition/${comp.comp_idx || comp.event_cd}" class="upcoming-card">
                         <div class="upcoming-card-icon">
                             <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -1370,7 +2009,7 @@ async function loadUpcomingCompetitions() {
                             <p>${comp.venue || ''}</p>
                         </div>
                         <div class="upcoming-card-status">
-                            <span class="status">${comp.days_until === 0 ? 'TODAY' : 'D-' + comp.days_until}</span>
+                            <span class="status">D-${comp.days_until}</span>
                             <div class="date">${formatDateRange(comp.start_date, comp.end_date)}</div>
                         </div>
                     </a>
@@ -1405,6 +2044,134 @@ function formatDateRange(startDate, endDate) {
     return `${startMonth}.${startDay} - ${endMonth}.${endDay}`;
 }
 
+// ==================== Ranking Preview ====================
+// Age group key → API code mapping
+const RANKING_AGE_MAP = {
+    elementary: 'E3',
+    middle_school: 'MS',
+    high_school: 'HS',
+    senior: 'SR'
+};
+
+// Age groups that require category parameter
+const RANKING_CATEGORY_AGES = ['MS', 'HS', 'UNI', 'SR'];
+
+// Onboarding age_group key → display label (use i18n weapons/gender already defined)
+const RANKING_AGE_DISPLAY = {
+    elementary: i18n.age_groups.Y12 || 'Elementary',
+    middle_school: i18n.age_groups.Y14 || 'Middle School',
+    high_school: i18n.age_groups.Cadet || 'High School',
+    senior: i18n.age_groups.Veteran || 'Senior'
+};
+
+const MEDAL_ICONS = ['&#129351;', '&#129352;', '&#129353;'];  // gold, silver, bronze
+
+async function fetchAndRenderRankingPreview(weapon, gender, ageGroupKey) {
+    var section = document.getElementById('ranking-preview-section');
+    if (!section) return;
+    if (!weapon || !gender) return;
+
+    var ageCode = ageGroupKey ? RANKING_AGE_MAP[ageGroupKey] : null;
+    if (!ageCode) {
+        // No age group selected (skip or elementary not mapped) — hide section
+        section.style.display = 'none';
+        return;
+    }
+
+    section.style.display = '';
+
+    // Build title: "Weapon Gender AgeGroup TOP 3"
+    var weaponLabel = WEAPON_DISPLAY[weapon] || weapon;
+    var genderLabel = GENDER_DISPLAY[gender] || gender;
+    var ageLabel = RANKING_AGE_DISPLAY[ageGroupKey] || ageCode;
+    var titleEl = document.getElementById('ranking-preview-title');
+    if (titleEl) {
+        titleEl.textContent = weaponLabel + ' ' + genderLabel + ' ' + ageLabel + '  ' + (i18n.ranking_preview ? i18n.ranking_preview.title : 'TOP 3');
+    }
+
+    // Show loading
+    var bodyEl = document.getElementById('ranking-preview-body');
+    var loadingEl = document.getElementById('ranking-preview-loading');
+    if (loadingEl) loadingEl.style.display = '';
+    bodyEl.querySelectorAll('.ranking-preview-row').forEach(function(r) { r.remove(); });
+
+    // Build API URL
+    var params = new URLSearchParams();
+    params.append('weapon', weapon);
+    params.append('gender', gender);
+    params.append('age_group', ageCode);
+    if (RANKING_CATEGORY_AGES.indexOf(ageCode) !== -1) {
+        params.append('category', 'PRO');
+    }
+    params.append('per_page', '3');
+    params.append('lang', currentLang);
+
+    // Build "View All" link
+    var linkEl = document.getElementById('ranking-preview-link');
+    if (linkEl) {
+        var linkParams = new URLSearchParams();
+        linkParams.append('weapon', weapon);
+        linkParams.append('gender', gender);
+        linkParams.append('age_group', ageCode);
+        if (RANKING_CATEGORY_AGES.indexOf(ageCode) !== -1) {
+            linkParams.append('category', 'PRO');
+        }
+        linkEl.href = '/' + currentLang + '/rankings?' + linkParams.toString();
+    }
+
+    try {
+        var res = await fetch('/api/rankings?' + params.toString());
+        var data = await res.json();
+
+        if (loadingEl) loadingEl.style.display = 'none';
+
+        if (!data.rankings || data.rankings.length === 0) {
+            bodyEl.innerHTML = '<div class="ranking-preview-empty">' + (i18n.ranking_preview ? i18n.ranking_preview.no_data : 'No ranking data available') + '</div>';
+            document.getElementById('ranking-preview-login-hint').style.display = 'none';
+            return;
+        }
+
+        var hasBlurred = false;
+        var html = '';
+        data.rankings.forEach(function(entry, idx) {
+            var medal = MEDAL_ICONS[idx] || (idx + 1);
+            var isBlurred = entry.blurred === true;
+            if (isBlurred) hasBlurred = true;
+
+            var nameText = entry.display_name || entry.name;
+            var teamText = (entry.display_teams && entry.display_teams.length > 0) ? entry.display_teams[0] : (entry.teams && entry.teams.length > 0 ? entry.teams[0] : '');
+            var pointsText = entry.points.toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1}) + ' pt';
+
+            var nameClass = isBlurred ? 'ranking-preview-name blurred-text' : 'ranking-preview-name';
+            var teamClass = isBlurred ? 'ranking-preview-team blurred-text' : 'ranking-preview-team';
+
+            // Wrap name in link if not blurred
+            var nameHtml = isBlurred
+                ? '<span class="' + nameClass + '">' + nameText + '</span>'
+                : '<a href="/player/' + encodeURIComponent(entry.name) + '" class="' + nameClass + '">' + nameText + '</a>';
+
+            html += '<div class="ranking-preview-row">' +
+                '<span class="ranking-preview-medal">' + medal + '</span>' +
+                nameHtml +
+                '<span class="' + teamClass + '">' + teamText + '</span>' +
+                '<span class="ranking-preview-points">' + pointsText + '</span>' +
+                '</div>';
+        });
+
+        bodyEl.innerHTML = html;
+
+        // Show/hide login hint
+        var hintEl = document.getElementById('ranking-preview-login-hint');
+        if (hintEl) {
+            hintEl.style.display = hasBlurred ? '' : 'none';
+        }
+    } catch (e) {
+        console.error('Ranking preview error:', e);
+        if (loadingEl) loadingEl.style.display = 'none';
+        section.style.display = 'none';
+    }
+}
+
 // FencingLab i18n setup
 window.i18n = {
     fencinglab: {
@@ -1434,7 +2201,7 @@ document.addEventListener('DOMContentLoaded', function() {
     script1.onload = function() {
         // Then load FencingLab
         const script2 = document.createElement('script');
-        script2.src = '/static/js/fencinglab.js?v=2';
+        script2.src = '/static/js/fencinglab.js?v=20260603';
         script2.onload = function() {
             // Render demo section
             if (window.FencingLab) {

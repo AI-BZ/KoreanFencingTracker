@@ -13,17 +13,44 @@ const FencingLab = {
         }
     },
 
-    // 색상 테마
-    colors: {
+    // 테마별 색상 정의
+    _darkColors: {
         green: '#00ff88',
         greenDim: 'rgba(0, 255, 136, 0.2)',
+        greenGradient: ['rgba(0, 255, 136, 0)', 'rgba(0, 255, 136, 0.3)'],
         blue: '#00d4ff',
         blueDim: 'rgba(0, 212, 255, 0.2)',
         red: '#ff4466',
         redDim: 'rgba(255, 68, 102, 0.2)',
         yellow: '#ffcc00',
         text: '#a0a0b0',
-        grid: '#2a2a3a'
+        grid: '#2a2a3a',
+        tooltipBg: '#1a1a24',
+        tooltipBorder: '#00d4ff',
+        tooltipTitle: '#fff',
+        pointBorder: '#0a0a0f'
+    },
+    _lightColors: {
+        green: '#00c471',
+        greenDim: 'rgba(0, 196, 113, 0.12)',
+        greenGradient: ['rgba(0, 196, 113, 0)', 'rgba(0, 196, 113, 0.15)'],
+        blue: '#3182f6',
+        blueDim: 'rgba(49, 130, 246, 0.12)',
+        red: '#f04452',
+        redDim: 'rgba(240, 68, 82, 0.12)',
+        yellow: '#f59f00',
+        text: '#4e5968',
+        grid: '#e5e8eb',
+        tooltipBg: '#ffffff',
+        tooltipBorder: '#e5e8eb',
+        tooltipTitle: '#191f28',
+        pointBorder: '#ffffff'
+    },
+
+    // 현재 테마 감지 후 적절한 색상 반환
+    get colors() {
+        const theme = document.documentElement.getAttribute('data-theme') || 'dark';
+        return theme === 'light' ? this._lightColors : this._darkColors;
     },
 
     // Translate match result for i18n
@@ -61,18 +88,19 @@ const FencingLab = {
                     backgroundColor: (context) => {
                         const chart = context.chart;
                         const {ctx, chartArea} = chart;
-                        if (!chartArea) return this.colors.greenDim;
+                        const colors = FencingLab.colors;
+                        if (!chartArea) return colors.greenDim;
 
                         const gradient = ctx.createLinearGradient(0, chartArea.bottom, 0, chartArea.top);
-                        gradient.addColorStop(0, 'rgba(0, 255, 136, 0)');
-                        gradient.addColorStop(1, 'rgba(0, 255, 136, 0.3)');
+                        gradient.addColorStop(0, colors.greenGradient[0]);
+                        gradient.addColorStop(1, colors.greenGradient[1]);
                         return gradient;
                     },
                     borderColor: this.colors.green,
                     borderWidth: 2,
                     tension: 0.4,
                     pointBackgroundColor: this.colors.green,
-                    pointBorderColor: '#0a0a0f',
+                    pointBorderColor: this.colors.pointBorder,
                     pointBorderWidth: 2,
                     pointRadius: 4,
                     pointHoverRadius: 6
@@ -98,10 +126,10 @@ const FencingLab = {
                 },
                 plugins: {
                     tooltip: {
-                        backgroundColor: '#1a1a24',
-                        borderColor: this.colors.blue,
+                        backgroundColor: this.colors.tooltipBg,
+                        borderColor: this.colors.tooltipBorder,
                         borderWidth: 1,
-                        titleColor: '#fff',
+                        titleColor: this.colors.tooltipTitle,
                         bodyColor: this.colors.text,
                         callbacks: {
                             label: (context) => `승률: ${context.raw}%`

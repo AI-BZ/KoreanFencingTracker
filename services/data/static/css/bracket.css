@@ -1883,3 +1883,386 @@ details[open] .seeded-toggle-icon {
         page-break-before: auto;
     }
 }
+
+/* ========================================
+   LIGHT THEME OVERRIDES (ko, ja, zh)
+   ======================================== */
+[data-theme="light"] {
+    --bracket-bg: #f5f5f7;
+    --bracket-border: rgba(0, 0, 0, 0.12);
+    --bracket-card-bg: #ffffff;
+    --bracket-line-color: #d1d5db;
+
+    --bracket-winner-bg: #dcfce7;
+    --bracket-winner-border: #22c55e;
+    --bracket-winner-text: #166534;
+
+    --bracket-loser-bg: #fef2f2;
+    --bracket-loser-text: #6b7280;
+
+    --bracket-score-bg: #f0f0f5;
+    --bracket-score-winning: #166534;
+
+    --bracket-champion-bg: linear-gradient(135deg, #fbbf24, #f59e0b);
+
+    --bracket-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    --bracket-hover-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+
+    --bracket-text-primary: #191f28;
+    --bracket-text-secondary: #4e5968;
+    --bracket-text-muted: #8b95a1;
+
+    --bracket-accent: #1e3a8a;
+    --bracket-accent-hover: #2d4cab;
+}
+
+/* Bracket container */
+[data-theme="light"] .bracket-container,
+[data-theme="light"] .dual-de-container {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+/* Round header */
+[data-theme="light"] .round-header {
+    background: linear-gradient(135deg, #e2e8f0, #cbd5e1);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="light"] .round-name {
+    color: #1e293b;
+    text-shadow: none;
+}
+
+[data-theme="light"] .round-count {
+    background: rgba(30, 58, 138, 0.15);
+    color: #1e3a8a;
+}
+
+/* Match cards - tree view */
+[data-theme="light"] .bracket-match {
+    background: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="light"] .bracket-match:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+    border-color: rgba(0, 0, 0, 0.15);
+}
+
+[data-theme="light"] .match-player {
+    background: #f5f5f7;
+    border: 1px solid transparent;
+}
+
+[data-theme="light"] .match-player:hover {
+    background: #e8e8ed;
+    border-color: rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="light"] .match-player.winner {
+    background: linear-gradient(90deg, rgba(34, 197, 94, 0.12), rgba(16, 185, 129, 0.08));
+    border-left: 4px solid #22c55e;
+    box-shadow: none;
+}
+
+[data-theme="light"] .match-player.winner .player-name {
+    color: #166534;
+    text-shadow: none;
+}
+
+[data-theme="light"] .match-player.winner .player-seed {
+    color: #166534;
+}
+
+[data-theme="light"] .match-player.winner .player-score {
+    color: #15803d;
+    text-shadow: none;
+}
+
+[data-theme="light"] .player-seed {
+    color: #1e3a8a;
+}
+
+[data-theme="light"] .player-name {
+    color: #191f28;
+}
+
+[data-theme="light"] .player-name:hover {
+    color: #1e3a8a;
+    text-shadow: none;
+}
+
+[data-theme="light"] .player-score {
+    color: #374151;
+    background: rgba(0, 0, 0, 0.04);
+}
+
+/* Match cards - list view */
+[data-theme="light"] .match-card {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="light"] .match-header {
+    background: #f5f5f7;
+}
+
+[data-theme="light"] .match-status.complete {
+    background: rgba(34, 197, 94, 0.1);
+    color: #15803d;
+}
+
+[data-theme="light"] .match-status.pending {
+    background: rgba(245, 158, 11, 0.1);
+    color: #b45309;
+}
+
+[data-theme="light"] .card-player {
+    background: #f5f5f7;
+}
+
+[data-theme="light"] .card-player.winner {
+    background: #dcfce7;
+    border: 1px solid #86efac;
+}
+
+[data-theme="light"] .card-player.winner .player-seed-badge {
+    background: #22c55e;
+    color: white;
+}
+
+[data-theme="light"] .card-player.winner .player-details .player-name {
+    color: #166534;
+}
+
+[data-theme="light"] .player-seed-badge {
+    background: #e2e8f0;
+    color: #4e5968;
+}
+
+[data-theme="light"] .player-score-badge.winning {
+    color: #15803d;
+}
+
+[data-theme="light"] .match-footer {
+    background: rgba(245, 158, 11, 0.06);
+    border-top: 1px solid rgba(245, 158, 11, 0.15);
+}
+
+[data-theme="light"] .winner-label {
+    color: #b45309;
+}
+
+[data-theme="light"] .winner-name {
+    color: #78350f;
+}
+
+/* Round tabs */
+[data-theme="light"] .round-tab {
+    color: #4e5968;
+}
+
+[data-theme="light"] .round-tab:hover {
+    background: #f0f0f5;
+    color: #191f28;
+}
+
+[data-theme="light"] .round-tab.active {
+    color: #1e3a8a;
+    background: #ffffff;
+}
+
+[data-theme="light"] .round-tab.active::after {
+    background: #1e3a8a;
+}
+
+/* Seeding section */
+[data-theme="light"] .seeding-header {
+    background: #f0f0f5;
+}
+
+[data-theme="light"] .seeding-item {
+    background: #f5f5f7;
+    color: #191f28;
+}
+
+[data-theme="light"] .seeding-rank {
+    background: #1e3a8a;
+}
+
+[data-theme="light"] .seeding-name:hover {
+    color: #1e3a8a;
+}
+
+/* Champion */
+[data-theme="light"] .champion-info {
+    box-shadow: 0 4px 12px rgba(245, 158, 11, 0.2);
+}
+
+[data-theme="light"] .champion-name {
+    color: #78350f;
+}
+
+[data-theme="light"] .champion-name:hover {
+    color: #451a03;
+}
+
+/* View toggle */
+[data-theme="light"] .view-btn {
+    color: #4e5968;
+}
+
+[data-theme="light"] .view-btn:hover {
+    background: #f0f0f5;
+}
+
+[data-theme="light"] .view-btn.active {
+    background: #1e3a8a;
+    color: white;
+}
+
+/* Dual DE specific */
+[data-theme="light"] .de-phase-btn.active {
+    background: #1e3a8a;
+    box-shadow: 0 4px 12px rgba(30, 58, 138, 0.2);
+}
+
+[data-theme="light"] .phase-indicator.active {
+    background: #d97706;
+    box-shadow: 0 0 12px rgba(217, 119, 6, 0.4);
+}
+
+[data-theme="light"] .bracket-notice.in-progress {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(245, 158, 11, 0.04));
+    border: 1px solid rgba(245, 158, 11, 0.2);
+    color: #b45309;
+}
+
+[data-theme="light"] .bracket-notice .notice-text {
+    color: #4e5968;
+}
+
+[data-theme="light"] .status-badge.in-progress {
+    background: rgba(245, 158, 11, 0.08);
+    color: #b45309;
+    border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+[data-theme="light"] .status-badge.complete {
+    background: rgba(34, 197, 94, 0.08);
+    color: #15803d;
+    border: 1px solid rgba(34, 197, 94, 0.2);
+}
+
+[data-theme="light"] .status-badge.waiting {
+    background: rgba(59, 130, 246, 0.08);
+    color: #1d4ed8;
+    border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+/* Seeded players section */
+[data-theme="light"] .seeded-players-section {
+    background: linear-gradient(135deg, rgba(180, 83, 9, 0.06), rgba(180, 83, 9, 0.02));
+    border: 1px solid rgba(180, 83, 9, 0.15);
+}
+
+[data-theme="light"] .seeded-header {
+    color: #b45309;
+    background: rgba(180, 83, 9, 0.04);
+    border-bottom: 1px solid rgba(180, 83, 9, 0.1);
+}
+
+[data-theme="light"] .seeded-item {
+    background: rgba(180, 83, 9, 0.04);
+    border: 1px solid rgba(180, 83, 9, 0.08);
+}
+
+[data-theme="light"] .seeded-item:hover {
+    background: rgba(180, 83, 9, 0.08);
+}
+
+[data-theme="light"] .seeded-rank {
+    color: #b45309;
+}
+
+[data-theme="light"] .seeded-badge {
+    background: #b45309;
+    color: white;
+}
+
+/* Qualifiers section */
+[data-theme="light"] .qualifiers-section {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.06), rgba(34, 197, 94, 0.02));
+    border: 1px solid rgba(34, 197, 94, 0.15);
+}
+
+[data-theme="light"] .qualifiers-header {
+    background: rgba(34, 197, 94, 0.04);
+    border-bottom: 1px solid rgba(34, 197, 94, 0.1);
+}
+
+[data-theme="light"] .qualifiers-title {
+    color: #15803d;
+}
+
+[data-theme="light"] .qualifier-item {
+    background: rgba(34, 197, 94, 0.04);
+    border: 1px solid rgba(34, 197, 94, 0.08);
+}
+
+[data-theme="light"] .qualifier-seed {
+    color: #15803d;
+}
+
+[data-theme="light"] .qualifier-name:hover {
+    color: #15803d;
+}
+
+[data-theme="light"] .qualifier-badge {
+    background: #15803d;
+    color: white;
+}
+
+/* Info banner */
+[data-theme="light"] .de-info-banner {
+    background: #ffffff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+/* Progress bar */
+[data-theme="light"] .step-label {
+    color: #4e5968;
+}
+
+[data-theme="light"] .progress-step.completed .step-label {
+    color: #15803d;
+}
+
+[data-theme="light"] .progress-step.current .step-label {
+    color: #b45309;
+}
+
+/* Bye match */
+[data-theme="light"] .bracket-match.bye-match,
+[data-theme="light"] .match-card.bye-match {
+    background: rgba(107, 114, 128, 0.05);
+}
+
+/* Scrollbar - light theme */
+[data-theme="light"] .bracket-tree::-webkit-scrollbar-track,
+[data-theme="light"] .seeding-grid::-webkit-scrollbar-track,
+[data-theme="light"] .round-tabs::-webkit-scrollbar-track {
+    background: #f5f5f7;
+}
+
+[data-theme="light"] .bracket-tree::-webkit-scrollbar-thumb,
+[data-theme="light"] .seeding-grid::-webkit-scrollbar-thumb,
+[data-theme="light"] .round-tabs::-webkit-scrollbar-thumb {
+    background: #d1d5db;
+}
+
+[data-theme="light"] .bracket-tree::-webkit-scrollbar-thumb:hover,
+[data-theme="light"] .seeding-grid::-webkit-scrollbar-thumb:hover,
+[data-theme="light"] .round-tabs::-webkit-scrollbar-thumb:hover {
+    background: #9ca3af;
+}

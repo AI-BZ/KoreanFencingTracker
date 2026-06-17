@@ -29,6 +29,8 @@
     R19: 이벤트 레벨 vs 참가자 org_type 교차 검증 (org_cache 필요)
     R20: 같은 학교 레벨(중/고)인데 다른 도/광역시 → 동명이인 의심 (org_cache 필요)
     R21: 3년 이상 활동 공백 후 다른 팀에서 재등장 → 동명이인 의심
+    R22: pool_total_ranking 존재하나 pool_rounds 비어있음 → 스크래핑 실패 감지
+    R23: Pool 기권(Abandon) 감지 — 기권자 존재 시 INFO, 기권 bout이 승/패에 포함됐으면 WARNING
 """
 
 import re
@@ -374,6 +376,16 @@ class DataValidator:
 
                 # R14: 같은 이벤트 같은 이름 중복 (DE 유무와 무관)
                 self._check_r14_same_event_duplicate_names(
+                    event, event_cd, comp_name, event_name
+                )
+
+                # R22: Pool 완전성 체크 (DE 유무와 무관)
+                self._check_r22_pool_completeness(
+                    event, event_cd, comp_name, event_name
+                )
+
+                # R23: Pool 기권(Abandon) 감지
+                self._check_r23_pool_forfeit(
                     event, event_cd, comp_name, event_name
                 )
 
@@ -1537,6 +1549,97 @@ class DataValidator:
                     },
                 ))
                 return  # 첫 발견만 보고
+
+    def _check_r22_pool_completeness(
+        self, event: Dict, event_cd: str, comp_name: str, event_name: str
+    ):
+        """R22: pool_total_ranking 있으면서 pool_rounds 비어있는 경우 (스크래핑 실패 감지)"""
+        raw_data = event.get("raw_data", event)
+        pool_total = raw_data.get("pool_total_ranking", [])
+        pool_rounds = raw_data.get("pool_rounds", [])
+
+        if len(pool_total) > 0 and len(pool_rounds) == 0:
+            self.issues.append(ValidationIssue(
+                rule_id="R22",
+                severity="ERROR",
+                player_name="",
+                event_cd=event_cd,
+                competition_name=comp_name,
+                message=(
+                    f"{event_name}: pool_total_ranking {len(pool_total)}명 존재하나 "
+                    f"pool_rounds 0개 — 풀 상세 데이터 스크래핑 실패 의심"
+                ),
+                data={
+                    "pool_total_count": len(pool_total),
+                    "pool_rounds_count": 0,
+                    "scrape_metadata": raw_data.get("_scrape_metadata", {}),
+                },
+            ))
+
+    def _check_r23_pool_forfeit(
+        self, event: Dict, event_cd: str, comp_name: str, event_name: str
+    ):
+        """R23: Pool 기권(Abandon) 감지
+
+        기권자(is_forfeit=True)가 풀에 존재하면 INFO 로그.
+        기권자의 wins/losses가 0이 아닌 경우 → 기권 bout이 승/패에 잘못 포함됨 → WARNING.
+        """
+        raw_data = event.get("raw_data", event)
+        pool_rounds = raw_data.get("pool_rounds", [])
+        if not pool_rounds:
+            return
+
+        for pool in pool_rounds:
+            pool_num = pool.get("pool_number", "?")
+            round_num = pool.get("round_number", "?")
+            results = pool.get("results", [])
+
+            for result in results:
+                if not result.get("is_forfeit"):
+                    continue
+
+                name = (result.get("name") or "").strip()
+                team = (result.get("team") or "").strip()
+                wins = result.get("wins", 0) or 0
+                losses = result.get("losses", 0) or 0
+
+                # 기권 감지 INFO
+                self.issues.append(ValidationIssue(
+                    rule_id="R23",
+                    severity="INFO",
+                    player_name=name,
+                    event_cd=event_cd,
+                    competition_name=comp_name,
+                    message=(
+                        f"{event_name} 뿔{round_num}-{pool_num}: "
+                        f"'{name}'({team}) 기권(Abandon) 감지"
+                    ),
+                    data={
+                        "pool_number": pool_num,
+                        "round_number": round_num,
+                    },
+                ))
+
+                # 기권자의 wins/losses가 0이 아니면 잘못된 집계
+                if wins > 0 or losses > 0:
+                    self.issues.append(ValidationIssue(
+                        rule_id="R23",
+                        severity="WARNING",
+                        player_name=name,
+                        event_cd=event_cd,
+                        competition_name=comp_name,
+                        message=(
+                            f"{event_name} 뿔{round_num}-{pool_num}: "
+                            f"기권자 '{name}'의 승/패가 {wins}W-{losses}L로 기록됨 "
+                            f"— 기권 bout이 승/패에 포함된 것으로 의심"
+                        ),
+                        data={
+                            "wins": wins,
+                            "losses": losses,
+                            "pool_number": pool_num,
+                            "round_number": round_num,
+                        },
+                    ))
 
     def _check_r14_same_event_duplicate_names(
         self, event: Dict, event_cd: str, comp_name: str, event_name: str

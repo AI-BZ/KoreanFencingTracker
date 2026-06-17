@@ -89,26 +89,29 @@ RANK_RATIOS = {
     2: 0.65,
     3: 0.50,
     4: 0.40,
-    # 5-8위
-    5: 0.30, 6: 0.30, 7: 0.30, 8: 0.30,
-    # 9-16위
-    9: 0.20, 10: 0.20, 11: 0.20, 12: 0.20,
-    13: 0.20, 14: 0.20, 15: 0.20, 16: 0.20,
-    # 17-32위
-    17: 0.10, 18: 0.10, 19: 0.10, 20: 0.10,
-    21: 0.10, 22: 0.10, 23: 0.10, 24: 0.10,
-    25: 0.10, 26: 0.10, 27: 0.10, 28: 0.10,
-    29: 0.10, 30: 0.10, 31: 0.10, 32: 0.10,
+    # 5-8위 (QF 탈락, 시드 순 개별 — 간격 0.02)
+    5: 0.30, 6: 0.28, 7: 0.26, 8: 0.24,
+    # 9-16위 (16강 탈락, 시드 순 개별 — 간격 0.01)
+    9: 0.20, 10: 0.19, 11: 0.18, 12: 0.17,
+    13: 0.16, 14: 0.15, 15: 0.14, 16: 0.13,
+    # 17-32위 (32강 탈락, 시드 순 개별 — 간격 0.005)
+    17: 0.10, 18: 0.095, 19: 0.09, 20: 0.085,
+    21: 0.08, 22: 0.075, 23: 0.07, 24: 0.065,
+    25: 0.06, 26: 0.055, 27: 0.05, 28: 0.045,
+    29: 0.04, 30: 0.035, 31: 0.03, 32: 0.025,
 }
 
 def get_rank_ratio(rank: int) -> float:
-    """순위별 포인트 비율 반환"""
+    """순위별 포인트 비율 반환 (라운드 내 시드 기반 소폭 차등)"""
     if rank in RANK_RATIOS:
         return RANK_RATIOS[rank]
     elif 33 <= rank <= 64:
-        return 0.05
+        # 64강 탈락 (간격 ~0.001)
+        return round(0.05 - (rank - 33) * 0.001, 4)
+    elif 65 <= rank <= 128:
+        return round(0.02 - (rank - 65) * 0.0002, 4)
     else:
-        return 0.02
+        return 0.01
 
 # 참가자 수 보정 계수
 def get_participant_factor(count: int) -> float:
@@ -168,6 +171,18 @@ LEGACY_AGE_GROUP_MAP = {
     "대학": "Junior",
     "일반": "Veteran",
     "마스터즈": "Veteran",
+}
+
+# DB age_group 비표준 값 → 표준 코드 정규화
+# events.age_group에 한국어 텍스트가 직접 저장된 경우 표준 코드로 변환
+AGE_GROUP_NORMALIZE = {
+    '일반부': 'SR', '일반': 'SR', '성인': 'SR',
+    '중등부': 'MS', '중학교': 'MS', '중등': 'MS',
+    '고등부': 'HS', '고등학교': 'HS', '고등': 'HS',
+    '대학부': 'UNI', '대학': 'UNI',
+    '초등부': 'E3', '초등': 'E3',
+    '15세이하부': 'MS', '16세이하부': 'MS',  # 구 소년체전 형식
+    '18세이하부': 'HS',                       # 구 소년체전 형식
 }
 
 # 연령대별 가중치 (글로벌 코드 + 레거시 코드)
@@ -527,6 +542,7 @@ class RankingCalculator:
     def __init__(self, data_file: str = None):
         self.results: List[PlayerResult] = []
         self.data = None
+        self.org_age_lookup: Dict[str, str] = {}
 
         if data_file:
             warnings.warn(
@@ -555,15 +571,18 @@ class RankingCalculator:
         self._extract_results()
         logger.info(f"[CLI] JSON 데이터 로드 완료: {len(self.results)}개 결과")
 
-    def load_from_data(self, data: dict):
+    def load_from_data(self, data: dict, org_age_lookup: dict = None):
         """Supabase 캐시 데이터에서 로드 (서버 런타임 전용)
 
         Args:
             data: {"competitions": [...], "meta": {...}} 형식의 데이터 딕셔너리
                   (server.py의 load_data_from_supabase()가 생성)
+            org_age_lookup: 조직명 → 나이그룹 매핑 (국가대표 서브랭킹용)
         """
         self.data = data
+        self.org_age_lookup = org_age_lookup or {}
         self._extract_results()
+        self._generate_national_sub_rankings()
         logger.info(f"메모리 데이터 로드 완료: {len(self.results)}개 결과")
 
     def _extract_results(self):
@@ -595,6 +614,13 @@ class RankingCalculator:
                 gender = event.get("gender", "") or extract_gender(event_name)
                 # 데이터베이스의 age_group 필드 우선 사용, 없으면 이벤트명에서 추출
                 age_group = event.get("age_group", "") or extract_age_group(event_name)
+                # 비표준 한국어 age_group → 표준 코드 정규화
+                age_group = AGE_GROUP_NORMALIZE.get(age_group, age_group)
+
+                # 국가대표 선발대회: 빈 age_group → 'NT' 설정
+                if not age_group and classify_competition_level(comp_name) == 'NATIONAL':
+                    age_group = 'NT'
+
                 total_participants = event.get("total_participants", 0)
 
                 # 개인전만 처리 (단체전 제외)
@@ -636,6 +662,109 @@ class RankingCalculator:
                     )
 
                     self.results.append(result)
+
+    def _infer_player_age_group(self, player_name: str, team: str,
+                                player_age_history: dict) -> str:
+        """소속 org_type 또는 다른 대회 참가 이력으로 나이그룹 추론
+
+        Args:
+            player_name: 선수명
+            team: 소속명
+            player_age_history: {선수명: [(age_group, date), ...]} 매핑
+
+        Returns:
+            추론된 나이그룹 코드 (MS/HS/UNI/SR 등)
+        """
+        # 1. org_type lookup (중학교/고등학교/대학교/실업팀 등)
+        age = self.org_age_lookup.get(team)
+        if age:
+            return age
+
+        # 2. Cross-reference: 다른 대회에서의 최근 나이그룹
+        if player_name in player_age_history:
+            entries = player_age_history[player_name]
+            # 날짜 역순 정렬 → 가장 최근 것 사용
+            entries.sort(key=lambda x: x[1], reverse=True)
+            for age_group, _ in entries:
+                if age_group in ('MS', 'HS', 'UNI', 'SR', 'E1', 'E2', 'E3'):
+                    return age_group
+
+        # 3. 기본값: 일반부
+        return 'SR'
+
+    def _generate_national_sub_rankings(self):
+        """국가대표 선발대회 (age_group='NT')의 나이리그별 서브랭킹 생성
+
+        전체 결과에서 각 선수의 나이그룹을 추론하고,
+        나이그룹별 서브랭킹 결과를 새로운 PlayerResult로 추가합니다.
+        서브랭킹 결과는 해당 나이그룹 랭킹에 포함됩니다.
+        """
+        # 비국가대표 결과에서 선수별 나이그룹 이력 구축
+        player_age_history = defaultdict(list)
+        for r in self.results:
+            if r.age_group and r.age_group not in ('', 'NT'):
+                player_age_history[r.player_name].append(
+                    (r.age_group, r.competition_date)
+                )
+
+        # NT 결과 찾기
+        national_results = [r for r in self.results if r.age_group == 'NT']
+        if not national_results:
+            return
+
+        # (대회명, 종목명, 대회일자)별로 그룹화
+        event_groups = defaultdict(list)
+        for r in national_results:
+            key = (r.competition_name, r.event_name, r.competition_date)
+            event_groups[key].append(r)
+
+        # 각 국가대표 이벤트별 서브랭킹 생성
+        new_results = []
+        for (comp_name, event_name, comp_date), results in event_groups.items():
+            # 각 선수의 나이그룹 추론
+            player_ages = {}
+            for r in results:
+                age = self._infer_player_age_group(
+                    r.player_name, r.team, player_age_history)
+                player_ages[r.player_name] = age
+
+            # 나이그룹별 그룹화
+            age_groups = defaultdict(list)
+            for r in results:
+                age = player_ages[r.player_name]
+                age_groups[age].append(r)
+
+            # 서브랭킹 계산 및 새 결과 생성
+            for age, players in age_groups.items():
+                players.sort(key=lambda x: x.final_rank)
+                for sub_rank, r in enumerate(players, 1):
+                    # 전체 참가자 수 기반으로 포인트 계산 (서브그룹 수 아님)
+                    points = calculate_points(
+                        tier=r.tier,
+                        final_rank=sub_rank,
+                        total_participants=r.total_participants,
+                        age_group=age,
+                        competition_name=r.competition_name
+                    )
+                    new_results.append(PlayerResult(
+                        player_name=r.player_name,
+                        team=r.team,
+                        event_name=r.event_name,
+                        competition_name=r.competition_name,
+                        competition_date=r.competition_date,
+                        final_rank=sub_rank,
+                        total_participants=r.total_participants,
+                        weapon=r.weapon,
+                        gender=r.gender,
+                        age_group=age,
+                        tier=r.tier,
+                        category=r.category,
+                        points=points
+                    ))
+
+        self.results.extend(new_results)
+        if new_results:
+            logger.info(f"국가대표 나이리그별 서브랭킹 {len(new_results)}건 생성")
 
     def calculate_rankings(
         self,

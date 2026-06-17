@@ -7,6 +7,9 @@ Korean event names from KFF follow patterns like:
   - "남자 플뢰레(개인)" = Men's Foil (Individual)
   - "U13 남자 에뻬" = U13 Men's Epee
   - "남자 중등부 에뻬 개인전" = Men's Middle School Epee Individual
+  - "17세이하부 남자 사브르(개)" = U17 Men's Sabre Individual
+  - "고등부 남자 사브르(개)" = Men's High School Sabre Individual
+  - "초등부(1-3학년) 남자 사브르(개)" = Men's Elem. Grade 1-3 Sabre Individual
 
 This module parses the components and reassembles them per language.
 """
@@ -41,6 +44,7 @@ LEVEL_LONG = {
     '대학부': '대', '대학': '대',
     '실업부': '실', '실업': '실',
     '일반부': '일', '일반': '일', '시니어': '일',
+    '엘리트부': '일', '엘리트': '일',
 }
 
 WEAPON = {
@@ -48,6 +52,7 @@ WEAPON = {
     '에뻬': {'en': 'Epee', 'fr': 'Épée', 'it': 'Spada', 'ja': 'エペ', 'zh': '重剑', 'tr': 'Epe'},
     '에페': {'en': 'Epee', 'fr': 'Épée', 'it': 'Spada', 'ja': 'エペ', 'zh': '重剑', 'tr': 'Epe'},
     '플러레': {'en': 'Foil', 'fr': 'Fleuret', 'it': 'Fioretto', 'ja': 'フルーレ', 'zh': '花剑', 'tr': 'Flöre'},
+    '플러러': {'en': 'Foil', 'fr': 'Fleuret', 'it': 'Fioretto', 'ja': 'フルーレ', 'zh': '花剑', 'tr': 'Flöre'},
     '사브르': {'en': 'Sabre', 'fr': 'Sabre', 'it': 'Sciabola', 'ja': 'サーブル', 'zh': '佩剑', 'tr': 'Kılıç'},
 }
 
@@ -67,21 +72,71 @@ ELEM_GRADES = {
     '초등3-4학년': {'en': 'Elem. Grade 3-4', 'fr': 'Primaire 3-4', 'it': 'Elem. 3-4', 'ja': '小学3-4年', 'zh': '小学3-4年级', 'tr': 'İlkokul 3-4'},
     '초등5-6학년': {'en': 'Elem. Grade 5-6', 'fr': 'Primaire 5-6', 'it': 'Elem. 5-6', 'ja': '小学5-6年', 'zh': '小学5-6年级', 'tr': 'İlkokul 5-6'},
     '1-2학년': {'en': 'Grade 1-2', 'fr': '1-2 année', 'it': '1-2 anno', 'ja': '1-2年', 'zh': '1-2年级', 'tr': '1-2. Sınıf'},
+    '1-3학년': {'en': 'Grade 1-3', 'fr': '1-3 année', 'it': '1-3 anno', 'ja': '1-3年', 'zh': '1-3年级', 'tr': '1-3. Sınıf'},
     '3-4학년': {'en': 'Grade 3-4', 'fr': '3-4 année', 'it': '3-4 anno', 'ja': '3-4年', 'zh': '3-4年级', 'tr': '3-4. Sınıf'},
+    '4-6학년': {'en': 'Grade 4-6', 'fr': '4-6 année', 'it': '4-6 anno', 'ja': '4-6年', 'zh': '4-6年级', 'tr': '4-6. Sınıf'},
     '5-6학년': {'en': 'Grade 5-6', 'fr': '5-6 année', 'it': '5-6 anno', 'ja': '5-6年', 'zh': '5-6年级', 'tr': '5-6. Sınıf'},
 }
+
+# Shared weapon regex fragment (all known weapon name variants)
+_W = r'플뢰레|에뻬|에페|플러레|플러러|사브르'
 
 # ============================================================================
 # Parser: extract components from Korean event name
 # ============================================================================
 
-# Compact format: "여중 에뻬(개)" or "남고 사브르(단)"
+# Compact format: "여중 에뻬(개)" or "남고 사브르(단)" or "남초 플러레(개)(1-3학년)"
 _RE_COMPACT = re.compile(
     r'^([남여])'               # gender (1 char)
     r'([초중고대실일])'         # level (1 char)
     r'\s+'                     # space
-    r'(플뢰레|에뻬|에페|플러레|사브르)'  # weapon
+    r'(' + _W + r')'           # weapon
     r'(?:\(([개단])\))?'       # optional event type in parens
+    r'(?:\((\d+[~-]\d+)학년\))?' # optional grade range suffix
+    r'$'
+)
+
+# Age-under format: "17세이하부 남자 사브르(개)" or "9세이하부 여자 에뻬(개)"
+_RE_AGE_UNDER = re.compile(
+    r'^(\d+)세이하부'           # age number + 세이하부
+    r'\s+'
+    r'(남자?|여자?|혼성)'       # gender
+    r'\s+'
+    r'(' + _W + r')'           # weapon
+    r'(?:\(?([개단](?:인|체)?(?:전)?)\)?)?'  # optional event type
+    r'$'
+)
+
+# Elementary with grade range: "초등부(1-3학년) 남자 사브르(개)" or "초등부 1(1~3학년) 남자 플러레"
+_RE_ELEM_GRADE = re.compile(
+    r'^초등부\s*\d?\(?(\d+[~-]\d+)학년\)'  # grade range (1-3, 4~6, etc.)
+    r'\s+'
+    r'(남자?|여자?|혼성)'           # gender
+    r'\s+'
+    r'(' + _W + r')'               # weapon
+    r'(?:\(?([개단](?:인|체)?(?:전)?)\)?)?'  # optional event type
+    r'$'
+)
+
+# Level with age qualifier: "엘리트부(만40세이상) 남자 플러레"
+_RE_LEVEL_AGE = re.compile(
+    r'^(엘리트부|일반부|시니어)\(만?(\d+)세이상\)'  # level + age qualifier
+    r'\s+'
+    r'(남자?|여자?|혼성)'       # gender
+    r'\s+'
+    r'(' + _W + r')'           # weapon
+    r'(?:\(?([개단](?:인|체)?(?:전)?)\)?)?'  # optional event type
+    r'$'
+)
+
+# Level-first format: "고등부 남자 사브르(개)" or "엘리트부 여자 에뻬(개)"
+_RE_LEVEL_FIRST = re.compile(
+    r'^(초등[저중고]?부?|중등부?|중학부?|고등부?|고교부?|대학부?|일반부?|실업부?|엘리트부?|시니어)'
+    r'\s+'
+    r'(남자?|여자?|혼성)'       # gender
+    r'\s+'
+    r'(' + _W + r')'           # weapon
+    r'(?:\(?([개단](?:인|체)?(?:전)?)\)?)?'  # optional event type
     r'$'
 )
 
@@ -89,7 +144,7 @@ _RE_COMPACT = re.compile(
 _RE_LONG_WEAPON_TYPE = re.compile(
     r'^(남자?|여자?|혼성)'     # gender
     r'\s+'
-    r'(플뢰레|에뻬|에페|플러레|사브르)'  # weapon
+    r'(' + _W + r')'           # weapon
     r'(?:\(([개단](?:인|체)?(?:전)?)\))?'  # optional event type in parens
     r'$'
 )
@@ -98,9 +153,9 @@ _RE_LONG_WEAPON_TYPE = re.compile(
 _RE_FULL = re.compile(
     r'^(남자?|여자?|혼성)'     # gender
     r'\s+'
-    r'(초등[저중고]?부?|중등부?|중학부?|고등부?|고교부?|대학부?|일반부?|실업부?|시니어)'  # level
+    r'(초등[저중고]?부?|중등부?|중학부?|고등부?|고교부?|대학부?|일반부?|실업부?|엘리트부?|시니어)'  # level
     r'\s+'
-    r'(플뢰레|에뻬|에페|플러레|사브르)'  # weapon
+    r'(' + _W + r')'           # weapon
     r'(?:\s+(개인전?|단체전?))?'  # optional event type
     r'(?:\s+(전문|동호인))?'    # optional category
     r'$'
@@ -112,25 +167,35 @@ _RE_INTERNATIONAL = re.compile(
     r'\s+'
     r'(남자?|여자?|혼성)'      # gender
     r'\s+'
-    r'(플뢰레|에뻬|에페|플러레|사브르)'  # weapon
+    r'(' + _W + r')'           # weapon
     r'(?:\s*(개인전?|단체전?))?'
     r'$'
 )
+
+
+def _normalize_name(name: str) -> str:
+    """Normalize common data quality issues in event names."""
+    # Fix missing closing parentheses: "에뻬(개" -> "에뻬(개)"
+    open_count = name.count('(')
+    close_count = name.count(')')
+    if open_count > close_count:
+        name += ')' * (open_count - close_count)
+    return name
 
 
 def _parse_event_name(name_ko: str) -> Optional[dict]:
     """
     Parse Korean event name into components.
 
-    Returns dict with keys: gender, level, weapon, event_type, u_age, category
+    Returns dict with keys: gender, level, weapon, event_type, u_age, elem_grade, category
     or None if the name doesn't match any known pattern.
     """
     if not name_ko:
         return None
 
-    name = name_ko.strip()
+    name = _normalize_name(name_ko.strip())
 
-    # Try compact format: "여중 에뻬(개)"
+    # Try compact format: "여중 에뻬(개)" or "남초 플러레(개)(1-3학년)"
     m = _RE_COMPACT.match(name)
     if m:
         return {
@@ -139,6 +204,20 @@ def _parse_event_name(name_ko: str) -> Optional[dict]:
             'weapon': m.group(3),
             'event_type': m.group(4) or '',
             'u_age': '',
+            'elem_grade': m.group(5) or '',
+            'category': '',
+        }
+
+    # Try age-under format: "17세이하부 남자 사브르(개)"
+    m = _RE_AGE_UNDER.match(name)
+    if m:
+        return {
+            'gender': m.group(2).rstrip('자'),
+            'level': '',
+            'weapon': m.group(3),
+            'event_type': m.group(4) or '',
+            'u_age': f'U{m.group(1)}',
+            'elem_grade': '',
             'category': '',
         }
 
@@ -151,6 +230,52 @@ def _parse_event_name(name_ko: str) -> Optional[dict]:
             'weapon': m.group(3),
             'event_type': m.group(4) or '',
             'u_age': m.group(1),
+            'elem_grade': '',
+            'category': '',
+        }
+
+    # Try elementary with grade: "초등부(1-3학년) 남자 사브르(개)"
+    m = _RE_ELEM_GRADE.match(name)
+    if m:
+        grade_range = m.group(1).replace('~', '-')
+        return {
+            'gender': m.group(2).rstrip('자'),
+            'level': '초',
+            'weapon': m.group(3),
+            'event_type': m.group(4) or '',
+            'u_age': '',
+            'elem_grade': grade_range,
+            'category': '',
+        }
+
+    # Try level with age qualifier: "엘리트부(만40세이상) 남자 플러레"
+    m = _RE_LEVEL_AGE.match(name)
+    if m:
+        age = m.group(2)
+        level_long = m.group(1)
+        level_key = LEVEL_LONG.get(level_long, '일')
+        return {
+            'gender': m.group(3).rstrip('자'),
+            'level': level_key,
+            'weapon': m.group(4),
+            'event_type': m.group(5) or '',
+            'u_age': f'{age}+',
+            'elem_grade': '',
+            'category': '',
+        }
+
+    # Try level-first format: "고등부 남자 사브르(개)"
+    m = _RE_LEVEL_FIRST.match(name)
+    if m:
+        level_long = m.group(1)
+        level_key = LEVEL_LONG.get(level_long, '')
+        return {
+            'gender': m.group(2).rstrip('자'),
+            'level': level_key,
+            'weapon': m.group(3),
+            'event_type': m.group(4) or '',
+            'u_age': '',
+            'elem_grade': '',
             'category': '',
         }
 
@@ -166,6 +291,7 @@ def _parse_event_name(name_ko: str) -> Optional[dict]:
             'weapon': m.group(3),
             'event_type': m.group(4) or '',
             'u_age': '',
+            'elem_grade': '',
             'category': m.group(5) or '',
         }
 
@@ -174,13 +300,13 @@ def _parse_event_name(name_ko: str) -> Optional[dict]:
     if m:
         gender_raw = m.group(1).rstrip('자')
         et_raw = m.group(3) or ''
-        # Normalize event type: "개인" -> "개인", "개인전" -> "개인전", "개" -> "개"
         return {
             'gender': gender_raw,
             'level': '',
             'weapon': m.group(2),
             'event_type': et_raw,
             'u_age': '',
+            'elem_grade': '',
             'category': '',
         }
 
@@ -214,6 +340,27 @@ def _assemble(parts: dict, lang: str) -> str:
     weapon = _get(WEAPON, parts['weapon'], lang)
     event_type = _get(EVENT_TYPE, parts['event_type'], lang)
     u_age = parts.get('u_age', '')
+    elem_grade = parts.get('elem_grade', '')
+
+    # Override level with elementary grade translation when present
+    if elem_grade:
+        grade_key = f'{elem_grade}학년'
+        grade_entry = ELEM_GRADES.get(grade_key)
+        if grade_entry:
+            grade_text = grade_entry.get(lang, grade_entry.get('en', ''))
+        else:
+            # Dynamic fallback for unlisted grade ranges
+            _templates = {
+                'en': f'Grade {elem_grade}', 'fr': f'{elem_grade} année',
+                'it': f'{elem_grade} anno', 'ja': f'{elem_grade}年',
+                'zh': f'{elem_grade}年级', 'tr': f'{elem_grade}. Sınıf',
+            }
+            grade_text = _templates.get(lang, _templates['en'])
+
+        if lang in ('ja', 'zh'):
+            level = _get(LEVEL, '초', lang) + grade_text  # e.g. "小学1-3年"
+        else:
+            level = _get(LEVEL, '초', lang) + ' ' + grade_text  # e.g. "Elementary Grade 1-3"
 
     if lang in ('ja', 'zh'):
         # CJK order: gender+level combined, then weapon, then event_type
@@ -249,6 +396,12 @@ def translate_event_name(name_ko: str, lang: str) -> str:
         "男子高校 サーブル 団体"
         >>> translate_event_name("남자 플뢰레(개인)", "fr")
         "Hommes Fleuret Individuel"
+        >>> translate_event_name("17세이하부 남자 사브르(개)", "en")
+        "U17 Men's Sabre Individual"
+        >>> translate_event_name("고등부 남자 사브르(개)", "en")
+        "Men's High School Sabre Individual"
+        >>> translate_event_name("초등부(1-3학년) 남자 사브르(개)", "en")
+        "Men's Elementary Grade 1-3 Sabre Individual"
     """
     if lang == 'ko' or not name_ko:
         return name_ko

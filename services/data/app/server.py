@@ -68,15 +68,17 @@ from app.bracket_utils import normalize_bracket_data, NormalizedBracket, compute
 # 풀 종합 순위 계산기
 from app.pool_calculator import calculate_pool_total_ranking, enrich_with_advancement_status
 
-# i18n 다국어 지원 시스템
-from app.i18n import (
-    i18n,
-    get_translator,
-    LanguageMiddleware,
-    create_language_context,
+# i18n 다국어 지원 시스템 (shared_core 인프라 + 서비스 고유 번역기)
+from shared_core.i18n import (
     SUPPORTED_LANGUAGES,
     DEFAULT_LANGUAGE,
     LANGUAGE_NAMES,
+    LANG_THEME_MAP,
+    DEFAULT_THEME,
+    LanguageMiddleware,
+    create_shared_i18n,
+)
+from app.i18n import (
     make_auto_translator,
     get_js_translations,
     translate_event_name,
@@ -446,7 +448,7 @@ def _normalize_bout_data(bout: Dict) -> Dict:
 from app.auth.router import router as auth_router, get_current_member
 from app.access_control import (
     get_access_level,
-    filter_rankings_for_guest,
+    blur_ranking_entries,
     blur_search_result_for_guest,
     can_access_fencinglab,
     apply_player_data_gate,
@@ -571,8 +573,11 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 templates.env.filters['tr_event'] = lambda name, lang: translate_event_name(name, lang)
 templates.env.filters['tr_comp'] = lambda name, lang: translate_competition_name(name, lang)
 
-# i18n 미들웨어 추가
-app.add_middleware(LanguageMiddleware)
+# i18n 미들웨어 추가 (shared_core: 공유 번역 + 서비스별 번역 deep merge, 테마 자동 결정)
+_service_i18n = create_shared_i18n(
+    extra_dirs=[Path(__file__).parent / "i18n" / "translations"]
+)
+app.add_middleware(LanguageMiddleware, i18n=_service_i18n)
 
 # Auth 라우터 등록
 app.include_router(auth_router)
@@ -591,6 +596,7 @@ _data_source: str = "supabase"  # 현재 데이터 소스 (Supabase 전용)
 _identity_resolver: Optional[PlayerIdentityResolver] = None  # 선수 식별 시스템
 _fencinglab_analyzer = None  # FencingLab 분석기 (지연 로딩)
 _org_region_cache: Dict[str, Dict[str, str]] = {}  # 조직명 → {province, city}
+_org_age_group_lookup: Dict[str, str] = {}  # 조직명 → 나이그룹 (국가대표 서브랭킹용)
 _org_translation_cache: Dict[str, str] = {}  # 조직명(한국어) → 영문명 캐시
 _player_translation_cache: Dict[str, str] = {}  # 선수명(한국어) → 영문명 캐시
 _quality_monitor: Optional["DataQualityMonitor"] = None  # 데이터 품질 모니터
@@ -623,6 +629,7 @@ class RankingEntry(BaseModel):
     silver: int
     bronze: int
     best_results: List[Dict] = []
+    blurred: bool = False  # guest용 블러 처리 플래그
 
 
 class RankingResponse(BaseModel):
@@ -722,13 +729,33 @@ def get_i18n_template_context(request: Request, lang: str = None) -> Dict[str, A
     if lang not in SUPPORTED_LANGUAGES:
         lang = DEFAULT_LANGUAGE
 
+    # shared_core 미들웨어가 설정한 theme 사용
+    theme = getattr(request.state, 'theme', LANG_THEME_MAP.get(lang, DEFAULT_THEME))
+
+    # shared_core 미들웨어가 설정한 t, i18n_data 사용
+    t_func = getattr(request.state, 't', None)
+    i18n_data = getattr(request.state, 'i18n_data', None)
+
+    if t_func is None:
+        from shared_core.i18n import get_translator
+        t_func = get_translator(lang)
+    if i18n_data is None:
+        i18n_data = _service_i18n.get_for_template(lang)
+
+    # alternate_urls 계산 (shared_core 미들웨어에 없으므로 직접)
+    alternate_urls = getattr(request.state, 'alternate_urls', None)
+    if alternate_urls is None:
+        from app.i18n.middleware import get_alternate_urls
+        alternate_urls = get_alternate_urls(request, lang)
+
     return {
         'lang': lang,
-        't': get_translator(lang),
+        'theme': theme,
+        't': t_func,
         'supported_langs': SUPPORTED_LANGUAGES,
         'lang_names': LANGUAGE_NAMES,
-        'alternate_urls': getattr(request.state, 'alternate_urls', {}),
-        'i18n': i18n.get_for_template(lang),
+        'alternate_urls': alternate_urls,
+        'i18n': i18n_data,
         '_t': make_auto_translator(lang),
         '_js_t': get_js_translations(lang),
         'tr_event': lambda name: translate_event_name(name, lang),
@@ -989,6 +1016,28 @@ def build_org_region_cache() -> Dict[str, Dict[str, str]]:
     except Exception as e:
         logger.error(f"조직 지역 캐시 빌드 실패: {e}")
         return {}
+
+
+def build_org_age_group_lookup():
+    """_org_region_cache에서 org_type → 나이그룹 매핑 구축 (국가대표 서브랭킹용)"""
+    global _org_age_group_lookup
+    ORG_TYPE_TO_AGE = {
+        'elementary': 'E3',
+        'middle': 'MS',
+        'high': 'HS',
+        'university': 'UNI',
+        'professional': 'SR',
+        'association': 'SR',
+        'international_school': 'HS',
+    }
+    lookup = {}
+    for name, info in _org_region_cache.items():
+        org_type = info.get('org_type', '')
+        age = ORG_TYPE_TO_AGE.get(org_type)
+        if age:
+            lookup[name] = age
+    _org_age_group_lookup = lookup
+    logger.info(f"조직→나이그룹 매핑 빌드: {len(lookup)}개")
 
 
 def audit_org_types():
@@ -1548,6 +1597,9 @@ def build_player_index():
             pool_rounds = event.get("pool_rounds", [])
             for pool in pool_rounds:
                 for result in pool.get("results", []):
+                    # 기권 선수는 pool stats에서 제외 (FIE t.95)
+                    if result.get("is_forfeit"):
+                        continue
                     pname = result.get("name", "").strip()
                     if pname:
                         wins = result.get("wins", 0) or 0
@@ -1616,6 +1668,13 @@ def build_player_index():
                         de_stats_lower[loser_lower] = de_stats_lower.get(loser_lower, {"wins": 0, "losses": 0})
                         de_stats_lower[loser_lower]["losses"] += 1
 
+            # pool_total_ranking에서 선수별 뿔 순위 맵 구축
+            pool_rank_map = {}
+            for ptr in pool_total_ranking:
+                ptr_name = ptr.get("name", "").strip()
+                if ptr_name:
+                    pool_rank_map[ptr_name] = ptr.get("rank")
+
             # 엘리미나시옹디렉트 (final_rankings)에서 선수 추출
             for final in event.get("final_rankings", []):
                 player_name = final.get("name", "").strip()
@@ -1646,6 +1705,7 @@ def build_player_index():
 
                 record = {
                     "rank": final.get("rank"),
+                    "pool_rank": pool_rank_map.get(player_name),
                     "competition_name": comp_name,
                     "competition_date": comp_date,
                     "event_name": event_name,
@@ -1908,7 +1968,7 @@ def build_filter_options():
                 _filter_options["genders"].add(gender)
 
             event_type = event.get("event_type", "")
-            if event_type:
+            if event_type and event_type in ("개인", "단체"):
                 _filter_options["event_types"].add(event_type)
 
             # 데이터베이스 age_group 필드 우선, FIE 코드로 변환
@@ -2042,7 +2102,7 @@ def load_data_from_supabase() -> bool:
                     "name": e["event_name"],
                     "weapon": e["weapon"],
                     "gender": e["gender"],
-                    "event_type": e["category"],  # category -> event_type
+                    "event_type": e["category"] if e.get("category") in ("개인", "단체") else "개인",  # category -> event_type (normalize)
                     "age_group": e["age_group"],
                     "total_participants": total_participants,
                     "pool_rounds": filtered_pools,
@@ -2196,6 +2256,7 @@ def load_data():
     build_competition_player_cache()  # 대회별 선수 캐시 (자동완성 최적화)
     build_team_event_index()  # 단체전 조직별 결과 인덱스
     build_org_region_cache()  # 조직→지역 캐시 (참가선수 탭 + 동명이인 지역 인식)
+    build_org_age_group_lookup()  # 조직→나이그룹 매핑 (국가대표 서브랭킹용)
     build_identity_resolver()
     audit_org_types()  # org_type 분류 로직 vs DB 불일치 감사
     build_org_translation_cache()  # 조직→영문명 캐시 (i18n)
@@ -2214,7 +2275,7 @@ def load_data():
     # 랭킹 계산기 초기화 (Supabase 캐시 데이터 사용)
     try:
         _ranking_calculator = RankingCalculator()
-        _ranking_calculator.load_from_data(_data_cache)
+        _ranking_calculator.load_from_data(_data_cache, org_age_lookup=_org_age_group_lookup)
         logger.info(f"✅ 랭킹 계산기 초기화 완료: {len(_ranking_calculator.results)}개 결과")
     except Exception as e:
         logger.error(f"랭킹 계산기 초기화 실패: {e}")
@@ -2300,9 +2361,11 @@ async def home(request: Request, lang: str = "ko"):
         from fastapi.responses import RedirectResponse
         return RedirectResponse(url=f"/{DEFAULT_LANGUAGE}/", status_code=302)
 
+    access_level, member = await get_access_level(request)
     context = {
         "request": request,
         "title": "Korean Fencing Tracker",
+        "access_level": access_level,
         **get_i18n_template_context(request, lang)
     }
     return templates.TemplateResponse("index.html", context)
@@ -2457,13 +2520,14 @@ async def api_events(
         # 대회 레벨 분류
         comp_level = classify_competition_level(comp_name)
 
-        # National 필터: 국가대표 대회만 표시
+        # 대회 레벨별 필터링
+        # - National 필터(age_group=National): 국가대표 대회만 표시 (전용 필터)
+        # - 일반 필터: 모든 대회 포함 (국가대표 대회도 무기/성별 매칭 시 표시)
+        #   → "사용자 선호 우선" 원칙: 여자 에페 중학생리그 선택 시
+        #     국가대표선발대회의 여자 에페 이벤트도 함께 표시
+        is_national_comp = (comp_level == 'NATIONAL')
         if is_national_filter:
-            if comp_level != 'NATIONAL':
-                continue
-        else:
-            # 다른 필터: 국가대표 대회는 제외 (National 이벤트에서만 표시)
-            if comp_level == 'NATIONAL':
+            if not is_national_comp:
                 continue
 
         for event in comp.get("events", []):
@@ -2479,11 +2543,12 @@ async def api_events(
             if event_type and (event.get("event_type") or "개인") != event_type:
                 continue
 
-            # 연령대 필터 (National이 아닌 경우에만 적용)
-            # 데이터베이스 age_group 필드 우선, FIE 코드로 변환
-            # U17 (17세이하)는 Y14와 Cadet 양쪽 필터에서 표시됨
+            # 연령대 필터
+            # - National 필터(age_group=National): 나이 필터 미적용 (전체 표시)
+            # - 국가대표 대회(is_national_comp): 나이 필터 미적용 (다연령 대회)
+            # - 일반 대회: 나이 매칭 적용 (U17↔Y14/Cadet 등 양방향 매핑)
             event_age = get_event_age_group_fie(event)
-            if age_group and not is_national_filter and not matches_age_group_filter(event_age, age_group):
+            if age_group and not is_national_filter and not is_national_comp and not matches_age_group_filter(event_age, age_group):
                 continue
 
             # 검색어 필터 (원본 한국어와 번역된 영어 모두 검색)
@@ -4699,10 +4764,9 @@ async def api_rankings(
         excl_selection=excl_selection
     )
 
-    # 접근 등급별 필터링: guest는 상위 10명 숨김
+    # 접근 등급 판별
     access_level, _ = await get_access_level(request)
-    if access_level == "guest":
-        rankings = filter_rankings_for_guest(rankings)
+    is_guest = access_level == "guest"
 
     # 페이지네이션
     total = len(rankings)
@@ -4783,6 +4847,10 @@ async def api_rankings(
             best_results=r.best_results
         ))
 
+    # guest: 1페이지의 상위 10명 이름·소속 블러 처리
+    if is_guest and start == 0:
+        blur_ranking_entries(ranking_entries, min(RANKINGS_HIDDEN_TOP_N, len(ranking_entries)))
+
     return RankingResponse(
         weapon=weapon,
         gender=gender,
@@ -4792,7 +4860,7 @@ async def api_rankings(
         category_name=category_display,
         total=total,
         rankings=ranking_entries,
-        hidden_top=RANKINGS_HIDDEN_TOP_N if access_level == "guest" else 0,
+        hidden_top=RANKINGS_HIDDEN_TOP_N if is_guest else 0,
     )
 
 
@@ -6252,6 +6320,45 @@ async def player_page(
 
     player_data["selection_points"] = selection_points
 
+    # FencingLab 랭킹 정보 조회 (선수 프로필 상단 표시용)
+    rankings_info = []
+    if _ranking_calculator:
+        try:
+            player_results = [r for r in _ranking_calculator.results if r.player_name == player_name]
+            if player_results:
+                # 유니크한 카테고리 조합 추출
+                categories_seen = set()
+                for r in player_results:
+                    cat = r.category if r.age_group in CATEGORY_APPLICABLE_AGE_GROUPS else None
+                    key = (r.weapon, r.gender, r.age_group, cat)
+                    categories_seen.add(key)
+
+                for weapon, gender, age_group, category in categories_seen:
+                    all_rankings = _ranking_calculator.calculate_rankings(
+                        weapon=weapon, gender=gender,
+                        age_group=age_group, category=category
+                    )
+                    for r in all_rankings:
+                        if r.player_name == player_name:
+                            rankings_info.append({
+                                "weapon": weapon,
+                                "gender": gender,
+                                "age_group": age_group,
+                                "age_group_name": AGE_GROUP_CODES.get(age_group, age_group),
+                                "category": category,
+                                "category_name": CATEGORY_CODES.get(category) if category else None,
+                                "rank": r.current_rank,
+                                "total": len(all_rankings),
+                                "points": r.total_points,
+                                "competitions": r.competitions_count,
+                                "best_results": r.best_results[:4],
+                            })
+                            break
+        except Exception as e:
+            logger.debug(f"랭킹 정보 조회 실패 ({player_name}): {e}")
+
+    player_data["rankings_info"] = rankings_info
+
     # 접근 등급 확인
     access_level, _ = await get_access_level(request)
 
@@ -6439,14 +6546,14 @@ def compute_dual_de_final_rankings(de_bracket: Dict) -> List[Dict]:
     국가대표 선발전 등 Dual DE 형식에서는 DB에 저장된 final_rankings가
     First DE 결과일 수 있으므로, Second DE(본선) 경기 결과에서 직접 계산.
 
-    순위 결정 원칙 (펜싱 표준):
+    순위 결정 원칙 (FIE 표준 - FencingTime 실제 결과 확인):
     - 1위: 결승 승자
     - 2위: 결승 패자
-    - 3위 (공동): 준결승 패자 2명
-    - 5-8위: 8강 패자 4명
-    - 9-16위: 16강 패자 8명
-    - 17-32위: 32강 패자 16명
-    - 33-64위: 64강 패자 32명
+    - 3위 (동률 3T): 준결승 패자 2명 — 유일한 동률 순위
+    - 5~8위: 8강 패자 4명, 풀 시드 순 개별 순위
+    - 9~16위: 16강 패자 8명, 풀 시드 순 개별 순위
+    - 17~32위: 32강 패자 16명, 풀 시드 순 개별 순위
+    - 33~64위: 64강 패자 32명, 풀 시드 순 개별 순위
     - 65+: First DE 탈락자
 
     Args:
@@ -6541,15 +6648,26 @@ def compute_dual_de_final_rankings(de_bracket: Dict) -> List[Dict]:
                 final_rankings.append({"rank": 2, "name": loser_name, "team": loser_team or ""})
                 assigned_players.add(loser_name)
 
-    # 2. 준결승 ~ 128강: 각 라운드 패자에게 해당 순위 부여
-    for round_name, rank_val in [
-        ("준결승", 3), ("8강", 5), ("16강", 9),
+    # 2. 준결승: 동률 3위 (FIE 표준 — 유일한 동률 순위)
+    losers = get_losers("준결승")
+    for loser in losers:
+        final_rankings.append({
+            "rank": 3,
+            "name": loser["name"],
+            "team": loser["team"],
+        })
+        assigned_players.add(loser["name"])
+
+    # 3. 8강 이후: 시드 기반 개별 순위 (FIE 표준)
+    #    같은 라운드 탈락자는 풀 시드 순으로 5,6,7,8 / 9,10,...,16 등 개별 부여
+    for round_name, start_rank in [
+        ("8강", 5), ("16강", 9),
         ("32강", 17), ("64강", 33), ("128강", 65),
     ]:
         losers = get_losers(round_name)
-        for loser in losers:
+        for i, loser in enumerate(losers):
             final_rankings.append({
-                "rank": rank_val,
+                "rank": start_rank + i,
                 "name": loser["name"],
                 "team": loser["team"],
             })
@@ -6649,6 +6767,130 @@ async def iksan_u13_redirect():
     return RedirectResponse(url="/competition/COMPM00673", status_code=301)
 
 
+def _compute_event_sub_rankings(final_rankings: list) -> dict:
+    """국가대표 선발대회 이벤트의 나이리그별 서브랭킹 계산
+
+    Args:
+        final_rankings: [{rank, name, team, ...}, ...]
+
+    Returns:
+        {age_code: [{rank, overall_rank, name, team}, ...], ...}
+        빈 딕셔너리면 서브랭킹 없음
+    """
+    if not final_rankings or not _org_age_group_lookup:
+        return {}
+
+    # 각 선수의 나이그룹 추론 (org_type 기반 + 다른 대회 cross-reference)
+    ORG_TYPE_TO_AGE = {
+        'elementary': 'E3', 'middle': 'MS', 'high': 'HS',
+        'university': 'UNI', 'professional': 'SR',
+        'association': 'SR', 'international_school': 'HS',
+    }
+
+    # 나이그룹별 그룹화
+    # 비표준 age_group → 표준 코드 정규화 맵
+    AGE_NORMALIZE = {
+        '중등부': 'MS', '중학교': 'MS', '중등': 'MS',
+        '고등부': 'HS', '고등학교': 'HS', '고등': 'HS',
+        '대학부': 'UNI', '대학': 'UNI',
+        '일반부': 'SR', '일반': 'SR', '성인': 'SR',
+        '초등부': 'E3', '초등': 'E3',
+        'U9': 'E1', 'U11': 'E2', 'U13': 'E3',
+        'U17': 'HS', 'U20': 'UNI',
+        '15세이하부': 'MS', '16세이하부': 'MS',  # 구 소년체전 형식
+        '18세이하부': 'HS',                       # 구 소년체전 형식
+        'E1': 'E1', 'E2': 'E2', 'E3': 'E3',
+        'MS': 'MS', 'HS': 'HS', 'UNI': 'UNI', 'SR': 'SR',
+    }
+    # 학교/연령 특정 코드 (cross-reference에서 우선)
+    # SR은 구체적 학교급이 아니므로 낮은 우선순위
+    SPECIFIC_AGE_CODES = {'E1', 'E2', 'E3', 'MS', 'HS', 'UNI'}  # priority 0
+    # SR = 일반부, 동호인 대회 등에서 부여되지만 실제 학교급이 아닐 수 있음 → priority 1
+
+    from collections import defaultdict
+    age_groups = defaultdict(list)
+    lookup_hit = 0
+    cross_ref_hit = 0
+    defaulted = 0
+    for r in final_rankings:
+        team = r.get("team", "")
+        age = _org_age_group_lookup.get(team)
+        if age:
+            lookup_hit += 1
+        if not age:
+            # cross-reference: _ranking_calculator에서 이 선수의 다른 결과 확인
+            # 우선순위: 학교 기반 코드(MS/HS/UNI) > 국제 코드(U17/U13)
+            # 같은 우선순위 내에서는 최신 대회 우선
+            if _ranking_calculator:
+                player_name = r.get("name", "")
+                candidates = []
+                for pr in _ranking_calculator.results:
+                    if pr.player_name == player_name and pr.age_group and pr.age_group not in ('', 'NT'):
+                        normalized = AGE_NORMALIZE.get(pr.age_group, pr.age_group)
+                        if normalized in SPECIFIC_AGE_CODES:
+                            priority = 0  # 구체적 학교급 (MS/HS/UNI/E1-3)
+                        elif normalized == 'SR':
+                            priority = 1  # 일반부 (학교급 불명확)
+                        else:
+                            priority = 2  # 기타
+                        candidates.append((
+                            priority,
+                            pr.competition_date or '',
+                            normalized,
+                        ))
+                if candidates:
+                    # (priority ASC, date DESC) → 학교 코드 우선, 최신 대회 우선
+                    candidates.sort(key=lambda x: (x[0], x[1]), reverse=False)
+                    # priority ASC 유지, date는 DESC로 → 2단계 정렬
+                    candidates.sort(key=lambda x: x[0])  # 안정 정렬로 priority 우선
+                    # priority가 같은 것들 중 최신 date 선택
+                    best_priority = candidates[0][0]
+                    same_priority = [c for c in candidates if c[0] == best_priority]
+                    same_priority.sort(key=lambda x: x[1], reverse=True)  # 최신 먼저
+                    age = same_priority[0][2]
+                    cross_ref_hit += 1
+            if not age:
+                age = 'SR'
+                defaulted += 1
+        # 정규화 적용 (org lookup 결과도)
+        age = AGE_NORMALIZE.get(age, age)
+        age_groups[age].append({
+            "name": r.get("name", ""),
+            "team": team,
+            "overall_rank": r.get("rank", 0),
+        })
+    logger.debug(f"[SUB-RANKING] lookup_size={len(_org_age_group_lookup)}, "
+                 f"total={len(final_rankings)}, lookup_hit={lookup_hit}, "
+                 f"cross_ref={cross_ref_hit}, defaulted={defaulted}, "
+                 f"groups={dict((k, len(v)) for k, v in age_groups.items())}")
+
+    # 2개 이상의 나이그룹이 있어야 의미 있음
+    if len(age_groups) < 2:
+        return {}
+
+    # 각 그룹 내에서 overall_rank 순으로 정렬 → 리그 순위 부여
+    result = {}
+    # 나이그룹 표시 순서
+    AGE_ORDER = ['E1', 'E2', 'E3', 'MS', 'HS', 'UNI', 'SR']
+    for age in AGE_ORDER:
+        if age not in age_groups:
+            continue
+        players = sorted(age_groups[age], key=lambda x: x["overall_rank"])
+        for i, p in enumerate(players, 1):
+            p["rank"] = i
+        result[age] = players
+
+    # AGE_ORDER에 없는 그룹도 추가
+    for age, players in age_groups.items():
+        if age not in result:
+            players = sorted(players, key=lambda x: x["overall_rank"])
+            for i, p in enumerate(players, 1):
+                p["rank"] = i
+            result[age] = players
+
+    return result
+
+
 @app.get("/competition/{event_cd}", response_class=HTMLResponse)
 async def competition_detail_page(request: Request, event_cd: str, event: Optional[str] = None):
     """대회 상세 페이지"""
@@ -6672,6 +6914,10 @@ async def competition_detail_page(request: Request, event_cd: str, event: Option
         if selected_event:
             # 원본 DE 데이터 저장 (순위 계산에 필요)
             original_de_bracket = selected_event.get("de_bracket", {})
+            # DE full bouts 추출 (통계 탭에서 사용 - transform 전에 추출)
+            de_full_bouts_for_stats = _get_full_bouts_from_de_bracket(
+                original_de_bracket
+            ) if isinstance(original_de_bracket, dict) else []
             pool_total_ranking = selected_event.get("pool_total_ranking", [])
             existing_rankings = selected_event.get("final_rankings", [])
 
@@ -6857,6 +7103,16 @@ async def competition_detail_page(request: Request, event_cd: str, event: Option
                     if en != player_name:
                         player_translation_map[player_name] = en
 
+            # 국가대표 선발대회: 나이리그별 서브랭킹 생성
+            # NOTE: existing_rankings(원본 DB 데이터, 전체 참가자 포함)를 사용.
+            # Dual DE 이벤트에서 selected_event["final_rankings"]는
+            # compute_dual_de_final_rankings()가 DE 참가자만으로 대체했을 수 있음.
+            age_group_rankings = {}
+            comp_name = comp.get("competition", {}).get("name", "")
+            sub_ranking_source = existing_rankings or selected_event.get("final_rankings", [])
+            if classify_competition_level(comp_name) == 'NATIONAL' and sub_ranking_source:
+                age_group_rankings = _compute_event_sub_rankings(sub_ranking_source)
+
             return templates.TemplateResponse("event_result.html", {
                 "request": request,
                 "competition": comp,
@@ -6866,6 +7122,8 @@ async def competition_detail_page(request: Request, event_cd: str, event: Option
                 "player_region_grade": player_region_grade,
                 "team_translation_map": team_translation_map,
                 "player_translation_map": player_translation_map,
+                "de_full_bouts_for_stats": de_full_bouts_for_stats,
+                "age_group_rankings": age_group_rankings,
                 **get_i18n_template_context(request, lang)
             })
 
@@ -6991,9 +7249,45 @@ async def rankings_page(request: Request, lang: str = "ko"):
         from fastapi.responses import RedirectResponse
         return RedirectResponse(url=f"/{DEFAULT_LANGUAGE}/rankings", status_code=302)
 
+    access_level, _ = await get_access_level(request)
+
+    # Guest preview: 기본 랭킹 top 5 (서버 사이드 렌더링으로 즉시 표시)
+    guest_preview = None
+    if access_level == "guest" and _ranking_calculator:
+        try:
+            preview_rankings = _ranking_calculator.calculate_rankings(
+                weapon="foil", gender="남", age_group="SR", category="PRO",
+                year=date.today().year
+            )
+            if not preview_rankings:
+                preview_rankings = _ranking_calculator.calculate_rankings(
+                    weapon="foil", gender="남", age_group="SR", category="PRO",
+                    year=date.today().year - 1
+                )
+            if preview_rankings:
+                guest_preview = {
+                    "rankings": [
+                        {
+                            "rank": r.current_rank,
+                            "points": r.total_points,
+                            "competitions": r.competitions_count,
+                            "gold": r.gold_count,
+                            "silver": r.silver_count,
+                            "bronze": r.bronze_count,
+                        }
+                        for r in preview_rankings[:5]
+                    ],
+                    "total": len(preview_rankings),
+                }
+        except Exception as e:
+            logger.debug(f"Guest preview 계산 실패: {e}")
+
     context = {
         "request": request,
         "title": "FencingLab Ranking",
+        "access_level": access_level,
+        "login_url": "/auth/login",
+        "guest_preview": guest_preview,
         **get_i18n_template_context(request, lang)
     }
     return templates.TemplateResponse("rankings.html", context)
@@ -7301,8 +7595,12 @@ async def get_upcoming_competitions(
             if lang != "ko" and comp_name in VERIFIED_COMPETITION_MAPPINGS:
                 comp_name = VERIFIED_COMPETITION_MAPPINGS[comp_name]
 
-            # 오늘 이후 ~ days일 이내
-            if 0 <= days_until <= days:
+            # 내일 이후 ~ days일 이내 (오늘 시작 대회는 ongoing이므로 제외)
+            # 이미 시작된 대회(진행 중)도 제외
+            comp_end_date_str = comp_info.get("end_date", "")
+            end_dt = date.fromisoformat(comp_end_date_str[:10]) if comp_end_date_str else start_date
+            is_ongoing = start_date <= today <= end_dt
+            if days_until > 0 and days_until <= days and not is_ongoing:
                 upcoming.append({
                     "event_cd": comp_info.get("event_cd"),
                     "comp_idx": comp_info.get("comp_idx"),
@@ -7852,6 +8150,261 @@ async def update_player_english_name(request: Request, player_name: str, body: E
     except Exception as e:
         logger.error(f"영문명 수정 실패 ({player_name}): {e}")
         raise HTTPException(status_code=500, detail="영문명 수정에 실패했습니다")
+
+
+# ==================== 즐겨찾기(Favorites) API ====================
+
+class FavoriteAddRequest(BaseModel):
+    player_name: str
+
+class FavoriteImportRequest(BaseModel):
+    player_names: List[str]
+
+
+@app.get("/api/favorites")
+async def api_get_favorites(request: Request):
+    """내 즐겨찾기 목록 조회"""
+    access_level, member = await get_access_level(request)
+    if access_level == "guest" or member is None:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다")
+
+    member_id = member.get("id")
+    if not member_id or not _supabase_client:
+        raise HTTPException(status_code=500, detail="서버 오류")
+
+    try:
+        result = _supabase_client.table("member_favorites").select(
+            "player_name, display_order, created_at"
+        ).eq("member_id", member_id).order("display_order").execute()
+
+        return {
+            "favorites": [r["player_name"] for r in (result.data or [])],
+            "total": len(result.data or []),
+        }
+    except Exception as e:
+        logger.error(f"즐겨찾기 조회 실패: {e}")
+        raise HTTPException(status_code=500, detail="즐겨찾기 조회 실패")
+
+
+@app.post("/api/favorites")
+async def api_add_favorite(request: Request, body: FavoriteAddRequest):
+    """즐겨찾기 추가"""
+    access_level, member = await get_access_level(request)
+    if access_level == "guest" or member is None:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다")
+
+    member_id = member.get("id")
+    if not member_id or not _supabase_client:
+        raise HTTPException(status_code=500, detail="서버 오류")
+
+    player_name = body.player_name.strip()
+    if not player_name:
+        raise HTTPException(status_code=400, detail="선수 이름이 필요합니다")
+
+    try:
+        _supabase_client.table("member_favorites").upsert(
+            {"member_id": member_id, "player_name": player_name},
+            on_conflict="member_id,player_name"
+        ).execute()
+        return {"success": True, "player_name": player_name}
+    except Exception as e:
+        logger.error(f"즐겨찾기 추가 실패: {e}")
+        raise HTTPException(status_code=500, detail="즐겨찾기 추가 실패")
+
+
+@app.delete("/api/favorites/{player_name:path}")
+async def api_remove_favorite(request: Request, player_name: str):
+    """즐겨찾기 제거"""
+    access_level, member = await get_access_level(request)
+    if access_level == "guest" or member is None:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다")
+
+    member_id = member.get("id")
+    if not member_id or not _supabase_client:
+        raise HTTPException(status_code=500, detail="서버 오류")
+
+    from urllib.parse import unquote
+    decoded_name = unquote(player_name).strip()
+
+    try:
+        _supabase_client.table("member_favorites").delete().eq(
+            "member_id", member_id
+        ).eq("player_name", decoded_name).execute()
+        return {"success": True, "player_name": decoded_name}
+    except Exception as e:
+        logger.error(f"즐겨찾기 제거 실패: {e}")
+        raise HTTPException(status_code=500, detail="즐겨찾기 제거 실패")
+
+
+@app.post("/api/favorites/import")
+async def api_import_favorites(request: Request, body: FavoriteImportRequest):
+    """localStorage → DB 일괄 이전"""
+    access_level, member = await get_access_level(request)
+    if access_level == "guest" or member is None:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다")
+
+    member_id = member.get("id")
+    if not member_id or not _supabase_client:
+        raise HTTPException(status_code=500, detail="서버 오류")
+
+    imported = 0
+    for name in body.player_names:
+        name = name.strip()
+        if not name:
+            continue
+        try:
+            _supabase_client.table("member_favorites").upsert(
+                {"member_id": member_id, "player_name": name},
+                on_conflict="member_id,player_name"
+            ).execute()
+            imported += 1
+        except Exception:
+            pass  # 중복 등 무시
+
+    return {"success": True, "imported": imported, "total": len(body.player_names)}
+
+
+@app.get("/api/favorites/dashboard")
+async def api_favorites_dashboard(request: Request):
+    """즐겨찾기 선수별 최근 1개 대회 결과 대시보드"""
+    access_level, member = await get_access_level(request)
+    if access_level == "guest" or member is None:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다")
+
+    member_id = member.get("id")
+    if not member_id or not _supabase_client:
+        raise HTTPException(status_code=500, detail="서버 오류")
+
+    lang = getattr(request.state, 'lang', DEFAULT_LANGUAGE)
+
+    try:
+        result = _supabase_client.table("member_favorites").select(
+            "player_name, display_order"
+        ).eq("member_id", member_id).order("display_order").execute()
+
+        favorites_data = []
+        for fav in (result.data or []):
+            player_name = fav["player_name"]
+            records = _player_index.get(player_name, [])
+
+            # 최근 대회 1건 (competition_date 내림차순)
+            latest = None
+            if records:
+                sorted_records = sorted(
+                    records,
+                    key=lambda r: r.get("competition_date", "") or "",
+                    reverse=True
+                )
+                latest = sorted_records[0]
+
+            # 현재 소속 (identity resolver)
+            current_team = ""
+            if _identity_resolver:
+                profiles = _identity_resolver.name_to_profiles.get(player_name, [])
+                if profiles:
+                    current_team = profiles[0].current_team or ""
+
+            # i18n 이름 변환
+            display_name = get_localized_player_name_sync(player_name, lang)
+            display_team = get_localized_org_name_sync(current_team, lang) if current_team else ""
+
+            entry = {
+                "player_name": player_name,
+                "display_name": display_name,
+                "current_team": current_team,
+                "display_team": display_team,
+                "latest_result": None,
+            }
+
+            if latest:
+                entry["latest_result"] = {
+                    "competition_name": latest.get("competition_name", ""),
+                    "display_competition_name": translate_competition_name(
+                        latest.get("competition_name", ""), lang
+                    ) if lang != "ko" else latest.get("competition_name", ""),
+                    "competition_date": latest.get("competition_date", ""),
+                    "event_name": latest.get("event_name", ""),
+                    "display_event_name": translate_event_name(
+                        latest.get("event_name", ""), lang
+                    ) if lang != "ko" else latest.get("event_name", ""),
+                    "event_cd": latest.get("event_cd", ""),
+                    "sub_event_cd": latest.get("sub_event_cd", ""),
+                    "rank": latest.get("rank"),
+                    "pool_rank": latest.get("pool_rank"),
+                    "total_participants": latest.get("total_participants"),
+                    "pool_wins": latest.get("pool_wins", 0),
+                    "pool_losses": latest.get("pool_losses", 0),
+                    "de_wins": latest.get("de_wins", 0),
+                    "de_losses": latest.get("de_losses", 0),
+                    "weapon": latest.get("weapon", ""),
+                    "age_group": latest.get("age_group", ""),
+                }
+
+            favorites_data.append(entry)
+
+        return {
+            "favorites": favorites_data,
+            "total": len(favorites_data),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"즐겨찾기 대시보드 조회 실패: {e}")
+        raise HTTPException(status_code=500, detail="대시보드 조회 실패")
+
+
+@app.get("/api/favorites/event/{sub_event_cd}")
+async def api_favorites_in_event(request: Request, sub_event_cd: str):
+    """해당 이벤트에 참가한 즐겨찾기 선수 반환"""
+    access_level, member = await get_access_level(request)
+    if access_level == "guest" or member is None:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다")
+
+    member_id = member.get("id")
+    if not member_id or not _supabase_client:
+        raise HTTPException(status_code=500, detail="서버 오류")
+
+    lang = getattr(request.state, 'lang', DEFAULT_LANGUAGE)
+
+    try:
+        result = _supabase_client.table("member_favorites").select(
+            "player_name"
+        ).eq("member_id", member_id).execute()
+
+        fav_names = {r["player_name"] for r in (result.data or [])}
+        matches = []
+
+        for name in fav_names:
+            records = _player_index.get(name, [])
+            for rec in records:
+                if rec.get("sub_event_cd") == sub_event_cd:
+                    display_name = get_localized_player_name_sync(name, lang)
+                    team = rec.get("team", "")
+                    display_team = get_localized_org_name_sync(team, lang) if team else ""
+                    matches.append({
+                        "player_name": name,
+                        "display_name": display_name,
+                        "team": team,
+                        "display_team": display_team,
+                        "rank": rec.get("rank"),
+                        "pool_rank": rec.get("pool_rank"),
+                        "total_participants": rec.get("total_participants"),
+                        "pool_wins": rec.get("pool_wins", 0),
+                        "pool_losses": rec.get("pool_losses", 0),
+                        "de_wins": rec.get("de_wins", 0),
+                        "de_losses": rec.get("de_losses", 0),
+                    })
+                    break  # 같은 이벤트에 1회만
+
+        return {
+            "favorites_in_event": matches,
+            "total": len(matches),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"이벤트 즐겨찾기 조회 실패: {e}")
+        raise HTTPException(status_code=500, detail="이벤트 즐겨찾기 조회 실패")
 
 
 # ==================== 데이터 새로고침 API ====================

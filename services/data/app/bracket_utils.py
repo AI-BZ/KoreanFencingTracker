@@ -164,6 +164,7 @@ class NormalizedDualDEBracket:
 
 # 라운드 순서 정의
 ROUND_ORDER = {
+    '256강': 0, '256강전': 0,
     '128강': 1, '128강전': 1,
     '64강': 2, '64강전': 2,
     '32강': 3, '32강전': 3,
@@ -175,6 +176,7 @@ ROUND_ORDER = {
 }
 
 ROUND_DISPLAY_NAMES = {
+    '256강전': '256강', '256강': '256강',
     '128강전': '128강', '128강': '128강',
     '64강전': '64강', '64강': '64강',
     '32강전': '32강', '32강': '32강',
@@ -193,6 +195,7 @@ def normalize_round_name(raw_name: str) -> str:
 
 # bracket_size별 유효한 라운드 목록
 VALID_ROUNDS_BY_BRACKET_SIZE = {
+    256: {'256강', '128강', '64강', '32강', '16강', '8강', '준결승', '결승', '3-4위'},
     128: {'128강', '64강', '32강', '16강', '8강', '준결승', '결승', '3-4위'},
     64: {'64강', '32강', '16강', '8강', '준결승', '결승', '3-4위'},
     32: {'32강', '16강', '8강', '준결승', '결승', '3-4위'},
@@ -644,11 +647,11 @@ def get_round_order(round_name: str) -> int:
 
 def get_bracket_size(participant_count: int) -> int:
     """참가자 수에 따른 브래킷 크기 (2의 거듭제곱)"""
-    sizes = [4, 8, 16, 32, 64, 128]
+    sizes = [4, 8, 16, 32, 64, 128, 256]
     for size in sizes:
         if participant_count <= size:
             return size
-    return 128
+    return 256
 
 
 def get_starting_round(bracket_size: int) -> str:
@@ -659,7 +662,8 @@ def get_starting_round(bracket_size: int) -> str:
         16: '16강',
         32: '32강',
         64: '64강',
-        128: '128강'
+        128: '128강',
+        256: '256강'
     }
     return mapping.get(bracket_size, '32강')
 
@@ -856,7 +860,7 @@ def normalize_bracket_data(
         # bout 라운드 이름에서 최소 필요 bracket_size 추론
         # 라운드 이름 → 최소 bracket_size 매핑
         round_to_min_bracket = {
-            '128강': 128, '64강': 64, '32강': 32, '16강': 16, '8강': 8,
+            '256강': 256, '128강': 128, '64강': 64, '32강': 32, '16강': 16, '8강': 8,
         }
         min_bracket_from_bouts = bracket_size
         for bout in all_bouts:
@@ -1831,9 +1835,56 @@ def normalize_dual_de_bracket_data(de_bracket: Dict) -> NormalizedDualDEBracket:
     if not de_bracket:
         return NormalizedDualDEBracket()
 
+    # === Distribute top-level bouts to sub-brackets if needed ===
+    # Some dual DE events store all bouts in de_bracket.full_bouts
+    # while first_de.full_bouts and second_de.full_bouts are empty.
+    top_level_bouts = de_bracket.get('full_bouts', [])
+    first_de_raw = de_bracket.get('first_de', {})
+    second_de_raw = de_bracket.get('second_de', {})
+
+    first_de_has_bouts = bool((first_de_raw.get('full_bouts') or []))
+    second_de_has_bouts = bool((second_de_raw.get('full_bouts') or []))
+
+    if top_level_bouts and not first_de_has_bouts and not second_de_has_bouts:
+        second_de_starting = (second_de_raw.get('starting_round') or '64강')
+        round_order = ['256강', '128강', '64강', '32강', '16강', '8강', '준결승', '결승']
+        second_de_idx = round_order.index(second_de_starting) if second_de_starting in round_order else 2
+
+        first_de_bouts = []
+        second_de_bouts = []
+
+        for bout in top_level_bouts:
+            round_name = bout.get('round_name', '')
+            round_idx = round_order.index(round_name) if round_name in round_order else -1
+
+            if round_idx < 0:
+                continue
+
+            if round_idx < second_de_idx:
+                # Rounds before Second DE start → First DE only
+                first_de_bouts.append(bout)
+            elif round_idx > second_de_idx:
+                # Rounds after Second DE start → Second DE only
+                second_de_bouts.append(bout)
+            else:
+                # Shared round (e.g., 64강) → split by match_number
+                second_de_bracket_size = second_de_raw.get('bracket_size', 64)
+                max_second_de_match = second_de_bracket_size // 2
+
+                match_num = bout.get('match_num', 0)
+                if match_num <= max_second_de_match:
+                    second_de_bouts.append(bout)
+                else:
+                    first_de_bouts.append(bout)
+
+        if first_de_bouts:
+            first_de_raw = {**first_de_raw, 'full_bouts': first_de_bouts}
+        if second_de_bouts:
+            second_de_raw = {**second_de_raw, 'full_bouts': second_de_bouts}
+
     # First DE 정규화 (예선 DE)
     # fill_to_final=False: First DE는 결승까지 가지 않음, 실제 데이터에 있는 라운드만 유지
-    first_de_data = de_bracket.get('first_de', {})
+    first_de_data = first_de_raw
     first_de = normalize_bracket_data(first_de_data, fill_to_final=False) if first_de_data else None
 
     # First DE에서 Second DE 시작 라운드 이후의 라운드 제거
@@ -1846,7 +1897,7 @@ def normalize_dual_de_bracket_data(de_bracket: Dict) -> NormalizedDualDEBracket:
         # Second DE 시작 라운드까지 First DE에 포함 (동일 라운드 포함)
         # 예: Second DE가 64강에서 시작하면, First DE는 128강, 64강 포함 (64강 승자가 Second DE 진출)
         # 예: Second DE가 32강에서 시작하면, First DE는 128강, 64강, 32강 포함
-        round_order_map = {'128강': 1, '64강': 2, '32강': 3, '16강': 4, '8강': 5, '준결승': 6, '결승': 7}
+        round_order_map = {'256강': 0, '128강': 1, '64강': 2, '32강': 3, '16강': 4, '8강': 5, '준결승': 6, '결승': 7}
         second_de_order = round_order_map.get(second_de_starting, 2)  # 기본값: 64강(2)
 
         for round_name in first_de.rounds:
@@ -1878,7 +1929,7 @@ def normalize_dual_de_bracket_data(de_bracket: Dict) -> NormalizedDualDEBracket:
 
     # Second DE 정규화 (본선 DE)
     # fill_to_final=True: Second DE는 결승까지 진행되므로 모든 라운드 표시
-    second_de_data = de_bracket.get('second_de', {})
+    second_de_data = second_de_raw
     second_de = normalize_bracket_data(second_de_data, fill_to_final=True) if second_de_data else None
 
     # 시드 선수 처리 (First DE 면제)
