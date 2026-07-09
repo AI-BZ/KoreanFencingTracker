@@ -639,10 +639,18 @@ class KFFFullScraper:
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        if self._browser:
-            await self._browser.close()
-        if self._playwright:
-            await self._playwright.stop()
+        try:
+            if self._browser:
+                await self._browser.close()
+        except Exception:
+            pass
+        try:
+            if self._playwright:
+                await self._playwright.stop()
+        except Exception:
+            pass
+        self._browser = None
+        self._playwright = None
 
     def _get_player_id(self, name: str, team: str) -> int:
         """선수 고유 ID 반환 (이름+팀 조합)"""

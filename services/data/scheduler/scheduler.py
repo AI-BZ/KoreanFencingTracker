@@ -13,6 +13,8 @@
    - ~33분 지연 → ~6분 지연으로 개선
 """
 import asyncio
+import os
+import signal
 import random
 from typing import Optional, Dict, Any
 from datetime import datetime, date, time, timedelta
@@ -168,6 +170,16 @@ class FencingScheduler:
             replace_existing=True
         )
         logger.info("📊 매주 월요일 08:00 Data Guardian 주간 리포트 등록")
+
+        # 11. 🧹 좀비 Playwright 프로세스 정리 - 매시간
+        self.scheduler.add_job(
+            lambda: self._cleanup_zombie_playwright(),
+            CronTrigger(minute=45),
+            id="playwright_cleanup",
+            name="🧹 Playwright Zombie Cleanup",
+            replace_existing=True
+        )
+        logger.info("🧹 매시 45분 좀비 Playwright 프로세스 정리 등록")
 
     async def _run_competition_detection(self):
         """대회 공고 감지 실행"""
@@ -819,8 +831,27 @@ class FencingScheduler:
         except Exception as e:
             logger.error(f"서버 캐시 새로고침 오류: {e}")
 
+    @staticmethod
+    def _cleanup_zombie_playwright():
+        """좀비 Playwright 프로세스 정리 (파일 디스크립터 누수 방지)"""
+        import subprocess
+        try:
+            result = subprocess.run(
+                ["pgrep", "-f", "playwright/driver/node"],
+                capture_output=True, text=True
+            )
+            pids = [p.strip() for p in result.stdout.strip().split("\n") if p.strip()]
+            if len(pids) > 10:
+                logger.warning(f"🧹 좀비 Playwright 프로세스 {len(pids)}개 감지, 정리 중...")
+                subprocess.run(["pkill", "-f", "playwright/driver/node"],
+                              capture_output=True)
+                logger.info("🧹 좀비 Playwright 프로세스 정리 완료")
+        except Exception as e:
+            logger.debug(f"Playwright 정리 스킵: {e}")
+
     def start(self):
         """스케줄러 시작"""
+        self._cleanup_zombie_playwright()
         self.setup()
         self.scheduler.start()
         logger.info("🚀 스마트 스케줄러 시작됨")

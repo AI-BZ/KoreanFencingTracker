@@ -79,12 +79,18 @@ class ChangeDetector:
 
     async def _close_browser(self):
         """브라우저 종료"""
-        if self._browser:
-            await self._browser.close()
-            self._browser = None
-        if self._playwright:
-            await self._playwright.stop()
-            self._playwright = None
+        try:
+            if self._browser:
+                await self._browser.close()
+        except Exception:
+            pass
+        self._browser = None
+        try:
+            if self._playwright:
+                await self._playwright.stop()
+        except Exception:
+            pass
+        self._playwright = None
         logger.debug("변경 감지용 브라우저 종료")
 
     async def capture_competition_fingerprint(
