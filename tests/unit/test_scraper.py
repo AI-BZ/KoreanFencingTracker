@@ -29,7 +29,7 @@ from scraper.models import (
 
 # Import fixtures
 import sys
-sys.path.insert(0, '/Users/gyejinpark/Documents/GitHub/FencingCommunityDropShipping/tests')
+sys.path.insert(0, '/Users/gyejinpark/Documents/GitHub/fencingmind/tests')
 from fixtures.scraper_fixtures import *
 
 
