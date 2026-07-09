@@ -152,6 +152,14 @@ AGE_GROUP_NAMES_KR = {
     "NT": "🇰🇷 국가대표",
 }
 
+# NT 서브랭킹용 짧은 나이리그 표시명 (best_results에 포함)
+AGE_GROUP_SHORT_LABEL = {
+    "E1": "초1-2", "E2": "초3-4", "E3": "초5-6",
+    "MS": "중등", "HS": "고등", "UNI": "대학", "SR": "일반",
+    "Y8": "초1-2", "Y10": "초3-4", "Y12": "초5-6",
+    "Y14": "중등", "Cadet": "고등", "Junior": "대학", "Veteran": "일반",
+}
+
 # 레거시 코드 매핑 (기존 데이터 호환)
 LEGACY_AGE_GROUP_MAP = {
     "E1": "Y8",
@@ -320,7 +328,11 @@ def classify_competition_level(competition_name: str) -> str:
     if '겸' in name and '국가대표' in name:
         return 'ELITE'
 
-    # NATIONAL - 순수 국가대표 선발대회만
+    # 유소년/청소년 국가대표 → YOUTH_NATIONAL (랭킹 완전 제외 대상)
+    if ('유소년' in name or '청소년' in name) and '국가대표' in name:
+        return 'YOUTH_NATIONAL'
+
+    # NATIONAL - 순수 국가대표 선발대회만 (유소년/청소년 제외)
     if '국가대표' in name:
         return 'NATIONAL'
 
@@ -608,18 +620,31 @@ class RankingCalculator:
             tier = classify_competition_tier(comp_name)
             category = classify_category(comp_name)
 
+            # 자유 참가 원칙: 시도별 선발 참가 대회는 랭킹 포인트 제외
+            # (전국체육대회, 전국소년체육대회 — 시도별 1명 선발, 13~18명)
+            if any(kw in comp_name for kw in ("전국체육대회", "소년체육대회", "전국체전")):
+                continue
+
+            # 유소년/청소년 국가대표 선발전: 랭킹 완전 제외
+            # (일반 국가대표 선발대회와 완전히 다른 대회 — 대상/참가자/방식 상이)
+            if ('유소년' in comp_name or '청소년' in comp_name) and '국가대표' in comp_name:
+                continue
+
             for event in comp_data.get("events", []):
                 event_name = event.get("name", "")
                 weapon = event.get("weapon", "") or extract_weapon(event_name)
                 gender = event.get("gender", "") or extract_gender(event_name)
-                # 데이터베이스의 age_group 필드 우선 사용, 없으면 이벤트명에서 추출
-                age_group = event.get("age_group", "") or extract_age_group(event_name)
-                # 비표준 한국어 age_group → 표준 코드 정규화
-                age_group = AGE_GROUP_NORMALIZE.get(age_group, age_group)
-
-                # 국가대표 선발대회: 빈 age_group → 'NT' 설정
-                if not age_group and classify_competition_level(comp_name) == 'NATIONAL':
+                # NATIONAL 대회(순수 국대선발)는 항상 NT
+                # — DB의 age_group("일반부" 등)은 무시 (전 연령 혼합 경기)
+                # — 겸 국대선발(ELITE)은 여기 해당하지 않음
+                # — 유소년/청소년 국가대표는 이미 위에서 continue로 제외됨
+                if classify_competition_level(comp_name) == 'NATIONAL':
                     age_group = 'NT'
+                else:
+                    raw_age_group = event.get("age_group", "")
+                    raw_age_group = AGE_GROUP_NORMALIZE.get(raw_age_group, raw_age_group) if raw_age_group else ""
+                    age_group = raw_age_group or extract_age_group(event_name)
+                    age_group = AGE_GROUP_NORMALIZE.get(age_group, age_group)
 
                 total_participants = event.get("total_participants", 0)
 
@@ -670,7 +695,7 @@ class RankingCalculator:
         Args:
             player_name: 선수명
             team: 소속명
-            player_age_history: {선수명: [(age_group, date), ...]} 매핑
+            player_age_history: {선수명: [(age_group, date, team), ...]} 매핑
 
         Returns:
             추론된 나이그룹 코드 (MS/HS/UNI/SR 등)
@@ -680,14 +705,25 @@ class RankingCalculator:
         if age:
             return age
 
-        # 2. Cross-reference: 다른 대회에서의 최근 나이그룹
+        # 2. Cross-reference: 다른 대회에서의 나이그룹
+        VALID_AGES = ('E1', 'E2', 'E3', 'MS', 'HS', 'UNI', 'SR',
+                      'Y8', 'Y10', 'Y12', 'Y14', 'Cadet', 'Junior', 'Veteran')
         if player_name in player_age_history:
             entries = player_age_history[player_name]
-            # 날짜 역순 정렬 → 가장 최근 것 사용
-            entries.sort(key=lambda x: x[1], reverse=True)
-            for age_group, _ in entries:
-                if age_group in ('MS', 'HS', 'UNI', 'SR', 'E1', 'E2', 'E3'):
-                    return age_group
+
+            # 2a. 같은 팀의 결과만 우선 (동명이인 안전)
+            team_entries = [(ag, d) for ag, d, t in entries
+                            if t == team and ag in VALID_AGES]
+            if team_entries:
+                team_entries.sort(key=lambda x: x[1], reverse=True)
+                return team_entries[0][0]
+
+            # 2b. 팀 무관 fallback (날짜 역순)
+            all_entries = [(ag, d) for ag, d, t in entries
+                           if ag in VALID_AGES]
+            if all_entries:
+                all_entries.sort(key=lambda x: x[1], reverse=True)
+                return all_entries[0][0]
 
         # 3. 기본값: 일반부
         return 'SR'
@@ -700,11 +736,12 @@ class RankingCalculator:
         서브랭킹 결과는 해당 나이그룹 랭킹에 포함됩니다.
         """
         # 비국가대표 결과에서 선수별 나이그룹 이력 구축
+        # 3-tuple: (age_group, date, team) — 동명이인 팀 필터링용
         player_age_history = defaultdict(list)
         for r in self.results:
             if r.age_group and r.age_group not in ('', 'NT'):
                 player_age_history[r.player_name].append(
-                    (r.age_group, r.competition_date)
+                    (r.age_group, r.competition_date, r.team)
                 )
 
         # NT 결과 찾기
@@ -721,6 +758,9 @@ class RankingCalculator:
         # 각 국가대표 이벤트별 서브랭킹 생성
         new_results = []
         for (comp_name, event_name, comp_date), results in event_groups.items():
+            # 유소년/청소년 국가대표는 _extract_results()에서 이미 완전 제외됨
+            # 여기 도달하는 NATIONAL 결과는 모두 일반 국가대표 선발대회
+
             # 각 선수의 나이그룹 추론
             player_ages = {}
             for r in results:
@@ -737,12 +777,14 @@ class RankingCalculator:
             # 서브랭킹 계산 및 새 결과 생성
             for age, players in age_groups.items():
                 players.sort(key=lambda x: x.final_rank)
+                sub_total = len(players)  # 해당 나이리그 참가자 수
                 for sub_rank, r in enumerate(players, 1):
-                    # 전체 참가자 수 기반으로 포인트 계산 (서브그룹 수 아님)
+                    # 나이리그 참가자 수 기준으로 포인트 계산
+                    # (전체 NT 참가자가 아닌, 해당 나이그룹 인원으로 base_points 결정)
                     points = calculate_points(
                         tier=r.tier,
                         final_rank=sub_rank,
-                        total_participants=r.total_participants,
+                        total_participants=sub_total,
                         age_group=age,
                         competition_name=r.competition_name
                     )
@@ -753,7 +795,7 @@ class RankingCalculator:
                         competition_name=r.competition_name,
                         competition_date=r.competition_date,
                         final_rank=sub_rank,
-                        total_participants=r.total_participants,
+                        total_participants=sub_total,
                         weapon=r.weapon,
                         gender=r.gender,
                         age_group=age,
@@ -787,9 +829,9 @@ class RankingCalculator:
             gender: 성별 필터 (남/여)
             age_group: 연령대 필터 (E1/E2/E3/MS/HS/UNI/SR)
             category: 구분 필터 (PRO/CLUB) - 중학교 이상만 적용
-            year: 시즌 연도 (None이면 롤링)
+            year: 시즌 연도 (None이면 현재 연도)
             best_n: 상위 N개 결과 합산
-            rolling_months: 롤링 기간 (월)
+            rolling_months: (미사용, 하위 호환용)
             national_team_only: True면 국가대표 선발대회만 필터링
             excl_national: True면 전국체전/소년체전 제외
             excl_selection: True면 선발전 제외 (겸 국대선발은 제외하지 않음)
@@ -819,20 +861,20 @@ class RankingCalculator:
         if gender:
             filtered = [r for r in filtered if r.gender == gender]
         if age_group:
-            # U17 특수 처리: MS(중등), HS(고등) 필터에서 U17 결과도 포함
-            filtered = [r for r in filtered if matches_age_group_for_ranking(r.age_group, age_group)]
+            if national_team_only and age_group == 'NT':
+                # NT 전체 랭킹: age_group='NT' 결과만 포함
+                # 서브랭킹 결과(age_group='MS','HS' 등)는 제외하여 이중 계산 방지
+                filtered = [r for r in filtered if r.age_group == 'NT']
+            elif not national_team_only:
+                # 일반 나이리그 랭킹: U17 특수 처리 포함
+                filtered = [r for r in filtered if matches_age_group_for_ranking(r.age_group, age_group)]
         # 카테고리 필터 (중학교 이상만 적용, 단 국가대표는 전체)
         if category and age_group and age_group in CATEGORY_APPLICABLE_AGE_GROUPS:
             filtered = [r for r in filtered if r.category == category]
 
-        # 기간 필터
-        if year:
-            # 시즌 포인트: 해당 연도
-            filtered = [r for r in filtered if r.competition_date.year == year]
-        else:
-            # 롤링 포인트: 최근 N개월
-            cutoff = date.today() - timedelta(days=rolling_months * 30)
-            filtered = [r for r in filtered if r.competition_date >= cutoff]
+        # 기간 필터 (엄격한 연도 기반 — 롤링 모드 폐지)
+        effective_year = year if year is not None else date.today().year
+        filtered = [r for r in filtered if r.competition_date.year == effective_year]
 
         # 선수별 결과 그룹화
         player_results: Dict[str, List[PlayerResult]] = defaultdict(list)
@@ -879,7 +921,11 @@ class RankingCalculator:
                         "competition": r.competition_name,
                         "date": r.competition_date.isoformat(),
                         "rank": r.final_rank,
-                        "points": r.points
+                        "points": r.points,
+                        "total_in_group": r.total_participants,
+                        "sub_rank_age": AGE_GROUP_SHORT_LABEL.get(r.age_group)
+                            if '국가대표' in r.competition_name and r.age_group != 'NT'
+                            else None,
                     }
                     for r in best_results
                 ],
@@ -960,8 +1006,8 @@ class RankingCalculator:
         export_data = {
             "meta": {
                 "generated_at": datetime.now().isoformat(),
-                "type": "season" if year else "rolling",
-                "year": year,
+                "type": "season",
+                "year": year if year is not None else date.today().year,
                 "total_categories": len(all_rankings)
             },
             "rankings": {}

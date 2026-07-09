@@ -55,6 +55,12 @@ from ranking.selection_points import (
     KKUMNAMU_COMP_PATTERNS,
     NATIONAL_TEAM_COMP_PATTERNS,
 )
+from ranking.team_ranking import (
+    calculate_team_scores_for_event,
+    calculate_competition_team_rankings,
+    calculate_season_team_rankings,
+    classify_team_category,
+)
 
 # 선수 식별 시스템
 from app.player_identity import PlayerIdentityResolver, PlayerProfile as IdentityProfile, is_team_event
@@ -2599,6 +2605,23 @@ async def api_events(
     }
 
 
+@app.get("/api/event-summary/{sub_event_cd}")
+async def api_event_summary(sub_event_cd: str):
+    """이벤트 요약 정보 (참가자 수, 상위 3명) - 내 리그 카드용 경량 API"""
+    for comp in get_competitions():
+        for event in comp.get("events", []):
+            if event.get("sub_event_cd") == sub_event_cd:
+                participants = event.get("participants", [])
+                total = len(participants) if participants else event.get("total_participants", 0)
+                fr = event.get("final_rankings", [])
+                top3 = []
+                for r in fr[:3]:
+                    top3.append({"rank": r.get("rank", ""), "name": r.get("name", ""), "team": r.get("team", "")})
+                status = "finished" if fr else ("in_progress" if total > 0 else "upcoming")
+                return {"sub_event_cd": sub_event_cd, "total_participants": total, "top3": top3, "status": status}
+    return {"sub_event_cd": sub_event_cd, "total_participants": 0, "top3": [], "status": "unknown"}
+
+
 @app.get("/api/player/{player_name}")
 async def api_player_profile(
     request: Request,
@@ -4709,7 +4732,7 @@ async def api_rankings(
     gender: str = Query(..., description="성별 (남/여)"),
     age_group: str = Query(..., description="연령대 (E1/E2/E3/MS/HS/UNI/SR/NT)"),
     category: Optional[str] = Query(None, description="구분 (PRO/CLUB) - 중학교 이상만"),
-    year: Optional[int] = Query(None, description="시즌 연도"),
+    year: Optional[int] = Query(None, description="시즌 연도 (미지정시 현재 연도)"),
     lang: str = Query("ko", description="언어 코드 (ko/en)"),
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=200),
@@ -4756,8 +4779,8 @@ async def api_rankings(
     rankings = _ranking_calculator.calculate_rankings(
         weapon=weapon,
         gender=gender,
-        age_group=age_group if not is_national_team else None,  # NT는 모든 연령대 포함
-        category=category,
+        age_group='NT' if is_national_team else age_group,  # NT는 age_group='NT'로 필터 (서브랭킹 제외)
+        category=None if is_national_team else category,  # NT는 카테고리 무시
         year=year,
         national_team_only=is_national_team,  # 국가대표 선발대회만 필터
         excl_national=excl_national,
@@ -4888,9 +4911,102 @@ async def api_ranking_options():
     }
 
 
+@app.get("/api/rankings/team")
+async def api_team_rankings(
+    request: Request,
+    competition_id: Optional[str] = Query(None),
+    weapon: Optional[str] = Query(None),
+    gender: Optional[str] = Query(None),
+    age_group: Optional[str] = Query(None),
+    year: Optional[int] = Query(None),
+    team_category: Optional[str] = Query(None),  # middle_school, high_school, university, club, pro
+):
+    """팀 랭킹 API (전원 합산 방식)
+
+    - competition_id 지정: 해당 대회의 팀 순위
+    - competition_id 없음: 시즌(연도) 누적 팀 랭킹
+    """
+    if competition_id:
+        comp = get_competition(competition_id)
+        if not comp:
+            raise HTTPException(status_code=404, detail="대회를 찾을 수 없습니다")
+
+        comp_info = comp.get('competition', {})
+        events_list = comp.get('events', [])
+        comp_with_events = {
+            'name': comp_info.get('name', ''),
+            'events': events_list,
+        }
+
+        rankings = calculate_competition_team_rankings(
+            competition_data=comp_with_events,
+            weapon=weapon,
+            gender=gender,
+            age_group=age_group,
+        )
+    else:
+        target_year = year or datetime.now().year
+        if not _ranking_calculator:
+            raise HTTPException(status_code=503, detail="랭킹 데이터 로딩 중")
+        rankings = calculate_season_team_rankings(
+            ranking_calculator=_ranking_calculator,
+            year=target_year,
+            weapon=weapon,
+            gender=gender,
+            age_group=age_group,
+        )
+
+    # Top-3 합산 및 1인당 평균 계산
+    enriched = []
+    for r in rankings:
+        all_pts = sorted([p['points'] for p in r.top_players], reverse=True)
+        top3_sum = round(sum(all_pts[:3]), 1)
+        avg_pts = round(r.total_points / r.member_count, 1) if r.member_count > 0 else 0.0
+        enriched.append({
+            "rank": r.rank,
+            "team": r.team_name,
+            "team_category": classify_team_category(r.team_name),
+            "total_points": r.total_points,
+            "top3_points": top3_sum,
+            "avg_points": avg_pts,
+            "individual_points": r.individual_sum,
+            "team_event_points": r.team_event_sum,
+            "event_count": r.event_count,
+            "member_count": r.member_count,
+            "top_players": r.top_players[:5],
+        })
+
+    # Filter by team category
+    if team_category and team_category != 'all':
+        enriched = [r for r in enriched if r['team_category'] == team_category]
+        for i, r in enumerate(enriched, 1):
+            r['rank'] = i
+
+    filtered_total = len(enriched)
+    enriched = enriched[:50]
+
+    return {
+        "total_teams": filtered_total,
+        "sort_options": [
+            {"key": "total_points", "label": "종합 전력", "desc": "팀 전체 실력 합산"},
+            {"key": "top3_points", "label": "최고 선수력", "desc": "상위 3명 기준"},
+            {"key": "avg_points", "label": "선수당 평균", "desc": "1인당 평균 점수"},
+        ],
+        "team_categories": [
+            {"key": "all", "label": "전체"},
+            {"key": "middle_school", "label": "중학교"},
+            {"key": "high_school", "label": "고등학교"},
+            {"key": "university", "label": "대학교"},
+            {"key": "club", "label": "클럽"},
+            {"key": "pro", "label": "실업팀"},
+        ],
+        "rankings": enriched,
+    }
+
+
 @app.get("/api/rankings/player/{player_name}")
-async def api_player_rankings(request: Request, player_name: str):
-    """선수의 모든 카테고리 랭킹 조회"""
+async def api_player_rankings(request: Request, player_name: str, team: Optional[str] = Query(None)):
+    """선수의 랭킹 조회 (현재 연도, 주력 카테고리)"""
     access_level, _ = await get_access_level(request)
     if access_level == "guest":
         raise HTTPException(status_code=401, detail="로그인이 필요합니다")
@@ -4898,50 +5014,109 @@ async def api_player_rankings(request: Request, player_name: str):
     if not _ranking_calculator:
         raise HTTPException(status_code=503, detail="랭킹 시스템이 초기화되지 않았습니다")
 
-    # 선수의 모든 결과에서 카테고리 추출
-    player_results = [r for r in _ranking_calculator.results if r.player_name == player_name]
+    from collections import Counter
+    current_year = date.today().year
+
+    # 동명이인 구분: identity_profile 팀 기반 필터링
+    known_teams = set()
+    if _identity_resolver:
+        profiles = _identity_resolver.get_players_by_name(player_name)
+        if team:
+            for p in profiles:
+                if team in p.teams:
+                    known_teams = set(p.teams)
+                    break
+        if not known_teams and profiles:
+            known_teams = set(profiles[0].teams)
+
+    player_results = [
+        r for r in _ranking_calculator.results
+        if r.player_name == player_name
+        and r.competition_date.year == current_year
+        and (not known_teams or r.team in known_teams)
+    ]
 
     if not player_results:
         raise HTTPException(status_code=404, detail="선수를 찾을 수 없습니다")
 
-    # 유니크한 카테고리 조합 추출
-    categories = set()
-    for r in player_results:
-        key = (r.weapon, r.gender, r.age_group, r.category if r.age_group in CATEGORY_APPLICABLE_AGE_GROUPS else None)
-        categories.add(key)
-
-    # 각 카테고리별 랭킹 조회
+    # 주력 무기/성별 = 가장 많이 출전한 조합
     rankings_info = []
-    for weapon, gender, age_group, category in categories:
-        rankings = _ranking_calculator.calculate_rankings(
-            weapon=weapon,
-            gender=gender,
-            age_group=age_group,
-            category=category
-        )
+    wg_counts = Counter((r.weapon, r.gender) for r in player_results if r.weapon and r.gender)
 
-        # 해당 선수의 순위 찾기
-        for r in rankings:
-            if r.player_name == player_name:
-                rankings_info.append({
-                    "weapon": weapon,
-                    "gender": gender,
-                    "age_group": age_group,
-                    "age_group_name": AGE_GROUP_CODES.get(age_group, age_group),
-                    "category": category,
-                    "category_name": CATEGORY_CODES.get(category) if category else None,
-                    "rank": r.current_rank,
-                    "total_in_category": len(rankings),
-                    "points": r.total_points,
-                    "competitions": r.competitions_count,
-                    "gold": r.gold_count,
-                    "silver": r.silver_count,
-                    "bronze": r.bronze_count
-                })
-                break
+    if wg_counts:
+        primary_weapon, primary_gender = wg_counts.most_common(1)[0][0]
+
+        # 주력 나이그룹 결정 — NT 제외, 실제 리그 우선
+        wp_results = [r for r in player_results
+                      if r.weapon == primary_weapon and r.gender == primary_gender]
+
+        league_results = [r for r in wp_results if r.age_group not in ('NT', '')]
+        if league_results:
+            age_counts = Counter(r.age_group for r in league_results)
+            YOUTH_AGES = {'E1', 'E2', 'E3', 'MS', 'HS', 'UNI',
+                          'Y8', 'Y10', 'Y12', 'Y14', 'Cadet', 'Junior'}
+            youth_counts = {k: v for k, v in age_counts.items() if k in YOUTH_AGES}
+            if youth_counts:
+                primary_age = max(youth_counts, key=youth_counts.get)
+            else:
+                primary_age = age_counts.most_common(1)[0][0]
+        else:
+            all_year_results = [
+                r for r in _ranking_calculator.results
+                if r.player_name == player_name
+                and (not known_teams or r.team in known_teams)
+                and r.age_group not in ('NT', '')
+                and r.weapon == primary_weapon and r.gender == primary_gender
+            ]
+            if all_year_results:
+                all_year_results.sort(key=lambda x: x.competition_date, reverse=True)
+                primary_age = all_year_results[0].age_group
+            else:
+                primary_age = 'Veteran'
+
+        cat_results = [r for r in wp_results if r.age_group == primary_age]
+        primary_cat = cat_results[0].category if cat_results else "PRO"
+        cat = primary_cat if primary_age in CATEGORY_APPLICABLE_AGE_GROUPS else None
+
+        targets = [(primary_weapon, primary_gender, primary_age, cat, False)]
+
+        has_nt = any(r.age_group == 'NT' and r.weapon == primary_weapon
+                     and r.gender == primary_gender for r in player_results)
+        if has_nt:
+            targets.append((primary_weapon, primary_gender, 'NT', None, True))
+
+        for weapon, gender, age_group, category, is_nt in targets:
+            rankings = _ranking_calculator.calculate_rankings(
+                weapon=weapon, gender=gender,
+                age_group='NT' if is_nt else age_group,
+                category=None if is_nt else category,
+                year=current_year,
+                national_team_only=is_nt,
+            )
+            for r in rankings:
+                if r.player_name == player_name:
+                    rankings_info.append({
+                        "weapon": weapon,
+                        "gender": gender,
+                        "age_group": age_group,
+                        "age_group_name": AGE_GROUP_CODES.get(age_group, age_group),
+                        "category": category,
+                        "category_name": CATEGORY_CODES.get(category) if category else None,
+                        "rank": r.current_rank,
+                        "total_in_category": len(rankings),
+                        "points": r.total_points,
+                        "competitions": r.competitions_count,
+                        "gold": r.gold_count,
+                        "silver": r.silver_count,
+                        "bronze": r.bronze_count,
+                        "year": current_year,
+                        "is_nt": is_nt,
+                    })
+                    break
 
     return {
         "player_name": player_name,
+        "year": current_year,
         "rankings": rankings_info
     }
 
@@ -6321,39 +6496,102 @@ async def player_page(
     player_data["selection_points"] = selection_points
 
     # FencingLab 랭킹 정보 조회 (선수 프로필 상단 표시용)
+    # - 엄격한 연도 기반 (현재 연도만)
+    # - 동명이인 구분: identity_profile 팀 기반 필터링
+    # - 주력 무기/성별/나이그룹 1개만 표시 (+ NT 선택적)
     rankings_info = []
     if _ranking_calculator:
         try:
-            player_results = [r for r in _ranking_calculator.results if r.player_name == player_name]
-            if player_results:
-                # 유니크한 카테고리 조합 추출
-                categories_seen = set()
-                for r in player_results:
-                    cat = r.category if r.age_group in CATEGORY_APPLICABLE_AGE_GROUPS else None
-                    key = (r.weapon, r.gender, r.age_group, cat)
-                    categories_seen.add(key)
+            from collections import Counter
+            current_year = date.today().year
 
-                for weapon, gender, age_group, category in categories_seen:
-                    all_rankings = _ranking_calculator.calculate_rankings(
-                        weapon=weapon, gender=gender,
-                        age_group=age_group, category=category
-                    )
-                    for r in all_rankings:
-                        if r.player_name == player_name:
-                            rankings_info.append({
-                                "weapon": weapon,
-                                "gender": gender,
-                                "age_group": age_group,
-                                "age_group_name": AGE_GROUP_CODES.get(age_group, age_group),
-                                "category": category,
-                                "category_name": CATEGORY_CODES.get(category) if category else None,
-                                "rank": r.current_rank,
-                                "total": len(all_rankings),
-                                "points": r.total_points,
-                                "competitions": r.competitions_count,
-                                "best_results": r.best_results[:4],
-                            })
-                            break
+            # 동명이인 구분: identity_profile의 팀 기반 필터링
+            known_teams = set(identity_profile.teams) if identity_profile else set(teams)
+
+            player_results = [
+                r for r in _ranking_calculator.results
+                if r.player_name == player_name
+                and r.competition_date.year == current_year
+                and (not known_teams or r.team in known_teams)
+            ]
+
+            if player_results:
+                # 주력 무기/성별 = 가장 많이 출전한 조합
+                wg_counts = Counter((r.weapon, r.gender) for r in player_results if r.weapon and r.gender)
+
+                if wg_counts:
+                    primary_weapon, primary_gender = wg_counts.most_common(1)[0][0]
+
+                    # 주력 나이그룹 결정 — NT 제외, 실제 리그 우선
+                    wp_results = [r for r in player_results
+                                  if r.weapon == primary_weapon and r.gender == primary_gender]
+
+                    # NT가 아닌 결과에서 나이그룹 추출
+                    league_results = [r for r in wp_results if r.age_group not in ('NT', '')]
+                    if league_results:
+                        age_counts = Counter(r.age_group for r in league_results)
+                        # 유소년/중등/고등/대학 등 실제 리그를 SR보다 우선
+                        YOUTH_AGES = {'E1', 'E2', 'E3', 'MS', 'HS', 'UNI',
+                                      'Y8', 'Y10', 'Y12', 'Y14', 'Cadet', 'Junior'}
+                        youth_counts = {k: v for k, v in age_counts.items() if k in YOUTH_AGES}
+                        if youth_counts:
+                            primary_age = max(youth_counts, key=youth_counts.get)
+                        else:
+                            primary_age = age_counts.most_common(1)[0][0]
+                    else:
+                        # 현재 연도에 NT 이벤트만 있는 경우 → 전체 결과에서 추론
+                        all_year_results = [
+                            r for r in _ranking_calculator.results
+                            if r.player_name == player_name
+                            and (not known_teams or r.team in known_teams)
+                            and r.age_group not in ('NT', '')
+                            and r.weapon == primary_weapon and r.gender == primary_gender
+                        ]
+                        if all_year_results:
+                            all_year_results.sort(key=lambda x: x.competition_date, reverse=True)
+                            primary_age = all_year_results[0].age_group
+                        else:
+                            primary_age = 'Veteran'
+
+                    # 카테고리 결정
+                    cat_results = [r for r in wp_results if r.age_group == primary_age]
+                    primary_cat = cat_results[0].category if cat_results else "PRO"
+                    cat = primary_cat if primary_age in CATEGORY_APPLICABLE_AGE_GROUPS else None
+
+                    # 타겟 구성: 나이리그 1개 + NT 전체 (해당시)
+                    targets = [(primary_weapon, primary_gender, primary_age, cat, False)]
+
+                    has_nt = any(r.age_group == 'NT' and r.weapon == primary_weapon
+                                and r.gender == primary_gender for r in player_results)
+                    if has_nt:
+                        targets.append((primary_weapon, primary_gender, 'NT', None, True))
+
+                    for weapon, gender, age_group, category, is_nt in targets:
+                        all_rankings = _ranking_calculator.calculate_rankings(
+                            weapon=weapon, gender=gender,
+                            age_group='NT' if is_nt else age_group,
+                            category=None if is_nt else category,
+                            year=current_year,
+                            national_team_only=is_nt,
+                        )
+                        for r in all_rankings:
+                            if r.player_name == player_name:
+                                rankings_info.append({
+                                    "weapon": weapon,
+                                    "gender": gender,
+                                    "age_group": age_group,
+                                    "age_group_name": AGE_GROUP_CODES.get(age_group, age_group),
+                                    "category": category,
+                                    "category_name": CATEGORY_CODES.get(category) if category else None,
+                                    "rank": r.current_rank,
+                                    "total": len(all_rankings),
+                                    "points": r.total_points,
+                                    "competitions": r.competitions_count,
+                                    "best_results": r.best_results[:4],
+                                    "year": current_year,
+                                    "is_nt": is_nt,
+                                })
+                                break
         except Exception as e:
             logger.debug(f"랭킹 정보 조회 실패 ({player_name}): {e}")
 
@@ -6539,7 +6777,7 @@ def _extract_bout_player_info(bout: Dict) -> Dict:
     return {}
 
 
-def compute_dual_de_final_rankings(de_bracket: Dict) -> List[Dict]:
+def compute_dual_de_final_rankings(de_bracket: Dict, pool_total_ranking: List = None) -> List[Dict]:
     """
     Dual DE 이벤트의 최종 순위를 Second DE 경기 결과에서 동적 계산.
 
@@ -6554,10 +6792,12 @@ def compute_dual_de_final_rankings(de_bracket: Dict) -> List[Dict]:
     - 9~16위: 16강 패자 8명, 풀 시드 순 개별 순위
     - 17~32위: 32강 패자 16명, 풀 시드 순 개별 순위
     - 33~64위: 64강 패자 32명, 풀 시드 순 개별 순위
-    - 65+: First DE 탈락자
+    - 65+: First DE 탈락자 (라운드별 시드 기반 개별 순위)
+    - 이후: Pool 탈락자 (풀 순위 기반 개별 순위)
 
     Args:
         de_bracket: event raw_data의 de_bracket (format=="dual_de")
+        pool_total_ranking: pool 종합 순위 리스트 (DE 미진출 선수 포함용)
 
     Returns:
         List[Dict]: [{"rank": 1, "name": "...", "team": "..."}, ...] 또는 빈 리스트
@@ -6676,34 +6916,95 @@ def compute_dual_de_final_rankings(de_bracket: Dict) -> List[Dict]:
     if not final_rankings:
         return []
 
-    # 3. First DE 탈락자들을 Second DE 최하위 이후에 추가
+    # 4. First DE 탈락자들: 라운드별 시드 기반 개별 순위
     max_rank = max((r["rank"] for r in final_rankings), default=0)
     first_de = de_bracket.get("first_de", {})
     if isinstance(first_de, dict):
         first_de_bouts = first_de.get("bouts", []) or first_de.get("full_bouts", [])
-        first_de_losers = []
+
+        # First DE 시딩 정보 (second_de seeding도 fallback으로 사용)
+        first_de_seeding: Dict[str, int] = {}
+        for s in first_de.get("seeding", []):
+            name = (s.get("name") or "").strip()
+            seed = s.get("seed", 0)
+            if name and seed:
+                first_de_seeding[name] = seed
+
+        # First DE bouts를 라운드별로 그룹화
+        first_de_by_round: Dict[str, List[Dict]] = defaultdict(list)
         for raw_bout in first_de_bouts:
             info = _extract_bout_player_info(raw_bout)
             if not info:
                 continue
-            winner = info["winner"].strip() if info.get("winner") else ""
-            p1 = info["p1"].strip() if info.get("p1") else ""
-            p2 = info["p2"].strip() if info.get("p2") else ""
-            if winner and p1 and p2:
-                loser_name = p2 if winner == p1 else p1
-                loser_team = info["p2_team"] if winner == p1 else info["p1_team"]
-                if loser_name and loser_name not in assigned_players:
-                    first_de_losers.append({"name": loser_name, "team": loser_team or ""})
-                    assigned_players.add(loser_name)
+            rn = normalize_round_name(info.get("round_name", ""))
+            if rn:
+                first_de_by_round[rn].append(info)
 
-        if first_de_losers:
+        # 라운드 순서: 결승에 가까운 라운드가 높은 순위
+        # (64강 first_de 패자 > 128강 패자 > 256강 패자)
+        round_priority = ["64강", "128강", "256강"]
+
+        for round_name in round_priority:
+            if round_name not in first_de_by_round:
+                continue
+
+            losers = []
+            for bout_info in first_de_by_round[round_name]:
+                if bout_info.get("is_bye"):
+                    continue
+                winner = bout_info["winner"].strip() if bout_info.get("winner") else ""
+                p1 = bout_info["p1"].strip() if bout_info.get("p1") else ""
+                p2 = bout_info["p2"].strip() if bout_info.get("p2") else ""
+                if winner and p1 and p2:
+                    loser_name = p2 if winner == p1 else p1
+                    loser_team = bout_info["p2_team"] if winner == p1 else bout_info["p1_team"]
+                    if loser_name and loser_name not in assigned_players:
+                        losers.append({
+                            "name": loser_name,
+                            "team": loser_team or "",
+                            "_seed": first_de_seeding.get(loser_name,
+                                     seeding_map.get(loser_name, 999)),
+                        })
+
+            # 시드 순 정렬 (낮은 시드 = 높은 순위)
+            losers.sort(key=lambda x: x["_seed"])
+
+            # 개별 순위 부여
             next_rank = max_rank + 1
-            for loser in first_de_losers:
+            for i, loser in enumerate(losers):
                 final_rankings.append({
-                    "rank": next_rank,
+                    "rank": next_rank + i,
                     "name": loser["name"],
                     "team": loser["team"],
                 })
+                assigned_players.add(loser["name"])
+
+            if losers:
+                max_rank = next_rank + len(losers) - 1
+
+    # 5. Pool-only 참가자 (DE 미진출자): 풀 순위 기반 개별 순위
+    if pool_total_ranking:
+        max_rank = max((r["rank"] for r in final_rankings), default=0)
+        pool_only = []
+        for pr in pool_total_ranking:
+            pname = (pr.get("name") or "").strip()
+            if pname and pname not in assigned_players:
+                pool_only.append({
+                    "name": pname,
+                    "team": pr.get("team", ""),
+                    "_pool_rank": pr.get("rank", 999),
+                })
+
+        # Pool 순위 순으로 정렬
+        pool_only.sort(key=lambda x: x["_pool_rank"])
+
+        next_rank = max_rank + 1
+        for i, pp in enumerate(pool_only):
+            final_rankings.append({
+                "rank": next_rank + i,
+                "name": pp["name"],
+                "team": pp["team"],
+            })
 
     # 순위순 정렬 (같은 순위 내에서는 이름순)
     final_rankings.sort(key=lambda x: (x["rank"], x["name"]))
@@ -6954,7 +7255,7 @@ async def competition_detail_page(request: Request, event_cd: str, event: Option
 
             if has_second_de:
                 # Dual DE: Second DE(본선) 경기 결과에서 최종 순위 계산
-                dual_rankings = compute_dual_de_final_rankings(original_de_bracket)
+                dual_rankings = compute_dual_de_final_rankings(original_de_bracket, pool_total_ranking)
                 if dual_rankings:
                     selected_event["final_rankings"] = dual_rankings
                     top_rank = dual_rankings[0] if dual_rankings else {}
@@ -7113,6 +7414,68 @@ async def competition_detail_page(request: Request, event_cd: str, event: Option
             if classify_competition_level(comp_name) == 'NATIONAL' and sub_ranking_source:
                 age_group_rankings = _compute_event_sub_rankings(sub_ranking_source)
 
+            # Pool용 선수 리그 랭킹 맵: {선수명: {rank, best_rank, points}}
+            pool_ranking_map = {}
+            if _ranking_calculator and selected_event.get("pool_rounds"):
+                ev_weapon = selected_event.get("weapon", "")
+                ev_gender = selected_event.get("gender", "")
+                ev_age_fie = get_event_age_group_fie(selected_event)
+                if not ev_age_fie or ev_age_fie == 'NT':
+                    ev_age_fie = extract_age_group(selected_event.get("name", ""))
+                legacy_codes = get_matching_legacy_codes(ev_age_fie)
+                ev_age = legacy_codes[0] if legacy_codes else ev_age_fie
+                ev_cat = "PRO" if ev_age in CATEGORY_APPLICABLE_AGE_GROUPS else None
+                comp_year = int(comp.get("competition", {}).get("start_date", "2026")[:4])
+                if ev_weapon and ev_gender:
+                    try:
+                        rk_list = _ranking_calculator.calculate_rankings(
+                            weapon=ev_weapon, gender=ev_gender,
+                            age_group=ev_age, category=ev_cat, year=comp_year
+                        )
+                        for idx, rk in enumerate(rk_list):
+                            rank = rk.current_rank if rk.current_rank else idx + 1
+                            best_rank = rank
+                            for br in rk.best_results:
+                                r = br.get("rank", 999)
+                                if r and r < best_rank:
+                                    best_rank = r
+                            pool_ranking_map[rk.player_name] = {
+                                "rank": rank,
+                                "best_rank": best_rank,
+                                "points": rk.total_points
+                            }
+                    except Exception:
+                        pass
+
+            if selected_event.get("pool_rounds"):
+                for pool in selected_event["pool_rounds"]:
+                    for p in pool.get("results", []):
+                        prk = pool_ranking_map.get(p.get("name", ""))
+                        if prk:
+                            p["league_rank"] = prk["rank"]
+                            p["league_best"] = prk["best_rank"]
+                        else:
+                            p["league_rank"] = 9999
+                            p["league_best"] = 9999
+                    # 대진표용: rank 순으로 정렬 + scores 재배열
+                    results = pool.get("results", [])
+                    if results and results[0].get("scores"):
+                        old_order = list(range(len(results)))
+                        ranked = sorted(enumerate(results), key=lambda x: x[1].get("rank", 999))
+                        idx_map = [r[0] for r in ranked]
+                        new_to_old = idx_map
+                        old_to_new = [0] * len(idx_map)
+                        for new_i, old_i in enumerate(new_to_old):
+                            old_to_new[old_i] = new_i
+                        new_results = []
+                        for new_i, old_i in enumerate(new_to_old):
+                            p = results[old_i].copy()
+                            old_scores = p.get("scores", [])
+                            if old_scores:
+                                p["scores"] = [old_scores[new_to_old[j]] if j < len(old_scores) and new_to_old[j] < len(old_scores) else None for j in range(len(results))]
+                            new_results.append(p)
+                        pool["results"] = new_results
+
             return templates.TemplateResponse("event_result.html", {
                 "request": request,
                 "competition": comp,
@@ -7124,6 +7487,7 @@ async def competition_detail_page(request: Request, event_cd: str, event: Option
                 "player_translation_map": player_translation_map,
                 "de_full_bouts_for_stats": de_full_bouts_for_stats,
                 "age_group_rankings": age_group_rankings,
+                "pool_ranking_map": pool_ranking_map,
                 **get_i18n_template_context(request, lang)
             })
 
