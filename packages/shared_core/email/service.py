@@ -90,7 +90,7 @@ class EmailService:
             lang: 언어 코드 ("ko" 또는 "en")
         """
         if not verify_url:
-            verify_url = f"https://account.fencingmind.ai/account/verification/email/verify?token={token}"
+            verify_url = f"https://account.fencingmind.ai/auth/verify-email?token={token}"
         html = get_verification_email_html(name, verify_url, lang=lang)
         subjects = EMAIL_SUBJECTS.get(lang, EMAIL_SUBJECTS["ko"])
         return await self._send(to, subjects["verification"], html)
