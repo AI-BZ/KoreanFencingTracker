@@ -67,6 +67,24 @@ ALLOWED_REDIRECT_DOMAINS = [
     "127.0.0.1",
 ]
 
+# 선수 선택 시퀀스: 무기 / 리그(연령대) 필터
+# events.weapon: epee / foil / sabre
+WEAPON_VALUES = ("epee", "foil", "sabre")
+
+# events.age_group 값이 불규칙(코드 + 한글 + U표기 혼재)하여 리그 그룹으로 매핑.
+# key = 프론트 리그 코드, value = 매칭할 events.age_group 값 집합
+LEAGUE_AGE_GROUPS = {
+    "elementary": {"E1", "E2", "E3", "초등부", "U9", "U11", "U13"},
+    "middle": {"MS", "중등부", "15세이하부", "U15"},
+    "high": {"HS", "고등부", "16세이하부", "18세이하부", "U17"},
+    "university": {"UNI", "대학", "U20"},
+    "senior": {"SR", "일반부", "엘리트부"},
+}
+# 역매핑: age_group → 리그 코드
+_AGE_GROUP_TO_LEAGUE = {
+    ag: league for league, groups in LEAGUE_AGE_GROUPS.items() for ag in groups
+}
+
 
 def _is_safe_redirect(url: str) -> bool:
     """오픈 리다이렉트 방지 - 허용된 도메인만 리다이렉트"""
@@ -109,6 +127,83 @@ def _set_auth_cookies(response, access_token: str, email: str):
     )
 
 
+def _annotate_and_filter_by_weapon_league(
+    candidates: list,
+    weapon: Optional[str] = None,
+    league: Optional[str] = None,
+) -> list:
+    """
+    선수 후보 목록에 무기/리그 정보를 붙이고(무기·리그 selector 표시용),
+    weapon/league 필터가 주어지면 매칭되는 선수만 남긴다.
+
+    무기/리그는 players 테이블이 아니라 rankings→events 조인에서 유도.
+    후보(cand_ids ≤ 검색 limit)에 한정해 조회하므로 부하가 제한적이다.
+    """
+    if not candidates:
+        return candidates
+
+    cand_ids = [c["id"] for c in candidates if c.get("id") is not None]
+    if not cand_ids:
+        return candidates
+
+    supabase = get_supabase()
+
+    # 후보 선수들의 rankings → event_id 수집
+    try:
+        rk = supabase.table("rankings").select(
+            "player_id, event_id"
+        ).in_("player_id", cand_ids).execute()
+        ranking_rows = rk.data or []
+    except Exception as e:
+        logger.warning(f"weapon/league 필터: rankings 조회 실패 → 필터 생략: {e}")
+        return candidates
+
+    event_ids = list({r["event_id"] for r in ranking_rows if r.get("event_id")})
+    event_meta = {}
+    if event_ids:
+        try:
+            ev = supabase.table("events").select(
+                "id, weapon, age_group"
+            ).in_("id", event_ids).execute()
+            for e in (ev.data or []):
+                event_meta[e["id"]] = (e.get("weapon"), e.get("age_group"))
+        except Exception as e:
+            logger.warning(f"weapon/league 필터: events 조회 실패 → 필터 생략: {e}")
+            return candidates
+
+    # player_id → {weapons}, {leagues}
+    player_weapons: dict = {}
+    player_leagues: dict = {}
+    for r in ranking_rows:
+        pid = r.get("player_id")
+        meta = event_meta.get(r.get("event_id"))
+        if not pid or not meta:
+            continue
+        w, ag = meta
+        if w:
+            player_weapons.setdefault(pid, set()).add(w)
+        league_code = _AGE_GROUP_TO_LEAGUE.get(ag)
+        if league_code:
+            player_leagues.setdefault(pid, set()).add(league_code)
+
+    filtered = []
+    for c in candidates:
+        pid = c.get("id")
+        weapons = player_weapons.get(pid, set())
+        leagues = player_leagues.get(pid, set())
+
+        if weapon and weapon not in weapons:
+            continue
+        if league and league not in leagues:
+            continue
+
+        c["weapons"] = sorted(weapons)
+        c["leagues"] = sorted(leagues)
+        filtered.append(c)
+
+    return filtered
+
+
 # =============================================
 # 공개 검색 API (회원가입 폼에서 인증 없이 사용)
 # =============================================
@@ -119,15 +214,20 @@ async def public_player_search(
     birth_year: Optional[int] = None,
     team: Optional[str] = None,
     weapon: Optional[str] = None,
+    league: Optional[str] = None,
 ):
     """
     선수 검색 (공개 - 회원가입 폼 용)
 
-    GET /auth/public/player-search?name=홍길동&birth_year=2005
+    GET /auth/public/player-search?name=홍길동&weapon=foil&league=middle
     대회 공개 데이터이므로 인증 불필요.
+    weapon: epee/foil/sabre, league: elementary/middle/high/university/senior
     """
     if not name or len(name.strip()) < 2:
         raise HTTPException(status_code=400, detail="이름은 2자 이상이어야 합니다")
+
+    weapon = weapon if weapon in WEAPON_VALUES else None
+    league = league if league in LEAGUE_AGE_GROUPS else None
 
     supabase = get_supabase()
     query = supabase.table("players").select(
@@ -139,7 +239,8 @@ async def public_player_search(
     if team:
         query = query.ilike("team_name", f"%{team.strip()}%")
 
-    query = query.limit(15)
+    # 무기/리그 필터 시 후보 폭을 넓게 잡고 조인 필터로 좁힌다
+    query = query.limit(60 if (weapon or league) else 15)
 
     try:
         result = query.execute()
@@ -147,7 +248,11 @@ async def public_player_search(
         logger.error(f"Public player search error: {e}")
         raise HTTPException(status_code=500, detail="검색 중 오류가 발생했습니다")
 
-    return {"results": result.data or [], "total": len(result.data or [])}
+    results = _annotate_and_filter_by_weapon_league(
+        result.data or [], weapon=weapon, league=league
+    )[:15]
+
+    return {"results": results, "total": len(results)}
 
 
 @router.get("/public/child-search")
@@ -155,14 +260,19 @@ async def public_child_search(
     name: str,
     birth_year: Optional[int] = None,
     team: Optional[str] = None,
+    weapon: Optional[str] = None,
+    league: Optional[str] = None,
 ):
     """
     자녀 선수 검색 (공개 - 부모회원 가입 폼 용)
 
-    GET /auth/public/child-search?name=홍길동&birth_year=2012
+    GET /auth/public/child-search?name=홍길동&weapon=foil&league=elementary
     """
     if not name or len(name.strip()) < 2:
         raise HTTPException(status_code=400, detail="이름은 2자 이상이어야 합니다")
+
+    weapon = weapon if weapon in WEAPON_VALUES else None
+    league = league if league in LEAGUE_AGE_GROUPS else None
 
     supabase = get_supabase()
     query = supabase.table("players").select(
@@ -174,7 +284,7 @@ async def public_child_search(
     if team:
         query = query.ilike("team_name", f"%{team.strip()}%")
 
-    query = query.limit(15)
+    query = query.limit(60 if (weapon or league) else 15)
 
     try:
         result = query.execute()
@@ -182,7 +292,11 @@ async def public_child_search(
         logger.error(f"Public child search error: {e}")
         raise HTTPException(status_code=500, detail="검색 중 오류가 발생했습니다")
 
-    return {"results": result.data or [], "total": len(result.data or [])}
+    results = _annotate_and_filter_by_weapon_league(
+        result.data or [], weapon=weapon, league=league
+    )[:15]
+
+    return {"results": results, "total": len(results)}
 
 
 @router.get("/public/org-search")
@@ -394,9 +508,25 @@ async def oauth_login(provider: str, request: Request, promotional: bool = False
 
 
 @router.get("/callback/{provider}")
-async def oauth_callback(provider: str, code: str, state: str, request: Request):
+async def oauth_callback(
+    provider: str,
+    request: Request,
+    code: Optional[str] = None,
+    state: Optional[str] = None,
+    error: Optional[str] = None,
+    error_description: Optional[str] = None,
+):
     """OAuth 콜백 처리 (OAuthHandler 사용)"""
-    state_data = _oauth_handler.validate_state(state, provider)
+    # OAuth 에러 또는 사용자 취소 처리
+    if error or not code or not state:
+        logger.warning(f"OAuth 콜백 에러/취소: provider={provider}, error={error}, desc={error_description}")
+        return RedirectResponse(url="/auth/login", status_code=303)
+
+    try:
+        state_data = _oauth_handler.validate_state(state, provider)
+    except HTTPException:
+        logger.warning(f"OAuth state 검증 실패: provider={provider}, state 만료 또는 재사용")
+        return RedirectResponse(url="/auth/login", status_code=303)
 
     try:
         # 토큰 교환
@@ -535,6 +665,10 @@ async def register_member(
     nickname: str = Form(...),
     email: str = Form(...),
     member_type: str = Form(...),
+    # 프로필 (선택)
+    phone: Optional[str] = Form(None),
+    phone_country_code: Optional[str] = Form(None),
+    birth_date: Optional[str] = Form(None),
     # 동의 항목 (서버사이드 검증)
     terms_consent: bool = Form(False),
     privacy_consent: bool = Form(False),
@@ -564,6 +698,24 @@ async def register_member(
     # Fix email "None" from OAuth
     if not email or email.lower() == "none":
         raise HTTPException(status_code=400, detail="이메일을 입력해주세요")
+
+    # 회원 유형 검증 (migration 008 CHECK 제약과 동일)
+    ALLOWED_MEMBER_TYPES = {
+        "general", "player", "player_parent",
+        "club_coach", "club_director", "school_coach", "school_director",
+    }
+    if member_type not in ALLOWED_MEMBER_TYPES:
+        raise HTTPException(status_code=400, detail="유효하지 않은 회원 유형입니다")
+
+    # 프로필 선택 필드 정리
+    phone_clean = "".join(ch for ch in (phone or "") if ch.isdigit()) or None
+    phone_cc = (phone_country_code or "+82").strip() if phone_clean else None
+    birth_date_clean = None
+    if birth_date and birth_date.strip():
+        try:
+            birth_date_clean = datetime.strptime(birth_date.strip(), "%Y-%m-%d").date().isoformat()
+        except ValueError:
+            birth_date_clean = None
 
     # Claim 파라미터 파싱 (빈 문자열 → None, 숫자 문자열 → int)
     def _parse_int(v):
@@ -617,6 +769,9 @@ async def register_member(
         "display_name": mask_korean_name(full_name),
         "email": email,
         "member_type": member_type,
+        "phone": phone_clean,
+        "phone_country_code": phone_cc,
+        "birth_date": birth_date_clean,
         "interested_services": json.dumps(interested_services),
         "marketing_consent": marketing_consent,
         "overseas_transfer_consent": True,  # 개인정보처리방침 동의로 갈음
