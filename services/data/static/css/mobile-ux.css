@@ -835,6 +835,10 @@
     .ranking-container .filter-section.desktop-filter {
         display: none;
     }
+    /* Team ranking filters must stay visible on mobile (no bottom sheet alternative) */
+    #team-ranking-section .filter-section.desktop-filter {
+        display: block;
+    }
 }
 
 /* ============================================

@@ -240,6 +240,70 @@
         margin-top: 0.25rem;
     }
 
+    /* 내 리그 이벤트 카드 — live-card와 동일한 규격 */
+    .my-league-card {
+        background: rgba(255,255,255,0.95);
+        border-radius: 12px;
+        padding: 1rem 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        cursor: pointer;
+        transition: transform 0.2s, box-shadow 0.2s;
+        text-decoration: none;
+        color: inherit;
+        min-width: 280px;
+    }
+    .my-league-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.2);
+    }
+    .ml-card-left { flex-shrink: 0; }
+    .ml-badge {
+        background: linear-gradient(135deg, #c9302c, #e74c3c);
+        color: #fff;
+        font-size: 0.7rem;
+        font-weight: 700;
+        padding: 0.3rem 0.65rem;
+        border-radius: 8px;
+        letter-spacing: 0.3px;
+        white-space: nowrap;
+    }
+    .ml-card-body {
+        flex: 1;
+        min-width: 0;
+    }
+    .ml-card-title {
+        margin: 0 0 0.3rem 0;
+        font-size: 1rem;
+        font-weight: 700;
+        color: #333;
+    }
+    .ml-detail {
+        margin: 0;
+        font-size: 0.85rem;
+        color: #666;
+    }
+    .ml-podium {
+        display: flex;
+        gap: 0.6rem;
+        flex-wrap: wrap;
+    }
+    .ml-medal {
+        font-size: 0.8rem;
+        font-weight: 500;
+        white-space: nowrap;
+    }
+    .ml-medal.gold { color: #b8860b; }
+    .ml-medal.silver { color: #6b7280; }
+    .ml-medal.bronze { color: #a0522d; }
+    .ml-card-right {
+        margin-left: auto;
+        font-size: 1.5rem;
+        color: #ccc;
+        flex-shrink: 0;
+    }
+
     /* 선수 검색 - 다크 반투명 */
     .player-search {
         background: rgba(18, 18, 26, 0.85) !important;
@@ -1072,7 +1136,7 @@
             <div class="ranking-preview-login-hint" id="ranking-preview-login-hint" style="display:none;">
                 <span class="ranking-preview-hint-icon">&#128161;</span>
                 <span class="ranking-preview-hint-text">{{ i18n.common.home.ranking_preview.login_hint|default('Sign in to see player names and teams.') }}</span>
-                <a class="ranking-preview-login-btn" href="/{{ lang|default('ko') }}/login">{{ i18n.common.home.ranking_preview.login_btn|default('Sign In') }}</a>
+                <a class="ranking-preview-login-btn" href="/auth/login">{{ i18n.common.home.ranking_preview.login_btn|default('Sign In') }}</a>
             </div>
         </div>
     </div>
@@ -1428,6 +1492,88 @@ function autoLoadFromPreferences() {
         state.page = 1;
         loadEvents();
     } catch(e) { /* ignore parse errors */ }
+}
+
+// 선호 리그 매칭 이벤트를 배너 대회에서 찾아 카드 추가
+function appendMyLeagueCard(compEventCd, targetContainer) {
+    var AGE_MAP = { elementary: 'Y12', middle_school: 'Y14', high_school: 'Cadet', senior: 'Veteran' };
+    try {
+        var raw = localStorage.getItem('fm_preferences');
+        if (!raw) return;
+        var prefs = JSON.parse(raw);
+        if (!prefs || !prefs.weapon || !prefs.gender) return;
+
+        var weapon = prefs.weapon;
+        var gender = prefs.gender;
+        var ageCode = prefs.age_group ? (AGE_MAP[prefs.age_group] || prefs.age_group) : '';
+
+        var params = new URLSearchParams();
+        params.append('weapon', weapon);
+        params.append('gender', gender);
+        params.append('per_page', '100');
+        params.append('lang', document.documentElement.lang || 'ko');
+
+        fetch('/api/events?' + params.toString())
+            .then(function(r) { return r.ok ? r.json() : null; })
+            .then(function(data) {
+                if (!data || !data.events) return;
+                var matched = data.events.filter(function(ev) {
+                    return ev.event_cd === compEventCd && ev.event_type === '개인';
+                });
+                var best = null;
+                if (ageCode) {
+                    best = matched.find(function(ev) { return ev.age_group === ageCode; });
+                }
+                if (!best && matched.length > 0) best = matched[0];
+                if (!best) return;
+
+                var url = '/competition/' + encodeURIComponent(compEventCd) +
+                    '?event=' + encodeURIComponent(best.sub_event_cd);
+
+                fetch('/api/event-summary/' + encodeURIComponent(best.sub_event_cd))
+                    .then(function(r2) { return r2.ok ? r2.json() : null; })
+                    .then(function(summary) {
+                        var total = summary ? summary.total_participants : 0;
+                        var top3 = summary ? summary.top3 : [];
+                        var status = summary ? summary.status : 'upcoming';
+
+                        var detailHtml = '';
+                        if (status === 'finished' && top3.length >= 3) {
+                            detailHtml =
+                                '<div class="ml-podium">' +
+                                    '<span class="ml-medal gold">🥇 ' + top3[0].name + '</span> ' +
+                                    '<span class="ml-medal silver">🥈 ' + top3[1].name + '</span> ' +
+                                    '<span class="ml-medal bronze">🥉 ' + top3[2].name + '</span>' +
+                                '</div>';
+                        } else if (total > 0) {
+                            detailHtml = '<div class="ml-detail">' + total + '{{ _t("명 참가") }}</div>';
+                        }
+
+                        _renderMyLeagueCard(targetContainer, url, best.name, detailHtml);
+                    })
+                    .catch(function() {
+                        _renderMyLeagueCard(targetContainer, url, best.name, '');
+                    });
+            })
+            .catch(function() {});
+    } catch(e) {}
+}
+
+function _renderMyLeagueCard(container, url, eventName, detailHtml) {
+    var leagueLabel = '{{ _t("내 리그") }}';
+    var card = document.createElement('a');
+    card.className = 'my-league-card';
+    card.href = url;
+    card.innerHTML =
+        '<div class="ml-card-left">' +
+            '<span class="ml-badge">' + leagueLabel + '</span>' +
+        '</div>' +
+        '<div class="ml-card-body">' +
+            '<div class="ml-card-title">' + eventName + '</div>' +
+            detailHtml +
+        '</div>' +
+        '<div class="ml-card-right">&rsaquo;</div>';
+    container.appendChild(card);
 }
 
 // Activate filter buttons to match current state (visual sync)
@@ -1935,6 +2081,10 @@ document.addEventListener('DOMContentLoaded', async function() {
                     </div>
                 </a>
             `).join('');
+            // 각 live 대회에 선호 리그 이벤트 카드 추가
+            data.ongoing.forEach(comp => {
+                appendMyLeagueCard(comp.event_cd, liveCards);
+            });
         }
 
         // 예정 대회 표시 (7일 이내, 진행 중 제외)
@@ -1963,6 +2113,10 @@ document.addEventListener('DOMContentLoaded', async function() {
                         </div>
                     </a>
                 `).join('');
+                // 각 upcoming 대회에 선호 리그 이벤트 카드 추가
+                filteredUpcoming.forEach(comp => {
+                    appendMyLeagueCard(comp.event_cd, upcomingCards);
+                });
             }
         }
 
@@ -2020,6 +2174,10 @@ async function loadUpcomingCompetitions() {
                 } else {
                     upcomingCards.innerHTML = newHtml;
                 }
+                // 각 upcoming 대회에 선호 리그 이벤트 카드 추가
+                additionalComps.slice(0, 5).forEach(comp => {
+                    appendMyLeagueCard(comp.event_cd, upcomingCards);
+                });
             }
         }
     } catch (error) {

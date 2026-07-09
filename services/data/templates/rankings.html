@@ -323,29 +323,46 @@
     .rank-cell {
         font-weight: 700;
         text-align: center;
-        width: 70px;
+        vertical-align: middle;
+        width: 60px;
         font-size: 1.1rem;
+        white-space: nowrap;
+        line-height: 1.2;
     }
 
     .rank-1 { color: #FFD700; text-shadow: 0 0 10px rgba(255,215,0,0.5); }
     .rank-2 { color: #C0C0C0; text-shadow: 0 0 10px rgba(192,192,192,0.5); }
     .rank-3 { color: #CD7F32; text-shadow: 0 0 10px rgba(205,127,50,0.5); }
+    .top-rank-1 td { color: #FFD700 !important; font-weight: 600; }
+    .top-rank-1 .player-link { color: #FFD700 !important; }
+    .top-rank-2 td { color: #C0C0C0 !important; font-weight: 600; }
+    .top-rank-2 .player-link { color: #C0C0C0 !important; }
+    .top-rank-3 td { color: #CD7F32 !important; font-weight: 600; }
+    .top-rank-3 .player-link { color: #CD7F32 !important; }
+
+    .ranking-table td,
+    .ranking-table th {
+        vertical-align: middle;
+    }
 
     .medal-cell {
         text-align: center;
+        vertical-align: middle;
     }
 
     .medal {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 28px;
-        height: 28px;
+        width: 26px;
+        height: 26px;
         border-radius: 50%;
-        font-size: 0.75rem;
+        font-size: 0.7rem;
         font-weight: 700;
-        margin: 0 3px;
+        margin: 0 2px;
         box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        vertical-align: middle;
+        line-height: 1;
     }
 
     .medal-gold {
@@ -718,6 +735,9 @@
         .desktop-filter {
             display: none !important;
         }
+        #team-ranking-section .desktop-filter {
+            display: block !important;
+        }
         .ranking-container {
             padding: 12px;
         }
@@ -734,6 +754,77 @@
         }
         .ranking-info h2 {
             font-size: 1.25rem;
+        }
+        /* Mobile ranking table: compact layout */
+        .ranking-table-container {
+            overflow-x: hidden;
+        }
+        .ranking-table {
+            table-layout: fixed;
+            width: 100%;
+        }
+        .ranking-table th,
+        .ranking-table td {
+            padding: 12px 6px;
+            font-size: 0.8rem;
+            vertical-align: middle;
+        }
+        .ranking-table .rank-cell {
+            width: 36px;
+            font-size: 0.8rem;
+            white-space: nowrap;
+            padding: 12px 2px !important;
+            text-align: center;
+            vertical-align: middle;
+            line-height: 1.2;
+        }
+        .ranking-table .col-name {
+            width: 30%;
+            vertical-align: middle;
+        }
+        .ranking-table .col-team {
+            width: 30%;
+            vertical-align: middle;
+        }
+        .ranking-table .col-points {
+            width: 50px;
+            vertical-align: middle;
+        }
+        /* Hide competition count and medal columns on mobile */
+        .ranking-table .col-comp,
+        .ranking-table .col-medal,
+        .ranking-table .medal-cell.col-medal {
+            display: none !important;
+        }
+        .ranking-table td {
+            vertical-align: middle !important;
+            height: 48px;
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
+        }
+        .ranking-table td .player-link,
+        .ranking-table td > span {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 100%;
+            line-height: 48px;
+        }
+        .ranking-table .col-team {
+            line-height: 48px;
+        }
+        .ranking-table .col-team .team-badge {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 100%;
+            padding: 3px 8px !important;
+            font-size: 0.7rem !important;
+            line-height: 1.2;
+            vertical-align: middle;
+        }
+        .points-cell {
+            font-size: 0.8rem !important;
         }
     }
 
@@ -784,6 +875,12 @@
     [data-theme="light"] .rank-1 { color: #b8860b; text-shadow: none; }
     [data-theme="light"] .rank-2 { color: #71717a; text-shadow: none; }
     [data-theme="light"] .rank-3 { color: #92400e; text-shadow: none; }
+    [data-theme="light"] .top-rank-1 td { color: #b8860b !important; }
+    [data-theme="light"] .top-rank-1 .player-link { color: #b8860b !important; }
+    [data-theme="light"] .top-rank-2 td { color: #71717a !important; }
+    [data-theme="light"] .top-rank-2 .player-link { color: #71717a !important; }
+    [data-theme="light"] .top-rank-3 td { color: #92400e !important; }
+    [data-theme="light"] .top-rank-3 .player-link { color: #92400e !important; }
 
     [data-theme="light"] .player-link {
         color: #191f28 !important;
@@ -894,6 +991,285 @@
     [data-theme="light"] .guest-filter-toggle:hover {
         background: #eef0f4 !important;
     }
+
+    /* Ranking Type Tabs */
+    .ranking-type-tabs {
+        display: flex;
+        gap: 0;
+        margin-bottom: 24px;
+        background: rgba(255,255,255,0.05);
+        border-radius: 12px;
+        padding: 4px;
+        max-width: 400px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+
+    .ranking-type-tab {
+        flex: 1;
+        padding: 12px 24px;
+        border: none;
+        background: transparent;
+        color: rgba(255,255,255,0.6);
+        font-weight: 600;
+        font-size: 15px;
+        cursor: pointer;
+        border-radius: 8px;
+        transition: all 0.2s;
+    }
+
+    .ranking-type-tab.active {
+        background: var(--primary-color, #1a5f7a);
+        color: #fff;
+        box-shadow: 0 2px 8px rgba(26,95,122,0.3);
+    }
+
+    [data-theme="light"] .ranking-type-tabs {
+        background: #e2e8f0;
+    }
+
+    [data-theme="light"] .ranking-type-tab {
+        color: #64748b;
+    }
+
+    [data-theme="light"] .ranking-type-tab.active {
+        background: var(--primary-color, #1a5f7a);
+        color: #fff;
+    }
+
+    /* Team Ranking Sort Buttons */
+    .team-sort-section {
+        margin-top: 16px;
+        padding-top: 16px;
+        border-top: 1px solid rgba(255,255,255,0.1);
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+
+    .team-sort-section .filter-label {
+        font-weight: 600;
+        color: rgba(255,255,255,0.6);
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-right: 8px;
+    }
+
+    .sort-btn-group {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .sort-btn {
+        padding: 8px 14px;
+        border: 2px solid rgba(255,255,255,0.15);
+        background: rgba(255,255,255,0.05);
+        color: rgba(255,255,255,0.7);
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+        min-width: 100px;
+    }
+    .sort-btn-label {
+        font-weight: 600;
+        font-size: 13px;
+    }
+    .sort-btn-desc {
+        font-size: 10px;
+        opacity: 0.6;
+    }
+
+    .sort-btn:hover {
+        border-color: var(--primary-color);
+        color: var(--primary-color);
+    }
+
+    .sort-btn.active {
+        background: var(--primary-color);
+        color: #fff;
+        border-color: var(--primary-color);
+    }
+    .sort-btn.active .sort-btn-desc {
+        opacity: 0.85;
+    }
+
+    [data-theme="light"] .team-sort-section { border-top-color: #e2e8f0; }
+    [data-theme="light"] .team-sort-section .filter-label { color: #334155; }
+    [data-theme="light"] .sort-btn { border-color: #e2e8f0; background: #fff; color: #475569; }
+
+    /* Active Filters Display */
+    .team-active-filters {
+        margin-top: 12px;
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: center;
+        font-size: 0.85rem;
+    }
+    .team-active-filters .af-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 12px;
+        border-radius: 6px;
+        background: rgba(255,255,255,0.08);
+        border: 1px solid rgba(255,255,255,0.12);
+    }
+    .team-active-filters .af-label {
+        color: rgba(255,255,255,0.5);
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+    }
+    .team-active-filters .af-value {
+        color: rgba(255,255,255,0.9);
+        font-weight: 600;
+    }
+    .team-active-filters .af-desc {
+        color: rgba(255,255,255,0.45);
+        font-size: 0.75rem;
+    }
+    [data-theme="light"] .team-active-filters .af-chip {
+        background: #f1f5f9;
+        border-color: #e2e8f0;
+    }
+    [data-theme="light"] .team-active-filters .af-label { color: #94a3b8; }
+    [data-theme="light"] .team-active-filters .af-value { color: #1e293b; }
+    [data-theme="light"] .team-active-filters .af-desc { color: #94a3b8; }
+
+    /* Team Category Buttons */
+    .team-category-section {
+        margin-top: 16px;
+        padding-top: 16px;
+        border-top: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .team-category-toggle {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 5px;
+    }
+
+    .team-cat-btn {
+        padding: 8px 0;
+        border: 2px solid rgba(255,255,255,0.15);
+        background: rgba(255,255,255,0.05);
+        color: rgba(255,255,255,0.7);
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 500;
+        font-size: 13px;
+        transition: all 0.2s;
+        white-space: nowrap;
+        text-align: center;
+    }
+
+    .team-cat-btn:hover:not(.active) {
+        border-color: var(--primary-color);
+        color: var(--primary-color);
+    }
+
+    .team-cat-btn.active {
+        background: var(--primary-color);
+        color: #fff;
+        border-color: var(--primary-color);
+    }
+
+    [data-theme="light"] .team-category-section { border-top-color: #e2e8f0; }
+    [data-theme="light"] .team-cat-btn { border-color: #e2e8f0; background: #fff; color: #475569; }
+
+    /* Team ranking table specific */
+    .team-ranking-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .team-ranking-table th,
+    .team-ranking-table td {
+        padding: 12px 16px;
+        text-align: left;
+        border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .team-ranking-table th {
+        font-weight: 600;
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: rgba(255,255,255,0.6);
+        background: rgba(255,255,255,0.03);
+    }
+
+    .team-ranking-table tbody tr:hover {
+        background: rgba(255,255,255,0.05);
+    }
+
+    .team-ranking-table .col-rank { width: 60px; text-align: center; }
+    .team-ranking-table .col-members { width: 70px; text-align: center; }
+    .team-ranking-table .col-pts { width: 100px; text-align: right; font-weight: 600; }
+    .team-ranking-table .col-events { width: 60px; text-align: center; }
+    .team-ranking-table .col-top-player { font-size: 0.85rem; color: rgba(255,255,255,0.6); }
+
+    .team-ranking-table .sort-active {
+        color: var(--fm-accent-primary, #c9302c);
+        font-weight: 700;
+    }
+
+    .team-ranking-table tbody tr:nth-child(1) .col-rank { color: #ffd700; font-weight: 700; }
+    .team-ranking-table tbody tr:nth-child(2) .col-rank { color: #c0c0c0; font-weight: 700; }
+    .team-ranking-table tbody tr:nth-child(3) .col-rank { color: #cd7f32; font-weight: 700; }
+
+    [data-theme="light"] .team-ranking-table th {
+        color: #334155;
+        background: #f1f5f9;
+        border-bottom-color: #e2e8f0;
+    }
+
+    [data-theme="light"] .team-ranking-table td {
+        color: #1e293b;
+        border-bottom-color: #e2e8f0;
+    }
+
+    [data-theme="light"] .team-ranking-table tbody tr:hover {
+        background: #f8fafc;
+    }
+
+    [data-theme="light"] .team-ranking-table .col-top-player {
+        color: #64748b;
+    }
+
+    .team-ranking-table tbody tr:nth-child(1) { background: linear-gradient(90deg, rgba(255,215,0,0.12) 0%, transparent 100%); }
+    .team-ranking-table tbody tr:nth-child(2) { background: linear-gradient(90deg, rgba(192,192,192,0.10) 0%, transparent 100%); }
+    .team-ranking-table tbody tr:nth-child(3) { background: linear-gradient(90deg, rgba(205,127,50,0.10) 0%, transparent 100%); }
+    .team-ranking-table tbody tr:nth-child(1) td { color: #ffd700; font-weight: 600; }
+    .team-ranking-table tbody tr:nth-child(2) td { color: #c0c0c0; font-weight: 600; }
+    .team-ranking-table tbody tr:nth-child(3) td { color: #cd7f32; font-weight: 600; }
+    [data-theme="light"] .team-ranking-table tbody tr:nth-child(1) { background: linear-gradient(90deg, rgba(255,215,0,0.15) 0%, transparent 100%); }
+    [data-theme="light"] .team-ranking-table tbody tr:nth-child(2) { background: linear-gradient(90deg, rgba(192,192,192,0.15) 0%, transparent 100%); }
+    [data-theme="light"] .team-ranking-table tbody tr:nth-child(3) { background: linear-gradient(90deg, rgba(205,127,50,0.15) 0%, transparent 100%); }
+    [data-theme="light"] .team-ranking-table tbody tr:nth-child(1) td { color: #b8860b; }
+    [data-theme="light"] .team-ranking-table tbody tr:nth-child(2) td { color: #6b7280; }
+    [data-theme="light"] .team-ranking-table tbody tr:nth-child(3) td { color: #92400e; }
+    .team-ace-inline { font-size: 0.72rem; color: rgba(255,255,255,0.45); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: none; }
+    [data-theme="light"] .team-ace-inline { color: #94a3b8; }
+    @media (max-width: 640px) {
+        .team-ranking-table th,
+        .team-ranking-table td {
+            padding: 8px 6px;
+            font-size: 0.8rem;
+        }
+        .team-ranking-table .col-pts { width: auto; }
+        .team-ranking-table .hide-mobile { display: none; }
+        .team-ace-inline { display: block; }
+    }
 </style>
 {% endblock %}
 
@@ -904,6 +1280,13 @@
         <p>{{ i18n.common.rankings.subtitle|default(_t('FIE + USA Fencing 포인트 시스템 기반 비공식 커뮤니티 랭킹')) }}</p>
     </div>
 
+    <!-- Ranking Type Tabs -->
+    <div class="ranking-type-tabs">
+        <button class="ranking-type-tab active" data-type="individual" onclick="switchRankingType('individual')">{{ _t('개인 랭킹') }}</button>
+        <button class="ranking-type-tab" data-type="team" onclick="switchRankingType('team')">{{ _t('팀 랭킹') }}</button>
+    </div>
+
+    <div id="individual-ranking-section">
     <!-- Mobile Filter Trigger Button (visible only on mobile ≤640px) -->
     <button class="mobile-filter-trigger" id="mobileFilterTrigger">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
@@ -1045,6 +1428,109 @@
         <div class="loading">
             <div class="loading-spinner"></div>
             <p>{{ i18n.common.rankings.loading_rankings|default('Loading rankings...') }}</p>
+        </div>
+    </div>
+    </div><!-- /individual-ranking-section -->
+
+    <div id="team-ranking-section" style="display: none;">
+        <!-- 팀 랭킹 모바일 필터 토글 -->
+        <button class="mobile-filter-trigger" id="teamFilterTrigger" onclick="(function(btn){ var p=document.getElementById('teamFilterPanel'); var show=p.style.display==='none'; p.style.display=show?'block':'none'; btn.classList.toggle('open',show); })(this)">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+            <span>{{ _t('필터') }}</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+        </button>
+        <div id="teamFilterPanel" style="display:none;">
+        <!-- 팀 유형 선택 (독립 — API 필터와 별개, 클라이언트 필터링) -->
+        <div class="filter-section desktop-filter" style="margin-bottom:0; border-bottom:none; padding-bottom:8px;">
+            <div class="team-category-section" style="margin-top:0; padding-top:0; border-top:none;">
+                <label style="font-weight:600; color:var(--text-muted, rgba(255,255,255,0.6)); font-size:0.85rem; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:10px; display:block;">{{ _t('팀 유형') }}</label>
+                <div class="team-category-toggle">
+                    <button class="team-cat-btn active" data-cat="all">{{ _t('전체') }}</button>
+                    <button class="team-cat-btn" data-cat="club">{{ _t('클럽') }}</button>
+                    <button class="team-cat-btn" data-cat="middle_school">{{ _t('중학교') }}</button>
+                    <button class="team-cat-btn" data-cat="high_school">{{ _t('고등학교') }}</button>
+                    <button class="team-cat-btn" data-cat="university">{{ _t('대학교') }}</button>
+                    <button class="team-cat-btn" data-cat="pro">{{ _t('실업팀') }}</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 종목 필터 (무기/성별/나이/시즌 — API 서버 필터) -->
+        <div class="filter-section desktop-filter" style="margin-top:8px;">
+            <div class="filter-grid">
+                <div class="filter-group">
+                    <label>{{ i18n.common.filters.weapon|default('Weapon') }}</label>
+                    <select id="team-weapon-select">
+                        <option value="">{{ _t('전체') }}</option>
+                        <option value="foil">{{ i18n.common.weapons.foil|default('Foil') }}</option>
+                        <option value="epee">{{ i18n.common.weapons.epee|default('Epee') }}</option>
+                        <option value="sabre">{{ i18n.common.weapons.sabre|default('Sabre') }}</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>{{ i18n.common.filters.gender|default('Gender') }}</label>
+                    <select id="team-gender-select">
+                        <option value="">{{ _t('전체') }}</option>
+                        <option value="남">{{ i18n.common.gender.male|default("Men's") }}</option>
+                        <option value="여">{{ i18n.common.gender.female|default("Women's") }}</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>{{ i18n.common.filters.age_group|default('Age Group') }}</label>
+                    <select id="team-age-select">
+                        <option value="">{{ _t('전체') }}</option>
+                        <option value="E1">{{ i18n.common.rankings.elementary_1_2|default('Elementary 1-2') }}</option>
+                        <option value="E2">{{ i18n.common.rankings.elementary_3_4|default('Elementary 3-4') }}</option>
+                        <option value="E3">{{ i18n.common.rankings.elementary_5_6|default('Elementary 5-6') }}</option>
+                        <option value="MS">{{ i18n.common.rankings.middle_school|default('Middle School') }}</option>
+                        <option value="HS">{{ i18n.common.rankings.high_school|default('High School') }}</option>
+                        <option value="UNI">{{ i18n.common.rankings.university|default('University') }}</option>
+                        <option value="SR" selected>{{ i18n.common.rankings.senior|default('Senior') }}</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>{{ i18n.common.filters.season|default('Season') }}</label>
+                    <select id="team-year-select">
+                    </select>
+                </div>
+            </div>
+
+            <div class="team-sort-section">
+                <span class="filter-label">{{ _t('정렬') }}</span>
+                <div class="sort-btn-group">
+                    <button class="sort-btn active" data-sort="top3_points">
+                        <span class="sort-btn-label">{{ _t('최고 선수력') }}</span>
+                        <span class="sort-btn-desc">{{ _t('상위 3명 포인트') }}</span>
+                    </button>
+                    <button class="sort-btn" data-sort="total_points">
+                        <span class="sort-btn-label">{{ _t('종합 전력') }}</span>
+                        <span class="sort-btn-desc">{{ _t('전 선수 포인트 합산') }}</span>
+                    </button>
+                    <button class="sort-btn" data-sort="avg_points">
+                        <span class="sort-btn-label">{{ _t('선수당 평균') }}</span>
+                        <span class="sort-btn-desc">{{ _t('1인당 평균 포인트') }}</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+        </div><!-- /teamFilterPanel -->
+
+        <div class="ranking-info" id="team-ranking-info">
+            <h2 id="team-ranking-title">-</h2>
+            <div class="ranking-info-grid">
+                <div class="info-item">
+                    <div class="info-value" id="total-teams">-</div>
+                    <div class="info-label">{{ _t('등록 팀') }}</div>
+                </div>
+            </div>
+            <div id="team-active-filters" class="team-active-filters"></div>
+        </div>
+
+        <div id="team-ranking-content">
+            <div class="loading">
+                <div class="loading-spinner"></div>
+                <p>{{ _t('팀 랭킹 로딩 중...') }}</p>
+            </div>
         </div>
     </div>
 </div>
@@ -1349,26 +1835,31 @@ document.addEventListener('DOMContentLoaded', function() {
         const theadHtml = `<thead>
                         <tr>
                             <th class="rank-cell">${i18n.table.rank}</th>
-                            <th>${i18n.table.name}</th>
-                            <th>${i18n.table.team}</th>
-                            <th class="points-cell">${i18n.table.points}</th>
-                            <th>${i18n.table.competition}</th>
-                            <th class="medal-cell">🏅</th>
+                            <th class="col-name">${i18n.table.name}</th>
+                            <th class="col-team">${i18n.table.team}</th>
+                            <th class="points-cell col-points">${i18n.table.points}</th>
+                            <th class="col-comp">${i18n.table.competition}</th>
+                            <th class="medal-cell col-medal">🏅</th>
                         </tr>
                     </thead>`;
 
         function buildRow(r) {
             const rankClass = r.rank <= 3 ? `rank-${r.rank}` : '';
+            const rowClass = r.rank <= 3 ? `top-rank-row top-rank-${r.rank}` : '';
             const teamsToShow = (r.display_teams && r.display_teams.length > 0) ? r.display_teams : r.teams;
             const teams = teamsToShow.slice(0, 2).map(t => `<span class="team-badge">${t}</span>`).join('');
             const displayName = r.display_name || r.name;
-            return `<tr>
+            const teamStr = teamsToShow.length > 0 ? teamsToShow[0] : '';
+            const playerLink = r.blurred
+                ? `<span>${displayName}</span>`
+                : `<a href="/${currentLang}/player/${encodeURIComponent(r.name)}?team=${encodeURIComponent(teamStr)}" class="player-link">${displayName}</a>`;
+            return `<tr class="${rowClass}">
                     <td class="rank-cell ${rankClass}">${r.rank}</td>
-                    <td>${r.blurred ? `<span>${displayName}</span>` : `<a href="/player/${encodeURIComponent(r.name)}" class="player-link">${displayName}</a>`}</td>
-                    <td>${teams}</td>
-                    <td class="points-cell">${r.points.toFixed(1)}</td>
-                    <td>${r.competitions}</td>
-                    <td class="medal-cell">
+                    <td class="col-name">${playerLink}</td>
+                    <td class="col-team">${teams}</td>
+                    <td class="points-cell col-points">${r.points.toFixed(1)}</td>
+                    <td class="col-comp">${r.competitions}</td>
+                    <td class="medal-cell col-medal">
                         ${r.gold > 0 ? `<span class="medal medal-gold">${r.gold}</span>` : ''}
                         ${r.silver > 0 ? `<span class="medal medal-silver">${r.silver}</span>` : ''}
                         ${r.bronze > 0 ? `<span class="medal medal-bronze">${r.bronze}</span>` : ''}
@@ -1426,6 +1917,220 @@ document.addEventListener('DOMContentLoaded', function() {
         loadRankings();
         window.scrollTo(0, 0);
     };
+
+    // ========== Team Ranking Section ==========
+    let teamCurrentSort = 'top3_points';
+    let teamCurrentCategory = 'all';
+    let _teamPrefsApplied = false;
+
+    window.switchRankingType = function(type) {
+        document.querySelectorAll('.ranking-type-tab').forEach(t => t.classList.remove('active'));
+        document.querySelector(`.ranking-type-tab[data-type="${type}"]`).classList.add('active');
+
+        const indSection = document.getElementById('individual-ranking-section');
+        const teamSection = document.getElementById('team-ranking-section');
+        const mobileFilterTrigger = document.getElementById('mobileFilterTrigger');
+        const guestToggle = document.getElementById('guestFilterToggle');
+        const guestPanel = document.getElementById('guestFilterPanel');
+
+        if (type === 'team') {
+            if (indSection) indSection.style.display = 'none';
+            teamSection.style.display = 'block';
+            if (mobileFilterTrigger) mobileFilterTrigger.style.display = 'none';
+            if (guestToggle) guestToggle.style.display = 'none';
+            if (guestPanel) guestPanel.style.display = 'none';
+            if (!_teamPrefsApplied) {
+                _applyTeamPreferences();
+                _teamPrefsApplied = true;
+            }
+            loadTeamRankings();
+        } else {
+            if (indSection) indSection.style.display = 'block';
+            teamSection.style.display = 'none';
+            if (mobileFilterTrigger) mobileFilterTrigger.style.display = '';
+            if (guestToggle) guestToggle.style.display = '';
+        }
+    };
+
+    function _applyTeamPreferences() {
+        try {
+            var prefs = JSON.parse(localStorage.getItem('fm_preferences'));
+            if (!prefs || prefs.version !== 2) return;
+            var AGE_MAP = { elementary:'E3', middle_school:'MS', high_school:'HS', senior:'SR' };
+            var tw = document.getElementById('team-weapon-select');
+            var tg = document.getElementById('team-gender-select');
+            var ta = document.getElementById('team-age-select');
+            if (tw && prefs.weapon) tw.value = prefs.weapon;
+            if (tg && prefs.gender) tg.value = prefs.gender;
+            if (ta && prefs.age_group && AGE_MAP[prefs.age_group]) ta.value = AGE_MAP[prefs.age_group];
+        } catch(e) {}
+    }
+
+    // Populate team year select
+    fetch('/api/rankings/options')
+        .then(res => res.json())
+        .then(data => {
+            const teamYearSelect = document.getElementById('team-year-select');
+            if (!teamYearSelect) return;
+            var currentYear = new Date().getFullYear();
+            data.years.forEach(year => {
+                const opt = document.createElement('option');
+                opt.value = year;
+                opt.textContent = year + '{{ _t("년") }}';
+                teamYearSelect.appendChild(opt);
+            });
+            if (data.years.includes(currentYear)) {
+                teamYearSelect.value = currentYear.toString();
+            } else if (data.years.length > 0) {
+                teamYearSelect.value = data.years[0];
+            }
+        });
+
+    // Team filter change handlers — weapon/gender/age/year trigger new API call
+    ['team-weapon-select', 'team-gender-select', 'team-age-select', 'team-year-select'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('change', loadTeamRankings);
+    });
+
+    // Team category buttons — client-side filter only (no API call)
+    document.querySelectorAll('.team-cat-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('.team-cat-btn').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            teamCurrentCategory = this.dataset.cat;
+            renderTeamTable(window._lastTeamData);
+        });
+    });
+
+    // Sort buttons — client-side re-sort only
+    document.querySelectorAll('.sort-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            teamCurrentSort = this.dataset.sort;
+            renderTeamTable(window._lastTeamData);
+        });
+    });
+
+    function loadTeamRankings() {
+        const weapon = document.getElementById('team-weapon-select').value;
+        const gender = document.getElementById('team-gender-select').value;
+        const ageGroup = document.getElementById('team-age-select').value;
+        const yearEl = document.getElementById('team-year-select');
+        const year = yearEl ? yearEl.value : '';
+        const content = document.getElementById('team-ranking-content');
+
+        let url = '/api/rankings/team?';
+        const params = [];
+        if (weapon) params.push('weapon=' + encodeURIComponent(weapon));
+        if (gender) params.push('gender=' + encodeURIComponent(gender));
+        if (ageGroup) params.push('age_group=' + ageGroup);
+        if (year && year.match(/^\d{4}$/)) params.push('year=' + year);
+        url += params.join('&');
+
+        content.innerHTML = '<div class="loading"><div class="loading-spinner"></div><p>{{ _t("팀 랭킹 로딩 중...") }}</p></div>';
+
+        fetch(url)
+            .then(res => {
+                if (!res.ok) throw new Error('Server error: ' + res.status);
+                return res.json();
+            })
+            .then(data => {
+                window._lastTeamData = data;
+                renderTeamTable(data);
+            })
+            .catch(err => {
+                content.innerHTML = '<div class="error-message"><p>' + err.message + '</p></div>';
+            });
+    }
+
+    function renderTeamTable(data) {
+        if (!data || !data.rankings) return;
+        const content = document.getElementById('team-ranking-content');
+
+        // Client-side category filter
+        let filtered = data.rankings;
+        if (teamCurrentCategory && teamCurrentCategory !== 'all') {
+            filtered = filtered.filter(r => r.team_category === teamCurrentCategory);
+        }
+
+        // Sort by current key
+        const sorted = [...filtered].sort((a, b) => b[teamCurrentSort] - a[teamCurrentSort]);
+        sorted.forEach((r, i) => r._displayRank = i + 1);
+
+        // Update info
+        document.getElementById('total-teams').textContent = sorted.length;
+
+        // Build title
+        const weapon = document.getElementById('team-weapon-select').value;
+        const gender = document.getElementById('team-gender-select').value;
+        const ageGroup = document.getElementById('team-age-select').value;
+        const genderMap = {'남': '{{ _t("남자") }}', '여': '{{ _t("여자") }}'};
+        const weaponMap = {'foil': '{{ _t("플뢰레") }}', 'epee': '{{ _t("에페") }}', 'sabre': '{{ _t("사브르") }}'};
+        const ageMap = {'E1': '{{ _t("초1-2") }}', 'E2': '{{ _t("초3-4") }}', 'E3': '{{ _t("초5-6") }}', 'MS': '{{ _t("중등") }}', 'HS': '{{ _t("고등") }}', 'UNI': '{{ _t("대학") }}', 'SR': '{{ _t("일반") }}'};
+        const catMap = {'all': '{{ _t("전체") }}', 'middle_school': '{{ _t("중학교") }}', 'high_school': '{{ _t("고등학교") }}', 'university': '{{ _t("대학교") }}', 'club': '{{ _t("클럽") }}', 'pro': '{{ _t("실업팀") }}'};
+        let title = '{{ _t("팀 랭킹") }}';
+        const parts = [];
+        if (teamCurrentCategory !== 'all' && catMap[teamCurrentCategory]) parts.push(catMap[teamCurrentCategory]);
+        if (gender) parts.push(genderMap[gender] || gender);
+        if (weapon) parts.push(weaponMap[weapon] || weapon);
+        if (ageGroup) parts.push(ageMap[ageGroup] || ageGroup);
+        if (parts.length) title = parts.join(' ') + ' {{ _t("팀 랭킹") }}';
+        document.getElementById('team-ranking-title').textContent = title;
+
+        // Active filters display
+        const sortLabels = {
+            total_points: {name: '{{ _t("종합 전력") }}', desc: '{{ _t("소속 전 선수의 랭킹 포인트를 합산한 총점") }}'},
+            top3_points: {name: '{{ _t("최고 선수력") }}', desc: '{{ _t("팀 내 상위 3명의 포인트 합계 — 에이스 전력 비교") }}'},
+            avg_points: {name: '{{ _t("선수당 평균") }}', desc: '{{ _t("총점을 선수 수로 나눈 1인당 평균 — 팀 밀도 비교") }}'}
+        };
+        const afEl = document.getElementById('team-active-filters');
+        if (afEl) {
+            let afHtml = '';
+            afHtml += '<span class="af-chip"><span class="af-label">{{ _t("팀 유형") }}</span><span class="af-value">' + (catMap[teamCurrentCategory] || '{{ _t("전체") }}') + '</span></span>';
+            const si = sortLabels[teamCurrentSort];
+            afHtml += '<span class="af-chip"><span class="af-label">{{ _t("정렬") }}</span><span class="af-value">' + si.name + '</span><span class="af-desc">— ' + si.desc + '</span></span>';
+            afEl.innerHTML = afHtml;
+        }
+
+        if (sorted.length === 0) {
+            content.innerHTML = '<div class="error-message"><p>{{ _t("해당 조건의 팀 랭킹 데이터가 없습니다.") }}</p></div>';
+            return;
+        }
+
+        let html = '<div class="ranking-table-container"><table class="team-ranking-table"><thead><tr>';
+        html += '<th class="col-rank">{{ _t("순위") }}</th>';
+        html += '<th>{{ _t("팀") }}</th>';
+        html += '<th class="col-members">{{ _t("선수") }}</th>';
+        html += '<th class="col-pts ' + (teamCurrentSort === 'total_points' ? 'sort-active' : '') + '">{{ _t("종합 전력") }}</th>';
+        html += '<th class="col-pts hide-mobile ' + (teamCurrentSort === 'top3_points' ? 'sort-active' : '') + '">{{ _t("최고 선수력") }}</th>';
+        html += '<th class="col-pts hide-mobile ' + (teamCurrentSort === 'avg_points' ? 'sort-active' : '') + '">{{ _t("선수당 평균") }}</th>';
+        html += '<th class="col-events hide-mobile">{{ _t("대회") }}</th>';
+        html += '<th class="col-top-player hide-mobile">{{ _t("에이스") }}</th>';
+        html += '</tr></thead><tbody>';
+
+        sorted.forEach(r => {
+            const seen = new Set();
+            const aces = (r.top_players || []).filter(p => { if (seen.has(p.player)) return false; seen.add(p.player); return true; }).slice(0, 2);
+            const aceStrs = aces.map(p => p.player + ' (' + p.rank + '{{ _t("위") }})');
+            const aceHtml = aceStrs.length > 0 ? aceStrs.join('<br>') : '-';
+
+            html += '<tr>';
+            const aceInline = aces.length > 0 ? '<div class="team-ace-inline">' + aces.map(p => p.player + '(' + p.rank + '{{ _t("위") }})').join(', ') + '</div>' : '';
+            html += '<td class="col-rank">' + r._displayRank + '</td>';
+            html += '<td>' + r.team + aceInline + '</td>';
+            html += '<td class="col-members">' + r.member_count + '{{ _t("명") }}</td>';
+            html += '<td class="col-pts ' + (teamCurrentSort === 'total_points' ? 'sort-active' : '') + '">' + r.total_points.toFixed(1) + '</td>';
+            html += '<td class="col-pts hide-mobile ' + (teamCurrentSort === 'top3_points' ? 'sort-active' : '') + '">' + r.top3_points.toFixed(1) + '</td>';
+            html += '<td class="col-pts hide-mobile ' + (teamCurrentSort === 'avg_points' ? 'sort-active' : '') + '">' + r.avg_points.toFixed(1) + '</td>';
+            html += '<td class="col-events hide-mobile">' + r.event_count + '</td>';
+            html += '<td class="col-top-player hide-mobile">' + aceHtml + '</td>';
+            html += '</tr>';
+        });
+
+        html += '</tbody></table></div>';
+        content.innerHTML = html;
+    }
 
     // Initial load is triggered after years are loaded (see above)
 });

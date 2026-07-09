@@ -30,7 +30,7 @@
 
     <!-- shared-ui 디자인 토큰 (light/dark 테마 변수 포함) -->
     <link rel="stylesheet" href="/static/css/variables.css?v=20260603">
-    <link rel="stylesheet" href="/static/css/dark-theme.css?v=20260614">
+    <link rel="stylesheet" href="/static/css/dark-theme.css?v=20260704a">
     <link rel="stylesheet" href="/static/css/components.css?v=20260613">
     <link rel="stylesheet" href="/static/css/mobile-ux.css?v=20260614">
     {% block extra_css %}{% endblock %}
@@ -235,11 +235,66 @@
                 const member = await response.json();
                 document.body.classList.add('authenticated');
                 const authNav = document.getElementById('authNav');
-                authNav.innerHTML = `
-                    <a href="https://account.fencingmind.ai/account/me" class="auth-btn profile-btn">
-                        ${member.display_name || member.full_name[0]}
-                    </a>
+                var _n = member.full_name || '';
+                var _initial = _n.charAt(0).toUpperCase();
+                var _email = member.email || '';
+                var _maskedEmail = _email.replace(/^(.{2})(.*)(@.*)$/, function(m,a,b,c){ return a + b.replace(/./g,'*') + c; });
+                authNav.innerHTML = `<button class="auth-btn profile-btn" id="profileBtn" type="button" aria-label="프로필 메뉴">${_initial}</button>`;
+                var _dd = document.createElement('div');
+                _dd.id = 'profileDropdown';
+                _dd.className = 'profile-dropdown';
+                _dd.innerHTML = `
+                    <div class="profile-dropdown-header">
+                        <div class="profile-dropdown-avatar">${_initial}</div>
+                        <div class="profile-dropdown-name">${_n}</div>
+                        <div class="profile-dropdown-email">${_maskedEmail}</div>
+                    </div>
+                    <div class="profile-dropdown-links">
+                        <a href="https://account.fencingmind.ai/account/me">
+                            <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                            {{ _t('내 프로필') }}
+                        </a>
+                    </div>
+                    <div class="profile-dropdown-divider"></div>
+                    <div class="pd-info-card" id="profileInfoCard" style="display:none;">
+                        <div class="pd-info-row" id="profileLeagueSection" style="display:none;">
+                            <span class="pd-info-icon">&#9876;</span>
+                            <span class="pd-info-label" id="profileLeagueInfo"></span>
+                        </div>
+                        <div class="pd-fav-row" id="profileFavSection" style="display:none;">
+                            <span class="pd-info-icon">&#9829;</span>
+                            <span class="pd-fav-list" id="profileFavList"></span>
+                        </div>
+                    </div>
+                    <div class="profile-dropdown-divider"></div>
+                    <div class="profile-dropdown-links">
+                        <a href="/auth/logout">
+                            <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                            {{ _t('로그아웃') }}
+                        </a>
+                    </div>
                 `;
+                document.body.appendChild(_dd);
+                document.getElementById('profileBtn').addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    var dd = document.getElementById('profileDropdown');
+                    dd.classList.toggle('open');
+                    if (dd.classList.contains('open')) {
+                        var btn = document.getElementById('profileBtn');
+                        var r = btn.getBoundingClientRect();
+                        dd.style.position = 'fixed';
+                        dd.style.top = (r.bottom + 8) + 'px';
+                        var right = window.innerWidth - r.right;
+                        dd.style.right = Math.max(8, right) + 'px';
+                        dd.style.left = 'auto';
+                        dd.style.transform = 'none';
+                        loadProfileDropdownData();
+                    }
+                });
+                document.addEventListener('click', function() {
+                    var dd = document.getElementById('profileDropdown');
+                    if (dd) dd.classList.remove('open');
+                });
                 // 로그인 완료 후 원래 페이지로 복귀
                 const redirectUrl = localStorage.getItem('fencingmind_login_redirect');
                 if (redirectUrl) {
@@ -251,6 +306,69 @@
             }
         } catch (e) {
             // 로그인 안됨 - 기본 상태 유지
+        }
+
+        var _profileLoaded = false;
+        function loadProfileDropdownData() {
+            if (_profileLoaded) return;
+            _profileLoaded = true;
+
+            var cardEl = document.getElementById('profileInfoCard');
+            var hasContent = false;
+
+            // 선호 리그
+            try {
+                var prefs = JSON.parse(localStorage.getItem('fm_preferences') || '{}');
+                if (prefs.weapon || prefs.gender || prefs.age_group) {
+                    var leagueEl = document.getElementById('profileLeagueInfo');
+                    var leagueSec = document.getElementById('profileLeagueSection');
+                    if (leagueEl && leagueSec) {
+                        var WL = {foil:'{{ _t("플뢰레") }}',epee:'{{ _t("에페") }}',sabre:'{{ _t("사브르") }}'};
+                        var GL = {'남':'{{ _t("남자") }}','여':'{{ _t("여자") }}',M:'{{ _t("남자") }}',F:'{{ _t("여자") }}'};
+                        var AL = {elementary:'{{ _t("초등") }}',middle_school:'{{ _t("중등") }}',high_school:'{{ _t("고등") }}',senior:'{{ _t("일반") }}'};
+                        var parts = [];
+                        if (prefs.gender) parts.push(GL[prefs.gender] || prefs.gender);
+                        if (prefs.weapon) parts.push(WL[prefs.weapon] || prefs.weapon);
+                        if (prefs.age_group) parts.push(AL[prefs.age_group] || prefs.age_group);
+                        leagueEl.textContent = parts.join(' · ');
+                        leagueSec.style.display = '';
+                        hasContent = true;
+                    }
+                }
+            } catch(e) {}
+
+            // 좋아요 선수
+            var favSec = document.getElementById('profileFavSection');
+            var favList = document.getElementById('profileFavList');
+
+            function showFavs(names) {
+                if (!names || names.length === 0 || !favSec || !favList) return;
+                favSec.style.display = '';
+                hasContent = true;
+                if (cardEl) cardEl.style.display = '';
+                favList.innerHTML = names.slice(0, 4).map(function(n) {
+                    return '<a href="/player/' + encodeURIComponent(n) + '" class="pd-fav-name">' + n + '</a>';
+                }).join('<span class="pd-fav-sep">·</span>');
+                if (names.length > 4) {
+                    favList.innerHTML += '<span class="pd-fav-sep">·</span><span class="pd-fav-more">+' + (names.length - 4) + '</span>';
+                }
+            }
+
+            fetch('/api/favorites')
+                .then(function(r) { return r.ok ? r.json() : null; })
+                .then(function(data) {
+                    var names = [];
+                    if (data && data.favorites) names = data.favorites.map(function(f) { return f.player_name || f; });
+                    if (names.length === 0) {
+                        try { names = JSON.parse(localStorage.getItem('fm_followed_players') || '[]'); } catch(e) {}
+                    }
+                    showFavs(names);
+                })
+                .catch(function() {
+                    try { showFavs(JSON.parse(localStorage.getItem('fm_followed_players') || '[]')); } catch(e) {}
+                });
+
+            if (hasContent && cardEl) cardEl.style.display = '';
         }
     });
     </script>
@@ -290,5 +408,31 @@
     <script src="/static/js/mobile-ux.js?v=20260613"></script>
     <!-- PWA는 app.fencingmind.ai에서 구현 예정 (CLAUDE.md 참조) -->
     {% block extra_js %}{% endblock %}
+
+    <!-- Global toast notification -->
+    <div id="global-toast" style="display:none;position:fixed;top:24px;left:50%;transform:translateX(-50%);z-index:99999;padding:14px 28px;border-radius:12px;background:#16a34a;color:#fff;font-weight:600;font-size:0.95rem;box-shadow:0 8px 32px rgba(0,0,0,0.25);opacity:0;transition:opacity 0.4s;white-space:nowrap;"></div>
+    <script>
+    (function(){
+        var p = new URLSearchParams(window.location.search);
+        if (p.get('verified') === 'true') {
+            var msgs = {
+                ko: '이메일 인증이 완료되었습니다! 환영합니다 🎉',
+                en: 'Email verified! Welcome to FencingMind 🎉',
+                ja: 'メール認証が完了しました！ようこそ 🎉',
+                fr: 'Email vérifié ! Bienvenue sur FencingMind 🎉',
+                it: 'Email verificata! Benvenuto su FencingMind 🎉',
+                zh: '邮箱验证完成！欢迎来到 FencingMind 🎉',
+                tr: 'E-posta doğrulandı! FencingMind\'e hoş geldiniz 🎉'
+            };
+            var lang = document.documentElement.lang || 'ko';
+            var toast = document.getElementById('global-toast');
+            toast.textContent = msgs[lang] || msgs['ko'];
+            toast.style.display = 'block';
+            requestAnimationFrame(function(){ toast.style.opacity = '1'; });
+            setTimeout(function(){ toast.style.opacity = '0'; setTimeout(function(){ toast.style.display = 'none'; }, 400); }, 4000);
+            history.replaceState(null, '', window.location.pathname);
+        }
+    })();
+    </script>
 </body>
 </html>

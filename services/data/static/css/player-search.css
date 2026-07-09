@@ -973,22 +973,32 @@ tr.player-highlighted td {
    LIGHT THEME OVERRIDES
    ===================================================== */
 [data-theme="light"] .autocomplete-dropdown {
-    background: #ffffff;
-    border-color: #e5e8eb;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.12);
+    background: #ffffff !important;
+    border-color: #e5e8eb !important;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.12) !important;
 }
 
 [data-theme="light"] .autocomplete-item {
-    border-bottom-color: #f0f0f5;
+    border-bottom-color: #f0f0f5 !important;
 }
 
 [data-theme="light"] .autocomplete-item:hover,
-[data-theme="light"] .autocomplete-item.active {
-    background: #f5f5f7;
+[data-theme="light"] .autocomplete-item.active,
+[data-theme="light"] .autocomplete-item.selected {
+    background: #f5f5f7 !important;
+}
+
+[data-theme="light"] .autocomplete-item .player-name {
+    color: #191f28 !important;
 }
 
 [data-theme="light"] .autocomplete-item .player-team {
-    color: #8b95a1;
+    color: #8b95a1 !important;
+}
+
+[data-theme="light"] .autocomplete-item .player-event {
+    background: rgba(59, 130, 246, 0.08) !important;
+    color: #2563eb !important;
 }
 
 [data-theme="light"] .player-search-section {

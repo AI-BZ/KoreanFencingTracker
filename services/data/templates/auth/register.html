@@ -80,25 +80,32 @@
             <div class="consent-section">
                 <h3>동의 항목</h3>
 
+                <label class="consent-item consent-all">
+                    <input type="checkbox" id="agreeAll">
+                    <span>전체 동의합니다</span>
+                </label>
+
+                <div class="consent-divider"></div>
+
                 <label class="consent-item">
-                    <input type="checkbox" name="terms" required>
+                    <input type="checkbox" name="terms" required class="consent-check">
                     <span>[필수] 이용약관에 동의합니다</span>
                     <a href="/terms" target="_blank">보기</a>
                 </label>
 
                 <label class="consent-item">
-                    <input type="checkbox" name="privacy" required>
+                    <input type="checkbox" name="privacy" required class="consent-check">
                     <span>[필수] 개인정보처리방침에 동의합니다</span>
                     <a href="/privacy" target="_blank">보기</a>
                 </label>
 
                 <label class="consent-item">
-                    <input type="checkbox" name="marketing_consent">
+                    <input type="checkbox" name="marketing_consent" class="consent-check">
                     <span>[선택] 마케팅 정보 수신에 동의합니다</span>
                 </label>
 
                 <label class="consent-item">
-                    <input type="checkbox" name="promotional_consent">
+                    <input type="checkbox" name="promotional_consent" class="consent-check">
                     <span>[선택] 홍보용 SNS 연동에 동의합니다</span>
                 </label>
             </div>
@@ -217,6 +224,17 @@
     cursor: pointer;
 }
 
+.consent-all {
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+
+.consent-divider {
+    height: 1px;
+    background: #eee;
+    margin: 4px 0 8px;
+}
+
 .consent-item a {
     color: var(--primary-color, #3182ce);
     text-decoration: none;
@@ -282,6 +300,20 @@ document.addEventListener('DOMContentLoaded', function() {
 
     birthInput.addEventListener('change', checkMinor);
     memberTypeSelect.addEventListener('change', checkMinor);
+
+    // 전체동의 ↔ 개별 체크박스 연동
+    const agreeAll = document.getElementById('agreeAll');
+    const checks = document.querySelectorAll('.consent-check');
+
+    agreeAll.addEventListener('change', function() {
+        checks.forEach(c => { c.checked = this.checked; });
+    });
+
+    checks.forEach(c => {
+        c.addEventListener('change', function() {
+            agreeAll.checked = Array.from(checks).every(cb => cb.checked);
+        });
+    });
 });
 </script>
 {% endblock %}

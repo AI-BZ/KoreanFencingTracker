@@ -190,6 +190,54 @@
     font-size: 0.95rem;
 }
 
+/* Pool ranking column */
+.pool-rank-col {
+    text-align: center;
+    white-space: nowrap;
+    font-size: 0.8rem;
+}
+.league-rank {
+    font-weight: 700;
+    color: var(--accent-primary, #c9302c);
+}
+.best-rank {
+    font-size: 0.7rem;
+    color: var(--text-muted, #6b6b7b);
+    margin-left: 2px;
+}
+
+/* Bout order table */
+.bout-order-table {
+    font-size: 0.85rem;
+}
+.bout-order-table .bout-num {
+    width: 30px;
+    text-align: center;
+    color: var(--text-muted, #6b6b7b);
+    font-weight: 600;
+}
+.bout-order-table .bout-player-name {
+    text-align: right;
+    padding-right: 4px;
+}
+.bout-order-table .bout-player-rank {
+    width: 40px;
+    font-size: 0.75rem;
+}
+.bout-order-table .bout-vs {
+    text-align: center;
+    width: 30px;
+    color: var(--text-muted, #6b6b7b);
+    font-weight: 600;
+}
+.bout-order-table td:nth-child(5) {
+    text-align: left;
+    padding-left: 4px;
+}
+.bout-order-table td:nth-child(6) {
+    font-size: 0.75rem;
+}
+
 /* Pool number link style */
 .player-result-card .pool-link {
     color: var(--accent-gold, #d4a574);
@@ -381,6 +429,26 @@ tr.player-highlighted td {
         justify-content: center;
     }
 
+    .pool-standings-table {
+        font-size: 0.75rem;
+    }
+    .pool-standings-table th,
+    .pool-standings-table td {
+        padding: 4px 3px;
+    }
+    .pool-standings-table .player-name {
+        max-width: 60px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .pool-rank-col {
+        font-size: 0.7rem;
+    }
+    .best-rank {
+        display: none;
+    }
+
     .my-player-header {
         flex-direction: column;
         align-items: flex-start;
@@ -391,6 +459,10 @@ tr.player-highlighted td {
         margin-top: 8px;
         width: 100%;
         text-align: center;
+    }
+
+    .team-rank-table .tr-sub {
+        display: none;
     }
 }
 
@@ -511,6 +583,129 @@ tr.player-highlighted td {
 }
 .participants-detail-line strong {
     color: var(--text-primary, #fff);
+}
+
+/* Stats panel */
+.stats-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+    margin-bottom: 1rem;
+}
+.stats-section {
+    background: var(--bg-secondary, rgba(26, 26, 37, 0.9));
+    border-radius: 10px;
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.06));
+    padding: 12px 16px;
+}
+.stats-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+.stats-section-title {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-primary, #fff);
+}
+.stats-toggle-btn {
+    background: none;
+    border: 1px solid var(--border-color, rgba(255,255,255,0.1));
+    color: var(--text-muted, #6b6b7b);
+    font-size: 0.72rem;
+    padding: 3px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.stats-toggle-btn:hover {
+    color: var(--text-primary, #fff);
+    border-color: var(--accent-primary, #c9302c);
+}
+.stats-bars {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.stats-bar-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.78rem;
+    color: var(--text-secondary, #b0b0c0);
+    min-width: 0;
+}
+.stats-bar-label {
+    white-space: nowrap;
+    font-weight: 500;
+}
+.stats-bar-track {
+    width: 60px;
+    height: 6px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 3px;
+    overflow: hidden;
+}
+.stats-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    background: var(--accent-primary, #c9302c);
+    transition: width 0.4s ease;
+}
+.stats-bar-count {
+    font-size: 0.72rem;
+    color: var(--text-muted, #6b6b7b);
+    min-width: 20px;
+}
+.stats-grade-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.stats-grade-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border-color, rgba(255,255,255,0.08));
+    border-radius: 20px;
+    font-size: 0.82rem;
+    color: var(--text-secondary, #b0b0c0);
+}
+.stats-grade-chip .grade-count {
+    font-weight: 700;
+    color: var(--text-primary, #fff);
+}
+.stats-grade-chip.g3 { border-color: rgba(201, 48, 44, 0.3); }
+.stats-grade-chip.g2 { border-color: rgba(59, 130, 246, 0.3); }
+.stats-grade-chip.g1 { border-color: rgba(34, 197, 94, 0.3); }
+.stats-grade-chip.g3 .grade-count { color: #e74c3c; }
+.stats-grade-chip.g2 .grade-count { color: #3b82f6; }
+.stats-grade-chip.g1 .grade-count { color: #22c55e; }
+.stats-detail {
+    margin-top: 10px;
+    font-size: 0.78rem;
+    color: var(--text-muted, #6b6b7b);
+    line-height: 1.7;
+}
+.stats-detail.collapsed { display: none; }
+.stats-detail-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    padding: 4px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+.stats-detail-row:last-child { border-bottom: none; }
+.stats-detail-prov {
+    font-weight: 600;
+    color: var(--text-secondary, #b0b0c0);
+    min-width: 50px;
+}
+.stats-detail-grades {
+    color: var(--text-muted, #6b6b7b);
 }
 
 /* Grade badges */
@@ -648,6 +843,39 @@ tr.player-highlighted td {
 
 [data-theme="light"] .participants-detail-line strong {
     color: #191f28;
+}
+
+[data-theme="light"] .stats-section {
+    background: #f5f5f7;
+    border: 1px solid rgba(0,0,0,0.06);
+}
+[data-theme="light"] .stats-section-title {
+    color: #191f28;
+}
+[data-theme="light"] .stats-toggle-btn {
+    color: #4e5968;
+    border-color: rgba(0,0,0,0.1);
+}
+[data-theme="light"] .stats-bar-label,
+[data-theme="light"] .stats-detail-prov {
+    color: #191f28;
+}
+[data-theme="light"] .stats-bar-track {
+    background: rgba(0,0,0,0.06);
+}
+[data-theme="light"] .stats-grade-chip {
+    background: #fff;
+    border-color: rgba(0,0,0,0.08);
+    color: #4e5968;
+}
+[data-theme="light"] .stats-grade-chip .grade-count {
+    color: #191f28;
+}
+[data-theme="light"] .stats-grade-chip.g3 .grade-count { color: #c9302c; }
+[data-theme="light"] .stats-grade-chip.g2 .grade-count { color: #2563eb; }
+[data-theme="light"] .stats-grade-chip.g1 .grade-count { color: #16a34a; }
+[data-theme="light"] .stats-detail-row {
+    border-bottom-color: rgba(0,0,0,0.04);
 }
 
 [data-theme="light"] .team-group {
@@ -864,6 +1092,10 @@ tr.player-highlighted td {
             <span class="tab-icon">📊</span>
             <span>{{ _t("통계") }}</span>
         </button>
+        <button class="tab-btn" data-tab="team-ranking">
+            <span class="tab-icon">🏫</span>
+            <span>{{ _t("팀 랭킹") }}</span>
+        </button>
     </div>
 
     <!-- Tab Contents -->
@@ -875,11 +1107,22 @@ tr.player-highlighted td {
             <span><strong>{{ teams|length }}</strong>{{ _t("개 소속") }}</span>
             <span class="grade-disclaimer">※ {{ _t("학년은 대회 이력 기반 추정치입니다") }}</span>
         </div>
-        <div class="participants-summary participants-detail-line">
-            <span>{{ _t("팀:") }} <span class="region-summary" id="region-summary-text"></span></span>
-        </div>
-        <div class="participants-summary participants-detail-line" id="player-region-grade-line" style="display:none">
-            <span>{{ _t("선수:") }} <span id="player-region-grade-text"></span></span>
+        <div class="stats-panel" id="stats-panel">
+            <div class="stats-section" id="region-stats-section" style="display:none">
+                <div class="stats-section-header">
+                    <span class="stats-section-title">📍 {{ _t("지역별 참가 현황") }}</span>
+                    <button class="stats-toggle-btn" id="region-toggle-btn" onclick="document.getElementById('region-detail').classList.toggle('collapsed')">{{ _t("상세") }} ▾</button>
+                </div>
+                <div class="stats-bars" id="region-bars"></div>
+                <div class="stats-detail collapsed" id="region-detail"></div>
+            </div>
+            <div class="stats-section" id="grade-stats-section" style="display:none">
+                <div class="stats-section-header">
+                    <span class="stats-section-title">🎓 {{ _t("학년별 분포") }}</span>
+                </div>
+                <div class="stats-grade-chips" id="grade-chips"></div>
+                <div class="stats-detail collapsed" id="grade-region-detail"></div>
+            </div>
         </div>
         <div class="participants-list" id="event-participants-list"></div>
         <script id="event-participants-data" type="application/json">{{ event.participants | tojson }}</script>
@@ -967,12 +1210,13 @@ tr.player-highlighted td {
             </div>
 
             <!-- Pool Standings -->
-            <table class="result-table">
+            <table class="result-table pool-standings-table">
                 <thead>
                     <tr>
                         <th>{{ _t("순위") }}</th>
                         <th style="text-align:left">{{ _t("이름") }}</th>
                         <th style="text-align:left">{{ _t("소속") }}</th>
+                        <th class="pool-rank-col">{{ _t("리그") }}</th>
                         <th>{{ _t("승") }}</th>
                         <th>{{ _t("패") }}</th>
                         <th>{{ _t("지수") }}</th>
@@ -980,11 +1224,13 @@ tr.player-highlighted td {
                     </tr>
                 </thead>
                 <tbody>
-                    {% for player in pool.results|sort(attribute='rank') %}
+                    {% set has_results = pool.results|selectattr('wins')|list|length > 0 %}
+                    {% for player in pool.results|sort(attribute='rank' if has_results else 'league_rank') %}
                     <tr>
                         <td class="rank">{{ player.rank or '-' }}</td>
                         <td class="player-name"><a href="/player/{{ player.name|urlencode }}?team={{ player.team|urlencode }}" class="player-link">{{ tr_player(player.name) }}</a></td>
                         <td><a href="/search?q={{ player.team|urlencode }}" class="team-link">{{ tr_team(player.team) }}</a></td>
+                        <td class="pool-rank-col">{% if player.league_rank and player.league_rank < 9999 %}<span class="league-rank">#{{ player.league_rank }}</span>{% if player.league_best and player.league_best != player.league_rank %}<span class="best-rank">({{ _t("최고") }}{{ player.league_best }})</span>{% endif %}{% else %}-{% endif %}</td>
                         <td>{{ player.wins or 0 }}</td>
                         <td>{{ player.losses or 0 }}</td>
                         <td>{% if player.indicator > 0 %}+{% endif %}{{ player.indicator or 0 }}</td>
@@ -1039,6 +1285,16 @@ tr.player-highlighted td {
                 </div>
             </div>
             {% endif %}
+
+            <!-- FIE Bout Order -->
+            <div class="bout-list">
+                <div class="bout-list-header" onclick="toggleBoutOrder(this)">
+                    <span>📋 {{ _t("예상 경기 순서") }} (FIE)</span>
+                    <span class="result-expand-icon">▼</span>
+                </div>
+                <div class="bout-order-list" style="display:none" data-pool-size="{{ pool.results|length }}" data-pool-idx="{{ loop.index0 }}">
+                </div>
+            </div>
 
             <!-- Individual Bouts -->
             {% if pool.bouts %}
@@ -1256,8 +1512,45 @@ tr.player-highlighted td {
             </div>
         </div>
 
+        <!-- Full Rankings (collapsed by default) — right after podium -->
+        <div class="rankings-collapsible">
+            <button class="rankings-toggle" onclick="this.parentElement.classList.toggle('open')">
+                <span>{{ _t("전체 순위") }} ({{ event.final_rankings|length }}{{ _t("명") }})</span>
+                <span class="toggle-arrow">▼</span>
+            </button>
+            <div class="rankings-collapsible-content">
+                <table class="final-table">
+                    <thead>
+                        <tr>
+                            <th>{{ _t("순위") }}{% if is_estimated %}<span style="color:#ffcc00;font-size:0.75em"> ({{ _t("추정") }})</span>{% endif %}</th>
+                            <th>{{ _t("이름") }}</th>
+                            <th>{{ _t("소속") }}</th>
+                            <th>{{ _t("순위/참가") }}</th>
+                            <th>{{ _t("포인트") }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% set total_participants = event.final_rankings|length %}
+                        {% for ranking in event.final_rankings %}
+                        <tr>
+                            <td class="rank-cell {% if ranking.rank == 1 %}gold{% elif ranking.rank == 2 %}silver{% elif ranking.rank == 3 %}bronze{% endif %}">
+                                {% if ranking.rank == 1 %}🥇{% elif ranking.rank == 2 %}🥈{% elif ranking.rank == 3 %}🥉{% else %}{{ ranking.rank }}{% endif %}
+                            </td>
+                            <td class="name-cell">
+                                <a href="/player/{{ ranking.name|urlencode }}?team={{ ranking.team|urlencode }}" class="player-link">{{ tr_player(ranking.name) }}</a>
+                            </td>
+                            <td><a href="/search?q={{ ranking.team|urlencode }}" class="team-link">{{ tr_team(ranking.team) }}</a></td>
+                            <td class="place-cell">{{ ranking.rank }}/{{ total_participants }}</td>
+                            <td class="points-cell">{% if ranking.points %}{{ "%.1f"|format(ranking.points) }}pt{% else %}-{% endif %}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
         {% if age_group_rankings %}
-        <!-- 나이리그별 서브랭킹 — promoted above full rankings for visibility -->
+        <!-- 나이리그별 서브랭킹 -->
         {% set age_names = {
             'E1': i18n.common.national_sub_rankings.elementary|default('초등부') ~ ' (U9)',
             'E2': i18n.common.national_sub_rankings.elementary|default('초등부') ~ ' (U11)',
@@ -1302,43 +1595,6 @@ tr.player-highlighted td {
         </div>
         {% endif %}
 
-        <!-- Full Rankings (collapsed by default) -->
-        <div class="rankings-collapsible">
-            <button class="rankings-toggle" onclick="this.parentElement.classList.toggle('open')">
-                <span>{{ _t("전체 순위") }} ({{ event.final_rankings|length }}{{ _t("명") }})</span>
-                <span class="toggle-arrow">▼</span>
-            </button>
-            <div class="rankings-collapsible-content">
-                <table class="final-table">
-                    <thead>
-                        <tr>
-                            <th>{{ _t("순위") }}{% if is_estimated %}<span style="color:#ffcc00;font-size:0.75em"> ({{ _t("추정") }})</span>{% endif %}</th>
-                            <th>{{ _t("이름") }}</th>
-                            <th>{{ _t("소속") }}</th>
-                            <th>{{ _t("순위/참가") }}</th>
-                            <th>{{ _t("포인트") }}</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% set total_participants = event.final_rankings|length %}
-                        {% for ranking in event.final_rankings %}
-                        <tr>
-                            <td class="rank-cell {% if ranking.rank == 1 %}gold{% elif ranking.rank == 2 %}silver{% elif ranking.rank == 3 %}bronze{% endif %}">
-                                {% if ranking.rank == 1 %}🥇{% elif ranking.rank == 2 %}🥈{% elif ranking.rank == 3 %}🥉{% else %}{{ ranking.rank }}{% endif %}
-                            </td>
-                            <td class="name-cell">
-                                <a href="/player/{{ ranking.name|urlencode }}?team={{ ranking.team|urlencode }}" class="player-link">{{ tr_player(ranking.name) }}</a>
-                            </td>
-                            <td><a href="/search?q={{ ranking.team|urlencode }}" class="team-link">{{ tr_team(ranking.team) }}</a></td>
-                            <td class="place-cell">{{ ranking.rank }}/{{ total_participants }}</td>
-                            <td class="points-cell">{% if ranking.points %}{{ "%.1f"|format(ranking.points) }}pt{% else %}-{% endif %}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
         <!-- Stats Summary -->
         <div class="stats-summary-box">
             <div class="stat-item">
@@ -1366,6 +1622,16 @@ tr.player-highlighted td {
         </div>
     </div>
 
+    <!-- Team Ranking Tab -->
+    <div id="tab-team-ranking" class="tab-content">
+        <div id="event-team-ranking-container">
+            <div class="loading">
+                <div class="loading-spinner"></div>
+                <p>{{ _t("팀 랭킹 계산 중...") }}</p>
+            </div>
+        </div>
+    </div>
+
     <!-- Embedded data for statistics computation -->
     <script id="event-pool-total-ranking-data" type="application/json">{{ event.pool_total_ranking | default([]) | tojson }}</script>
     <script id="event-final-rankings-data" type="application/json">{{ event.final_rankings | default([]) | tojson }}</script>
@@ -1375,6 +1641,7 @@ tr.player-highlighted td {
     <script id="stats-participants-data" type="application/json">{{ event.participants | default([]) | tojson }}</script>
     <script id="stats-region-summary-data" type="application/json">{{ region_summary | default({}) | tojson }}</script>
     <script id="stats-player-region-grade-data" type="application/json">{{ player_region_grade | default({}) | tojson }}</script>
+    <script id="pool-ranking-map-data" type="application/json">{{ pool_ranking_map | default({}) | tojson }}</script>
 </div>
 
 <script src="/static/js/player-search.js"></script>
@@ -1406,6 +1673,11 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
                     '<div class="empty"><p>' + _t('통계를 계산할 수 없습니다') + '</p></div>';
             }
         }
+        // Lazy-load team ranking on first click
+        if (btn.dataset.tab === 'team-ranking' && !window._teamRankingLoaded) {
+            window._teamRankingLoaded = true;
+            loadEventTeamRanking();
+        }
     });
 });
 
@@ -1423,70 +1695,70 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     const regionSummaryEl = document.getElementById('event-region-summary-data');
     const regionSummary = regionSummaryEl ? JSON.parse(regionSummaryEl.textContent) : '';
 
-    // Render region summary from dict: {province: {count, cities: {city: count}}}
+    // Render region stats as visual bars
     if (regionSummary && typeof regionSummary === 'object' && Object.keys(regionSummary).length) {
-        const summarySpan = document.getElementById('region-summary-text');
-        if (summarySpan) {
-            const parts = Object.entries(regionSummary)
-                .sort((a, b) => b[1].count - a[1].count)
-                .map(([prov, info]) => {
+        const section = document.getElementById('region-stats-section');
+        const barsEl = document.getElementById('region-bars');
+        const detailEl = document.getElementById('region-detail');
+        if (section && barsEl) {
+            section.style.display = '';
+            const entries = Object.entries(regionSummary).sort((a, b) => b[1].count - a[1].count);
+            const maxCount = entries.length ? entries[0][1].count : 1;
+            barsEl.innerHTML = entries.map(([prov, info]) => {
+                const pct = Math.round((info.count / maxCount) * 100);
+                return `<div class="stats-bar-item"><span class="stats-bar-label">${prov}</span><div class="stats-bar-track"><div class="stats-bar-fill" style="width:${pct}%"></div></div><span class="stats-bar-count">${info.count}</span></div>`;
+            }).join('');
+            if (detailEl) {
+                detailEl.innerHTML = entries.map(([prov, info]) => {
                     const cities = info.cities || {};
                     const cityEntries = Object.entries(cities).sort((a, b) => b[1] - a[1]);
-                    if (cityEntries.length > 0) {
-                        const cityStr = cityEntries.map(([c, n]) => `${c} ${n}`).join(', ');
-                        return `${prov} ${info.count}(${cityStr})`;
-                    }
-                    return `${prov} ${info.count}`;
-                });
-            summarySpan.textContent = parts.join(', ');
+                    const cityStr = cityEntries.length ? cityEntries.map(([c, n]) => `${c} ${n}`).join(', ') : '';
+                    return `<div class="stats-detail-row"><span class="stats-detail-prov">${prov} ${info.count}</span>${cityStr ? `<span class="stats-detail-grades">${cityStr}</span>` : ''}</div>`;
+                }).join('');
+            }
         }
     }
 
-    // Render player region+grade summary
+    // Render grade distribution as chips
     const prgEl = document.getElementById('event-player-region-grade-data');
     if (prgEl) {
         try {
             const prg = JSON.parse(prgEl.textContent);
             if (prg && prg.total && prg.total.count > 0) {
-                const st = prg.school_type || '';
-                // grades helper: {3G: 25, 2G: 35, ?:10} → "M3G25,M2G35,?10"
-                function fmtGrades(grades, prefix) {
+                const section = document.getElementById('grade-stats-section');
+                const chipsEl = document.getElementById('grade-chips');
+                const detailEl = document.getElementById('grade-region-detail');
+                if (section && chipsEl) {
+                    section.style.display = '';
+                    const grades = prg.total.grades || {};
+                    const gradeLabels = {'3G': '3{{ _t("학년") }}', '2G': '2{{ _t("학년") }}', '1G': '1{{ _t("학년") }}', '?': '{{ _t("미확인") }}'};
+                    const gradeClasses = {'3G': 'g3', '2G': 'g2', '1G': 'g1', '?': ''};
                     const order = ['3G', '2G', '1G', '?'];
-                    return order.filter(k => grades[k]).map(k => {
-                        if (k === '?') return '?' + grades[k];
-                        return prefix + k + grades[k];
-                    }).join(',');
-                }
-                // total line
-                let totalStr = '총' + prg.total.count + ' ' + fmtGrades(prg.total.grades, st);
-                // by province (sorted by count desc)
-                const provEntries = Object.entries(prg.by_province || {})
-                    .filter(([p]) => p !== '미확인')
-                    .sort((a, b) => b[1].count - a[1].count);
-                if (provEntries.length > 0) {
-                    const provParts = provEntries.map(([prov, info]) => {
-                        let s = prov + ' ' + info.count + '(' + fmtGrades(info.grades, st);
-                        // cities
-                        const cityEntries = Object.entries(info.cities || {}).sort((a, b) => b[1].count - a[1].count);
-                        if (cityEntries.length > 0) {
-                            const cityParts = cityEntries.map(([c, ci]) =>
-                                c + ' ' + ci.count + '(' + fmtGrades(ci.grades, st) + ')'
-                            );
-                            s += '; ' + cityParts.join(', ');
+                    chipsEl.innerHTML = order.filter(k => grades[k]).map(k =>
+                        `<div class="stats-grade-chip ${gradeClasses[k]}"><span>${gradeLabels[k]}</span><span class="grade-count">${grades[k]}{{ _t("명") }}</span></div>`
+                    ).join('');
+
+                    if (detailEl) {
+                        const provEntries = Object.entries(prg.by_province || {})
+                            .filter(([p]) => p !== '미확인')
+                            .sort((a, b) => b[1].count - a[1].count);
+                        if (provEntries.length > 0) {
+                            function fmtGradesReadable(g) {
+                                const parts = [];
+                                if (g['3G']) parts.push('3{{ _t("학년") }} ' + g['3G']);
+                                if (g['2G']) parts.push('2{{ _t("학년") }} ' + g['2G']);
+                                if (g['1G']) parts.push('1{{ _t("학년") }} ' + g['1G']);
+                                if (g['?']) parts.push('{{ _t("미확인") }} ' + g['?']);
+                                return parts.join(' · ');
+                            }
+                            detailEl.innerHTML = provEntries.map(([prov, info]) =>
+                                `<div class="stats-detail-row"><span class="stats-detail-prov">${prov} ${info.count}{{ _t("명") }}</span><span class="stats-detail-grades">${fmtGradesReadable(info.grades || {})}</span></div>`
+                            ).join('');
                         }
-                        s += ')';
-                        return s;
-                    });
-                    totalStr += ' / ' + provParts.join(', ');
-                }
-                const lineEl = document.getElementById('player-region-grade-line');
-                const textEl = document.getElementById('player-region-grade-text');
-                if (lineEl && textEl) {
-                    textEl.textContent = totalStr;
-                    lineEl.style.display = '';
+                    }
                 }
             }
-        } catch(e) { /* ignore parse errors */ }
+        } catch(e) {}
     }
 
     // 학년 정보 있는지 확인
@@ -1666,6 +1938,69 @@ document.querySelectorAll('.bracket-list-view .round-tab').forEach(btn => {
 });
 
 // Toggle functions
+// FIE 표준 풀 경기 순서 (FIE Rules Annex)
+const FIE_BOUT_ORDER = {
+    3: [[1,2],[2,3],[1,3]],
+    4: [[1,4],[2,3],[1,3],[2,4],[3,4],[1,2]],
+    5: [[1,2],[3,4],[5,1],[2,3],[4,5],[1,3],[5,2],[4,1],[3,5],[2,4]],
+    6: [[1,2],[4,5],[2,3],[5,6],[1,3],[4,6],[5,2],[1,6],[3,4],[2,6],[3,5],[1,4],[2,4],[5,1],[6,3]],
+    7: [[1,4],[2,5],[3,6],[7,1],[2,4],[5,3],[6,7],[4,5],[1,3],[7,2],[6,4],[5,1],[3,7],[2,6],[4,1],[5,7],[6,3],[1,2],[7,4],[3,5],[6,2]],
+    8: [[1,2],[3,4],[5,6],[7,8],[1,3],[2,4],[5,7],[6,8],[1,4],[2,3],[5,8],[6,7],[1,5],[2,6],[3,7],[4,8],[1,6],[2,5],[3,8],[4,7],[1,7],[2,8],[3,5],[4,6],[1,8],[2,7],[3,6],[4,5]]
+};
+
+function toggleBoutOrder(header) {
+    const container = header.nextElementSibling;
+    const icon = header.querySelector('.result-expand-icon');
+    if (container.style.display === 'none') {
+        container.style.display = 'block';
+        icon.textContent = '▲';
+        if (!container.dataset.rendered) {
+            renderBoutOrder(container);
+            container.dataset.rendered = '1';
+        }
+    } else {
+        container.style.display = 'none';
+        icon.textContent = '▼';
+    }
+}
+
+function renderBoutOrder(container) {
+    const poolSize = parseInt(container.dataset.poolSize);
+    const poolIdx = parseInt(container.dataset.poolIdx);
+    const poolData = JSON.parse(document.getElementById('event-pool-rounds-data').textContent || '[]');
+    const pool = poolData[poolIdx];
+    if (!pool) return;
+    const players = pool.results || [];
+    const order = FIE_BOUT_ORDER[poolSize];
+    if (!order) {
+        container.innerHTML = '<div style="padding:12px;color:var(--text-muted)">' + _t('해당 풀 크기의 FIE 경기 순서가 없습니다') + '</div>';
+        return;
+    }
+    let html = '<table class="result-table bout-order-table"><thead><tr>';
+    html += '<th>#</th><th colspan="2" style="text-align:center">' + _t('선수 A') + '</th>';
+    html += '<th></th>';
+    html += '<th colspan="2" style="text-align:center">' + _t('선수 B') + '</th></tr></thead><tbody>';
+    order.forEach((pair, i) => {
+        const a = players[pair[0] - 1];
+        const b = players[pair[1] - 1];
+        if (!a || !b) return;
+        const aName = _tr_player(a.name);
+        const bName = _tr_player(b.name);
+        const aLr = a.league_rank && a.league_rank < 9999 ? '<span class="league-rank">#' + a.league_rank + '</span>' : '';
+        const bLr = b.league_rank && b.league_rank < 9999 ? '<span class="league-rank">#' + b.league_rank + '</span>' : '';
+        html += '<tr>';
+        html += '<td class="bout-num">' + (i + 1) + '</td>';
+        html += '<td class="bout-player-name">' + aName + '</td>';
+        html += '<td class="bout-player-rank">' + aLr + '</td>';
+        html += '<td class="bout-vs">vs</td>';
+        html += '<td class="bout-player-name">' + bName + '</td>';
+        html += '<td class="bout-player-rank">' + bLr + '</td>';
+        html += '</tr>';
+    });
+    html += '</tbody></table>';
+    container.innerHTML = html;
+}
+
 function togglePoolMatrix(header) {
     const matrix = header.nextElementSibling;
     const icon = header.querySelector('.result-expand-icon');
@@ -2653,6 +2988,86 @@ class EventStatsRenderer {
         html += '</div>';
         return html;
     }
+}
+
+// ========== Event Team Ranking ==========
+function loadEventTeamRanking() {
+    const container = document.getElementById('event-team-ranking-container');
+    if (!container) return;
+    const eventCd = '{{ competition.competition.event_cd }}';
+    fetch('/api/rankings/team?competition_id=' + encodeURIComponent(eventCd))
+        .then(res => res.json())
+        .then(data => {
+            if (!data.rankings || data.rankings.length === 0) {
+                container.innerHTML = '<div class="empty"><p>' + _t('팀 랭킹 데이터가 없습니다') + '</p></div>';
+                return;
+            }
+            let sortKey = 'top3_points';
+            renderEventTeamTable(container, data.rankings, sortKey);
+        })
+        .catch(err => {
+            container.innerHTML = '<div class="empty"><p>' + err.message + '</p></div>';
+        });
+}
+
+function renderEventTeamTable(container, rankings, sortKey) {
+    const sorted = [...rankings].sort((a, b) => b[sortKey] - a[sortKey]);
+    sorted.forEach((r, i) => r._rank = i + 1);
+
+    let html = '<div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">';
+    html += '<span style="font-weight:600;font-size:0.85rem;color:var(--text-muted,#6b6b7b)">' + _t('정렬') + ':</span>';
+    const sortItems = [
+        {key:'top3_points', label:_t('최고 선수력'), desc:_t('상위 3명 포인트')},
+        {key:'total_points', label:_t('종합 전력'), desc:_t('전 선수 포인트 합산')},
+        {key:'avg_points', label:_t('선수당 평균'), desc:_t('1인당 평균 포인트')}
+    ];
+    sortItems.forEach(s => {
+        const active = s.key === sortKey ? 'background:var(--accent-primary,#c9302c);color:#fff;border-color:var(--accent-primary,#c9302c)' : '';
+        html += '<button onclick="renderEventTeamTable(document.getElementById(\'event-team-ranking-container\'),window._evtTeamData,\'' + s.key + '\')" style="padding:6px 14px;border:2px solid var(--border-color,#e2e8f0);border-radius:8px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:1px;min-width:90px;' + active + '">';
+        html += '<span style="font-weight:600;font-size:13px">' + s.label + '</span>';
+        html += '<span style="font-size:10px;opacity:0.6">' + s.desc + '</span>';
+        html += '</button>';
+    });
+    html += '</div>';
+
+    var cols = [
+        {key:'top3_points', label:_t('최고 선수력'), fn: r => r.top3_points.toFixed(1)},
+        {key:'total_points', label:_t('종합 전력'), fn: r => r.total_points.toFixed(1)},
+        {key:'avg_points', label:_t('선수당 평균'), fn: r => r.avg_points.toFixed(1)}
+    ];
+    cols.sort((a, b) => a.key === sortKey ? -1 : b.key === sortKey ? 1 : 0);
+
+    html += '<div class="ranking-table-container"><table class="final-table team-rank-table"><thead><tr>';
+    html += '<th>' + _t('순위') + '</th>';
+    html += '<th>' + _t('팀') + '</th>';
+    html += '<th>' + _t('선수') + '</th>';
+    cols.forEach((c, i) => {
+        var cls = i > 0 ? ' class="tr-sub"' : '';
+        var fw = c.key === sortKey ? '700' : '500';
+        html += '<th' + cls + ' style="text-align:right;font-weight:' + fw + '">' + c.label + '</th>';
+    });
+    html += '</tr></thead><tbody>';
+
+    sorted.forEach(r => {
+        const _seen = new Set();
+        const aces = (r.top_players || []).filter(p => { if (_seen.has(p.player)) return false; _seen.add(p.player); return true; }).slice(0, 2);
+        const aceHtml = aces.map(p => _tr_player(p.player) + ' (' + p.rank + _t('위') + ')').join('<br>');
+        html += '<tr>';
+        html += '<td class="rank-cell ' + (r._rank <= 3 ? (r._rank === 1 ? 'gold' : r._rank === 2 ? 'silver' : 'bronze') : '') + '">';
+        html += r._rank <= 3 ? ['🥇','🥈','🥉'][r._rank - 1] : r._rank;
+        html += '</td>';
+        html += '<td>' + _tr_team(r.team) + (aceHtml ? '<br><span style="font-size:0.75rem;color:var(--text-muted,#6b6b7b)">' + aceHtml + '</span>' : '') + '</td>';
+        html += '<td>' + r.member_count + _t('명') + '</td>';
+        cols.forEach((c, i) => {
+            var cls = i > 0 ? ' class="tr-sub"' : '';
+            var fw = c.key === sortKey ? '700' : '400';
+            html += '<td' + cls + ' style="text-align:right;font-weight:' + fw + '">' + c.fn(r) + '</td>';
+        });
+        html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+    window._evtTeamData = rankings;
+    container.innerHTML = html;
 }
 </script>
 {% endblock %}

@@ -136,10 +136,12 @@
                             <span class="rank-total">/ {{ rk.total }}{{ _t("명") }}</span>
                         </div>
                         <div class="ranking-category">
+                            <span class="ranking-year">{{ rk.year }}</span>
+                            {% if rk.is_nt %}{{ _t("국가대표 선발전") }} {% endif %}
                             {% if rk.gender == '여' %}{{ _t("여자") }}{% elif rk.gender == '남' %}{{ _t("남자") }}{% endif %}
                             {{ translate_weapon(rk.weapon) }}
-                            {{ rk.age_group_name }}
-                            {% if rk.category_name %}({{ rk.category_name }}){% endif %}
+                            {% if not rk.is_nt %}{{ rk.age_group_name }}{% endif %}
+                            {% if rk.category_name and not rk.is_nt %}({{ rk.category_name }}){% endif %}
                         </div>
                         <div class="ranking-points">
                             <span class="points-value">{{ "%.1f"|format(rk.points) }}</span>
@@ -149,13 +151,22 @@
                     <div class="ranking-card-details">
                         <div class="ranking-detail-header">
                             <span>{{ _t("포인트 산출 내역") }} (Best {{ rk.best_results|length }})</span>
-                            <span class="ranking-detail-help" title="{{ _t('랭킹 포인트 = 참가자수 기반포인트 × 순위비율 × 연령가중치. 상위 4개 대회 가중합산 (100%, 70%, 50%, 30%)') }}">?</span>
+                            <span class="ranking-detail-help" onclick="event.stopPropagation(); this.nextElementSibling.classList.toggle('show')">?</span>
+                            <div class="ranking-help-popup" onclick="event.stopPropagation()">
+                                <div class="ranking-help-content">
+                                    <strong>{{ _t("랭킹 포인트 산출 기준") }}</strong>
+                                    <p>{{ _t("기본 포인트") }}: {{ _t("참가자 수로 결정") }}<br>
+                                    128{{ _t("명") }}+=1200, 64+=1000, 32+=800, 16+=500</p>
+                                    <p>{{ _t("최종 포인트") }} = {{ _t("기본") }} × {{ _t("순위비율") }} × {{ _t("연령가중치") }}</p>
+                                    <p>{{ _t("상위 대회 가중합산") }}: ×1.0, ×0.7, ×0.5, ×0.3</p>
+                                </div>
+                            </div>
                         </div>
                         <div class="ranking-breakdown-list">
                             {% set weights = [1.0, 0.7, 0.5, 0.3] %}
                             {% for br in rk.best_results %}
                             <div class="ranking-breakdown-item">
-                                <div class="breakdown-rank">{{ br.rank }}{{ _t("위") }}</div>
+                                <div class="breakdown-rank">{{ br.rank }}{{ _t("위") }}{% if br.sub_rank_age %} <span class="sub-rank-tag">({{ _t(br.sub_rank_age) }} {{ br.total_in_group }}{{ _t("명") }})</span>{% endif %}</div>
                                 <div class="breakdown-comp">{{ tr_comp(br.competition) }}</div>
                                 <div class="breakdown-pts">
                                     {{ br.points }}pts
@@ -363,85 +374,95 @@
             </div>
         </div>
 
-        <!-- Section 4: Rank Progression Chart -->
+        <!-- Section 4: Rank Progression Chart (deferred until Chart.js loads) -->
         {% if player.chart_data and player.chart_data|length >= 2 %}
-        <div class="stat-card-large rank-chart-section">
+        <div class="stat-card-large rank-chart-section" id="rankProgressionSection" style="display:none;">
             <h4>Rank Progression</h4>
             <div style="position: relative; height: 200px; width: 100%;">
                 <canvas id="rankProgressionChart"></canvas>
             </div>
         </div>
         <script>
-        (function() {
-            var chartData = {{ player.chart_data | tojson }};
-            if (chartData.length >= 2 && typeof Chart !== 'undefined') {
-                var ctx = document.getElementById('rankProgressionChart').getContext('2d');
-                new Chart(ctx, {
-                    type: 'line',
-                    data: {
-                        labels: chartData.map(function(d) { return d.label; }),
-                        datasets: [{
-                            label: 'Rank',
-                            data: chartData.map(function(d) { return d.rank; }),
-                            borderColor: '#1a5f7a',
-                            backgroundColor: 'rgba(26, 95, 122, 0.1)',
-                            fill: true,
-                            tension: 0.3,
-                            pointBackgroundColor: chartData.map(function(d) {
-                                if (d.rank === 1) return '#FFD700';
-                                if (d.rank === 2) return '#C0C0C0';
-                                if (d.rank === 3) return '#CD7F32';
-                                return '#1a5f7a';
-                            }),
-                            pointRadius: 5,
-                            pointHoverRadius: 7
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: { display: false },
-                            tooltip: {
-                                callbacks: {
-                                    title: function(items) {
-                                        var d = chartData[items[0].dataIndex];
-                                        return d.label;
-                                    },
-                                    label: function(item) {
-                                        var d = chartData[item.dataIndex];
-                                        return 'Rank: ' + d.rank + '/' + d.total;
-                                    },
-                                    afterLabel: function(item) {
-                                        var d = chartData[item.dataIndex];
-                                        var lines = [];
-                                        if (d.event) lines.push(d.event);
-                                        if (d.date) lines.push(d.date);
-                                        return lines;
-                                    }
-                                }
-                            }
-                        },
-                        scales: {
-                            y: {
-                                reverse: true,
-                                beginAtZero: false,
-                                min: 1,
-                                title: { display: true, text: 'Rank' },
-                                ticks: { stepSize: 1, precision: 0 }
-                            },
-                            x: {
-                                ticks: {
-                                    maxRotation: 45,
-                                    minRotation: 30,
-                                    font: { size: 10 }
+        window._rankChartData = {{ player.chart_data | tojson }};
+        window._initRankChart = function() {
+            var chartData = window._rankChartData;
+            if (!chartData || chartData.length < 2 || typeof Chart === 'undefined') return;
+            var section = document.getElementById('rankProgressionSection');
+            var ctx = document.getElementById('rankProgressionChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: chartData.map(function(d) { return d.label; }),
+                    datasets: [{
+                        label: 'Rank',
+                        data: chartData.map(function(d) { return d.rank; }),
+                        borderColor: '#1a5f7a',
+                        backgroundColor: 'rgba(26, 95, 122, 0.1)',
+                        fill: true,
+                        tension: 0.3,
+                        pointBackgroundColor: chartData.map(function(d) {
+                            if (d.rank === 1) return '#FFD700';
+                            if (d.rank === 2) return '#C0C0C0';
+                            if (d.rank === 3) return '#CD7F32';
+                            return '#1a5f7a';
+                        }),
+                        pointRadius: 5,
+                        pointHoverRadius: 7
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                title: function(items) {
+                                    var d = chartData[items[0].dataIndex];
+                                    return d.label;
+                                },
+                                label: function(item) {
+                                    var d = chartData[item.dataIndex];
+                                    return 'Rank: ' + d.rank + '/' + d.total;
+                                },
+                                afterLabel: function(item) {
+                                    var d = chartData[item.dataIndex];
+                                    var lines = [];
+                                    if (d.event) lines.push(d.event);
+                                    if (d.date) lines.push(d.date);
+                                    return lines;
                                 }
                             }
                         }
+                    },
+                    scales: {
+                        y: {
+                            reverse: true,
+                            beginAtZero: false,
+                            min: 1,
+                            title: { display: true, text: 'Rank' },
+                            ticks: { stepSize: 1, precision: 0 }
+                        },
+                        x: {
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 30,
+                                font: { size: 10 }
+                            }
+                        }
                     }
-                });
-            }
-        })();
+                }
+            });
+            if (section) section.style.display = '';
+        };
+        // Defer until Chart.js is loaded
+        if (typeof Chart !== 'undefined') {
+            window._initRankChart();
+        } else {
+            document.addEventListener('DOMContentLoaded', function() {
+                setTimeout(window._initRankChart, 100);
+            });
+        }
         </script>
         {% endif %}
 
