@@ -293,6 +293,30 @@ from app.auth.privacy import mask_korean_name  # → shared_core.privacy.masking
 - [ ] 데이터 변경 로그 기록
 - [ ] R24: 대회 최종순위 KFA 일치 검증 자동화
 
+### 랭킹 시스템 원칙 (RANKING SYSTEM RULES)
+- **엄격한 연도 기반**: N년 랭킹 = N년 대회 결과만. 롤링 윈도우 사용 금지
+- **새 연도 빈 데이터**: 새 해 첫 대회 결과 나올 때까지 해당 연도 랭킹 미생성
+- **🔴 자유 참가 원칙 (Open Entry Principle)**: 랭킹 포인트는 자유 참가(open entry) 대회만 인정
+  - 포인트 인정: 누구나 자유롭게 참가 신청할 수 있는 대회
+  - 포인트 제외: 시도별 선발 등 소수만 참가하는 선발 참가(nominated/selected) 대회
+  - 제외 대회: 전국체육대회, 전국소년체육대회 (시도별 1명 선발, 13~18명 참가)
+  - 결과 표시: 제외 대회의 경기 결과는 선수 프로필/대회 페이지에 정상 표시 (포인트만 0)
+  - 구현: `_extract_results()`에서 해당 대회 skip
+- **🔴 유소년/청소년 국가대표 완전 제외**:
+  - 유소년/청소년 국가대표 선발전 ≠ 일반 국가대표 선발대회 (완전히 다른 대회)
+  - **랭킹 완전 제외**: NT 전체 랭킹, 나이리그 서브랭킹 모두 미포함
+  - 대회 페이지/선수 프로필에서는 결과 정상 표시 (포인트만 0)
+  - 구현: `_extract_results()`에서 대회명 '유소년'/'청소년' + '국가대표' 포함 시 skip
+- **겸 국대선발 = 국가대표 대회**: '겸'은 국가대표 선발도 겸한다는 의미 → NT 전체 랭킹에 포함
+- **2카드 시스템**: NT 선발전 출전 선수는 프로필에 2개 랭킹 표시:
+  1. 나이리그 랭킹 (일반 대회 + NT 나이리그별 서브랭킹 포인트 합산)
+  2. NT 전체 랭킹 (순수 국대선발 + 겸 국대선발 전체 참가자 중 순위)
+- **NT 서브랭킹**: NATIONAL급 대회의 전 연령 혼합 결과를 나이리그별로 재순위 → 나이리그 랭킹에 포인트 합산
+- **🔴 NT 서브랭킹 포인트 계산**: `total_participants`는 반드시 나이리그별 인원수(`sub_total = len(players)`)를 사용. 전체 NT 이벤트 참가자 수 사용 금지 (2026-06-22 버그 수정 완료)
+- **투명한 포인트**: 각 랭킹 카드에 Best N 대회별 포인트 산출 내역 공개
+- **NT 나이리그 추론**: 팀 기반 필터링으로 동명이인 혼입 방지 (calculator.py)
+- **동명이인 구분**: identity_profile 팀 기반 필터링으로 다른 사람의 랭킹 혼입 방지
+
 ---
 
 ## 🎯🎯🎯 제2원칙: 사용자 선호 우선 (USER-PREFERENCE-FIRST DESIGN) 🎯🎯🎯
@@ -340,12 +364,12 @@ from app.auth.privacy import mask_korean_name  # → shared_core.privacy.masking
 - **모든 순위 데이터**: `Supabase > rankings` 테이블
 - **회원 데이터**: `Supabase > members` 테이블
 
-### 📊 현재 Supabase 데이터 현황 (2026-06-06)
+### 📊 현재 Supabase 데이터 현황 (2026-06-22)
 | 테이블 | 데이터 수 | 설명 |
 |--------|----------|------|
-| competitions | 132+ | 2019-2026 대회 (스케줄러 자동 수집) |
-| events | 2,500+ | 모든 종목 |
-| players | 11,786+ | 모든 선수 (영문명 번역 포함) |
+| competitions | 143 | 2019-2026 대회 (스케줄러 자동 수집) |
+| events | 2,795 | 모든 종목 |
+| players | 11,786+ | 모든 선수 (영문명 번역 포함), 서버 활성 5,017명 |
 | rankings | 964+ | 최종 순위 |
 | members | 11 | 클럽 회원 |
 | organizations | 507+ | 팀/클럽/학교 |
@@ -372,7 +396,7 @@ mcp__supabase__execute_sql("SELECT * FROM players WHERE team_name LIKE '%최병�
 - **서버**: Mac Studio (Cloudflare Tunnel → nginx:9090 → FastAPI:9071)
 - **스케줄러**: `run_scheduler.py --multichannel` (자동 스크래핑 + 변경 감지)
 
-## Current Status (2026-06-06)
+## Current Status (2026-06-22)
 
 ### Scraping Status
 | 연도 | 상태 | 비고 |
@@ -383,6 +407,16 @@ mcp__supabase__execute_sql("SELECT * FROM players WHERE team_name LIKE '%최병�
 ### Database Status
 - **Supabase**: ✅ 모든 데이터 업로드 완료
 - 테이블: competitions, events, players, matches, rankings, scrape_logs, organizations, members, attendance, fees 등
+
+### 📊 현재 Supabase 데이터 현황 (2026-06-22)
+| 테이블 | 데이터 수 | 설명 |
+|--------|----------|------|
+| competitions | 143 | 2019-2026 대회 (스케줄러 자동 수집) |
+| events | 2,795 | 모든 종목 |
+| players | 11,786+ | 모든 선수 (영문명 번역 포함), 서버 로드 시 5,017명 활성 |
+| rankings | 964+ | 최종 순위 |
+| members | 11 | 클럽 회원 |
+| organizations | 507+ | 팀/클럽/학교 |
 
 ### 구현 완료 기능 요약
 | 기능 | 상태 | 구현 시점 |
@@ -401,6 +435,8 @@ mcp__supabase__execute_sql("SELECT * FROM players WHERE team_name LIKE '%최병�
 | 자동 스크래핑 스케줄러 | ✅ | 2026-05 |
 | 클럽 관리 SaaS (출석/레슨/비용) | ✅ | 2026-01 |
 | PWA 제거 (data 서비스) | ✅ | 2026-06 |
+| Dual DE 대진표 + Pool 기권 처리 | ✅ | 2026-06 |
+| NT 서브랭킹 포인트 버그 수정 | ✅ | 2026-06-22 |
 
 ## Supabase MCP 사용 가이드
 
@@ -610,10 +646,25 @@ python scraper/full_scraper.py --competition-id 123
   club.fencingmind.ai     = 9072
   NLLB 번역 서버          = 8081
 
+프로덕션 서버 관리 (launchd):
+  launchctl stop com.fencingmind.data   # 서버 중지
+  launchctl start com.fencingmind.data  # 서버 시작
+  시작 스크립트: /Users/gyejinpark/opt/fencingmind/scripts/start-data.sh
+  로그: /Users/gyejinpark/Library/Logs/FencingMind/data-server.log
+  에러 로그: /Users/gyejinpark/Library/Logs/FencingMind/data-server.error.log
+
 관리 스크립트: bash scripts/fencingmind-server.sh {start|stop|restart|status}
 스케줄러: python scripts/run_scheduler.py start --multichannel
 개발 서버: PYTHONPATH=".:../../packages" python -m uvicorn app.server:app --host 0.0.0.0 --port 9071
 ```
+
+### 🔴 프로덕션 PYTHONPATH 주의사항 (CRITICAL)
+프로덕션 `start-data.sh`의 PYTHONPATH: `${BASE}:${BASE}/packages:${BASE}/services/data`
+- `${BASE}` = `/Users/gyejinpark/opt/fencingmind/data`
+- Python은 PYTHONPATH 순서대로 모듈을 탐색하므로, `${BASE}/ranking/`에 파일이 있으면 `${BASE}/services/data/ranking/` 대신 먼저 import됨
+- **2026-06-22 사고**: `${BASE}/ranking/calculator.py` (구버전)이 `${BASE}/services/data/ranking/calculator.py` (신버전)을 섀도잉 → NT 서브랭킹 포인트가 840점으로 부풀려짐 (정확값: 560점)
+- **해결**: 구버전 `${BASE}/ranking/` 디렉토리 삭제
+- **예방**: `${BASE}/` 루트에 `services/data/` 내부와 동일한 이름의 패키지/모듈 폴더를 절대 생성하지 말 것
 
 ## Environment Variables
 ```
@@ -639,19 +690,21 @@ MAX_CONCURRENT_REQUESTS=3
 11. [x] ~~Data Guardian 자동 무결성 검증~~ (완료 - 2026-05-13)
 12. [x] ~~자동 스크래핑 스케줄러 + 변경 감지~~ (완료 - 2026-05)
 13. [x] ~~PWA 제거 (data 서비스)~~ (완료 - 2026-06-04, app 서비스로 이동 예정)
+14. [x] ~~Dual DE 대진표 + Pool 기권 처리~~ (완료 - 2026-06)
+15. [x] ~~NT 서브랭킹 포인트 버그 수정~~ (완료 - 2026-06-22, 프로덕션 PYTHONPATH 섀도잉 해결)
 
 ### 진행 예정 (data 서비스)
-14. [ ] 카카오 로그인 연동 (OAuth)
-15. [ ] 대표선발 포인트 시스템 고도화 (꿈나무/선수)
-16. [ ] 2026 신규 대회 데이터 지속 수집 (스케줄러 운영)
+16. [ ] 카카오 로그인 연동 (OAuth)
+17. [ ] 대표선발 포인트 시스템 고도화 (꿈나무/선수)
+18. [ ] 2026 신규 대회 데이터 지속 수집 (스케줄러 운영)
 
 ### 진행 예정 (다른 서비스)
-17. [ ] PWA 구현 → app.fencingmind.ai (아래 PWA 계획 참조)
-18. [ ] app.fencingmind.ai SaaS 플랫폼 개발
-19. [ ] community.fencingmind.ai 커뮤니티
-20. [ ] shop.fencingmind.ai 드롭쉬핑
-21. [ ] blog.fencingmind.ai 콘텐츠
-22. [ ] analytics.fencingmind.ai AI 경기 분석
+19. [ ] PWA 구현 → app.fencingmind.ai (아래 PWA 계획 참조)
+20. [ ] app.fencingmind.ai SaaS 플랫폼 개발
+21. [ ] community.fencingmind.ai 커뮤니티
+22. [ ] shop.fencingmind.ai 드롭쉬핑
+23. [ ] blog.fencingmind.ai 콘텐츠
+24. [ ] analytics.fencingmind.ai AI 경기 분석
 
 ---
 

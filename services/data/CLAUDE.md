@@ -137,6 +137,73 @@ Body: {"english_name": "Soyun Park"}
 
 ---
 
+## 랭킹 시스템 원칙 (RANKING SYSTEM RULES)
+- **엄격한 연도 기반**: N년 랭킹 = N년 대회 결과만. 롤링 윈도우 사용 금지
+- **새 연도 빈 데이터**: 새 해 첫 대회 결과 나올 때까지 해당 연도 랭킹 미생성
+- **🔴 자유 참가 원칙 (Open Entry Principle)**: 랭킹 포인트는 자유 참가(open entry) 대회만 인정
+  - **포인트 인정**: 누구나 자유롭게 참가 신청할 수 있는 대회
+  - **포인트 제외**: 시도별 선발 등 소수만 참가하는 선발 참가(nominated/selected) 대회
+  - **제외 대회**: 전국체육대회, 전국소년체육대회 (시도별 1명 선발, 13~18명 참가)
+  - **결과 표시**: 제외 대회의 경기 결과는 선수 프로필/대회 페이지에 정상 표시 (포인트만 0)
+  - **근거**: 선발 참가 대회는 참가 기회의 공정성이 보장되지 않아 전체 선수 실력 비교에 부적합
+  - **구현**: `_extract_results()`에서 해당 대회 skip (results 자체를 미생성)
+- **2카드 시스템**: NT 선발전 출전 선수는 프로필에 2개 랭킹 표시:
+  1. 나이리그 랭킹 (일반 대회 + NT 나이리그별 서브랭킹 포인트 합산)
+  2. NT 전체 랭킹 (국가대표 선발전 전체 참가자 중 순위)
+- **투명한 포인트**: 각 랭킹 카드에 Best N 대회별 포인트 산출 내역 공개
+- **NT 나이리그 추론**: 팀 기반 필터링으로 동명이인 혼입 방지 (calculator.py)
+- **동명이인 구분**: identity_profile 팀 기반 필터링으로 다른 사람의 랭킹 혼입 방지
+- **구현 위치**: `ranking/calculator.py` (연도 필터 + NT 서브랭킹), `server.py` (프로필 랭킹 + API)
+
+### NT 서브랭킹 상세 규칙 (NATIONAL TEAM SUB-RANKING RULES)
+
+**대회 분류 (classify_competition_level)**:
+- `NATIONAL`: 순수 국대선발 (예: "2026 펜싱 국가대표선수 선발대회")
+- `YOUTH_NATIONAL`: 유소년/청소년 국대선발 (예: "유소년 국가대표선수 선발전") — 랭킹 완전 제외
+- `ELITE`: 겸 국대선발 포함 (예: "제55회 회장기 겸 2026 펜싱 국가대표 2차선발대회")
+- **겸 국대선발 = 국가대표 대회**: '겸'은 해당 대회가 국가대표 선발도 겸한다는 의미
+  - 나이리그 랭킹: 일반 age_group으로 포함 (SR, MS, HS 등)
+  - NT 전체 랭킹: '국가대표' 포함 대회이므로 NT 전체 랭킹에도 포함
+- NATIONAL 대회의 모든 이벤트는 `age_group='NT'`로 분류 (DB의 "일반부" 등 무시)
+- YOUTH_NATIONAL 대회는 `_extract_results()`에서 완전 제외 (results 미생성)
+- ELITE(겸) 대회는 일반 age_group 사용 + NT 전체 랭킹에도 포함
+
+**서브랭킹 생성 (`_generate_national_sub_rankings`)**:
+1. NT 결과에서 각 선수의 나이그룹을 다른 대회 출전 이력으로 추론
+2. 추론된 나이그룹별로 재순위 (sub_rank) 매김
+3. sub_rank 기준 + 전체 참가자 수 기반으로 포인트 계산
+4. 생성된 서브랭킹 결과는 해당 나이리그 랭킹에 합산됨
+
+**🔴 유소년/청소년 국가대표 완전 제외 규칙**:
+- "유소년 국가대표선수 선발전", "청소년 국가대표선수 선발전"은 일반 국가대표 선발대회와 **완전히 다른 대회**
+- 대상 연령, 참가자, 대회 방식이 상이 → 동일 랭킹에서 비교 불가
+- **랭킹 완전 제외**: NT 전체 랭킹에도, 나이리그 서브랭킹에도 포함하지 않음
+- 대회/선수 프로필 페이지에서는 정상 표시 (대회 결과 데이터는 존재, 포인트만 0)
+- 구현: `_extract_results()`에서 대회명에 '유소년' 또는 '청소년' + '국가대표' 포함 시 `continue`
+- 참고: 1~2월 NATIONAL 대회는 역사적으로 모두 유소년/청소년 국가대표이므로 별도 월 기반 로직 불필요
+
+**NT 전체 랭킹 (rankings 페이지 & 프로필 2번째 카드)**:
+- `national_team_only=True` 필터: 대회명에 '국가대표' 포함 대회 전체
+- 순수 NATIONAL + 겸 ELITE 모두 포함 (유소년/청소년은 `_extract_results()`에서 이미 제외)
+- **이중 계산 방지**: `national_team_only=True` + `age_group='NT'`일 때 `r.age_group == 'NT'` 결과만 포함
+  - 서브랭킹 결과(age_group='MS','HS' 등)는 NT 전체 랭킹에서 제외
+  - 서브랭킹 결과는 해당 나이리그 랭킹에만 포함됨
+- 구현: `calculate_rankings(age_group='NT', national_team_only=True)` — age_group='NT' 필터 적용
+
+**NT 서브랭킹 포인트 계산**:
+- 서브랭킹 포인트는 **해당 나이그룹 참가자 수** 기준으로 계산 (전체 NT 인원 아님)
+- 예: MS 51명 → base_points=800, SR 33명 → base_points=800, HS 57명 → base_points=800
+- 구현: `_generate_national_sub_rankings()` — `sub_total = len(players)` 사용
+- **🔴 2026-06-22 버그 수정**: 프로덕션에서 구버전 calculator.py가 PYTHONPATH 섀도잉으로 import되어 `total_participants=r.total_participants` (전체 NT 인원 173명 → base_points=1200)를 사용. 신버전은 `total_participants=sub_total` (나이그룹별 인원) 사용. 구버전 파일 삭제로 해결.
+
+**포인트 계산 공식**:
+- `points = base_points × prestige × rank_ratio × age_weight`
+- base_points: 참가자 128+→1200, 64+→1000, 32+→800, 16+→500, 8+→300
+- Best N 가중합: [1.0, 0.7, 0.5, 0.3, 0.2, 0.1]
+- age_weight: MS=0.7, HS=0.8, UNI=0.9, SR=1.0
+
+---
+
 ## 🔴🔴🔴 데이터 수정 원칙 (Data Modification Principles) 🔴🔴🔴
 
 **데이터 표시 오류 발생 시 반드시 이 원칙을 따르세요.**
@@ -457,3 +524,47 @@ Second DE: 64강 (일부) → 32강 → 16강 → 8강 → 준결승 → 결승
 - `app/server.py`: `compute_dual_de_final_rankings()` - Dual DE 최종순위 계산
 - `templates/event_result.html`: dual DE 탭 UI (First DE / Second DE)
 - `static/css/bracket.css`: 대진표 스타일
+
+---
+
+## 🔄 현재 작업 상태 (2026-07-09)
+
+### ✅ 최근 완료 (이전 세션)
+
+#### Pool 선수 리그 랭킹 표시 + 정렬
+- **구현**: pool standings에 리그 순위(league_rank) / 올해 최고순위(league_best) 컬럼 추가
+- **정렬 조건**: 경기 결과 없으면 → 리그 랭킹순, 경기 결과 있으면 → 풀 결과순
+- **대진표(matrix)**: 풀 결과 rank순 정렬 + scores 배열 재배열(score remapping)
+- **FIE 코드 변환**: `get_matching_legacy_codes(ev_age_fie)` → Y14→MS 변환 후 `calculate_rankings()` 호출
+- **PlayerRanking 객체**: attribute 접근(`.player_name`, `.current_rank`) — dict 접근 아님
+- **코드 위치**: `server.py` ~line 7417 (pool_ranking_map 생성), `event_result.html` (standings/matrix UI)
+
+#### FIE 풀 예상 경기순서
+- `FIE_BOUT_ORDER` 상수 (3~8인 풀), `renderBoutOrder()` JS 함수
+- 접이식 토글 (`toggleBoutOrder()`)
+- `event_result.html` 내 `<script>` 블록
+
+#### 팀 랭킹 모바일 정렬
+- 활성 정렬 컬럼을 첫 번째로 동적 재배치
+- `.tr-sub` 모바일 숨김
+
+### ⏳ 대기 중 (Pending Plan)
+
+#### 2카드 랭킹 시스템 (piped-cooking-pancake.md)
+- **플랜 파일**: `~/.claude/plans/piped-cooking-pancake.md` (6단계 상세 계획)
+- **핵심**: NT 선발전 출전 선수 프로필에 2개 랭킹 카드 표시
+  - 카드1: 나이리그 랭킹 (일반 대회 + NT 서브랭킹 합산)
+  - 카드2: NT 전체 랭킹 (국가대표 선발전 전체 순위)
+- **수정 파일**: `calculator.py` (팀 기반 나이추론), `server.py` (primary_age 선택), `player_profile.html` (NT 라벨)
+- **핵심 버그**: 박소윤(최병철FC) 프로필이 SR 랭킹(#186/19.4pts)을 표시 — 실제는 MS(#28/74.2pts)
+- **근본 원인**: `_infer_player_age_group()`에서 동명이인 3명의 결과 혼합 → SR 기본값 반환
+
+#### 메인 페이지 즐겨찾기 카드 복원
+- 이전 세션에서 언급, 미구현
+
+### 🔧 Fable 5 오케스트레이션 (2026-07-12까지)
+- **상태**: ON (`fable status`로 확인)
+- **구성**: `~/.claude/fable/` (fable.md, agents/, hooks/, env.sh)
+- **3티어**: Fable 5 오케스트레이터 → deep-reasoner(Opus 4.8, max) → runner(Haiku 4.5)
+- **게이트**: PreToolUse 훅 — 메인 에이전트 턴당 코드 파일 2개 직접 수정 제한, 초과 시 서브에이전트 위임
+- **종료**: 7/12 이후 `fable off` 실행
