@@ -6,6 +6,39 @@
 
 ---
 
+## 🧭 세션 핸드오프 (재시작 후 컨텍스트) — 기록: 2026-07-09
+
+> Claude Code를 껏다 켜도 이어서 작업할 수 있도록 남기는 현재 상태 스냅샷.
+> 최신 상태는 항상 `git status` / `git diff` 로 재확인할 것. 작업 완료·커밋 후에는 이 섹션을 갱신하거나 삭제.
+
+### 현재 위치
+- **워크트리:** `fencingmind` (메인) · **브랜치:** `feature/account/init`
+- **작업 서비스:** `services/account/` (회원가입 폼 개선 진행 중), 일부 `packages/shared_core/`
+
+### 미커밋 작업 요약 (아직 커밋 안 됨)
+| 파일 | 변경 내용 |
+|------|----------|
+| `services/account/app/auth/router.py` | ① 공개 선수/자녀 검색(`/auth/public/player-search`, `/child-search`)에 **무기(weapon)·리그(league) 필터** 추가. players 테이블에 무기/연령이 없어 `rankings → events` 조인으로 유도. `LEAGUE_AGE_GROUPS` 로 불규칙한 `events.age_group` 값을 elementary/middle/high/university/senior 5개 리그로 매핑. 후보를 60개로 넓게 뽑아 조인 필터 후 15개로 컷. ② OAuth 콜백(`/callback/{provider}`)에 **에러/사용자취소/state 만료** 처리 → `/auth/login` 리다이렉트(기존 500 방지). ③ `register_member` 에 **phone / phone_country_code / birth_date** 선택 필드 + `member_type` 화이트리스트 검증(migration 008 CHECK와 일치) 추가. |
+| `services/account/templates/auth/register.html` | 회원가입 폼 대규모 리라이트(~1000줄). 선수/자녀 검색에 **무기·리그 세그먼트 버튼 UI**(에페/플뢰레/사브르 · 초/중/고/대/일반부), **연락처(국가코드+번호)·생년월일 선택 입력** 추가. |
+| `packages/shared_core/email/service.py` | 이메일 인증 URL 경로 변경: `/account/verification/email/verify` → **`/auth/verify-email`**. |
+| `tests/unit/test_scraper.py` | fixtures sys.path 를 구 `FencingCommunityDropShipping` → `fencingmind` 로 수정. |
+| `services/app/CLAUDE.md` | app 서비스 문서 갱신(※ 원칙상 app 워크트리 관할 파일 — 커밋 전 검토 필요). |
+
+### 다음 할 일 / TODO
+1. `register.html` 프론트의 무기/리그 selector 값이 실제로 검색 API 쿼리파라미터(`weapon`, `league`)로 전달되는지 **동작 확인**(account 서버 port 70 띄워서 검증).
+2. 이메일 인증 URL 변경(`/auth/verify-email`)에 대응하는 **라우트 핸들러가 실제 존재하는지** 확인 — 없으면 링크 클릭 시 404.
+3. `member_type` 화이트리스트 값이 migration 008 CHECK 제약과 정확히 일치하는지 재대조.
+4. `services/app/CLAUDE.md` 변경은 app 워크트리 소관 — 이 브랜치에 섞어 커밋할지 분리할지 결정.
+5. 커밋 분리 권장: (a) account 회원가입/검색 개선, (b) 이메일 URL 수정, (c) 테스트 경로 수정.
+
+### 결정사항 · 주의점
+- **선수 인증 후 수정 정책**은 메모리 `account-post-verification-edit-policy` 참조(영문이름/소속/학년/리그 요청 + SNS만 허용, 대회결과 잠금).
+- **개인정보 서류 수집 금지**(제0원칙 4번) — 본인/학부모 인증은 선수 데이터 교차검증 + AI 추론으로만.
+- 무기/리그는 players 원본 컬럼이 아니라 **파생 정보**(rankings 조인). 조회 실패 시 필터를 생략하고 원본 결과 반환하도록 fail-open 처리됨.
+- 서버 실행: `PYTHONPATH="${PWD}:${PWD}/packages:${PWD}/services/account" python -m uvicorn services.account.app.server:app --host 0.0.0.0 --port 70`
+
+---
+
 ## 🏗️ 8대 서브도메인 아키텍처
 
 ### 서브도메인 구조
