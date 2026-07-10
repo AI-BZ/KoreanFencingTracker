@@ -1,0 +1,312 @@
+{% extends "base.html" %}
+
+{% block title %}환영합니다 - FencingMind{% endblock %}
+
+{% block content %}
+<div class="welcome-container">
+    <div class="welcome-card">
+        <!-- 헤더 -->
+        <div class="welcome-header">
+            <div class="welcome-confetti">&#127881;</div>
+            <h1>환영합니다, {{ member.full_name }}님!</h1>
+            <p class="welcome-sub">FencingMind 가입이 완료되었습니다</p>
+        </div>
+
+        <!-- 회원유형별 맞춤 카드 -->
+        {% if member.member_type == 'player' %}
+        <div class="welcome-hero-card hero-player">
+            <div class="hero-icon">&#9876;</div>
+            <div class="hero-content">
+                {% if member.player_id %}
+                <h3>선수 프로필이 연결되었습니다!</h3>
+                <p>관리자 검토 후 전적 데이터가 연동됩니다.</p>
+                <a href="https://data.fencingmind.ai/player/{{ member.player_id }}" class="hero-cta">내 프로필 보기 &rarr;</a>
+                {% else %}
+                <h3>선수 인증을 완료해주세요</h3>
+                <p>인증 페이지에서 본인 선수 데이터를 연결할 수 있습니다.</p>
+                <a href="/account/verification" class="hero-cta">선수 인증하기 &rarr;</a>
+                {% endif %}
+            </div>
+        </div>
+
+        {% elif member.member_type == 'player_parent' %}
+        <div class="welcome-hero-card hero-parent">
+            <div class="hero-icon">&#128106;</div>
+            <div class="hero-content">
+                <h3>자녀 성적을 확인해보세요</h3>
+                <p>관리자 검토 후 자녀의 대회 성적을 조회할 수 있습니다.</p>
+                <a href="https://data.fencingmind.ai" class="hero-cta">선수 검색하기 &rarr;</a>
+            </div>
+        </div>
+
+        {% elif member.member_type in ('club_coach', 'club_director', 'school_coach', 'school_director') %}
+        <div class="welcome-hero-card hero-coach">
+            <div class="hero-icon">&#127941;</div>
+            <div class="hero-content">
+                <h3>클럽 관리를 시작해보세요</h3>
+                <p>조직 인증 후 출석 관리, 회원 관리 등 다양한 기능을 이용할 수 있습니다.</p>
+                <a href="/account/verification" class="hero-cta">조직 인증하기 &rarr;</a>
+            </div>
+        </div>
+
+        {% else %}
+        <div class="welcome-hero-card hero-general">
+            <div class="hero-icon">&#128202;</div>
+            <div class="hero-content">
+                <h3>펜싱 데이터를 탐색해보세요</h3>
+                <p>11,000+ 선수의 대회 전적, 랭킹, 통계를 확인할 수 있습니다.</p>
+                <a href="https://data.fencingmind.ai" class="hero-cta">선수 검색하기 &rarr;</a>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- 시작 가이드 카드 -->
+        <h2 class="guide-title">FencingMind 시작 가이드</h2>
+        <div class="guide-cards">
+            <a href="https://data.fencingmind.ai/search" class="guide-card">
+                <span class="guide-icon">&#128269;</span>
+                <span class="guide-label">선수 검색</span>
+            </a>
+            <a href="https://data.fencingmind.ai/rankings" class="guide-card">
+                <span class="guide-icon">&#127942;</span>
+                <span class="guide-label">랭킹</span>
+            </a>
+            <a href="https://data.fencingmind.ai" class="guide-card">
+                <span class="guide-icon">&#127941;</span>
+                <span class="guide-label">대회 결과</span>
+            </a>
+        </div>
+
+        <!-- 이메일 인증 안내 (OAuth 가입 시) -->
+        {% if not member.email_verified %}
+        <div class="email-verify-notice">
+            <div class="notice-icon">&#9993;</div>
+            <div class="notice-content">
+                <p><strong>이메일 인증을 완료해주세요</strong></p>
+                <p>인증 메일이 <strong>{{ member.email }}</strong>로 발송되었습니다.</p>
+                <form action="/auth/resend-verification" method="POST" style="display: inline;">
+                    <button type="submit" class="resend-link">인증 메일 재발송</button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- CTA -->
+        <div class="welcome-cta">
+            <a href="https://data.fencingmind.ai" class="cta-btn">데이터 서비스 시작하기 &rarr;</a>
+        </div>
+    </div>
+</div>
+
+<style>
+.welcome-container {
+    min-height: calc(100vh - 160px);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 2rem;
+    padding-top: 1rem;
+}
+
+.welcome-card {
+    background: var(--bg-card);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    box-shadow: var(--shadow-lg);
+    padding: 2.5rem;
+    max-width: 520px;
+    width: 100%;
+}
+
+.welcome-header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.welcome-confetti {
+    font-size: 3rem;
+    margin-bottom: 0.5rem;
+}
+
+.welcome-header h1 {
+    font-size: 1.35rem;
+    color: var(--text-primary);
+    margin-bottom: 0.25rem;
+    font-weight: 700;
+}
+
+.welcome-sub {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+/* Hero card */
+.welcome-hero-card {
+    display: flex;
+    gap: 1rem;
+    padding: 1.25rem;
+    border-radius: 14px;
+    margin-bottom: 1.5rem;
+}
+
+.hero-player {
+    background: rgba(30, 58, 138, 0.12);
+    border: 1px solid rgba(30, 58, 138, 0.25);
+}
+.hero-parent {
+    background: rgba(139, 92, 246, 0.1);
+    border: 1px solid rgba(139, 92, 246, 0.25);
+}
+.hero-coach {
+    background: rgba(16, 185, 129, 0.1);
+    border: 1px solid rgba(16, 185, 129, 0.25);
+}
+.hero-general {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-color);
+}
+
+.hero-icon {
+    font-size: 2rem;
+    flex-shrink: 0;
+}
+
+.hero-content h3 {
+    font-size: 0.95rem;
+    margin-bottom: 0.25rem;
+    color: var(--text-primary);
+}
+
+.hero-content p {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+}
+
+.hero-cta {
+    display: inline-block;
+    font-size: 0.85rem;
+    color: var(--accent-gold);
+    text-decoration: none;
+    font-weight: 600;
+    transition: color 0.2s;
+}
+
+.hero-cta:hover {
+    color: var(--text-primary);
+}
+
+/* Guide cards */
+.guide-title {
+    font-size: 0.95rem;
+    margin-bottom: 0.75rem;
+    color: var(--text-primary);
+}
+
+.guide-cards {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+}
+
+.guide-card {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 1rem 0.5rem;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    text-decoration: none;
+    color: var(--text-secondary);
+    transition: all 0.3s ease;
+}
+
+.guide-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--border-light);
+    background: rgba(255, 255, 255, 0.06);
+    box-shadow: var(--shadow-sm);
+    color: var(--text-primary);
+}
+
+.guide-icon {
+    font-size: 1.5rem;
+}
+
+.guide-label {
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+/* Email verify notice */
+.email-verify-notice {
+    display: flex;
+    gap: 0.75rem;
+    padding: 1rem;
+    background: rgba(245, 158, 11, 0.08);
+    border: 1px solid rgba(245, 158, 11, 0.25);
+    border-radius: 12px;
+    margin-bottom: 1.5rem;
+}
+
+.notice-icon {
+    font-size: 1.5rem;
+    flex-shrink: 0;
+}
+
+.notice-content p {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.25rem;
+}
+
+.notice-content strong {
+    color: var(--warning-color);
+}
+
+.resend-link {
+    background: none;
+    border: none;
+    color: var(--accent-gold);
+    font-size: 0.8rem;
+    cursor: pointer;
+    text-decoration: underline;
+    padding: 0;
+    font-family: inherit;
+}
+
+/* CTA */
+.welcome-cta {
+    text-align: center;
+}
+
+.cta-btn {
+    display: inline-block;
+    padding: 0.85rem 2rem;
+    background: linear-gradient(135deg, var(--accent-primary), #a02320);
+    color: #fff;
+    text-decoration: none;
+    border-radius: 10px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    box-shadow: 0 4px 15px var(--glow-primary);
+    transition: all 0.3s ease;
+}
+
+.cta-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 25px var(--glow-primary);
+}
+
+@media (max-width: 480px) {
+    .welcome-card { padding: 1.5rem; border-radius: 16px; }
+    .guide-cards { flex-direction: column; }
+    .welcome-hero-card { flex-direction: column; align-items: center; text-align: center; }
+}
+</style>
+{% endblock %}
