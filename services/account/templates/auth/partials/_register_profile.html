@@ -1,0 +1,75 @@
+<!-- ========== 3. 프로필 정보 ========== -->
+<section class="form-section">
+    <h2 class="section-title">프로필 정보</h2>
+
+    <div class="form-group">
+        <label for="full_name">이름 <span class="required">*</span></label>
+        <input
+            type="text"
+            id="full_name"
+            name="full_name"
+            required
+            placeholder="실명을 입력하세요"
+            value="{{ pending.name if pending and pending.name and pending.name != 'None' else '' }}"
+            class="fm-input"
+        >
+        <p class="form-hint">협회 등록 이름과 동일해야 인증이 가능합니다</p>
+    </div>
+
+    <div class="form-group">
+        <label for="nickname">닉네임 <span class="required">*</span></label>
+        <div class="nickname-group">
+            <span class="nickname-at">@</span>
+            <input
+                type="text"
+                id="nickname"
+                name="nickname"
+                required
+                minlength="3"
+                maxlength="20"
+                pattern="[a-zA-Z0-9_]{3,20}"
+                placeholder="fencer_park"
+                autocomplete="off"
+                class="nickname-input"
+            >
+            <span id="nicknameStatus" class="nickname-status"></span>
+        </div>
+        <p class="form-hint">영문, 숫자, 밑줄(_)만 사용 가능 (3~20자). 서비스 내 고유 ID로 사용됩니다</p>
+    </div>
+
+    <div class="form-group">
+        <label for="email">이메일 <span class="required">*</span></label>
+        <input
+            type="email"
+            id="email"
+            name="email"
+            required
+            value="{{ pending.email if pending and pending.email and pending.email != 'None' else '' }}"
+            readonly
+            class="fm-input"
+        >
+        <p class="form-hint">인증 완료된 이메일입니다</p>
+    </div>
+
+    <div class="form-group">
+        <label for="phone">연락처 <span class="optional">(선택)</span></label>
+        <div class="phone-group">
+            <select name="phone_country_code" id="phoneCountryCode" class="fm-input phone-cc">
+                <option value="+82">🇰🇷 +82</option>
+                <option value="+1">🇺🇸 +1</option>
+                <option value="+81">🇯🇵 +81</option>
+                <option value="+86">🇨🇳 +86</option>
+                <option value="+33">🇫🇷 +33</option>
+                <option value="+39">🇮🇹 +39</option>
+                <option value="+90">🇹🇷 +90</option>
+            </select>
+            <input type="tel" id="phone" name="phone" placeholder="01012345678" class="fm-input phone-number" inputmode="numeric">
+        </div>
+        <p class="form-hint">숫자만 입력 (- 없이)</p>
+    </div>
+
+    <div class="form-group">
+        <label for="birth_date">생년월일 <span class="optional">(선택)</span></label>
+        <input type="date" id="birth_date" name="birth_date" class="fm-input">
+    </div>
+</section>

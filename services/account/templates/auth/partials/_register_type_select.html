@@ -1,0 +1,66 @@
+<!-- ========== 1. 회원 유형 (최상단) ========== -->
+<section class="form-section">
+    <h2 class="section-title">회원 유형 <span class="required">*</span></h2>
+    <p class="section-desc">먼저 유형을 선택하면 아래에서 소속/선수를 연결할 수 있습니다.</p>
+
+    <div class="type-cards">
+        <label class="type-card" data-type="general">
+            <input type="radio" name="member_type" value="general" checked>
+            <div class="type-card-content">
+                <span class="type-card-icon">&#9834;</span>
+                <span class="type-card-title">일반회원</span>
+                <span class="type-card-desc">펜싱 팬 / 관심자</span>
+            </div>
+        </label>
+
+        <label class="type-card" data-type="player">
+            <input type="radio" name="member_type" value="player">
+            <div class="type-card-content">
+                <span class="type-card-icon">&#9876;</span>
+                <span class="type-card-title">선수회원</span>
+                <span class="type-card-desc">현역 / 은퇴 선수</span>
+            </div>
+        </label>
+
+        <label class="type-card" data-type="player_parent">
+            <input type="radio" name="member_type" value="player_parent">
+            <div class="type-card-content">
+                <span class="type-card-icon">&#128106;</span>
+                <span class="type-card-title">선수 학부모</span>
+                <span class="type-card-desc">선수의 보호자</span>
+            </div>
+        </label>
+
+        <label class="type-card" data-type="coach">
+            <input type="radio" name="member_type" value="coach_group">
+            <div class="type-card-content">
+                <span class="type-card-icon">&#127941;</span>
+                <span class="type-card-title">코치 / 감독</span>
+                <span class="type-card-desc">클럽 / 학교 지도자</span>
+            </div>
+        </label>
+    </div>
+
+    <!-- 코치/감독 세부 선택 -->
+    <div id="coachSubType" class="sub-type-select" style="display: none;">
+        <label class="form-group-label">세부 유형</label>
+        <div class="sub-type-options">
+            <label class="sub-type-item">
+                <input type="radio" name="coach_role" value="club_coach" checked>
+                <span>클럽 코치</span>
+            </label>
+            <label class="sub-type-item">
+                <input type="radio" name="coach_role" value="club_director">
+                <span>클럽 감독/대표</span>
+            </label>
+            <label class="sub-type-item">
+                <input type="radio" name="coach_role" value="school_coach">
+                <span>학교 코치</span>
+            </label>
+            <label class="sub-type-item">
+                <input type="radio" name="coach_role" value="school_director">
+                <span>학교 감독</span>
+            </label>
+        </div>
+    </div>
+</section>

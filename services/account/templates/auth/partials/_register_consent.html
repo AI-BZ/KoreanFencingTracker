@@ -1,0 +1,32 @@
+<!-- ========== 4. 약관 동의 ========== -->
+<section class="form-section">
+    <h2 class="section-title">약관 동의</h2>
+
+    <div class="consent-section">
+        <label class="consent-item">
+            <input type="checkbox" name="terms_consent" value="true" required class="consent-required">
+            <span>[필수] 이용약관에 동의합니다</span>
+            <a href="/legal/terms" target="_blank">전문 보기</a>
+        </label>
+
+        <label class="consent-item">
+            <input type="checkbox" name="privacy_consent" value="true" required class="consent-required">
+            <span>[필수] 개인정보 수집/이용에 동의합니다</span>
+            <a href="/legal/privacy" target="_blank">전문 보기</a>
+        </label>
+        <div class="consent-detail">
+            수집 항목: 이름, 이메일, 닉네임, 회원유형 (선택: 연락처, 생년월일)<br>
+            수집 목적: 서비스 제공, 회원 관리<br>
+            보유 기간: 탈퇴 후 30일
+        </div>
+
+        <div class="consent-divider"></div>
+
+        <label class="consent-item">
+            <input type="checkbox" name="marketing_consent" value="true" class="consent-optional">
+            <span>[선택] 마케팅 정보 수신에 동의합니다</span>
+        </label>
+    </div>
+
+    <button type="submit" class="fm-btn fm-btn-primary btn-submit" id="submitBtn" disabled>가입 완료</button>
+</section>
