@@ -509,18 +509,17 @@ async def login_page(request: Request, redirect: Optional[str] = None):
 @router.get("/login/{provider}")
 async def oauth_login(provider: str, request: Request, promotional: bool = False, redirect: Optional[str] = None):
     """OAuth 로그인 시작 (OAuthHandler 사용)"""
-    auth_url = _oauth_handler.build_auth_url(provider, promotional)
+    auth_url, state = _oauth_handler.build_auth_url_with_state(provider, promotional)
     # redirect URL을 DB의 oauth_states에 저장
     if redirect and _is_safe_redirect(redirect):
-        state = auth_url.split("state=")[1].split("&")[0] if "state=" in auth_url else None
-        if state:
-            supabase = get_supabase()
-            try:
-                supabase.table("oauth_states").update(
-                    {"redirect_url": redirect}
-                ).eq("state", state).execute()
-            except Exception:
-                pass  # redirect 저장 실패는 치명적이지 않음
+        supabase = get_supabase()
+        try:
+            supabase.table("oauth_states").update(
+                {"redirect_url": redirect}
+            ).eq("state", state).execute()
+        except Exception as e:
+            # redirect 저장 실패는 치명적이지 않음 (로그인 플로우는 계속 진행)
+            logger.warning(f"oauth_states redirect_url 저장 실패: state={state}, error={e}")
     return RedirectResponse(url=auth_url)
 
 
@@ -762,7 +761,7 @@ async def register_member(
     if existing_nick.data:
         raise HTTPException(status_code=400, detail="이미 사용 중인 닉네임입니다")
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     is_email_provider = pending["provider"] == "email"
 
     # 이메일 가입: 이미 인증코드로 검증 완료 → email_verified = True
@@ -936,7 +935,7 @@ async def _create_registration_claims(
                     "status": status,
                 }
                 if status == "approved":
-                    claim_data["reviewed_at"] = datetime.utcnow().isoformat()
+                    claim_data["reviewed_at"] = datetime.now(timezone.utc).isoformat()
 
                 claim_result = supabase.table("player_claims").insert(claim_data).execute()
 
@@ -1133,13 +1132,16 @@ async def verify_email(request: Request, token: str):
     # Check expiration
     if member.get("email_verification_expires_at"):
         expires_at = datetime.fromisoformat(member["email_verification_expires_at"].replace("Z", "+00:00"))
-        if datetime.now(expires_at.tzinfo) > expires_at:
+        # 레거시 naive 값(과거 datetime.utcnow() 저장분)은 UTC로 간주하여 aware 비교로 통일
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) > expires_at:
             raise HTTPException(status_code=400, detail="인증 링크가 만료되었습니다. 재발송해주세요.")
 
     # Mark email as verified
     supabase.table("members").update({
         "email_verified": True,
-        "email_verified_at": datetime.utcnow().isoformat(),
+        "email_verified_at": datetime.now(timezone.utc).isoformat(),
         "email_verification_token": None,
         "email_verification_expires_at": None,
     }).eq("id", member["id"]).execute()
@@ -1176,7 +1178,7 @@ async def resend_verification_email(request: Request):
     # Generate new token
     new_token = secrets.token_urlsafe(64)
     settings = get_account_settings()
-    expires_at = datetime.utcnow() + timedelta(hours=settings.EMAIL_VERIFICATION_EXPIRE_HOURS)
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=settings.EMAIL_VERIFICATION_EXPIRE_HOURS)
 
     supabase = get_supabase()
     supabase.table("members").update({
