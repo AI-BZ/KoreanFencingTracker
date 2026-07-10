@@ -87,13 +87,30 @@ _AGE_GROUP_TO_LEAGUE = {
 
 
 def _is_safe_redirect(url: str) -> bool:
-    """오픈 리다이렉트 방지 - 허용된 도메인만 리다이렉트"""
+    """오픈 리다이렉트 방지 - 허용된 도메인만 리다이렉트.
+
+    - 내부 상대 경로("/dashboard")는 허용
+    - 절대 URL은 hostname이 허용 도메인과 정확히 일치하거나 그 하위 도메인일 때만 허용.
+      접미사 우회 차단: "evilfencingmind.ai"는 "fencingmind.ai"로 끝나지만 하위 도메인이
+      아니므로 거부.
+    - 스킴 상대("//evil.com")·백슬래시 우회("/\\evil.com")는 거부.
+    """
     if not url:
         return False
-    parsed = urlparse(url)
-    if not parsed.hostname:
-        return True  # 상대 경로는 허용
-    return any(parsed.hostname.endswith(d) for d in ALLOWED_REDIRECT_DOMAINS)
+    # 브라우저가 백슬래시를 슬래시로 해석하는 우회를 차단하기 위해 정규화 후 파싱.
+    normalized = url.replace("\\", "/")
+    parsed = urlparse(normalized)
+    if parsed.hostname:
+        hostname = parsed.hostname.lower()
+        return any(
+            hostname == d or hostname.endswith("." + d)
+            for d in ALLOWED_REDIRECT_DOMAINS
+        )
+    # hostname이 없는데 netloc이 있으면 비정상 절대 URL → 거부.
+    if parsed.netloc:
+        return False
+    # 진짜 내부 상대 경로만 허용 ("/..."). "javascript:", "dashboard" 등은 거부.
+    return normalized.startswith("/")
 
 
 def get_supabase():
