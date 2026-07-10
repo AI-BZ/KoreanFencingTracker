@@ -23,6 +23,7 @@ def classify_frame_action(
     parry_window: int,
     use_ratio_based_hip_drop: bool,
     kinematics: Optional[FrameKinematics] = None,
+    window_frames: Optional[List[PoseResult]] = None,
 ) -> FrameActionState:
     """Classify the action state for a single frame transition.
 
@@ -37,6 +38,12 @@ def classify_frame_action(
         parry_window: Window for parry detection.
         use_ratio_based_hip_drop: Ratio-vs-absolute hip-drop toggle.
         kinematics: Pre-computed FrameKinematics (optional).
+        window_frames: Consecutive frames ending at ``curr_frame`` used to
+            feed footwork/parry detection.  ``detect_footwork`` and
+            ``detect_parry`` need >= 3 frames to fire LUNGE/FLECHE/PARADE;
+            when only the ``prev_frame``/``curr_frame`` pair is available
+            (early in a sequence, or direct 2-frame callers), this defaults
+            to that pair and the hip-direction/velocity fallbacks apply.
 
     Returns:
         FrameActionState for the current frame.
@@ -69,12 +76,15 @@ def classify_frame_action(
     if opp is not None:
         dist_bh = compute_distance_bh(fencer, opp)
 
-    # Detect footwork — use 2-frame pair if that's all we have
-    sub_seq = [prev_frame, curr_frame]
-    fw = detect_footwork(sub_seq, side, footwork_window, use_ratio_based_hip_drop)
+    # Feed footwork/parry detection with the trailing consecutive-frame
+    # window when available; detect_footwork/detect_parry both require >= 3
+    # frames, so a bare 2-frame pair can only ever yield UNKNOWN and leaves
+    # LUNGE/FLECHE/PARADE unreachable.
+    detection_seq = window_frames if window_frames is not None else [prev_frame, curr_frame]
+    fw = detect_footwork(detection_seq, side, footwork_window, use_ratio_based_hip_drop)
 
     # Detect parry
-    parry = detect_parry(sub_seq, side, parry_window)
+    parry = detect_parry(detection_seq, side, parry_window)
 
     # If footwork returned UNKNOWN due to <3 frames, use hip direction fallback
     if fw is not None and fw.footwork_type == FootworkType.UNKNOWN and max_vel >= FOOTWORK_MIN_DISPLACEMENT_PX:
@@ -192,6 +202,11 @@ def classify_action_sequence(
     results: List[FrameActionState] = []
     sampled_indices = list(range(0, len(pose_sequence), sample_every_n))
 
+    # Number of trailing consecutive frames to hand to footwork/parry
+    # detection.  Both slice their own sub-window internally, so supply the
+    # larger of the two so neither is starved.
+    window_span = max(footwork_window, parry_window)
+
     for si, idx in enumerate(sampled_indices):
         if si == 0:
             # First frame — no previous, default to EN_GARDE
@@ -214,6 +229,12 @@ def classify_action_sequence(
             continue
 
         kin = kin_map.get(idx)
+        # Trailing consecutive frames ending at the current sample. Passing
+        # the raw (un-sampled) slice keeps detect_footwork/detect_parry on the
+        # consecutive frames they expect; when < 3 frames exist this stays a
+        # 2-frame pair and the per-frame fallbacks take over.
+        window_start = max(0, idx - window_span + 1)
+        window_frames = pose_sequence[window_start:idx + 1]
         fas = classify_frame_action(
             pose_sequence[prev_idx],
             pose_sequence[idx],
@@ -222,6 +243,7 @@ def classify_action_sequence(
             parry_window,
             use_ratio_based_hip_drop,
             kinematics=kin,
+            window_frames=window_frames,
         )
         results.append(fas)
 
