@@ -55,6 +55,12 @@ class AppSettings:
         "SUPABASE_URL", "https://tjfjuasvjzjawyckengv.supabase.co"
     )
     SUPABASE_KEY: str = os.getenv("SUPABASE_KEY", "")
+    # service_role 키 — RLS를 우회하는 서버 전용 시크릿. app_* 테이블(푸시 구독/설정/
+    # 발송 로그/커서)은 서버만 접근하는 내부 인프라이므로 이 키로 접근한다(migration 025
+    # RLS 잠금 대비). 🔴 절대 클라이언트(브라우저)에 노출 금지. 미설정 시 db.get_app_db()가
+    # anon(SUPABASE_KEY)로 폴백해 현재처럼 동작한다(하위호환) — 단, 폴백 상태에서는
+    # migration 025(RLS 잠금)를 적용하면 서버가 죽으므로 적용 금지.
+    SUPABASE_SERVICE_KEY: str = os.getenv("SUPABASE_SERVICE_KEY", "")
 
     # FCM (Phase 4에서 사용)
     FCM_VAPID_PUBLIC_KEY: str = os.getenv("FCM_VAPID_PUBLIC_KEY", "")

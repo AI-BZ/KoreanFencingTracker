@@ -17,9 +17,8 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
-from shared_core.db.client import get_supabase_client
-
 from ..config import settings
+from ..db import get_app_db
 from .dispatcher import NotificationDispatcher
 
 logger = logging.getLogger("app.pipeline.poller")
@@ -45,7 +44,7 @@ class EventPoller:
     @property
     def db(self) -> Any:
         if self._db is None:
-            self._db = get_supabase_client()
+            self._db = get_app_db()
         return self._db
 
     @property
