@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Optional
 
-from shared_core.db.client import get_supabase_client
+from ..db import get_app_db
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +63,7 @@ def get_preferences(member_id: str) -> list[dict[str, Any]]:
 
     저장된 행이 없는 카테고리는 기본값으로 채워 항상 전체 카테고리를 돌려준다.
     """
-    supabase = get_supabase_client()
+    supabase = get_app_db()
     rows = (
         supabase.table("app_notification_preferences")
         .select("category, web_push, kakao_alimtalk, in_app")
@@ -100,7 +100,7 @@ def get_member_preference(member_id: str, category: str, supabase: Any = None) -
     defaults = _DEFAULTS.get(
         category, {"web_push": False, "kakao_alimtalk": False, "in_app": True}
     )
-    supabase = supabase or get_supabase_client()
+    supabase = supabase or get_app_db()
     res = (
         supabase.table("app_notification_preferences")
         .select("web_push, kakao_alimtalk, in_app")
@@ -142,7 +142,7 @@ def update_preference(member_id: str, category: str, channels: dict[str, bool]) 
     if category in LOCKED_CATEGORIES:
         payload["in_app"] = True
 
-    supabase = get_supabase_client()
+    supabase = get_app_db()
     res = (
         supabase.table("app_notification_preferences")
         .upsert(payload, on_conflict="member_id,category")
@@ -164,7 +164,7 @@ def save_push_subscription(
 
     실제 발송은 Phase 4(FCM)에서 이 구독 정보를 사용한다.
     """
-    supabase = get_supabase_client()
+    supabase = get_app_db()
     payload: dict[str, Any] = {
         "member_id": member_id,
         "fcm_token": fcm_token,
@@ -200,7 +200,7 @@ def save_push_subscription(
 
 def remove_push_subscription(member_id: str, endpoint: str) -> bool:
     """endpoint에 해당하는 구독을 비활성화 (soft delete)."""
-    supabase = get_supabase_client()
+    supabase = get_app_db()
     res = (
         supabase.table("app_push_subscriptions")
         .update({"is_active": False})

@@ -14,6 +14,12 @@ CATEGORY_COMPETITION_RESULT = "competition_result"
 CATEGORY_RANKING_CHANGE = "ranking_change"
 
 # data_events.event_type → 카테고리
+#
+# 매핑 비대칭 주의 (의도된 설계):
+#   - `event.created`는 의도적으로 미매핑한다. 종목(event) 생성 시점엔 아직 결과가 없어
+#     알림 대상이 아니다. 결과가 채워지는 `event.updated`에서만 competition_result 알림을 보낸다.
+#   - 반면 `competition.created`는 매핑한다. 대회(competition) 생성은 일정 공지 성격이라
+#     생성 시점에도 사용자에게 알릴 가치가 있다 (개별 종목 결과와는 다른 레벨).
 EVENT_TYPE_TO_CATEGORY: dict[str, str] = {
     "ranking.updated": CATEGORY_RANKING_CHANGE,
     "competition.created": CATEGORY_COMPETITION_RESULT,
