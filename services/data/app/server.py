@@ -5589,9 +5589,8 @@ async def player_certificate_page(
     if identity_profile:
         records_to_use = identity_profile.records
     else:
-        # Fallback to search
-        player_records = get_player_records(player_name, team)
-        records_to_use = player_records
+        # Fallback: use the name-indexed records directly (identity unresolved)
+        records_to_use = _player_index.get(player_name, [])
 
     # Filter by weapon if specified
     weapon_filter_display = None

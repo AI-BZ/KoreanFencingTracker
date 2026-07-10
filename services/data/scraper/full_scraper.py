@@ -1136,6 +1136,7 @@ class KFFFullScraper:
 
     async def get_de_only(self, event_cd: str, sub_event_cd: str, page_num: int = 1) -> Dict[str, Any]:
         """DE 데이터만 수집 (보완 스크래핑용)"""
+        start_time = time.time()
         results = {
             "de_bracket": {},
             "de_matches": []

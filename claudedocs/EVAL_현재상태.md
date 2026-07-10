@@ -70,6 +70,17 @@
 | P0-1 | **관리성 엔드포인트 무인증**: `POST /api/data/reload`(server.py:2397), `POST /api/scheduler/run`(:8858), `GET /api/admin/validate`(:8883) 모두 인증 없음 | 코드 직접 확인 — `get_current_member` 호출 없음 | 외부인이 반복 호출로 전체 데이터 리로드/스크래퍼 강제 실행 → 서버 자원 고갈 + KFA 사이트에 무단 트래픽 (차단/법적 리스크) |
 | P0-2 | **JWT 시크릿 기본값 폴백**: `JWT_SECRET_KEY: str = os.getenv(..., "your-secret-key-change-in-production")` | shared_core/auth/config.py:20 | 프로덕션에서 env 미설정 시 공개된 기본 키로 토큰 위조 가능 → 인증·접근제어 전체 무력화. (프로덕션 env 설정 여부는 미검증 — 확인 필요) |
 
+### P1 신규 (2026-07-10 실행 단계에서 ruff/env 확인으로 확정된 추가 결함)
+| # | 문제 | 근거 | 방치 시 결과 |
+|---|---|---|---|
+| P1-A | **P0-2가 실제 활성 상태로 확정**: 프로덕션 launchd plist(com.fencingmind.data)에 `JWT_SECRET_KEY` env 없음 + `/opt/fencingmind/data/.env` 파일 부재 → 현재 프로덕션이 공개 기본키로 JWT 서명 중 | plist EnvironmentVariables 확인, .env 부재 확인 | 누구나 토큰 위조로 인증 전면 우회 가능 (지금 이 순간 노출) |
+| P1-B | **undefined name `get_player_records`** — 선수 페이지 fallback 경로(identity_profile 없을 때)에서 미정의 함수 호출 | server.py:5572, grep으로 정의 부재 확인 (ruff F821) | identity 미해결 선수 페이지 접근 시 500 크래시 |
+| P1-C | **undefined name `start_time`** — `get_de_only()`(full_scraper.py:1137)에서 초기화 없이 `time.time()-start_time` 사용 | full_scraper.py:1225 (ruff F821) | DE-only 스크래핑 경로에서 NameError로 중단 |
+| P1-D | **중복 dict 키 16건** — location_codes.py의 지역 코드 매핑에서 같은 키 중복 정의(앞 값 소실) + auto_translate.py 번역 키 중복 | ruff F601 (location_codes.py 다수, auto_translate.py:1577) | 일부 지역/번역이 의도와 다르게 매핑 (조용한 데이터 오류) |
+| P1-E | **date 재정의(F811)** — player_identity.py:1396에서 line 23의 `date` import를 지역 재정의 | ruff F811 | 섀도잉으로 인한 잠재 오동작 |
+
+**ruff 정적 분석 기준선 (2026-07-10)**: services/data + packages 총 **347건** — F401 미사용 import 137, F541 빈 f-string 96, F841 미사용 변수 43, E402 29, F601 16, E722 bare-except 15, 기타. 234건 자동수정 가능.
+
 ### P1 (중요 — 유지보수·운영 심각 저해)
 | # | 문제 | 근거 | 방치 시 결과 |
 |---|---|---|---|
