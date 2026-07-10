@@ -2394,12 +2394,33 @@ async def api_status():
     }
 
 
+async def require_admin_or_internal(request: Request):
+    """관리성 엔드포인트 접근 게이트: 내부 토큰 또는 관리자 JWT.
+
+    - 헤더 X-Internal-Token이 환경변수 INTERNAL_API_TOKEN과 일치하면 통과 (내부 호출).
+      단 INTERNAL_API_TOKEN이 미설정이면 이 경로는 비활성 (빈 값끼리 매칭 우회 방지).
+    - 그 외에는 관리자(member_type == "admin") JWT 회원만 통과.
+    - 어느 쪽도 아니면 403.
+    """
+    token_env = os.getenv("INTERNAL_API_TOKEN", "")
+    header_token = request.headers.get("X-Internal-Token", "")
+    if token_env and header_token == token_env:
+        return
+
+    member = await get_current_member(request)
+    if member and member.get("member_type") == "admin":
+        return
+
+    raise HTTPException(status_code=403, detail="관리자 권한이 필요합니다")
+
+
 @app.post("/api/data/reload")
-async def api_data_reload():
+async def api_data_reload(request: Request):
     """데이터 새로고침 API
 
     Supabase에서 최신 데이터를 다시 로드합니다.
     """
+    await require_admin_or_internal(request)
     global _data_cache, _data_source, _player_index
 
     try:
@@ -8774,12 +8795,13 @@ async def api_favorites_in_event(request: Request, sub_event_cd: str):
 # ==================== 데이터 새로고침 API ====================
 
 @app.post("/api/refresh-data")
-async def refresh_data_cache():
+async def refresh_data_cache(request: Request):
     """서버 데이터 캐시 새로고침 API
 
     스크래핑/선수 데이터 업데이트 완료 후 호출하여 DB의 최신 데이터를 서버 메모리에 로드
     identity_resolver도 재구축하여 current_team 등이 올바르게 반영됨
     """
+    await require_admin_or_internal(request)
     try:
         logger.info("🔄 데이터 캐시 새로고침 시작...")
 
@@ -8856,7 +8878,7 @@ async def get_scheduler_status():
 
 
 @app.post("/api/scheduler/run")
-async def run_scheduler_now(task_type: str = "detect"):
+async def run_scheduler_now(request: Request, task_type: str = "detect"):
     """스케줄러 즉시 실행 API
 
     Args:
@@ -8866,6 +8888,7 @@ async def run_scheduler_now(task_type: str = "detect"):
             - "final": 최종 결과 수집 (종료된 대회)
             - "all": 전체 실행
     """
+    await require_admin_or_internal(request)
     if not SCHEDULER_AVAILABLE or not ENABLE_SCHEDULER:
         raise HTTPException(status_code=503, detail="스케줄러가 활성화되지 않았습니다")
 
@@ -8880,8 +8903,9 @@ async def run_scheduler_now(task_type: str = "detect"):
 # ==================== 데이터 무결성 검증 API ====================
 
 @app.get("/api/admin/validate")
-async def api_validate_data():
+async def api_validate_data(request: Request):
     """전체 데이터 무결성 검증"""
+    await require_admin_or_internal(request)
     from app.data_validator import DataValidator
     validator = DataValidator(get_competitions(), org_cache=_org_region_cache)
     issues = validator.validate_all()
@@ -8905,8 +8929,9 @@ async def api_validate_data():
 
 
 @app.get("/api/admin/validate/{player_name}")
-async def api_validate_player(player_name: str):
+async def api_validate_player(request: Request, player_name: str):
     """특정 선수 데이터 검증"""
+    await require_admin_or_internal(request)
     from app.data_validator import DataValidator
     validator = DataValidator(get_competitions(), org_cache=_org_region_cache)
     issues = validator.validate_player(player_name)

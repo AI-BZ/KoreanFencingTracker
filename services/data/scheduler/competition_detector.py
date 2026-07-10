@@ -891,6 +891,7 @@ class EventBasedScraper:
             async with httpx.AsyncClient() as client:
                 response = await client.post(
                     f"http://localhost:{server_port}/api/refresh-data",
+                    headers={"X-Internal-Token": os.getenv("INTERNAL_API_TOKEN", "")},
                     timeout=60.0  # 데이터 로드에 시간이 걸릴 수 있음
                 )
                 if response.status_code == 200:
