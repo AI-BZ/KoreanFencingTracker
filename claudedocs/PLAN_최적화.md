@@ -88,16 +88,28 @@
 
 ---
 
-## 승인 기록
+## 승인 기록 및 실행 결과 (2026-07-10 완료)
 
-| # | 항목 | 승인 | 상태 |
-|---|---|---|---|
-| 1 | 작업 트리 정리 + 커밋 | ⏳ | - |
-| 2 | 관리성 엔드포인트 인증 | ⏳ | - |
-| 3 | JWT 시크릿 기본값 제거 | ⏳ | - |
-| 4 | 테스트 환경 복구 | ⏳ | - |
-| 5 | extract_age_group 통일 | ⏳ | - |
-| 6 | server.py 1차 분할 | ⏳ | - |
-| 7 | ruff 도입 | ⏳ | - |
-| 8 | de_scraper_v4 backup 이동 | ⏳ | - |
-| 9 | team_ranking.py 결정 | ⏳ | 사용자 결정 필요 |
+사용자 승인: "전부 진행, 6번 포함". 브랜치 `refactor/eval-20260710-exec`.
+
+| # | 항목 | 상태 | 커밋 | 비고 |
+|---|---|---|---|---|
+| 1 | 작업 트리 정리 + 커밋 | ✅ 완료 | 7개 커밋 | 미커밋 20파일 정리, PNG 54개 docs/screenshots/ 이동, .gitignore 갱신, 트리 clean |
+| 2 | 관리성 엔드포인트 인증 (P0) | ✅ 완료 | 06babe2 | require_admin_or_internal 게이트 5개 엔드포인트 + 스케줄러 내부토큰 헤더 |
+| 3 | JWT 시크릿 기본값 제거 (P0) | ✅ 완료 | b86778d | fail-fast. ⚠️ 배포 전 프로덕션 env 설정 필수 (아래 미결 참조) |
+| 4 | 테스트 환경 복구 | ✅ 완료 | (환경) | Python 3.13 pytest 복구. 전체 514통과/170실패(네트워크 의존). 오프라인 기준선 218통과/14실패(기존 stale) 확보 |
+| 5 | extract_age_group 통일 | ✅ 재조정 완료 | deac6f3 | 두 함수가 13개 입력서 버킷 자체 불일치 → 병합 불가. 특성화 테스트 117개로 현행 고정 + 불일치 문서화 |
+| 6 | server.py 1차 분할 | ✅ 완료 | 6e1450b | DE/bout 변환 9함수 → app/de_transforms.py. server.py 8932→8299줄. AST 동일성 검증 |
+| 7 | ruff 도입 | ✅ 완료 | 08d6eda | 234건 자동수정/72파일 + ruff.toml. 회귀 없음 |
+| 8 | de_scraper_v4 backup 이동 | ✅ 불필요 확정 | - | full_scraper.py:23이 실제 import하는 활성 DE 모듈. 이동 안 함 |
+| 9 | team_ranking.py 결정 | ✅ 보존 처리 | 1cf7aaf | 커밋으로 보존 + server.py 팀랭킹 API 연동 상태로 통합 |
+
+### 실행 중 신규 발견·처리
+- **P1 크래시 2건** (485190e): server.py `get_player_records` 미정의 → 선수페이지 500 크래시 수정; full_scraper `start_time` 미정의 → 스크래퍼 NameError 수정 (ruff F821로 발견)
+- **잠재 랭킹 버그** (미수정, 문서화): calculator.py의 age classifier가 카뎃/Junior/고교/14~16세이하/U23 이벤트를 SR로 오분류. 랭킹 의미 변경이라 데이터 소유자 판단 대기 (docs/AGE_GROUP_DIVERGENCE.md)
+
+### 🔴 배포 전 필수 (사람이 할 일 — 코드 아님)
+1. **프로덕션 JWT 키 설정**: 현재 프로덕션 launchd(com.fencingmind.data)에 `JWT_SECRET_KEY` 미설정 → 공개 기본키로 가동 중(토큰 위조 가능). 배포 시 plist EnvironmentVariables에 강력 랜덤 `JWT_SECRET_KEY` 추가 **필수** (없으면 fail-fast로 기동 실패). 키 설정 시 기존 세션 전원 재로그인 발생.
+2. **INTERNAL_API_TOKEN 설정**: 스케줄러 캐시 갱신용. plist에 추가.
+3. **shared_core R2**: config.py(b86778d)는 data 브랜치에 커밋됨 → feature/shared/* 브랜치로 cherry-pick 필요.
+4. **배포 전 전체 테스트**: 오프라인 커버리지가 route/domain 레이어를 못 덮으므로, 배포 전 네트워크 포함 전체 pytest(약 1.5h) 1회 권장.
