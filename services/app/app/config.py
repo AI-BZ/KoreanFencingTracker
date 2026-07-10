@@ -120,5 +120,11 @@ class AppSettings:
     # 이벤트 폴러 활성화 (Phase 3). 테스트/로컬에서 끄려면 APP_ENABLE_POLLER=false
     ENABLE_POLLER: bool = os.getenv("APP_ENABLE_POLLER", "true").lower() == "true"
 
+    # 알림 재시도 스윕 (EVAL P1-1). 폴러 커서가 지나간 failed/pending 로그를 재발송한다.
+    #   - MAX_ATTEMPTS: 로그 행당 재시도 상한. 도달하면 스윕 대상에서 제외(무한 재시도 방지).
+    #   - WINDOW_HOURS: created_at이 이 시간 이내인 로그만 재시도(오래된 실패는 포기).
+    NOTIFY_RETRY_MAX_ATTEMPTS: int = int(os.getenv("NOTIFY_RETRY_MAX_ATTEMPTS", "3"))
+    NOTIFY_RETRY_WINDOW_HOURS: int = int(os.getenv("NOTIFY_RETRY_WINDOW_HOURS", "24"))
+
 
 settings = AppSettings()

@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from shared_core.db.client import get_supabase_client
@@ -164,6 +164,29 @@ class NotificationDispatcher:
         """notifications 테이블에 인앱 알림 생성. 중복이면 False."""
         if self._already_sent(member_id, "in_app", event):
             return False
+        ok, notif_id, error = self._in_app_core(member_id, category, title, body, link, event)
+        if ok:
+            self._log(member_id, "in_app", "sent", event, notification_id=notif_id)
+            return True
+        self._log(member_id, "in_app", "failed", event, error=error)
+        return False
+
+    def _in_app_core(
+        self,
+        member_id: str,
+        category: str,
+        title: str,
+        body: str,
+        link: Optional[str],
+        event: dict,
+    ) -> tuple[bool, Optional[str], Optional[str]]:
+        """인앱 알림 발송 코어 (멱등성 검사·로그 기록 없음).
+
+        최초 발송(_send_in_app)과 재시도(retry_failed)가 공유한다.
+        Returns:
+            (ok, notification_id, error) — 성공 시 (True, 생성된 notifications.id, None),
+            실패 시 (False, None, 오류 문자열).
+        """
         try:
             ins = (
                 self.db.table("notifications")
@@ -184,12 +207,10 @@ class NotificationDispatcher:
                 .execute()
             )
             notif_id = ins.data[0]["id"] if ins.data else None
-            self._log(member_id, "in_app", "sent", event, notification_id=notif_id)
-            return True
+            return True, notif_id, None
         except Exception as exc:  # noqa: BLE001
             logger.error("인앱 알림 발송 실패 member=%s: %s", member_id, exc)
-            self._log(member_id, "in_app", "failed", event, error=str(exc))
-            return False
+            return False, None, str(exc)
 
     def _send_web_push(self, member_id: str, event: dict) -> bool:
         """웹 푸시 발송 (FCM은 표준 Web Push 위에서 동작 → pywebpush 사용).
@@ -207,20 +228,40 @@ class NotificationDispatcher:
         if self._already_sent(member_id, "web_push", event):
             return False
 
-        # 1) VAPID 비밀키 확인 (없으면 발송 불가 → pending 로그)
+        status, error = self._web_push_core(member_id, event)
+        if status == "sent":
+            self._log(member_id, "web_push", "sent", event)
+            return True
+        if status == "no_subscription":
+            # 원본 동작 보존: 활성 구독이 없으면 로그를 남기지 않는다 (debug만).
+            return False
+        # pending(VAPID/pywebpush 미설정) 또는 failed(구독 조회 실패/발송 실패)
+        self._log(member_id, "web_push", status, event, error=error)
+        return False
+
+    def _web_push_core(self, member_id: str, event: dict) -> tuple[str, Optional[str]]:
+        """웹 푸시 발송 코어 (멱등성 검사·로그 기록 없음).
+
+        최초 발송(_send_web_push)과 재시도(retry_failed)가 공유한다.
+        Returns:
+            (status, error) — status ∈ {'sent','pending','failed','no_subscription'}.
+              - sent            : 1건 이상 실제 발송 성공.
+              - pending         : VAPID 키 미설정 / pywebpush 미설치 (향후 재시도 가능).
+              - failed          : 구독 조회 실패 또는 모든 발송 실패.
+              - no_subscription : 활성 구독 없음 (발송 대상 자체가 없음).
+        """
+        # 1) VAPID 비밀키 확인 (없으면 발송 불가 → pending)
         private_key = settings.FCM_VAPID_PRIVATE_KEY
         if not private_key:
             logger.info("web_push skip member=%s: VAPID key 미설정", member_id)
-            self._log(member_id, "web_push", "pending", event, error="VAPID key 미설정")
-            return False
+            return "pending", "VAPID key 미설정"
 
         # 2) pywebpush 지연 import (미설치여도 모듈 import는 깨지지 않음)
         try:
             from pywebpush import WebPushException, webpush  # type: ignore
         except Exception as exc:  # noqa: BLE001 - ImportError 등
             logger.warning("web_push skip member=%s: pywebpush 미설치 (%s)", member_id, exc)
-            self._log(member_id, "web_push", "pending", event, error="pywebpush 미설치")
-            return False
+            return "pending", "pywebpush 미설치"
 
         # 3) 활성 구독 조회
         try:
@@ -234,12 +275,11 @@ class NotificationDispatcher:
             subscriptions = res.data or []
         except Exception as exc:  # noqa: BLE001
             logger.error("구독 조회 실패 member=%s: %s", member_id, exc)
-            self._log(member_id, "web_push", "failed", event, error=str(exc))
-            return False
+            return "failed", str(exc)
 
         if not subscriptions:
             logger.debug("web_push: 활성 구독 없음 member=%s", member_id)
-            return False
+            return "no_subscription", None
 
         title, body, link = et.build_message(event)
         payload = json.dumps(
@@ -286,10 +326,8 @@ class NotificationDispatcher:
                 logger.error("web_push 예외 member=%s: %s", member_id, exc)
 
         if sent_any:
-            self._log(member_id, "web_push", "sent", event)
-        else:
-            self._log(member_id, "web_push", "failed", event, error=last_error or "발송 대상 없음")
-        return sent_any
+            return "sent", None
+        return "failed", last_error or "발송 대상 없음"
 
     def _deactivate_subscription(self, sub_id: Optional[str]) -> None:
         if not sub_id:
@@ -314,6 +352,22 @@ class NotificationDispatcher:
         if self._already_sent(member_id, "kakao_alimtalk", event):
             return
 
+        status, error = self._kakao_core(member_id, event)
+        if status == "sent":
+            self._log(member_id, "kakao_alimtalk", "sent", event)
+        elif status == "pending":
+            self._log(member_id, "kakao_alimtalk", "pending", event, error=error)
+        else:  # 'failed'
+            self._log(member_id, "kakao_alimtalk", "failed", event, error=error or "알 수 없는 오류")
+
+    def _kakao_core(self, member_id: str, event: dict) -> tuple[str, Optional[str]]:
+        """카카오 알림톡 발송 코어 (멱등성 검사·로그 기록 없음).
+
+        최초 발송(_send_kakao)과 재시도(retry_failed)가 공유한다.
+        not_configured(자격증명/템플릿 없음)는 pending으로 정규화한다(향후 재시도 가능 상태).
+        Returns:
+            (status, error) — status ∈ {'sent','pending','failed'}.
+        """
         # 1) 수신 전화번호 해석 (members.phone / phone_country_code / contact_phone)
         try:
             res = (
@@ -326,16 +380,14 @@ class NotificationDispatcher:
             member_row = (res.data or [None])[0]
         except Exception as exc:  # noqa: BLE001
             logger.error("kakao 수신번호 조회 실패 member=%s: %s", member_id, exc)
-            self._log(member_id, "kakao_alimtalk", "failed", event, error=str(exc))
-            return
+            return "failed", str(exc)
 
         from .kakao import KakaoAlimtalkSender, build_recipient_phone
 
         phone = build_recipient_phone(member_row or {})
         if not phone:
             logger.info("kakao skip member=%s: 전화번호 없음", member_id)
-            self._log(member_id, "kakao_alimtalk", "pending", event, error="전화번호 없음")
-            return
+            return "pending", "전화번호 없음"
 
         # 2) 발송 (sender는 절대 예외를 던지지 않음)
         sender = KakaoAlimtalkSender()
@@ -343,14 +395,170 @@ class NotificationDispatcher:
         status = result.get("status")
         error = result.get("error")
 
-        # 3) 결과 → 로그 상태 매핑
-        #    not_configured(자격증명/템플릿 없음)은 pending으로 기록 (향후 재시도 가능 상태).
+        # 3) 결과 정규화 (not_configured → pending)
         if status == "sent":
-            self._log(member_id, "kakao_alimtalk", "sent", event)
-        elif status in ("pending", "not_configured"):
-            self._log(member_id, "kakao_alimtalk", "pending", event, error=error)
-        else:  # 'failed' 또는 알 수 없는 값
-            self._log(member_id, "kakao_alimtalk", "failed", event, error=error or "알 수 없는 오류")
+            return "sent", None
+        if status in ("pending", "not_configured"):
+            return "pending", error
+        return "failed", error or "알 수 없는 오류"
+
+    # -------------------------------------------------------------- retry sweep
+
+    def retry_failed(self, max_attempts: int, window_hours: int) -> dict:
+        """실패/보류(failed/pending) 알림 로그를 재발송하는 스윕 (EVAL P1-1).
+
+        폴러 커서는 배치 max(id)로 무조건 전진하므로, 일시적 오류로 실패한 알림은
+        재시도 경로가 없으면 영원히 재발송되지 않는다. 이 스윕이 app_notification_log에서
+        아직 성공하지 못한 행을 찾아 원본 이벤트를 재조회하고 채널별로 재발송한다.
+
+        멱등성 우회: 재발송은 _send_* 가 아니라 채널 코어(_in_app_core/_web_push_core/
+        _kakao_core)를 직접 호출한다. _send_* 는 맨 앞에서 _already_sent()로 스킵하는데,
+        재시도 대상은 이미 로그 행이 있어 그 검사에 걸리기 때문이다. 결과는 기존 로그 행을
+        UPDATE(migration 022의 UNIQUE 제약과 정합 — 신규 INSERT 아님)한다.
+
+        절대 raise 하지 않는다(폴러 생존 보장).
+
+        Returns:
+            {"retried": 시도한 행 수, "recovered": sent로 전이한 행 수}.
+        """
+        summary = {"retried": 0, "recovered": 0}
+        try:
+            window_start = (
+                datetime.now(timezone.utc) - timedelta(hours=window_hours)
+            ).isoformat()
+            res = (
+                self.db.table("app_notification_log")
+                .select("*")
+                .in_("status", ["failed", "pending"])
+                .lt("attempt_count", max_attempts)
+                .gte("created_at", window_start)
+                .order("created_at")
+                .limit(200)
+                .execute()
+            )
+            rows = res.data or []
+        except Exception as exc:  # noqa: BLE001 - 스윕 조회 실패는 폴러를 죽이지 않음
+            logger.error("재시도 스윕 조회 실패: %s", exc)
+            return summary
+
+        for row in rows:
+            try:
+                self._retry_one(row, summary)
+            except Exception as exc:  # noqa: BLE001 - 한 행 실패가 스윕을 막지 않음
+                logger.error("재시도 처리 오류 log=%s: %s", row.get("id"), exc)
+
+        return summary
+
+    def _retry_one(self, row: dict, summary: dict) -> None:
+        """단일 로그 행 재시도. 로그 행 상태를 UPDATE한다."""
+        channel = row.get("channel")
+        log_id = row.get("id")
+        member_id = row.get("member_id")
+        event_id = row.get("event_id")
+        event_type = row.get("event_type") or ""
+
+        # 카카오는 게이트 off면 건너뜀 (재활성화 대비 상태 보존, attempt 증가 안 함).
+        if channel == "kakao_alimtalk" and not settings.ENABLE_KAKAO_ALIMTALK:
+            return
+
+        summary["retried"] += 1
+
+        # 원본 이벤트 재조회 (title/body는 로그에 없으므로 data_events에서 재구성).
+        event = self._fetch_source_event(event_id)
+        if event is None:
+            # 원본이 사라졌으면 재구성 불가 → attempt만 올려 무한 재시도 방지.
+            self._update_log_row(
+                log_id, row, status=None, error="원본 이벤트 없음"
+            )
+            return
+
+        status, error, notif_id = self._resend_channel(channel, member_id, event_type, event)
+        if status == "sent":
+            self._update_log_row(log_id, row, status="sent", error=None, notification_id=notif_id)
+            summary["recovered"] += 1
+        elif status == "pending":
+            self._update_log_row(log_id, row, status="pending", error=error)
+        else:  # 'failed' 또는 알 수 없는 채널
+            self._update_log_row(log_id, row, status="failed", error=error)
+
+    def _fetch_source_event(self, event_id: Any) -> Optional[dict]:
+        """event_id로 data_events 원본 행을 재조회. 없거나 실패하면 None."""
+        if event_id is None:
+            return None
+        try:
+            res = (
+                self.db.table("data_events")
+                .select("*")
+                .eq("id", event_id)
+                .limit(1)
+                .execute()
+            )
+            return (res.data or [None])[0]
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("원본 이벤트 조회 실패 event_id=%s: %s", event_id, exc)
+            return None
+
+    def _resend_channel(
+        self, channel: Optional[str], member_id: str, event_type: str, event: dict
+    ) -> tuple[str, Optional[str], Optional[str]]:
+        """채널별 재발송 (멱등성 우회, 로그 INSERT 없음).
+
+        Returns:
+            (status, error, notification_id) — status ∈ {'sent','pending','failed'}.
+            notification_id는 in_app 재발송 성공 시에만 채워진다.
+        """
+        if channel == "in_app":
+            category = et.category_for_event(event.get("event_type", "")) or event_type
+            title, body, link = et.build_message(event)
+            ok, notif_id, error = self._in_app_core(
+                member_id, category, title, body, link, event
+            )
+            return ("sent" if ok else "failed"), error, notif_id
+
+        if channel == "web_push":
+            status, error = self._web_push_core(member_id, event)
+            # 재시도 시 '구독 없음'은 재발송 불가한 실패로 취급(원본과 달리 로그를 남겨야 함).
+            if status == "no_subscription":
+                return "failed", "활성 구독 없음", None
+            return status, error, None
+
+        if channel == "kakao_alimtalk":
+            # 게이트는 _retry_one에서 이미 확인됨 (여기 도달 = ENABLE_KAKAO_ALIMTALK True).
+            status, error = self._kakao_core(member_id, event)
+            return status, error, None
+
+        return "failed", f"알 수 없는 채널: {channel}", None
+
+    def _update_log_row(
+        self,
+        log_id: Any,
+        row: dict,
+        status: Optional[str],
+        error: Optional[str],
+        notification_id: Optional[str] = None,
+    ) -> None:
+        """재시도 결과를 로그 행에 UPDATE (id로 특정). attempt_count는 항상 +1.
+
+        status가 None이면 기존 상태를 유지하고 attempt_count/last_attempt_at/error만 갱신
+        (원본 이벤트 소실 등 재발송을 아예 시도하지 못한 경우).
+        """
+        if log_id is None:
+            return
+        patch: dict[str, Any] = {
+            "attempt_count": int(row.get("attempt_count") or 0) + 1,
+            "last_attempt_at": _now_iso(),
+            "error_message": error,
+        }
+        if status is not None:
+            patch["status"] = status
+        if status == "sent":
+            patch["sent_at"] = _now_iso()
+            if notification_id is not None:
+                patch["notification_id"] = notification_id
+        try:
+            self.db.table("app_notification_log").update(patch).eq("id", log_id).execute()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("재시도 로그 업데이트 실패 log=%s: %s", log_id, exc)
 
     # ------------------------------------------------------------- logging
 

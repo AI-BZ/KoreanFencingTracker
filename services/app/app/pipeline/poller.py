@@ -105,7 +105,9 @@ class EventPoller:
         events = res.data or []
         if not events:
             self._touch_cursor()
-            return {"polled": 0, "dispatched": 0, "last_id": last_id}
+            result = {"polled": 0, "dispatched": 0, "last_id": last_id}
+            self._retry_sweep(result)
+            return result
 
         dispatched = 0
         new_last = last_id
@@ -123,7 +125,28 @@ class EventPoller:
                 pass
 
         self._advance_cursor(new_last, processed_total + len(events))
-        return {"polled": len(events), "dispatched": dispatched, "last_id": new_last}
+        result = {"polled": len(events), "dispatched": dispatched, "last_id": new_last}
+        self._retry_sweep(result)
+        return result
+
+    def _retry_sweep(self, result: dict) -> None:
+        """실패/보류 알림 재발송 스윕 (EVAL P1-1). 빈 배치여도 매 폴 사이클 1회 실행.
+
+        - dispatcher가 retry_failed를 지원할 때만 실행(스텁 디스패처 호환).
+        - 성공 시 result에 retried/recovered 키를 추가한다.
+        - 어떤 예외도 폴 루프를 죽이지 않도록 흡수(retry_failed 자체도 흡수하지만 이중 방어).
+        """
+        if not hasattr(self.dispatcher, "retry_failed"):
+            return
+        try:
+            retry = self.dispatcher.retry_failed(
+                max_attempts=settings.NOTIFY_RETRY_MAX_ATTEMPTS,
+                window_hours=settings.NOTIFY_RETRY_WINDOW_HOURS,
+            )
+            result["retried"] = retry.get("retried", 0)
+            result["recovered"] = retry.get("recovered", 0)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("재시도 스윕 오류: %s", exc)
 
     # ------------------------------------------------------------- loop
 
@@ -138,6 +161,12 @@ class EventPoller:
                         logger.info(
                             "polled=%s dispatched=%s last_id=%s",
                             result["polled"], result["dispatched"], result["last_id"],
+                        )
+                    # 빈 배치여도 재시도로 복구된 알림이 있으면 관측 가능하게 남긴다.
+                    if result.get("recovered"):
+                        logger.info(
+                            "retry sweep: retried=%s recovered=%s",
+                            result.get("retried", 0), result["recovered"],
                         )
                 except Exception as exc:  # noqa: BLE001 - 루프는 계속 살아있어야 함
                     logger.error("폴 루프 오류: %s", exc)
