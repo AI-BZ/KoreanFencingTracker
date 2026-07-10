@@ -3,7 +3,6 @@
 
 이름, 이메일, 전화번호 마스킹 함수 제공
 """
-from typing import Optional
 
 # 한글 초성 → 영어 매핑
 CHOSUNG_LIST = [

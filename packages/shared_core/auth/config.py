@@ -17,7 +17,7 @@ class SharedAuthSettings(BaseSettings):
     SUPABASE_SERVICE_KEY: str = os.getenv("SUPABASE_SERVICE_KEY", "")
 
     # JWT
-    JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
+    JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "")
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24시간
 
@@ -39,6 +39,15 @@ class SharedAuthSettings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
+_INSECURE_JWT_DEFAULT = "your-secret-key-change-in-production"
+
+
 @lru_cache()
 def get_shared_auth_settings() -> SharedAuthSettings:
-    return SharedAuthSettings()
+    settings = SharedAuthSettings()
+    if not settings.JWT_SECRET_KEY or settings.JWT_SECRET_KEY == _INSECURE_JWT_DEFAULT:
+        raise RuntimeError(
+            "JWT_SECRET_KEY 환경변수가 설정되지 않았습니다. "
+            "프로덕션 기동 전 반드시 강력한 랜덤 키를 설정하세요."
+        )
+    return settings
