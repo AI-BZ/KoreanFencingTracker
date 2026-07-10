@@ -1900,3 +1900,97 @@ class TestHandednessDetection:
         handedness, confidence = self.analyzer.detect_handedness(seq, "left")
         assert handedness is None
         assert confidence == 0.0
+
+
+# ==================================================================
+# Quality fix C: NEUTRAL bucket for low-confidence exchanges
+# ==================================================================
+
+
+class TestNeutralExchangeBucket:
+    """Low-confidence non-scoring exchanges must be labelled NEUTRAL, not
+    FAILED_ATTACK, and excluded from attack/defense statistics."""
+
+    def _classify(self, sub_seq: List[PoseResult], is_scoring: bool = False):
+        from analyzer.config import (
+            FOOTWORK_ANALYSIS_WINDOW,
+            PARRY_DETECTION_WINDOW,
+            FOOTWORK_USE_RATIO_BASED_HIP_DROP,
+        )
+        from ml.pose_analysis import exchanges as exch
+        return exch.classify_exchange(
+            sub_seq, is_scoring, 0, len(sub_seq) - 1, set(),
+            FOOTWORK_ANALYSIS_WINDOW, PARRY_DETECTION_WINDOW,
+            FOOTWORK_USE_RATIO_BASED_HIP_DROP,
+        )
+
+    def test_clear_advance_without_score_is_failed_attack(self):
+        """A committed forward approach that does not score stays FAILED_ATTACK."""
+        # Left fencer steps forward (toward opponent) ~40px over the window;
+        # right fencer stays put → clear single aggressor, no score.
+        seq: List[PoseResult] = []
+        for i in range(15):
+            offset = (i / 14) * 40.0
+            left_x = 200.0 + offset
+            left = make_fencer("left", shoulder_cx=left_x, hip_cx=left_x, ankle_cx=left_x)
+            right = make_fencer("right", shoulder_cx=600, hip_cx=600, ankle_cx=600)
+            seq.append(make_pose_result(i, left, right))
+        assert self._classify(seq) == NonScoringEventType.FAILED_ATTACK
+
+    def test_both_stationary_is_neutral(self):
+        """Both fencers stationary (no aggressor) → NEUTRAL, not FAILED_ATTACK."""
+        seq = make_static_sequence(20, left_x=200.0, right_x=600.0)
+        assert self._classify(seq) == NonScoringEventType.NEUTRAL
+
+    def test_too_short_window_is_neutral(self):
+        """A sub-sequence too short to analyse footwork → NEUTRAL, not FAILED_ATTACK."""
+        seq = make_static_sequence(2, left_x=200.0, right_x=600.0)
+        assert self._classify(seq) == NonScoringEventType.NEUTRAL
+
+    def test_neutral_excluded_from_attack_denominator(self):
+        """A NEUTRAL exchange must not count as an attack attempt, even if its
+        stored footwork looks aggressive."""
+        from ml.pose_analysis import exchanges as exch
+
+        advance = FootworkResult(footwork_type=FootworkType.ADVANCE, confidence=0.9)
+        failed = ExchangeEvent(
+            start_frame=0, end_frame=10, min_distance_frame=5, min_distance_bh=1.0,
+            event_type=NonScoringEventType.FAILED_ATTACK, footwork_left=advance,
+        )
+        neutral = ExchangeEvent(
+            start_frame=20, end_frame=30, min_distance_frame=25, min_distance_bh=1.0,
+            event_type=NonScoringEventType.NEUTRAL, footwork_left=advance,
+        )
+        summary = exch.build_my_fencer_summary(
+            [failed, neutral], "left", set(), fps=30.0,
+        )
+        # Only the FAILED_ATTACK exchange is counted; the NEUTRAL one is skipped.
+        assert summary.attacks_attempted == 1
+        assert summary.attacks_failed == 1
+
+    def test_neutral_analyze_continuous_end_to_end(self):
+        """analyze_continuous on an ambiguous approach-engage-separate sequence
+        yields NEUTRAL exchanges that stay out of the my-fencer attack stats."""
+        analyzer = PoseAnalyzer()
+        seq = []
+        for i in range(90):
+            # Right fencer approaches then retreats; left fencer never commits.
+            if i < 30:
+                right_x = 600.0 - i * 5
+            elif i < 60:
+                right_x = 450.0
+            else:
+                right_x = 450.0 + (i - 60) * 5
+            left = make_fencer("left", shoulder_cx=200, hip_cx=200, ankle_cx=200)
+            right = make_fencer("right", shoulder_cx=right_x, hip_cx=right_x, ankle_cx=right_x)
+            seq.append(make_pose_result(i, left, right))
+
+        result = analyzer.analyze_continuous(seq, sample_every_n=1, my_fencer="left")
+        neutral = [
+            ex for ex in result.exchanges
+            if ex.event_type == NonScoringEventType.NEUTRAL
+        ]
+        assert len(neutral) >= 1
+        # my_fencer (left) never advanced → no attack attempts recorded.
+        assert result.my_fencer_summary is not None
+        assert result.my_fencer_summary.attacks_attempted == 0

@@ -10,6 +10,7 @@ from analyzer.config import (
     EXCHANGE_MIN_APPROACH_FRAMES,
     EXCHANGE_MIN_DISTANCE_CHANGE_BH,
     EXCHANGE_MERGE_SEPARATION_FRAMES,
+    EXCHANGE_ATTACK_FOOTWORK_TYPES,
     SCORING_FRAME_TOLERANCE_SEC,
 )
 from ml.pose_analysis.footwork import detect_footwork
@@ -112,8 +113,10 @@ def classify_exchange(
 ) -> NonScoringEventType:
     """Classify an exchange as scoring or non-scoring event type."""
     if is_scoring:
-        # Scoring exchanges use existing PoseAnalysisResult labels
-        # Mark as UNKNOWN_EXCHANGE (the scoring label is in the touch analysis)
+        # A touch landed in this exchange, but the scorer attribution is not
+        # resolved here (the scoring label lives in the touch analysis).
+        # UNKNOWN_EXCHANGE means "scored, attribution unknown here" — it is not
+        # a low-confidence marker.
         return NonScoringEventType.UNKNOWN_EXCHANGE
 
     # Check for white lamp (off-target)
@@ -129,22 +132,37 @@ def classify_exchange(
                 has_parry = True
                 break
 
-    # Check for mutual retreat: both fencers moving backward
-    both_retreat = False
+    # Footwork for both fencers, reused for the mutual-retreat and
+    # attack-signal checks. None when the window is too short to analyse.
+    fw_l = None
+    fw_r = None
     if len(sub_seq) >= 3:
         fw_l = detect_footwork(sub_seq, "left", footwork_window, use_ratio_based_hip_drop)
         fw_r = detect_footwork(sub_seq, "right", footwork_window, use_ratio_based_hip_drop)
-        both_retreat = (
-            fw_l.footwork_type == FootworkType.RETREAT
-            and fw_r.footwork_type == FootworkType.RETREAT
-        )
+
+    both_retreat = (
+        fw_l is not None and fw_r is not None
+        and fw_l.footwork_type == FootworkType.RETREAT
+        and fw_r.footwork_type == FootworkType.RETREAT
+    )
 
     if both_retreat:
         return NonScoringEventType.MUTUAL_RETREAT
     if has_parry:
         return NonScoringEventType.SUCCESSFUL_DEFENSE
-    # Default: approach then separation without scoring = failed attack
-    return NonScoringEventType.FAILED_ATTACK
+
+    # Only label a failed attack when at least one fencer committed to an
+    # attacking approach (advance/lunge/fleche). Without that signal — both
+    # fencers stationary/unknown, or the window too short — the exchange is
+    # low-confidence noise, so return NEUTRAL to keep it out of the stats
+    # instead of asserting a confident "failed attack".
+    has_attack_signal = (
+        (fw_l is not None and fw_l.footwork_type.value in EXCHANGE_ATTACK_FOOTWORK_TYPES)
+        or (fw_r is not None and fw_r.footwork_type.value in EXCHANGE_ATTACK_FOOTWORK_TYPES)
+    )
+    if has_attack_signal:
+        return NonScoringEventType.FAILED_ATTACK
+    return NonScoringEventType.NEUTRAL
 
 
 def build_my_fencer_summary(
@@ -161,6 +179,12 @@ def build_my_fencer_summary(
     scoring_tolerance = int(SCORING_FRAME_TOLERANCE_SEC * fps)
 
     for ex in exchanges:
+        # NEUTRAL exchanges are low-confidence noise with no clear aggressor —
+        # exclude them from both the attack and defense denominators so they
+        # do not distort success rates.
+        if ex.event_type == NonScoringEventType.NEUTRAL:
+            continue
+
         is_scoring = any(
             ex.start_frame - scoring_tolerance <= sf <= ex.end_frame + scoring_tolerance
             for sf in scoring_frames
