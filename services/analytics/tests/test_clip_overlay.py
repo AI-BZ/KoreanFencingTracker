@@ -229,6 +229,131 @@ class TestPadSeconds:
         pad_frames = int(gen.pad_seconds * fps)
         assert pad_frames == 36
 
+    def test_asymmetric_padding_basic(self):
+        """pad_before/pad_after override pad_seconds independently."""
+        gen = ClipOverlayGenerator.__new__(ClipOverlayGenerator)
+        gen.pad_seconds = 2.0
+        gen.pad_before = 3.0
+        gen.pad_after = 0.5
+        fps = 30.0
+
+        pb = gen.pad_before if gen.pad_before is not None else gen.pad_seconds
+        pa = gen.pad_after if gen.pad_after is not None else gen.pad_seconds
+        pad_before_frames = int(pb * fps)
+        pad_after_frames = int(pa * fps)
+
+        assert pad_before_frames == 90  # 3.0 * 30
+        assert pad_after_frames == 15   # 0.5 * 30
+
+        # Simulate actual_start/actual_end for event at frame 200, total=500
+        start_frame, end_frame, total = 200, 200, 500
+        actual_start = max(0, start_frame - pad_before_frames)
+        actual_end = min(total - 1, end_frame + pad_after_frames)
+        assert actual_start == 110  # 200 - 90
+        assert actual_end == 215    # 200 + 15
+
+    def test_asymmetric_padding_none_fallback(self):
+        """When pad_before/pad_after are None, pad_seconds is used."""
+        gen = ClipOverlayGenerator.__new__(ClipOverlayGenerator)
+        gen.pad_seconds = 2.0
+        gen.pad_before = None
+        gen.pad_after = None
+        fps = 30.0
+
+        pb = gen.pad_before if gen.pad_before is not None else gen.pad_seconds
+        pa = gen.pad_after if gen.pad_after is not None else gen.pad_seconds
+        assert pb == 2.0
+        assert pa == 2.0
+
+
+# ---------------------------------------------------------------------------
+# Unit tests — smart clip bounds
+# ---------------------------------------------------------------------------
+
+class TestComputeTouchClipBounds:
+    """Test the _compute_touch_clip_bounds() helper from server.py."""
+
+    def _call(self, **kwargs):
+        from app.server import _compute_touch_clip_bounds
+        return _compute_touch_clip_bounds(**kwargs)
+
+    def test_touch_exchange_matching(self):
+        """Touch near exchange end → clip starts at exchange start."""
+        exchanges = [
+            {"start_frame": 4239, "end_frame": 4347, "exchange_number": 15},
+        ]
+        start, end = self._call(
+            touch_frame=4350, exchanges=exchanges, clock_events=[], fps=30.0,
+        )
+        # Should use exchange start_frame (4239), not touch - 3s
+        assert start == 4239
+        # end = touch + 0.5s = 4350 + 15 = 4365
+        assert end == 4365
+
+    def test_clock_event_fallback(self):
+        """No matching exchange, recent allez → allez frame as start."""
+        clock_events = [
+            {"frame": 6500, "event": "allez", "time": "2:10"},
+        ]
+        start, end = self._call(
+            touch_frame=6750, exchanges=[], clock_events=clock_events, fps=30.0,
+        )
+        assert start == 6500
+        assert end == 6750 + 15  # 0.5s after touch
+
+    def test_asymmetric_fallback_no_data(self):
+        """No exchanges, no clock events → 3s before, 0.5s after."""
+        start, end = self._call(
+            touch_frame=1000, exchanges=[], clock_events=[], fps=30.0,
+        )
+        assert start == 1000 - 90  # 3.0 * 30
+        assert end == 1000 + 15     # 0.5 * 30
+
+    def test_min_clip_length_enforced(self):
+        """When exchange is very short, ensure minimum clip length."""
+        exchanges = [
+            {"start_frame": 998, "end_frame": 1000, "exchange_number": 1},
+        ]
+        start, end = self._call(
+            touch_frame=1000, exchanges=exchanges, clock_events=[], fps=30.0,
+        )
+        clip_end = 1000 + 15  # POST_TOUCH_BUFFER
+        min_clip = int(1.5 * 30)  # 45 frames
+        # exchange start=998, clip_end=1015 → length=17 < 45 → start adjusted
+        assert end - start >= min_clip
+
+    def test_ocr_frame_before_exchange_matches(self):
+        """OCR touch frame a few frames before exchange start → still matches."""
+        # Simulates the common case where OCR detects score change
+        # slightly before the exchange start_frame.
+        exchanges = [
+            {"start_frame": 15954, "end_frame": 16100, "exchange_number": 4},
+        ]
+        # Touch at 15950, 4 frames before exchange start (within 0.5s tolerance)
+        start, end = self._call(
+            touch_frame=15950, exchanges=exchanges, clock_events=[], fps=30.0,
+        )
+        # Exchange matched (NOT fallback 3s before = 15950 - 90 = 15860)
+        fallback_start = 15950 - int(3.0 * 30)
+        assert start != fallback_start, "Should not fall back to 3s padding"
+        assert end == 15950 + 15  # POST_TOUCH_BUFFER
+        # MIN_CLIP_FRAMES enforced: clip_end(15965) - exchange_start(15954) = 11 < 45
+        # → start adjusted to clip_end - min_clip = 15965 - 45 = 15920
+        assert end - start >= int(1.5 * 30)
+
+    def test_ocr_frame_far_before_exchange_no_match(self):
+        """OCR touch frame far before exchange start → no match, falls back."""
+        exchanges = [
+            {"start_frame": 16000, "end_frame": 16100, "exchange_number": 1},
+        ]
+        # Touch at 15900, 100 frames (3.3s) before exchange start → too far
+        start, end = self._call(
+            touch_frame=15900, exchanges=exchanges, clock_events=[], fps=30.0,
+        )
+        # Should fall back to asymmetric padding (3s before, 0.5s after)
+        assert start == 15900 - int(3.0 * 30)
+        assert end == 15900 + 15
+
 
 # ---------------------------------------------------------------------------
 # Integration tests — clip generation (mock YOLO)

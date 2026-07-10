@@ -556,6 +556,8 @@ def _enrich_report_stats(report_dict: dict) -> dict:
     fencer_profile.distance_stats / footwork_stats. This function computes them
     on-the-fly from the available touch and exchange data.
     """
+    from ml.fencer_profile import compute_success_rates
+
     touches = report_dict.get("touches") or []
     exchanges = report_dict.get("exchanges") or []
     fencer_profile = report_dict.get("fencer_profile") or {}
@@ -614,10 +616,7 @@ def _enrich_report_stats(report_dict: dict) -> dict:
 
         # Build distance_stats if we have data
         if not has_distance and zone_counts:
-            zone_success_rate = {}
-            for z, cnt in zone_counts.items():
-                scored = zone_scored.get(z, 0)
-                zone_success_rate[z] = scored / cnt if cnt > 0 else 0.0
+            zone_success_rate = compute_success_rates(zone_counts, zone_scored)
 
             # Preferred zone = zone with most touches
             preferred = max(zone_counts, key=zone_counts.get) if zone_counts else None
@@ -631,10 +630,7 @@ def _enrich_report_stats(report_dict: dict) -> dict:
 
         # Build footwork_stats if we have data
         if not has_footwork and footwork_counts:
-            fw_success_rate = {}
-            for fw_type, cnt in footwork_counts.items():
-                scored = footwork_scored.get(fw_type, 0)
-                fw_success_rate[fw_type] = scored / cnt if cnt > 0 else 0.0
+            fw_success_rate = compute_success_rates(footwork_counts, footwork_scored)
 
             preferred_fw = max(footwork_counts, key=footwork_counts.get) if footwork_counts else None
 
@@ -727,6 +723,64 @@ async def list_saved_reports(request: Request):
 # ------------------------------------------------------------------
 
 
+def _compute_touch_clip_bounds(
+    touch_frame: int,
+    exchanges: list,
+    clock_events: list,
+    fps: float = 30.0,
+) -> tuple:
+    """Compute optimal clip start/end for a touch frame.
+
+    Priority:
+    1. Nearest exchange whose range covers the touch → exchange start .. touch + 0.5s
+    2. Most recent allez clock event → allez frame .. touch + 0.5s
+    3. Fallback: touch - 3s .. touch + 0.5s (asymmetric)
+    """
+    TOLERANCE_FRAMES = int(2.0 * fps)
+    POST_TOUCH_BUFFER = int(0.5 * fps)
+    FALLBACK_BEFORE = int(3.0 * fps)
+    MIN_CLIP_FRAMES = int(1.5 * fps)
+
+    clip_end = touch_frame + POST_TOUCH_BUFFER
+
+    # 1) Exchange matching: find exchange whose range covers the touch
+    # Allow OCR touch frames that arrive slightly before exchange start
+    # (OCR detects score change a few frames before pose analysis sees the exchange)
+    TOLERANCE_BEFORE = int(0.5 * fps)
+    best_exchange = None
+    best_dist = float("inf")
+    for ex in exchanges:
+        ef = ex.get("end_frame", 0)
+        sf = ex.get("start_frame", 0)
+        if sf - TOLERANCE_BEFORE <= touch_frame <= ef + TOLERANCE_FRAMES:
+            d = abs(ef - touch_frame)
+            if d < best_dist:
+                best_dist = d
+                best_exchange = ex
+
+    if best_exchange:
+        clip_start = best_exchange["start_frame"]
+        if clip_end - clip_start < MIN_CLIP_FRAMES:
+            clip_start = clip_end - MIN_CLIP_FRAMES
+        return (max(0, clip_start), clip_end)
+
+    # 2) Clock event: most recent allez within 10 seconds
+    if clock_events:
+        recent_allez = None
+        for ce in clock_events:
+            if ce.get("event") == "allez" and ce.get("frame", 0) < touch_frame:
+                if touch_frame - ce["frame"] < int(10 * fps):
+                    recent_allez = ce
+        if recent_allez:
+            clip_start = recent_allez["frame"]
+            if clip_end - clip_start < MIN_CLIP_FRAMES:
+                clip_start = clip_end - MIN_CLIP_FRAMES
+            return (max(0, clip_start), clip_end)
+
+    # 3) Fallback: asymmetric padding (3s before, 0.5s after)
+    return (max(0, touch_frame - FALLBACK_BEFORE), clip_end)
+
+
 @app.get("/api/analytics/clips/{report_id}/{event_type}/{event_number}")
 async def get_event_clip(report_id: str, event_type: str, event_number: int):
     """
@@ -771,8 +825,13 @@ async def get_event_clip(report_id: str, event_type: str, event_number: int):
         frame = event.get("frame")
         if frame is None:
             raise HTTPException(status_code=400, detail=f"Touch #{event_number} has no frame data")
-        start_frame = frame
-        end_frame = frame
+        meta_fps = report_dict.get("meta", {}).get("fps", 30)
+        start_frame, end_frame = _compute_touch_clip_bounds(
+            touch_frame=frame,
+            exchanges=report_dict.get("exchanges", []),
+            clock_events=report_dict.get("clock_events", []),
+            fps=meta_fps,
+        )
     else:
         events = report_dict.get("exchanges", [])
         event = next((e for e in events if e.get("exchange_number") == event_number), None)
@@ -802,12 +861,14 @@ async def get_event_clip(report_id: str, event_type: str, event_number: int):
     # Generate clip
     try:
         from ml.clip_overlay import ClipOverlayGenerator
-        gen = ClipOverlayGenerator()
 
-        event_info = {}
         if event_type == "touch":
+            # Touch: smart bounds already computed, use small padding for margin
+            gen = ClipOverlayGenerator(pad_before=0.5, pad_after=0.0)
             event_info = gen._extract_touch_info(event)
         else:
+            # Exchange: start/end are already exchange boundaries, small padding
+            gen = ClipOverlayGenerator(pad_before=0.5, pad_after=0.3)
             event_info = gen._extract_exchange_info(event)
 
         gen.generate_clip(

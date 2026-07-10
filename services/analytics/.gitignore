@@ -5,12 +5,16 @@ vendor/
 data/raw/
 data/clips/
 data/labeled/
+data/facts/
+data/uploads/
 
 # Model files (large binaries)
 *.pkl
 *.pt
 *.pth
 *.onnx
+*.safetensors
+ml/models/videomae-fencing-v1/
 !ml/models/.gitkeep
 
 # Python

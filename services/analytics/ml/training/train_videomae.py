@@ -37,8 +37,8 @@ def parse_args():
     )
     parser.add_argument(
         "--dataset-format", type=str, default="csv",
-        choices=["csv", "facts"],
-        help="Dataset format: 'csv' (labels.csv) or 'facts' (FACTS directory structure)",
+        choices=["csv", "facts", "facts-csv"],
+        help="Dataset format: 'csv' (labels.csv), 'facts' (directory structure), or 'facts-csv' (CSV + nested ZIP streaming)",
     )
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--batch-size", type=int, default=4)
@@ -47,6 +47,8 @@ def parse_args():
     parser.add_argument("--lr", type=float, default=5e-5)
     parser.add_argument("--warmup-epochs", type=int, default=3)
     parser.add_argument("--label-smoothing", type=float, default=0.1)
+    parser.add_argument("--freeze-epochs", type=int, default=3,
+                        help="Freeze backbone for first N epochs (train classifier head only)")
     parser.add_argument("--device", type=str, default=None, help="cuda/mps/cpu")
     return parser.parse_args()
 
@@ -81,11 +83,11 @@ def train(args):
     )
 
     device = resolve_device(args.device)
-    print(f"Device: {device}")
-    print(f"Data dir: {args.data_dir}")
-    print(f"Dataset format: {args.dataset_format}")
-    print(f"Output dir: {args.output_dir}")
-    print(f"Batch size: {args.batch_size} × {args.grad_accum} accum = {args.batch_size * args.grad_accum} effective")
+    print(f"Device: {device}", flush=True)
+    print(f"Data dir: {args.data_dir}", flush=True)
+    print(f"Dataset format: {args.dataset_format}", flush=True)
+    print(f"Output dir: {args.output_dir}", flush=True)
+    print(f"Batch size: {args.batch_size} × {args.grad_accum} accum = {args.batch_size * args.grad_accum} effective", flush=True)
 
     # ------------------------------------------------------------------
     # Data
@@ -95,13 +97,13 @@ def train(args):
         from ml.training.dataset import FACTSDatasetAdapter
         adapter = FACTSDatasetAdapter(facts_dir=Path(args.data_dir))
         if len(adapter) == 0:
-            print("ERROR: No FACTS clips found. Check directory structure.")
-            print(f"  Expected: {args.data_dir}/AL/, AR/, RL/, RR/, CAL/, CAR/, ReL/, ReR/")
+            print("ERROR: No FACTS clips found. Check directory structure.", flush=True)
+            print(f"  Expected: {args.data_dir}/AL/, AR/, RL/, RR/, CAL/, CAR/, ReL/, ReR/", flush=True)
             return
-        print(f"FACTS adapter found {len(adapter)} clips")
+        print(f"FACTS adapter found {len(adapter)} clips", flush=True)
         dist = adapter.get_class_distribution()
         for label, count in dist.items():
-            print(f"  {label}: {count}")
+            print(f"  {label}: {count}", flush=True)
 
         # Write temporary labels.csv for FencingActionDataset
         tmp_csv = Path(args.data_dir) / "labels.csv"
@@ -118,6 +120,31 @@ def train(args):
             labels_file=tmp_csv,
             split="val", augment=False,
         )
+    elif args.dataset_format == "facts-csv":
+        # Stream clips from nested ZIP using CSV annotations + clip_index.json
+        from ml.training.dataset import FACTSCsvZipDataset
+
+        facts_dir = Path(args.data_dir)
+        train_ds = FACTSCsvZipDataset(
+            facts_dir=facts_dir, split="train", augment=True,
+        )
+        val_ds = FACTSCsvZipDataset(
+            facts_dir=facts_dir, split="val", augment=False,
+        )
+
+        if len(train_ds) == 0:
+            print("ERROR: No FACTS-CSV training samples found.", flush=True)
+            print(f"  Required files in {args.data_dir}/:", flush=True)
+            print(f"    - filtered_data_800_fencing.csv  (6,400 annotations)", flush=True)
+            print(f"    - facts_dataset.zip              (30.3GB nested ZIP)", flush=True)
+            print(f"    - clip_index.json                (clip → inner ZIP mapping)", flush=True)
+            return
+
+        print(f"FACTS-CSV streaming adapter loaded", flush=True)
+        dist = train_ds.get_class_distribution()
+        for label, count in sorted(dist.items()):
+            print(f"  {label}: {count}", flush=True)
+
     else:
         train_ds = FencingActionDataset(
             data_dir=Path(args.data_dir), split="train", augment=True,
@@ -127,14 +154,16 @@ def train(args):
         )
 
     if len(train_ds) == 0:
-        print("ERROR: No training samples found.")
+        print("ERROR: No training samples found.", flush=True)
         if args.dataset_format == "csv":
-            print(f"  Expected: {args.data_dir}/labels.csv")
+            print(f"  Expected: {args.data_dir}/labels.csv", flush=True)
+        elif args.dataset_format == "facts-csv":
+            print(f"  Expected: {args.data_dir}/filtered_data_800_fencing.csv + facts_dataset.zip + clip_index.json", flush=True)
         else:
-            print(f"  Expected: {args.data_dir}/<class_code>/*.mp4")
+            print(f"  Expected: {args.data_dir}/<class_code>/*.mp4", flush=True)
         return
 
-    print(f"Train samples: {len(train_ds)}, Val samples: {len(val_ds)}")
+    print(f"Train samples: {len(train_ds)}, Val samples: {len(val_ds)}", flush=True)
 
     processor = VideoMAEImageProcessor.from_pretrained(BASE_MODEL)
 
@@ -178,16 +207,32 @@ def train(args):
     model.to(device)
 
     # ------------------------------------------------------------------
+    # Backbone freezing (train classifier head only for first N epochs)
+    # ------------------------------------------------------------------
+    freeze_epochs = args.freeze_epochs
+    if freeze_epochs > 0:
+        for param in model.videomae.parameters():
+            param.requires_grad = False
+        trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        total_params = sum(p.numel() for p in model.parameters())
+        print(f"Backbone frozen for {freeze_epochs} epochs", flush=True)
+        print(f"  Trainable: {trainable:,} / {total_params:,} ({100*trainable/total_params:.1f}%)", flush=True)
+
+    # ------------------------------------------------------------------
     # Optimizer + Scheduler
     # ------------------------------------------------------------------
+    grad_accum = args.grad_accum
+
     optimizer = torch.optim.AdamW(
-        model.parameters(),
+        [p for p in model.parameters() if p.requires_grad],
         lr=args.lr,
         weight_decay=0.05,
     )
 
-    total_steps = len(train_loader) * args.epochs
-    warmup_steps = len(train_loader) * args.warmup_epochs
+    # Account for gradient accumulation: scheduler steps at optimizer frequency
+    steps_per_epoch = len(train_loader) // grad_accum + (1 if len(train_loader) % grad_accum else 0)
+    total_steps = steps_per_epoch * args.epochs
+    warmup_steps = steps_per_epoch * args.warmup_epochs
 
     def lr_lambda(step):
         if step < warmup_steps:
@@ -208,9 +253,32 @@ def train(args):
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     history: List[dict] = []
-    grad_accum = args.grad_accum
 
-    for epoch in range(args.epochs):
+    try:
+      for epoch in range(args.epochs):
+        # Unfreeze backbone after freeze_epochs
+        if epoch == freeze_epochs and freeze_epochs > 0:
+            for param in model.videomae.parameters():
+                param.requires_grad = True
+            # Rebuild optimizer with all parameters and lower LR for backbone
+            optimizer = torch.optim.AdamW([
+                {"params": model.videomae.parameters(), "lr": args.lr * 0.1},
+                {"params": model.classifier.parameters(), "lr": args.lr},
+            ], weight_decay=0.05)
+            # Reset scheduler for remaining epochs
+            remaining_steps = steps_per_epoch * (args.epochs - epoch)
+            remaining_warmup = steps_per_epoch  # 1-epoch warmup after unfreeze
+
+            def lr_lambda_unfrozen(step):
+                if step < remaining_warmup:
+                    return step / max(1, remaining_warmup)
+                progress = (step - remaining_warmup) / max(1, remaining_steps - remaining_warmup)
+                return max(0.0, 0.5 * (1.0 + np.cos(np.pi * progress)))
+
+            scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda_unfrozen)
+            trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+            print(f"  → Backbone unfrozen at epoch {epoch+1}, trainable: {trainable:,}", flush=True)
+
         model.train()
         train_loss = 0.0
         train_correct = 0
@@ -261,7 +329,8 @@ def train(args):
             f"Epoch {epoch+1}/{args.epochs} — "
             f"loss: {avg_loss:.4f}, acc: {train_acc:.3f}, "
             f"val_loss: {val_loss:.4f}, val_acc: {val_acc:.3f}, "
-            f"time: {epoch_time:.1f}s"
+            f"time: {epoch_time:.1f}s",
+            flush=True,
         )
 
         # Save best model
@@ -269,14 +338,32 @@ def train(args):
             best_val_acc = val_acc
             model.save_pretrained(output_dir)
             processor.save_pretrained(output_dir)
-            print(f"  → Best model saved (val_acc={val_acc:.3f})")
+            print(f"  → Best model saved (val_acc={val_acc:.3f})", flush=True)
 
-    # Save training history
-    with open(output_dir / "training_history.json", "w") as f:
-        json.dump(history, f, indent=2)
+        # Save training history after EVERY epoch (crash-safe)
+        with open(output_dir / "training_history.json", "w") as f:
+            json.dump(history, f, indent=2)
 
-    print(f"\nTraining complete. Best val accuracy: {best_val_acc:.3f}")
-    print(f"Model saved to: {output_dir}")
+    except (KeyboardInterrupt, Exception) as e:
+        # Crash-safe: save partial history even on failure
+        if history:
+            with open(output_dir / "training_history.json", "w") as f:
+                json.dump(history, f, indent=2)
+            print(f"\n⚠ Training interrupted after {len(history)} epochs. History saved.", flush=True)
+        if isinstance(e, KeyboardInterrupt):
+            print("Interrupted by user.", flush=True)
+        else:
+            print(f"Error: {e}", flush=True)
+            raise
+
+    # Cleanup streaming dataset handles
+    if hasattr(train_ds, "close"):
+        train_ds.close()
+    if hasattr(val_ds, "close"):
+        val_ds.close()
+
+    print(f"\nTraining complete. Best val accuracy: {best_val_acc:.3f}", flush=True)
+    print(f"Model saved to: {output_dir}", flush=True)
 
 
 def _evaluate(model, dataloader, loss_fn, device) -> tuple:

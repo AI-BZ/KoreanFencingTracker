@@ -92,7 +92,32 @@ DEMO_REPORTS = [
         "description_ko": "22개 터치와 63개 교환 — 포즈 기반 풋워크/빠라드 분석 + 선수 프로필 포함",
         "description_en": "22 touches and 63 exchanges — pose-based footwork/parry analysis with fencer profiles",
     },
+    {
+        "id": "nac_y12wf_lee_esaki_k-spxGdlWfo_continuous_report",
+        "title_ko": "NAC Y12 여자 플뢰레 — LEE vs ESAKI (13-13)",
+        "title_en": "NAC Y12 Women's Foil — LEE vs ESAKI (13-13)",
+        "weapon": "foil",
+        "bout_type": "de",
+        "score": "13-13",
+        "touches": 26,
+        "exchanges": 138,
+        "duration": "28:44",
+        "youtube_id": "k-spxGdlWfo",
+        "description_ko": "26개 터치와 138개 교환 — 스마트 클립 경계 + 시계 OCR(Allez/Halt) 15개 이벤트 포함",
+        "description_en": "26 touches and 138 exchanges — smart clip bounds + clock OCR with 15 allez/halt events",
+    },
 ]
+
+
+def _report_path(report_id: str) -> Path | None:
+    """Resolve a curated report ID to its on-disk JSON path.
+
+    Centralizes the mechanical path derivation and existence check against
+    REPORTS_DIR so curated entries reference reports by ID only. Returns None
+    when the backing file is absent, letting callers skip it gracefully.
+    """
+    path = REPORTS_DIR / f"{report_id}.json"
+    return path if path.exists() else None
 
 
 def extract_youtube_id(report_id: str) -> str | None:
@@ -120,8 +145,7 @@ def get_demo_reports(lang: str = "ko") -> list[dict]:
     """Return gallery-ready report list with localized titles."""
     result = []
     for r in DEMO_REPORTS:
-        report_path = REPORTS_DIR / f"{r['id']}.json"
-        if not report_path.exists():
+        if _report_path(r["id"]) is None:
             continue
         result.append({
             "id": r["id"],
@@ -140,8 +164,8 @@ def get_demo_reports(lang: str = "ko") -> list[dict]:
 
 def get_demo_report(report_id: str) -> dict | None:
     """Load a specific demo report JSON."""
-    report_path = REPORTS_DIR / f"{report_id}.json"
-    if not report_path.exists():
+    report_path = _report_path(report_id)
+    if report_path is None:
         return None
     with open(report_path) as f:
         return json.load(f)

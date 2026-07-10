@@ -680,7 +680,7 @@ class TVScoreTracker:
             return None
         if ":" in time_str:
             parts = time_str.split(":")
-            if len(parts) == 2 and all(p.isdigit() for p in parts if p):
+            if len(parts) == 2 and all(p and p.isdigit() for p in parts):
                 return int(parts[0]) * 60 + int(parts[1])
         elif time_str.isdigit():
             return float(time_str)
