@@ -1,0 +1,9 @@
+# Testing
+pytest
+pytest-asyncio
+
+# Linting & Code Quality
+ruff
+
+# HTTP Client (for testing)
+httpx
