@@ -166,6 +166,29 @@ class NotificationDispatcher:
 
     # ----------------------------------------------------- target resolution
 
+    def _select_in_chunks(
+        self,
+        table: str,
+        select_cols: str,
+        col: str,
+        values: list,
+        chunk_size: int = 200,
+    ) -> list[dict]:
+        """`col IN (values)` 조회를 chunk_size 단위로 분할 실행 후 행을 합산한다.
+
+        큰 대회는 참가 선수가 수천 명이라 단일 .in_()의 쿼리스트링이 PostgREST의
+        URI 길이 한도를 넘어 414(URI too long)를 유발할 수 있다 (EVAL P2-1).
+        values를 나눠 여러 번 조회하고 결과를 이어붙인다.
+        """
+        rows: list[dict] = []
+        for i in range(0, len(values), chunk_size):
+            chunk = values[i : i + chunk_size]
+            if not chunk:
+                continue
+            res = self.db.table(table).select(select_cols).in_(col, chunk).execute()
+            rows.extend(res.data or [])
+        return rows
+
     def _resolve_targets(self, event: dict, category: str) -> list[str]:
         """카테고리별 대상 회원 id 목록."""
         data = event.get("data") or {}
@@ -183,13 +206,8 @@ class NotificationDispatcher:
             player_ids = self._players_for_result(event)
             if not player_ids:
                 return []
-            res = (
-                self.db.table("members")
-                .select("id")
-                .in_("player_id", list(player_ids))
-                .execute()
-            )
-            return [r["id"] for r in (res.data or [])]
+            rows = self._select_in_chunks("members", "id", "player_id", list(player_ids))
+            return [r["id"] for r in rows]
 
         return []
 
@@ -210,8 +228,8 @@ class NotificationDispatcher:
         if not event_ids:
             return set()
 
-        rk = self.db.table("rankings").select("player_id").in_("event_id", event_ids).execute()
-        return {r["player_id"] for r in (rk.data or []) if r.get("player_id") is not None}
+        rk_rows = self._select_in_chunks("rankings", "player_id", "event_id", event_ids)
+        return {r["player_id"] for r in rk_rows if r.get("player_id") is not None}
 
     # ------------------------------------------------------------- channels
 
