@@ -89,6 +89,8 @@ class FencerProfile:
     fencer_side: str
     total_bouts: int = 0
     total_touches: int = 0
+    handedness: Optional[str] = None
+    handedness_confidence: float = 0.0
     distance_stats: Optional[DistanceStats] = None
     footwork_stats: Optional[FootworkStats] = None
     parry_rate: float = 0.0
@@ -103,6 +105,8 @@ class FencerProfile:
             "fencer_side": self.fencer_side,
             "total_bouts": self.total_bouts,
             "total_touches": self.total_touches,
+            "handedness": self.handedness,
+            "handedness_confidence": round(self.handedness_confidence, 2),
             "parry_rate": round(self.parry_rate, 3),
             "parry_success_to_riposte": round(self.parry_success_to_riposte, 3),
             "weaknesses": self.weaknesses,

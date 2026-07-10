@@ -31,6 +31,11 @@ def parse_args():
         "--data-dir", type=str, default="data/labeled",
         help="Root directory for labeled clips",
     )
+    parser.add_argument(
+        "--dataset-format", type=str, default="csv",
+        choices=["csv", "facts", "facts-csv"],
+        help="Dataset format: 'csv' (labels.csv), 'facts' (directory structure), or 'facts-csv' (CSV + nested ZIP streaming)",
+    )
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--device", type=str, default=None)
     parser.add_argument(
@@ -156,15 +161,22 @@ def evaluate(args):
 
     print(f"Loading model from: {model_dir}")
     print(f"Device: {device}")
+    print(f"Dataset format: {args.dataset_format}")
 
     model = VideoMAEForVideoClassification.from_pretrained(str(model_dir))
     processor = VideoMAEImageProcessor.from_pretrained(str(model_dir))
     model.to(device)
     model.eval()
 
-    test_ds = FencingActionDataset(
-        data_dir=Path(args.data_dir), split="test", augment=False,
-    )
+    if args.dataset_format == "facts-csv":
+        from ml.training.dataset import FACTSCsvZipDataset
+        test_ds = FACTSCsvZipDataset(
+            facts_dir=Path(args.data_dir), split="test", augment=False,
+        )
+    else:
+        test_ds = FencingActionDataset(
+            data_dir=Path(args.data_dir), split="test", augment=False,
+        )
 
     if len(test_ds) == 0:
         print("ERROR: No test samples found.")
@@ -204,6 +216,10 @@ def evaluate(args):
 
     metrics = compute_metrics(all_true, all_pred, NUM_CLASSES, IDX_TO_LABEL)
     print_report(metrics)
+
+    # Cleanup streaming dataset handles
+    if hasattr(test_ds, "close"):
+        test_ds.close()
 
     # Save results
     output_path = args.output or str(model_dir / "eval_results.json")

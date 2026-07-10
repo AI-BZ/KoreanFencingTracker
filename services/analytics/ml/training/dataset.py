@@ -19,9 +19,14 @@ labels.csv format:
 """
 
 import csv
+import io
+import json
+import os
 import random
+import tempfile
+import zipfile
 from pathlib import Path
-from typing import List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional
 
 import cv2
 import numpy as np
@@ -29,8 +34,13 @@ import numpy as np
 from ml.training.config import (
     DATA_DIR,
     FACTS_DATA_DIR,
+    FACTS_CSV_PATH,
+    FACTS_ZIP_PATH,
+    FACTS_CLIP_INDEX_PATH,
+    FACTS_CSV_LABEL_MAP,
     LABELS_FILE,
     LABEL_TO_IDX,
+    IDX_TO_LABEL,
     FACTS_CLASS_CODES,
     FLIP_LABEL_MAP,
     NUM_FRAMES,
@@ -275,3 +285,252 @@ class FACTSDatasetAdapter:
             IDX_TO_LABEL.get(idx, f"idx_{idx}"): count
             for idx, count in sorted(counts.items())
         }
+
+
+class FACTSCsvZipDataset(FencingActionDataset):
+    """
+    Streaming adapter for the FACTS dataset stored as nested ZIPs.
+
+    Reads ``filtered_data_800_fencing.csv`` for annotations and streams
+    video clips directly from the 30.3 GB nested ZIP archive without
+    extracting to disk.
+
+    Outer ZIP (``facts_dataset.zip``) contains 16 inner ZIPs, each
+    holding bout clips.  ``clip_index.json`` maps each clip path to its
+    containing inner ZIP.
+
+    Data leakage prevention:
+        Unique clips are split into train/val/test *first*, then all CSV
+        rows for each split's clips are included.  This preserves the
+        FACTS oversampling strategy while preventing the same clip from
+        appearing in multiple splits.
+    """
+
+    def __init__(
+        self,
+        facts_dir: Optional[Path] = None,
+        csv_path: Optional[Path] = None,
+        clip_index_path: Optional[Path] = None,
+        zip_path: Optional[Path] = None,
+        split: str = "train",
+        num_frames: int = NUM_FRAMES,
+        augment: bool = False,
+        seed: int = 42,
+        max_cached_zips: int = 2,
+    ):
+        # Bypass FencingActionDataset.__init__ — we set everything manually.
+        self.facts_dir = Path(facts_dir) if facts_dir else FACTS_DATA_DIR
+        self.csv_path = Path(csv_path) if csv_path else FACTS_CSV_PATH
+        self.clip_index_path = (
+            Path(clip_index_path) if clip_index_path else FACTS_CLIP_INDEX_PATH
+        )
+        self.zip_path = Path(zip_path) if zip_path else FACTS_ZIP_PATH
+        self.split = split
+        self.num_frames = num_frames
+        self.augment = augment and split == "train"
+        self.seed = seed
+
+        # Inner ZIP LRU cache
+        self._max_cached_zips = max_cached_zips
+        self._outer_zip: Optional[zipfile.ZipFile] = None
+        self._inner_cache: Dict[str, zipfile.ZipFile] = {}  # name → ZipFile
+        self._inner_order: List[str] = []  # LRU order (most recent last)
+
+        # clip_path (str) → inner ZIP name (str)
+        self._clip_index: Dict[str, str] = {}
+
+        # (clip_path_str, label_idx) pairs
+        self.samples: List[Tuple[str, int]] = []
+        self._load_and_split()
+
+    # ------------------------------------------------------------------
+    # Data loading
+    # ------------------------------------------------------------------
+
+    def _load_and_split(self):
+        """Read CSV + clip_index.json, split by unique clips, then expand."""
+        # Load clip index
+        if not self.clip_index_path.exists():
+            return
+        with open(self.clip_index_path, "r", encoding="utf-8") as f:
+            self._clip_index = json.load(f)
+
+        if not self.csv_path.exists():
+            return
+
+        # Read CSV — group rows by normalised clip path
+        # clip_path → list of label_idx
+        clip_rows: Dict[str, List[int]] = {}
+        with open(self.csv_path, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                raw_path = row.get("video_url", "").strip()
+                label_str = row.get("label", "").strip()
+
+                # Normalise label (CSV title-case → config snake_case)
+                norm_label = FACTS_CSV_LABEL_MAP.get(label_str)
+                if norm_label is None:
+                    continue
+                label_idx = LABEL_TO_IDX.get(norm_label)
+                if label_idx is None:
+                    continue
+
+                # Strip ``storage/`` prefix to match ZIP internal paths
+                clip_key = raw_path
+                if clip_key.startswith("storage/"):
+                    clip_key = clip_key[len("storage/"):]
+
+                # Only keep clips present in the ZIP
+                if clip_key not in self._clip_index:
+                    continue
+
+                clip_rows.setdefault(clip_key, []).append(label_idx)
+
+        if not clip_rows:
+            return
+
+        # Skip clips with conflicting labels (only 1 known)
+        clean_clips: Dict[str, List[int]] = {}
+        for clip_key, labels in clip_rows.items():
+            unique_labels = set(labels)
+            if len(unique_labels) > 1:
+                continue  # conflicting — skip
+            clean_clips[clip_key] = labels
+
+        # Split unique clips into train/val/test (data leakage prevention)
+        unique_keys = sorted(clean_clips.keys())
+        rng = random.Random(self.seed)
+        rng.shuffle(unique_keys)
+
+        n = len(unique_keys)
+        train_end = int(n * TRAIN_RATIO)
+        val_end = train_end + int(n * VAL_RATIO)
+
+        if self.split == "train":
+            split_keys = set(unique_keys[:train_end])
+        elif self.split == "val":
+            split_keys = set(unique_keys[train_end:val_end])
+        elif self.split == "test":
+            split_keys = set(unique_keys[val_end:])
+        else:
+            split_keys = set(unique_keys)
+
+        # Expand: include ALL CSV rows for each split's clips
+        for clip_key in sorted(split_keys):
+            for label_idx in clean_clips[clip_key]:
+                self.samples.append((clip_key, label_idx))
+
+    # ------------------------------------------------------------------
+    # Clip loading (streaming from nested ZIPs)
+    # ------------------------------------------------------------------
+
+    def __getitem__(self, idx: int) -> Tuple[List[np.ndarray], int]:
+        clip_key, label_idx = self.samples[idx]
+        frames = self._load_clip_frames(clip_key)
+        frames = self._sample_frames(frames)
+
+        if self.augment:
+            frames, label_idx = self._apply_augmentation(frames, label_idx)
+
+        return frames, label_idx
+
+    def _load_clip_frames(self, clip_key: str) -> List[np.ndarray]:
+        """Extract a clip from the nested ZIP into a temp file, read frames."""
+        inner_name = self._clip_index.get(clip_key)
+        if inner_name is None:
+            return []
+
+        inner_zip = self._get_inner_zip(inner_name)
+        if inner_zip is None:
+            return []
+
+        try:
+            clip_data = inner_zip.read(clip_key)
+        except (KeyError, zipfile.BadZipFile):
+            return []
+
+        # Write to a temp file (cv2.VideoCapture needs a file path)
+        tmp_fd, tmp_path = tempfile.mkstemp(suffix=".mp4")
+        try:
+            os.write(tmp_fd, clip_data)
+            os.close(tmp_fd)
+
+            frames: List[np.ndarray] = []
+            cap = cv2.VideoCapture(tmp_path)
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                frames.append(frame[:, :, ::-1].copy())  # BGR → RGB
+            cap.release()
+            return frames
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
+    def _get_inner_zip(self, inner_name: str) -> Optional[zipfile.ZipFile]:
+        """Return a ZipFile for *inner_name*, using an LRU cache."""
+        # Cache hit — move to end (most recently used)
+        if inner_name in self._inner_cache:
+            self._inner_order.remove(inner_name)
+            self._inner_order.append(inner_name)
+            return self._inner_cache[inner_name]
+
+        # Ensure outer ZIP is open
+        if self._outer_zip is None:
+            if not self.zip_path.exists():
+                return None
+            self._outer_zip = zipfile.ZipFile(str(self.zip_path), "r")
+
+        # Evict oldest if at capacity
+        while len(self._inner_cache) >= self._max_cached_zips:
+            oldest = self._inner_order.pop(0)
+            self._inner_cache[oldest].close()
+            del self._inner_cache[oldest]
+
+        # Load inner ZIP into memory (BytesIO)
+        try:
+            raw = self._outer_zip.read(inner_name)
+        except (KeyError, zipfile.BadZipFile):
+            return None
+
+        buf = io.BytesIO(raw)
+        try:
+            zf = zipfile.ZipFile(buf, "r")
+        except zipfile.BadZipFile:
+            return None
+
+        self._inner_cache[inner_name] = zf
+        self._inner_order.append(inner_name)
+        return zf
+
+    # ------------------------------------------------------------------
+    # Utilities
+    # ------------------------------------------------------------------
+
+    def get_class_distribution(self) -> Dict[str, int]:
+        """Return {label_name: count} for all samples in this split."""
+        from collections import Counter
+        counts = Counter(label for _, label in self.samples)
+        return {
+            IDX_TO_LABEL.get(idx, f"idx_{idx}"): count
+            for idx, count in sorted(counts.items())
+        }
+
+    def close(self):
+        """Release all open ZIP handles."""
+        for zf in self._inner_cache.values():
+            zf.close()
+        self._inner_cache.clear()
+        self._inner_order.clear()
+        if self._outer_zip is not None:
+            self._outer_zip.close()
+            self._outer_zip = None
+
+    def __del__(self):
+        try:
+            self.close()
+        except Exception:
+            pass

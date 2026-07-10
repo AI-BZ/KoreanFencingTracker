@@ -85,6 +85,21 @@ FLIP_LABEL_MAP = {
 # Paths (FACTS dataset)
 # ------------------------------------------------------------------
 FACTS_DATA_DIR = Path("data/facts")  # FACTS dataset root directory
+FACTS_ZIP_PATH = FACTS_DATA_DIR / "facts_dataset.zip"  # 30.3GB nested ZIP
+FACTS_CLIP_INDEX_PATH = FACTS_DATA_DIR / "clip_index.json"  # clip → inner ZIP mapping
+FACTS_CSV_PATH = FACTS_DATA_DIR / "filtered_data_800_fencing.csv"  # 6,400 annotations
+
+# FACTS CSV label normalization (CSV title case → config snake_case)
+FACTS_CSV_LABEL_MAP = {
+    "Attack left": "attack_left",
+    "Attack right": "attack_right",
+    "Riposte left": "riposte_left",
+    "Riposte right": "riposte_right",
+    "Counter Attack left": "counter_attack_left",
+    "Counter Attack right": "counter_attack_right",
+    "Remise left": "remise_left",
+    "Remise right": "remise_right",
+}
 
 # ------------------------------------------------------------------
 # Training (FACTS paper-aligned hyperparameters)

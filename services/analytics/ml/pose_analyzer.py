@@ -987,6 +987,77 @@ class PoseAnalyzer:
         return ja
 
     # ------------------------------------------------------------------
+    # Handedness detection (arm extension asymmetry)
+    # ------------------------------------------------------------------
+
+    def detect_handedness(
+        self,
+        pose_sequence: List[PoseResult],
+        side: str,
+        min_frames: int = 30,
+    ) -> Tuple[Optional[str], float]:
+        """Detect fencer handedness by comparing arm extension asymmetry.
+
+        Weapon arm (dominant hand) shows higher average extension ratio
+        because fencers extend their weapon arm forward during en garde,
+        attacks, and most fencing actions.
+
+        Args:
+            pose_sequence: Full-bout pose frames.
+            side: "left" or "right" fencer to analyze.
+            min_frames: Minimum valid frames required for reliable detection.
+
+        Returns:
+            (handedness, confidence): e.g., ("right", 0.85) or (None, 0.0)
+            handedness: "right" | "left" | None (insufficient data)
+        """
+        left_extensions: List[float] = []
+        right_extensions: List[float] = []
+
+        for pr in pose_sequence:
+            fencer = self._get_fencer_by_side(pr, side)
+            if fencer is None or len(fencer.keypoints) < 17:
+                continue
+
+            # Left arm extension
+            lsh = fencer.keypoints[KP_LEFT_SHOULDER]
+            lel = fencer.keypoints[KP_LEFT_ELBOW]
+            lwr = fencer.keypoints[KP_LEFT_WRIST]
+            if _kp_valid(lsh) and _kp_valid(lel) and _kp_valid(lwr):
+                angle = self._angle_between_points(
+                    (lsh.x, lsh.y), (lel.x, lel.y), (lwr.x, lwr.y)
+                )
+                left_extensions.append(angle / 180.0)
+
+            # Right arm extension
+            rsh = fencer.keypoints[KP_RIGHT_SHOULDER]
+            rel = fencer.keypoints[KP_RIGHT_ELBOW]
+            rwr = fencer.keypoints[KP_RIGHT_WRIST]
+            if _kp_valid(rsh) and _kp_valid(rel) and _kp_valid(rwr):
+                angle = self._angle_between_points(
+                    (rsh.x, rsh.y), (rel.x, rel.y), (rwr.x, rwr.y)
+                )
+                right_extensions.append(angle / 180.0)
+
+        if len(left_extensions) < min_frames or len(right_extensions) < min_frames:
+            return (None, 0.0)
+
+        avg_left = sum(left_extensions) / len(left_extensions)
+        avg_right = sum(right_extensions) / len(right_extensions)
+
+        diff = avg_right - avg_left  # positive = right arm more extended
+        max_ext = max(avg_left, avg_right)
+        ratio = abs(diff) / max_ext if max_ext > 0 else 0.0
+
+        THRESHOLD = 0.05  # 5% difference required for a call
+        if ratio < THRESHOLD:
+            return (None, ratio)  # too similar to distinguish
+
+        handedness = "right" if diff > 0 else "left"
+        confidence = min(ratio / 0.15, 1.0)  # 15% diff → confidence 1.0
+        return (handedness, round(confidence, 2))
+
+    # ------------------------------------------------------------------
     # My-fencer narrative (Phase 6)
     # ------------------------------------------------------------------
 

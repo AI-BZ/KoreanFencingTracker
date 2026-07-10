@@ -1653,3 +1653,119 @@ class TestFrameActionIntegration:
                 assert fas.state == ActionState.EN_GARDE, (
                     f"{side} frame {fas.frame_index}: expected EN_GARDE, got {fas.state}"
                 )
+
+
+# ==================================================================
+# Handedness detection tests (4)
+# ==================================================================
+
+
+class TestHandednessDetection:
+
+    def setup_method(self):
+        self.analyzer = PoseAnalyzer()
+
+    def _make_handedness_sequence(
+        self,
+        n_frames: int = 50,
+        right_arm_angle: float = 160.0,
+        left_arm_angle: float = 110.0,
+        side: str = "left",
+    ) -> List[PoseResult]:
+        """Create a sequence where one arm is more extended than the other.
+
+        Args:
+            right_arm_angle: Angle at the right elbow (degrees).
+            left_arm_angle: Angle at the left elbow (degrees).
+            side: Which side fencer to create ("left" or "right").
+        """
+        import math
+        seq = []
+        for i in range(n_frames):
+            # Create fencer at standard position
+            cx = 200.0 if side == "left" else 600.0
+            f = make_fencer(side, shoulder_cx=cx, hip_cx=cx, ankle_cx=cx)
+
+            # Set right arm keypoints to produce right_arm_angle
+            # shoulder-elbow-wrist angle
+            rsh = f.keypoints[KP_RIGHT_SHOULDER]
+            # Place elbow straight out, then bend wrist to create desired angle
+            elbow_r_x = rsh.x + 40.0
+            elbow_r_y = rsh.y
+            # Wrist position to create the desired angle
+            rad = math.radians(right_arm_angle)
+            # The angle is at the elbow: shoulder-elbow-wrist
+            # If angle=180, wrist is straight out from shoulder through elbow
+            # Use direction from shoulder to elbow, then rotate
+            wrist_r_x = elbow_r_x + 40.0 * math.cos(math.pi - rad)
+            wrist_r_y = elbow_r_y + 40.0 * math.sin(math.pi - rad)
+            f.keypoints[KP_RIGHT_ELBOW] = make_kp(elbow_r_x, elbow_r_y)
+            f.keypoints[KP_RIGHT_WRIST] = make_kp(wrist_r_x, wrist_r_y)
+
+            # Set left arm keypoints to produce left_arm_angle
+            lsh = f.keypoints[KP_LEFT_SHOULDER]
+            elbow_l_x = lsh.x - 40.0
+            elbow_l_y = lsh.y
+            rad_l = math.radians(left_arm_angle)
+            wrist_l_x = elbow_l_x - 40.0 * math.cos(math.pi - rad_l)
+            wrist_l_y = elbow_l_y + 40.0 * math.sin(math.pi - rad_l)
+            f.keypoints[KP_LEFT_ELBOW] = make_kp(elbow_l_x, elbow_l_y)
+            f.keypoints[KP_LEFT_WRIST] = make_kp(wrist_l_x, wrist_l_y)
+
+            other_cx = 600.0 if side == "left" else 200.0
+            other_side = "right" if side == "left" else "left"
+            other = make_fencer(other_side, shoulder_cx=other_cx, hip_cx=other_cx, ankle_cx=other_cx)
+            if side == "left":
+                seq.append(make_pose_result(i, f, other))
+            else:
+                seq.append(make_pose_result(i, other, f))
+        return seq
+
+    def test_right_handed_detection(self):
+        """Right arm more extended → right-handed."""
+        seq = self._make_handedness_sequence(
+            n_frames=50,
+            right_arm_angle=170.0,  # nearly straight
+            left_arm_angle=110.0,   # bent
+            side="left",
+        )
+        handedness, confidence = self.analyzer.detect_handedness(seq, "left")
+        assert handedness == "right"
+        assert confidence > 0.5
+
+    def test_left_handed_detection(self):
+        """Left arm more extended → left-handed."""
+        seq = self._make_handedness_sequence(
+            n_frames=50,
+            right_arm_angle=110.0,  # bent
+            left_arm_angle=170.0,   # nearly straight
+            side="left",
+        )
+        handedness, confidence = self.analyzer.detect_handedness(seq, "left")
+        assert handedness == "left"
+        assert confidence > 0.5
+
+    def test_indeterminate_similar_arms(self):
+        """Both arms similar extension → None (indeterminate)."""
+        seq = self._make_handedness_sequence(
+            n_frames=50,
+            right_arm_angle=150.0,
+            left_arm_angle=148.0,   # very similar
+            side="left",
+        )
+        handedness, confidence = self.analyzer.detect_handedness(seq, "left")
+        assert handedness is None
+        # confidence should be below threshold
+        assert confidence < 0.05
+
+    def test_insufficient_frames(self):
+        """Too few frames → None with 0.0 confidence."""
+        seq = self._make_handedness_sequence(
+            n_frames=10,  # below min_frames default of 30
+            right_arm_angle=170.0,
+            left_arm_angle=110.0,
+            side="left",
+        )
+        handedness, confidence = self.analyzer.detect_handedness(seq, "left")
+        assert handedness is None
+        assert confidence == 0.0

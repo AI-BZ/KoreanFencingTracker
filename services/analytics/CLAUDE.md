@@ -3,7 +3,7 @@
 **서브도메인:** analytics.fencingmind.ai
 **포트:** 76
 **상태:** Phase 7b 완료 (프레이즈 다름 경계 탐지 6항목 전체 구현), Phase 8 준비
-**마지막 세션:** 2026-06-03
+**마지막 세션:** 2026-06-08
 **브랜치:** `feature/analytics/main`
 
 ---
@@ -129,6 +129,8 @@ services/analytics/
 │   ├── test_pose_analyzer.py        # 포즈 분석기 (92) [Phase 5c+6+7b]
 │   ├── test_fencer_profile.py       # FencerProfile 테스트 (6) [Phase 6]
 │   └── test_clip_overlay.py        # ClipOverlay 테스트 (19) [Phase 7a]
+├── docs/                            # 프로젝트 문서
+│   └── PRIORITY_1_FACTS_FINETUNING.md  # 🔴 1순위 이슈: FACTS 파인튜닝 절차서
 ├── requirements.txt
 ├── .gitignore
 └── CLAUDE.md                        # 이 파일
@@ -1406,7 +1408,7 @@ Phase C: 대회 전 브리핑
 
 ### 핵심 블로커
 1. ~~**PoseAnalyzer 실제 클립 검증 미완**~~ → **해결됨** (2026-05-29, 30클립 검증 + 카메라컷/빠라드 수정)
-2. **FACTS 데이터셋 미확보** — 논문 저자 연락 또는 USA Fencing 스트림에서 자체 수집 (TVDataCollector 준비됨)
+2. **🔴 FACTS 데이터셋 미확보 (PRIORITY #1)** — 논문 저자 연락 또는 USA Fencing 스트림에서 자체 수집 (TVDataCollector 준비됨) → 상세: [`docs/PRIORITY_1_FACTS_FINETUNING.md`](docs/PRIORITY_1_FACTS_FINETUNING.md)
 3. **Supabase 마이그레이션 미적용** — `007_analytics_tables.sql` 준비됨, 적용 필요
 4. ~~**ultralytics 미설치**~~ → **해결됨** (2026-05-27)
 5. ~~**Gemini Vision attack 100% 문제**~~ → **해결됨** (2026-05-28, PoseAnalyzer로 전환)
@@ -1578,3 +1580,724 @@ clock_events: 0 (이 영상에서는 시계 OCR 불가 — 레이아웃 미매�
 generate_continuous_report.py 버그 수정:
   video_stem → video_path.stem (line 141, UnboundLocalError 수정)
 ```
+
+---
+
+## 🔬 영상 분석 기술 종합 보고서 (A-to-Z Technical Deep Dive, 2026-06-07)
+
+### 0. 전체 파이프라인 아키텍처
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│ INPUT: 펜싱 경기 영상 (코치/학부모/선수 촬영 or TV 중계)                    │
+└───────┬─────────────────────────────────────────────────────────────────┘
+        │
+        ▼
+┌───────────────────────── [A] 영상 유형 감지 ─────────────────────────────┐
+│  VideoSourceDetector — 휴리스틱 (장면전환 빈도, 선수 크기, 안정성, 점수판)   │
+│  → COACH / PARENT / PLAYER / TV_BROADCAST                               │
+└───────┬──────────────────────────────────────────────────────────────────┘
+        │
+   ┌────┴────────────────┬─────────────────────┐
+   ▼                     ▼                      ▼
+[B] 물리 LED 경로    [C] TV OCR 경로       [D] 포즈 전용 경로
+(코치/학부모)        (TV 중계)             (선수 촬영)
+   │                     │                      │
+   ▼                     ▼                      │
+[E] LED 감지         [F] TV 오버레이 OCR        │
+[G] 7-Segment OCR    [H] TVScoreTracker         │
+   │                     │                      │
+   ▼                     ▼                      │
+[I] 이벤트 감지 (MatchEvent / TVTouchEvent)     │
+   │                     │                      │
+   └──────┬──────────────┘                      │
+          ▼                                     ▼
+[J] YOLO11-Pose 포즈 추정 ◄────────────────────┘
+          │
+          ▼
+[K] 연속 분석 (PoseAnalyzer.analyze_continuous)
+├─ [L] 거리 계산 (Body Height 정규화)
+├─ [M] 풋워크 감지 (런지/플레쉬/전진/후퇴)
+├─ [N] 빠라드 감지 (손목 상대 변위)
+├─ [O] 교환 감지 (거리 기반 상태 기계)
+├─ [P] 관절 키네마틱 (8관절 속도/가속도)
+├─ [Q] 프레임별 동작 분류 (ActionState 9종)
+├─ [R] 시계 OCR → Allez/Halt 이벤트
+└─ [S] scoring_frames 연동 (OCR 지연 보정)
+          │
+          ▼
+[T] FencerProfile 집계 (DistanceStats, FootworkStats, JointAngleStats)
+          │
+          ▼
+[U] 리포트 생성 (MatchReport + 코칭 인사이트)
+          │
+          ▼
+[V] 클립 오버레이 (YOLO 스켈레톤 + HUD)
+          │
+          ▼
+[W] 2-패널 HTML 리포트 (Jinja2 + Chart.js + 인라인 클립 재생)
+          │
+          ▼
+[X] VideoMAE 행동 분류 (FACTS 파인튜닝 대기)
+```
+
+---
+
+### [A] 영상 유형 감지 (Video Source Detection)
+
+**기술 정의**: 입력 영상의 촬영 환경을 자동 분류하여 최적 분석 파이프라인을 선택하는 전처리 단계
+
+**학술 참조**:
+- 장면 전환 감지: Histogram difference + threshold (Boreczky & Rowe, 1996)
+- 카메라 안정성: Optical flow magnitude variance (Lucas-Kanade)
+
+**우리 구현** (`ml/video_source_detector.py`):
+- `scene_cuts_per_minute`: 인접 프레임 히스토그램 차이 > 임계값
+- `avg_fencer_height_ratio`: YOLO11-Pose bbox 높이 / 프레임 높이
+- `stability_score`: 프레임간 optical flow의 분산 (0=흔들림, 1=삼각대)
+- `scoreboard_detected`: 물리 LED 점수판 유무
+- `overlay_detected`: TV 오버레이 바 유무
+
+**분류 규칙 (캐스케이드)**:
+```
+scene_cuts > 3/30s + overlay → TV_BROADCAST
+stability > 0.8 + scoreboard + 2인 → COACH
+scoreboard + stability < 0.8 → PARENT
+person_count ≤ 1 → PLAYER
+나머지 → UNKNOWN
+```
+
+**개선 필요**:
+- 현재 휴리스틱 기반 → 영상 유형 라벨 데이터 축적 후 경량 분류기(SVM/RF)로 대체 가능
+- UNKNOWN 비율 추적 필요 (현재 메트릭 없음)
+- 다양한 방송국 레이아웃(FIE, KFF 등) 지원 필요
+
+---
+
+### [B~D] 분석 경로 분기 (Routing)
+
+| 영상 유형 | 경로 | Phase 1 | 포즈 | 연속분석 | 비고 |
+|-----------|------|---------|------|---------|------|
+| COACH | 물리 LED | ✅ LED+OCR | ✅ 이벤트 윈도우 | ⚠️ 선택 | 최적 소스 |
+| PARENT | 물리 LED | ⚠️ 부분 | ✅ 이벤트 윈도우 | ⚠️ 선택 | 군중 노이즈 |
+| TV_BROADCAST | TV OCR | ✅ Tesseract | ✅ 연속 | ✅ | 프로덕션 메인 |
+| PLAYER | 없음 | ❌ 스킵 | ✅ 포즈만 | ✅ | 기술 중심 |
+
+---
+
+### [E] LED 감지 (Lamp Detection)
+
+**기술 정의**: 펜싱 전자 채점기의 빨간/초록 LED 점등을 프레임 단위로 감지
+
+**학술 참조**:
+- HSV 색공간 분리: Hue-Saturation-Value가 조명 변화에 강인 (Gonzalez & Woods, Digital Image Processing)
+- 임계값 기반 이진화: Otsu's method의 변형 (고정 threshold 200)
+
+**우리 구현** (`analyzer/lamp_detector.py`):
+- **Method 1 (밝기 기반)**: BGR→Gray, threshold=200으로 밝은 픽셀 카운트
+- **Method 2 (색상 기반)**: BGR→HSV, 빨강(0-15, 160-180 hue) / 초록(35-85 hue) 범위 마스킹
+- **합산**: 밝기 픽셀 + 색상 픽셀 > `LAMP_PIXEL_THRESHOLD(300)` → ON
+
+**특이 설계**:
+- 빨간 HSV 범위를 2구간으로 분리 (hue wrap-around: 0~15, 160~180)
+- 높은 밝기 + 낮은 채도 마스크 별도 추가 (LED 과포화 시 흰색으로 보이는 현상 대응)
+
+**개선 필요**:
+- 환경광 적응: 현재 고정 임계값 → 첫 N프레임에서 자동 calibration
+- ROI 자동 검출: 현재 수동 ROI 지정 or ScoreboardDetector (Phase 4b)
+
+---
+
+### [F~G] 점수 판독 (Score Reading)
+
+#### [F] TV 오버레이 OCR (`analyzer/tv_overlay_ocr.py`)
+
+**기술 정의**: TV 중계 영상의 점수판 오버레이에서 선수명, 점수, 시간, 카드 정보를 추출
+
+**학술 참조**:
+- OCR 엔진: Tesseract 4+ (LSTM 기반, Smith 2007: "An Overview of the Tesseract OCR Engine")
+- 전처리: 색상 마스킹 + 모폴로지 연산 (erosion/dilation for noise removal)
+
+**우리 구현**:
+1. **레이아웃 프리셋**: `OVERLAY_LAYOUTS["usa_fencing"]` — 1280x720 기준 각 영역 x좌표 (이름, 점수, 시간)
+2. **전처리 파이프라인**: ROI 추출 → 3배 업스케일 → HSV 색상 마스킹(흰색/빨강/초록/파랑) → 모폴로지 → Tesseract
+3. **디바운싱**: `OVERLAY_SCORE_DEBOUNCE=15` 프레임(~0.5초) 동안 같은 점수 유지해야 확정
+4. **에러 필터링**: 점수 감소 무시, 한 번에 3점 이상 변화 무시
+
+**성능**: ~85ms/프레임 (Tesseract 병목), 점수 읽기율 76%, 이름 정확도 100%
+
+**개선 필요 (높은 우선순위)**:
+- **Tesseract → EasyOCR/PaddleOCR 전환**: Tesseract가 최대 병목 (8분 영상에 23분 소요)
+- **레이아웃 자동 감지**: 현재 USA Fencing 전용 → 다른 방송국(FIE, KFF) 레이아웃 자동 감지
+- **sample_interval 최적화**: 현재 5프레임마다 OCR → 10~15로 올리면 정확도 trade-off
+- **GPU OCR**: Tesseract CPU-only → GPU 가속 OCR 엔진
+
+#### [G] 7-Segment OCR (`analyzer/score_reader.py`)
+
+**기술 정의**: 물리 전자 채점기의 7-세그먼트 LED 숫자를 패턴 매칭으로 판독
+
+**학술 참조**:
+- 7-Segment Display Recognition: 템플릿 매칭 (Brunelli, "Template Matching Techniques in Computer Vision")
+- 세그먼트 패턴 룩업: (a,b,c,d,e,f,g) 7개 세그먼트 ON/OFF → 숫자 매핑
+
+**우리 구현**:
+1. **ROI에서 빨간 LED 마스킹**: HSV (0-15, 165-180 hue, sat>80, val>80)
+2. **컨투어 → 자릿수 분리**: cv2.findContours → 바운딩 박스 정렬
+3. **이중 인식 전략**:
+   - 방법 A: 7-세그먼트 영역별 활성화 비율 → `SEVEN_SEGMENT_PATTERNS` 룩업
+   - 방법 B: 저장된 템플릿과 NCC(Normalized Cross-Correlation) 매칭
+4. **학습**: 새 샘플이 높은 confidence로 인식되면 `digit_templates.pkl`에 자동 추가
+5. **자릿수 "1" 특별 처리**: aspect ratio < 0.65이면 "1"로 직접 판정
+
+**정확도**: ~95% (클린 LED 디스플레이), 30프레임 디바운싱으로 오류 완화
+
+**개선 필요**:
+- 2자리 숫자(10-15) 분리 정확도 개선 필요 (간혹 "1"과 "5"가 붙어보임)
+- 시계(M:SS) 읽기에서 콜론(:) 오인식 문제
+
+---
+
+### [H] TVScoreTracker — 상태 추적 + 시계 OCR
+
+**기술 정의**: 프레임별 OCR 결과를 상태 기계로 추적하여 노이즈를 제거하고 이벤트를 생성
+
+**학술 참조**:
+- Finite State Machine (FSM) for event detection (Hopcroft, Motwani, Ullman)
+- Debouncing: 시그널 처리의 디지털 필터 개념 적용
+
+**우리 구현** (`analyzer/tv_overlay_ocr.py: TVScoreTracker`):
+1. **점수 상태 기계**: `confirmed_score` → `pending_score`(변화 감지) → N프레임 유지 → `confirmed_score` 전환
+2. **시계 상태 기계**: `unknown` → `running`(시간 감소 3프레임 연속) → `stopped`(시간 유지 5프레임 연속)
+3. **이벤트 생성**: 점수 확정 시 `TVTouchEvent`, 시계 전환 시 `clock_event` (allez/halt 프록시)
+
+**개선 필요**:
+- 시계 해상도가 1초 → 짧은 halt(2초 미만) 감지 불안정
+- period 전환 감지 로직 미구현 (1기→2기→3기)
+
+---
+
+### [I] 이벤트 감지 + 디바운싱
+
+**기술 정의**: 점수 변화를 확인하고 실제 터치 이벤트로 확정하는 시간적 필터링
+
+**핵심 파라미터**:
+| 파라미터 | 값 | 의미 |
+|---------|---|------|
+| `DEBOUNCE_FRAMES` | 30 (~1초) | 물리 LED 연속 이벤트 최소 간격 |
+| `OVERLAY_SCORE_DEBOUNCE` | 15 (~0.5초) | TV OCR 점수 확인 프레임 수 |
+| `SCORE_WAIT_SECONDS` | 15 | LED 점등 후 점수 변화 대기 시간 |
+| `SCORING_FRAME_TOLERANCE_SEC` | 2.0 | OCR 점수 지연과 실제 터치 매칭 허용 범위 |
+
+---
+
+### [J] YOLO11-Pose 포즈 추정 (Pose Estimation)
+
+**기술 정의**: 단일 프레임에서 인체 17개 관절(COCO format) 좌표를 실시간 추정
+
+**학술 참조**:
+- YOLOv8-Pose / YOLO11-Pose: Ultralytics (2024), "Real-Time Pose Estimation"
+- COCO Keypoint format: 17 joints (Lin et al., "Microsoft COCO: Common Objects in Context", ECCV 2014)
+- Top-down vs Bottom-up: Top-down 방식 (person detect → keypoint) 사용
+
+**COCO 17 관절**:
+```
+0: Nose, 1-2: Eyes, 3-4: Ears
+5-6: Shoulders, 7-8: Elbows, 9-10: Wrists
+11-12: Hips, 13-14: Knees, 15-16: Ankles
+```
+
+**우리 구현** (`ml/pose_estimator.py`):
+- **모델**: `yolo11n-pose.pt` (nano variant, ~26MB)
+- **입력**: BGR 720p 프레임
+- **출력**: `PoseResult` (최대 2명의 `FencerPose`, 각 17 `PoseKeypoint`(x,y,confidence))
+- **좌우 할당**: bbox x-center 비교 → 왼쪽/오른쪽 자동 배정
+- **GPU**: MPS(Metal Performance Shaders) 우선 → CUDA → CPU 폴백
+- **임계값**: person confidence ≥ 0.5, keypoint confidence ≥ 0.3
+- **Lazy loading**: 첫 호출 시 모델 로드
+
+**성능**: 150ms/프레임 (720p, MPS GPU)
+
+**개선 필요**:
+- **1인 감지 시 사이드 추정**: 현재 무조건 "left" → 프레임 중앙 기준 또는 이전 프레임 tracking 필요
+- **Tracking 미구현**: 프레임간 ID 유지 안됨 → ByteTrack/BoT-SORT 통합 필요
+  - 현재: 매 프레임 독립적으로 좌/우 할당 → 교차 시 swap 발생
+  - 해결: Object tracking으로 일관된 ID 유지
+- **모델 업그레이드**: nano → small/medium으로 정확도 향상 가능 (지연시간 trade-off)
+- **Occlusion 처리**: 두 선수가 겹칠 때 keypoint 혼동 → 이전 프레임 정보로 보정 필요
+
+---
+
+### [K] 연속 분석 (Continuous Analysis)
+
+**기술 정의**: 전체 경기 영상을 서브샘플링하여 프레임별 포즈를 분석하고, 교환/비득점/동작 상태를 추출
+
+**우리 구현** (`ml/pose_analyzer.py: analyze_continuous()`):
+```python
+def analyze_continuous(
+    pose_sequence,           # YOLO11-Pose 결과 시퀀스
+    scoring_frames=None,     # OCR에서 감지된 득점 프레임 (지연 보정용)
+    fps=30.0,
+    my_fencer="left",
+    sample_every_n=5,
+):
+```
+
+**서브샘플링**: 매 `sample_every_n`(기본 5) 프레임마다 YOLO 실행 → 처리량 5배 향상
+
+**성능**:
+| 영상 길이 | 샘플 프레임 | 처리 시간 | 배율 |
+|----------|-----------|----------|------|
+| 3.8분 | 2,282 | 51.8초 | 0.23x realtime |
+| 6.7분 | 4,036 | 73.2초 | 0.18x realtime |
+| 9.5분 | ~5,700 | ~120초 | ~0.21x realtime |
+
+---
+
+### [L] 거리 계산 (Distance in Body Height Units)
+
+**기술 정의**: 두 펜서 간 거리를 체고(Body Height) 단위로 정규화하여 카메라 거리/줌에 독립적인 측정
+
+**학술 참조**:
+- Body Height normalization: 스포츠 생체역학에서 표준 방법 (Winter, "Biomechanics and Motor Control of Human Movement")
+- 카메라 독립 거리 측정: 단안 카메라에서 절대 거리 추정의 일반적 접근법
+
+**우리 구현**:
+1. **체고 계산**: `compute_body_height()` — shoulder_center ~ ankle_center 픽셀 거리
+2. **거리 계산**: `compute_distance_bh()` — hip_center 간 X축 거리 / 평균 체고
+3. **이동 평균**: `smooth_distances()` — 5프레임 윈도우로 노이즈 제거
+4. **5단계 거리 구간**:
+
+| 구간 | BH 범위 | 펜싱 의미 |
+|------|---------|----------|
+| OUT_OF_DISTANCE | > 1.8 BH | 거리 밖 (안전) |
+| ADVANCE_LUNGE | 1.5-1.8 BH | 전진+런지 필요 |
+| LUNGE | 1.2-1.5 BH | 런지 가능 거리 |
+| EXTENSION | 0.8-1.2 BH | 팔만 뻗으면 닿는 거리 |
+| INFIGHTING | < 0.8 BH | 인파이팅 (매우 가까움) |
+
+**개선 필요**:
+- **X축만 사용**: 사이드뷰 가정 → 비스듬한 카메라 각도에서 오차 증가 → Y축 가중 병합 필요
+- **체고 캘리브레이션**: 한 선수가 숙이면 체고 변동 → en garde 시 체고를 기준으로 고정
+- **임계값 보정**: 현재 고정 BH 비율 → 종목별(사브르는 더 가까움) 동적 조정
+
+---
+
+### [M] 풋워크 감지 (Footwork Detection)
+
+**기술 정의**: 관절 궤적 분석으로 펜서의 풋워크 유형을 분류
+
+**학술 참조**:
+- 펜싱 풋워크 분류: Gholipour et al., "Biomechanical Analysis of Fencing Lunge" (Sports Biomechanics, 2008)
+- 엉덩이 하강(hip drop): 런지의 핵심 생체역학 지표
+
+**우리 구현** (`pose_analyzer.py: detect_footwork()`):
+
+| 풋워크 | 감지 조건 | 관련 상수 |
+|--------|----------|----------|
+| **LUNGE** | 앞발 전진 + 뒷발 정지 + 엉덩이 하강 | `HIP_DROP_RATIO_MIN=0.005 BH` |
+| **FLECHE** | 양발 모두 전진 (>50px) + 비율 < 2.5 | `FLECHE_BOTH_ADVANCE_MIN_TUNED=50px` |
+| **ADVANCE** | 양발 전진, 엉덩이 하강 없음 | `MIN_DISPLACEMENT_PX=15` |
+| **RETREAT** | 양발 후퇴 | 방향 반전으로 감지 |
+| **STATIONARY** | 변위 < 15px | `FOOTWORK_MIN_DISPLACEMENT_PX=15` |
+
+**분석 윈도우**: 터치 시점 이전 15프레임 (`FOOTWORK_ANALYSIS_WINDOW`)
+
+**실측 결과 (30클립)**:
+```
+fleche: 20(33%), unknown: 13(22%), stationary: 12(20%),
+retreat: 9(15%), advance: 6(10%), lunge: 0(0%)
+```
+
+**개선 필요 (중간 우선순위)**:
+- **런지 0건 문제**: `HIP_DROP_RATIO_MIN=0.005 BH`가 TV 클립에서도 감지 실패 → hip_drop이 실제로 음수인 케이스 다수 (TV 카메라 각도 때문)
+  - 해결 방향: 앞무릎 각도(front_knee < 130°) 보조 조건 추가
+- **fleche 과감지**: 양발 전진 조건이 너무 관대 → 빠른 전진+런지를 fleche로 오분류
+  - 해결 방향: 양발 교차 여부(ankle 좌표 swap) 확인 추가
+- **비율 기반 hip drop**: `FOOTWORK_USE_RATIO_BASED_HIP_DROP=True` → 절대 px가 아닌 BH 비율 사용 중이지만 여전히 미흡
+
+---
+
+### [N] 빠라드 감지 (Parry Detection)
+
+**기술 정의**: 비득점자의 무기팔 손목 급변위를 감지하여 방어 동작을 추론
+
+**학술 참조**:
+- 빠라드(Parry): 상대의 공격 블레이드를 옆으로 치는 방어 동작 (Czajkowski, "Understanding Fencing")
+- 상대 변위(relative displacement): 전신 이동과 국소 변위를 분리하는 기법
+
+**우리 구현** (`pose_analyzer.py: detect_parry()`):
+1. **절대 → 상대 변위 전환** (결정 18):
+   - 초기: `|wrist_y[t] - wrist_y[t-1]|` → 전신 접근 시 200+px 오탐
+   - 현재: `(wrist_delta) - (hip_delta)` → 순수 손목 동작만 감지 (20-57px 범위)
+2. **카메라컷 보정**: 프레임 갭 > 3인 쌍은 스킵
+3. **감지 윈도우**: 터치 전 10프레임 (`PARRY_DETECTION_WINDOW`)
+4. **임계값**: 횡변위 > 20px (`PARRY_WRIST_LATERAL_MIN_PX`) + 속도 > 8px/frame (`PARRY_WRIST_SPEED_MIN_PX`)
+
+**한계 & 개선 필요**:
+- **Y축 변위만 사용**: 사이드뷰 가정 → 정면 카메라에서는 X축도 필요
+- **블레이드 접촉 미확인**: 손목 변위 ≠ 실제 빠라드 (페이크 빠라드 구분 불가)
+- **종목별 빠라드 차이**: 사브르(머리 위 빠라드 5번) vs 플뢰레(가슴 빠라드 4번) → 종목별 임계값 필요
+
+---
+
+### [O] 교환 감지 (Exchange Detection)
+
+**기술 정의**: 두 펜서의 거리 변화를 상태 기계로 추적하여 공방 교환의 시작/종료를 감지
+
+**학술 참조**:
+- State Machine for temporal event segmentation (FSM 기반 활동 인식)
+- "Phrase d'armes" (검술 구절): FIE 규칙서의 경기 단위 개념
+
+**우리 구현** (`pose_analyzer.py: _detect_exchanges()`):
+
+```
+상태 기계: IDLE → APPROACH → SEPARATION → IDLE
+                                    ↓ (10프레임 내 재접근)
+                                 APPROACH (병합)
+```
+
+- **IDLE → APPROACH**: 거리 감소가 3프레임 연속 (`EXCHANGE_MIN_APPROACH_FRAMES`)
+- **APPROACH → SEPARATION**: 거리 증가 시작 (최소 거리 도달 후)
+- **SEPARATION 병합**: 10프레임 내 재접근 시 같은 교환으로 병합 (`EXCHANGE_MERGE_SEPARATION_FRAMES`)
+- **교환 분류**: `_classify_exchange()`
+  - 득점 연동 (`scoring_frames` tolerance ±2초)
+  - `failed_attack` / `successful_defense` / `mutual_retreat` / `off_target`
+
+**개선 필요**:
+- **느린 접근 미감지**: 매우 천천히 접근하는 경우 (에페 특유) 교환으로 미인식
+- **다중 교환 세분화**: 하나의 긴 교환 내에서 여러 액션(공격-빠라드-리포스트)을 세분화
+- **득점 교환과 비득점 교환 비율 모니터링**: 현재는 감지만 하고 전술적 해석은 미구현
+
+---
+
+### [P] 관절 키네마틱 (Joint Kinematics)
+
+**기술 정의**: 8개 관절의 프레임간 속도(px/frame, BH/frame)와 가속도(px/frame²)를 계산
+
+**학술 참조**:
+- 스포츠 생체역학 키네마틱: Winter, "Biomechanics and Motor Control of Human Movement", 4th ed.
+- 관절 속도/가속도: 1차/2차 유한 차분 (finite difference) 방법
+
+**우리 구현** (`pose_analyzer.py: compute_joint_kinematics()`):
+- **추적 관절**: 양쪽 wrist, ankle, hip, shoulder (8개)
+- **velocity_px**: `|pos[t] - pos[t-1]|` (프레임당 픽셀)
+- **velocity_bh**: velocity_px / body_height (체고 정규화)
+- **acceleration_px**: `|vel[t] - vel[t-1]|` (프레임당 픽셀 변화)
+- **카메라컷 필터링**: hip 점프 > 100px → 해당 프레임 스킵
+
+**개선 필요**:
+- **노이즈 필터링**: Savitzky-Golay 필터 또는 Kalman 필터 적용 필요 (현재 raw 차분)
+- **각속도 미구현**: 관절 각도의 시간 변화율 (angular velocity) → 런지/플레쉬 특성화에 중요
+- **BH 정규화 일관성**: 프레임마다 BH가 변동 → 영상 시작 시 1회 calibration으로 고정
+
+---
+
+### [Q] 프레임별 동작 상태 분류 (Action State Classification)
+
+**기술 정의**: 매 프레임의 키네마틱 + 풋워크 + 빠라드 정보를 조합하여 9가지 동작 상태 중 하나를 할당
+
+**학술 참조**:
+- Rule-based action recognition: 규칙 기반 접근법 (Bobick & Davis, "The Recognition of Human Movement Using Temporal Templates", PAMI 2001)
+- 펜싱 동작 분류 체계: FIE 규칙서 t.7-t.17 "Method of Making a Hit"
+
+**9가지 ActionState**:
+| 상태 | 의미 | 분류 조건 |
+|------|------|----------|
+| EN_GARDE | 기본 자세 | velocity_max < threshold, 적정 거리 |
+| MARCHE | 전진 | 양발 전진, hip drop 없음 |
+| RETRAITE | 후퇴 | 양발 후퇴 |
+| FENTE | 런지 | 앞발 전진 + hip drop |
+| FLECHE | 플레쉬 | 양발 고속 전진, 교차 |
+| PARADE | 빠라드 | 비득점자 손목 급변위 |
+| RIPOSTE | 리포스트 | 빠라드 직후 전진 |
+| PREPARATION | 준비 동작 | 중간 속도, 거리 조절 |
+| RECOVERY | 복귀 | 공격 후 기본 자세 복귀 |
+
+**실측 결과 (PRIMUS vs KOVALEV)**:
+```
+Left: en_garde 52.1%, marche 12.3%, preparation 10.8%, retraite 9.4%
+Right: en_garde 34.5%, marche 15.2%, preparation 13.1%
+```
+
+**개선 필요 (높은 우선순위)**:
+- **ML 대체 필요**: 규칙 기반은 임계값 민감 → LSTM/Transformer 시퀀스 분류기로 업그레이드
+- **종목별 상태 세분화**: 사브르의 balestra, flunge / 플뢰레의 disengage / 에페의 remise 등
+- **Ground truth 부재**: 현재 검증 데이터 없음 → 라벨링 세션으로 GT 구축 필요
+
+---
+
+### [R] 시계 OCR → Allez/Halt 이벤트
+
+**기술 정의**: TV 점수판의 시계 변화를 추적하여 경기 진행(Allez)과 중단(Halt)을 간접 감지
+
+**학술 참조**:
+- Allez Go (2024): Meinecke et al., "Audio-based Allez/Halt detection in fencing" — 오디오 기반 89.1% 정확도
+- 우리 접근: 시각적 시계 OCR (오디오 대신 점수판 시계 변화 추적)
+
+**우리 구현** (`tv_overlay_ocr.py: TVScoreTracker._update_clock_state()`):
+- `running`: 시간 값이 3프레임 연속 감소 → Allez (경기 진행)
+- `stopped`: 시간 값이 5프레임 연속 동일 → Halt (경기 중단)
+- 디바운싱으로 OCR 오류에 의한 spurious 전환 방지
+
+**한계**: 시계 해상도 1초, 방송국별 시계 위치/형식 다름
+
+**개선 필요**:
+- **오디오 Allez/Halt 감지 추가**: Allez Go 논문 방식 (오디오 기반 89.1%) → 시각+오디오 융합
+- **단일 프레이즈 시간 분석**: Allez~Halt 구간 = 1 프레이즈 → 평균 프레이즈 시간, 공방 밀도 분석 가능
+
+---
+
+### [S] scoring_frames 연동 (OCR 지연 보정)
+
+**기술 정의**: OCR 점수 변화 시점과 실제 터치 시점 간의 시간차를 tolerance 기반으로 보정
+
+**문제**:
+```
+실제 타임라인: 런지 → 터치(실제) → 심판 판정 → 점수판 업데이트 → OCR 감지
+              ─────────────── 0.5 ~ 2.0초 지연 ──────────────────
+```
+
+**우리 구현** (`pose_analyzer.py: _build_my_fencer_summary()`):
+- `SCORING_FRAME_TOLERANCE_SEC = 2.0`: 교환의 min_dist_frame 기준 ±2초 윈도우 내에 scoring_frame이 있으면 매칭
+- 매칭 성공 → 해당 교환을 "득점 교환"으로 분류
+- 매칭 실패 → "비득점 교환" (failed_attack 등)
+
+**결과**: 공격 성공률 0% → 64.3% (PRIMUS vs KOVALEV 실측)
+
+**개선 필요**:
+- **2초 윈도우 동적 조정**: 대회마다 심판 반응 속도 다름 → 자동 calibration
+- **양방향 매칭**: 현재 교환→scoring_frame 단방향 → scoring_frame→가장 가까운 교환 역방향 매칭 추가
+
+---
+
+### [T] FencerProfile 집계
+
+**기술 정의**: 다수의 경기/교환 분석 결과를 집계하여 선수별 종합 프로필을 생성
+
+**우리 구현** (`ml/fencer_profile.py: FencerProfileBuilder`):
+
+| 집계 항목 | 데이터 소스 | 출력 |
+|-----------|-----------|------|
+| DistanceStats | 터치별 distance_zone | zone_distribution, zone_success_rate |
+| FootworkStats | 터치별 footwork_type | type_distribution, type_success_rate |
+| JointAngleStats | 터치별 joint_angles | avg_hip/knee/trunk/arm |
+| ParryStats | 터치별 parry_detected | parry_rate, parry_to_riposte |
+| Handedness | arm extension 비대칭 | right/left/None + confidence |
+| 자동 인사이트 | 위 모든 데이터 | strengths[], weaknesses[], recommendations[] |
+
+**손잡이 감지** (미커밋 신규 기능):
+- 양팔 신전 비율(arm extension ratio) 비대칭 분석
+- 무기팔이 더 펴져 있음 → 해당 손이 dominant hand
+- 임계값: 5% 차이 미만 → 판별 불가, 15% 차이 → confidence 1.0
+
+**개선 필요**:
+- **경기 간 일관성 검증**: 동일 선수의 다른 경기에서 프로필 일관성 확인 필요
+- **시계열 추세**: 대회 기간 동안의 컨디션 변화 추적 (피로도 등)
+- **상대 전적 분석**: 특정 상대에 대한 성적/패턴 비교
+
+---
+
+### [U~V] 리포트 + 클립 오버레이
+
+**리포트 구조** (`MatchReport`):
+- MatchSummary (점수, 시간, 종목)
+- TouchDetail[] (프레임, 득점자, 동작, 신뢰도)
+- FencerStats × 2 (동작 분포, 성공률)
+- CoachingInsight[] (자동 생성 코칭 포인트)
+- exchanges[] (교환 타임라인)
+- fencer_profiles (거리/풋워크/관절 통계)
+
+**클립 오버레이** (`ml/clip_overlay.py: ClipOverlayGenerator`):
+- YOLO `result.plot()` → 17-joint 스켈레톤 자동 그리기
+- `cv2.putText()` → HUD 텍스트 (거리 BH, 풋워크, 빠라드)
+- 비대칭 패딩: `pad_before` / `pad_after` 독립 설정
+- 스마트 클립 경계: 교환 시작점 or Allez 시점 or 3초 전(폴백)
+
+**개선 필요**:
+- **스켈레톤 시각화**: 현재 YOLO 기본 → 펜싱 특화 시각화 (무기팔 강조, 거리선 표시)
+- **슬로우모션 지원**: 핵심 구간(터치 직전) 0.5x 슬로모션 → 코치/선수 교육용
+
+---
+
+### [W] 2-패널 HTML 리포트
+
+**기술 스택**: Jinja2 + Tailwind CSS + Chart.js + fetch/blob URL
+
+**레이아웃**:
+- 왼쪽(440px, sticky): 경기 전체 영상 + 인라인 클립 플레이어
+- 오른쪽(flex-1, scroll): 분석 콘텐츠 (summary → charts → events → stats)
+- 모바일: flex-col, 영상 상단 60vh sticky
+
+---
+
+### [X] VideoMAE 행동 분류 (FACTS 파인튜닝 대기)
+
+**기술 정의**: 비디오 클립에서 블레이드 액션(공격/리포스트/카운터/르미즈)을 분류하는 딥러닝 모델
+
+**학술 참조**:
+- VideoMAE: Tong et al., "VideoMAE: Masked Autoencoders are Data-Efficient Learners for Self-Supervised Video Pre-Training" (NeurIPS 2022)
+- FACTS: Martinent et al., "Fencing Action Classification with Temporal Segments" — 90% 정확도
+- Kinetics-400: Kay et al., "The Kinetics Human Action Video Dataset" (CVPR 2017)
+
+**우리 구현** (`ml/action_classifier.py`):
+- **모델**: MCG-NJU/videomae-base-finetuned-kinetics (86M params, 329MB)
+- **입력**: 16프레임 윈도우 (224×224 RGB)
+- **현재 상태**: Kinetics-400 pretrained → 펜싱 동작 "unknown" 반환 (89번 "fencing_sport"만 매핑)
+- **FACTS 파인튜닝 준비 완료**: `ml/training/` 파이프라인 (dataset, train, evaluate)
+
+**FACTS 8클래스**:
+| 코드 | 동작 | 방향 |
+|------|------|------|
+| AL/AR | Attack | Left/Right |
+| RL/RR | Riposte | Left/Right |
+| CAL/CAR | Counter-attack | Left/Right |
+| ReL/ReR | Remise | Left/Right |
+
+**현재 상태**: **파인튜닝 데이터 미확보** → VideoMAE가 사실상 비활성
+
+**개선 필요 (최고 우선순위)**:
+- **FACTS 데이터셋 확보**: 논문 저자 연락 or USA Fencing 스트림에서 자체 수집 (TVDataCollector 준비됨)
+- **자체 데이터 생성**: labeling_server.py로 인간 검수 → labels_reviewed.csv → 파인튜닝
+- **파인튜닝 실행**: `train_videomae.py --dataset-format facts --epochs 10` (Mac Studio MPS)
+
+---
+
+### 기술별 성숙도 + 개선 우선순위 매트릭스
+
+| 기술 | 성숙도 | 정확도 | 개선 우선순위 | 예상 효과 |
+|------|--------|--------|-------------|----------|
+| LED 감지 | ★★★★☆ | ~95% | 낮음 | 환경광 적응 |
+| 7-Segment OCR | ★★★★☆ | ~95% | 낮음 | 2자리 분리 개선 |
+| TV 오버레이 OCR | ★★★☆☆ | 76% (점수) | **높음** | EasyOCR 전환 → 속도 5x+ |
+| 영상 유형 감지 | ★★★☆☆ | 미측정 | 낮음 | ML 분류기 전환 |
+| YOLO11-Pose | ★★★★☆ | 높음 | 중간 | Tracking 추가 |
+| 거리 계산 (BH) | ★★★★☆ | 높음 | 낮음 | 체고 calibration |
+| 풋워크 감지 | ★★☆☆☆ | 런지0% | **중간** | 무릎 각도 보조 조건 |
+| 빠라드 감지 | ★★★☆☆ | ~40% | 중간 | 종목별 임계값 |
+| 교환 감지 | ★★★★☆ | 높음 | 낮음 | 안정적 |
+| 관절 키네마틱 | ★★★☆☆ | — | 중간 | Kalman 필터 |
+| 동작 상태 분류 | ★★☆☆☆ | 미측정 | **높음** | ML 모델 전환 |
+| 시계 OCR | ★★☆☆☆ | 미측정 | 중간 | 오디오 융합 |
+| scoring_frames | ★★★★☆ | 64.3% | 중간 | 양방향 매칭 |
+| FencerProfile | ★★★☆☆ | — | 중간 | 경기 간 일관성 검증 |
+| VideoMAE | ★☆☆☆☆ | 0% (미파인튜닝) | **최고** | FACTS 파인튜닝 |
+| 클립 오버레이 | ★★★★☆ | — | 낮음 | 슬로모션 |
+| 리포트 UI | ★★★★☆ | — | 낮음 | 안정적 |
+
+---
+
+### 참조 논문/기술 전체 목록
+
+| # | 논문/기술 | 우리 시스템에서의 활용 |
+|---|----------|---------------------|
+| 1 | **YOLO11-Pose** (Ultralytics, 2024) | 17-joint 포즈 추정 — `pose_estimator.py` |
+| 2 | **VideoMAE** (Tong et al., NeurIPS 2022) | 비디오 액션 분류 기반 모델 — `action_classifier.py` |
+| 3 | **FACTS** (Martinent et al.) | 8클래스 펜싱 액션 분류 데이터셋 → 파인튜닝 목표 |
+| 4 | **Kinetics-400** (Kay et al., CVPR 2017) | VideoMAE pretrained 데이터셋 |
+| 5 | **COCO Keypoint** (Lin et al., ECCV 2014) | 17-joint 인체 관절 표준 포맷 |
+| 6 | **Tesseract OCR** (Smith, 2007) | TV 오버레이 텍스트 인식 — `tv_overlay_ocr.py` |
+| 7 | **HSV Color Space** (Gonzalez & Woods) | LED 감지, 오버레이 색상 분리 |
+| 8 | **7-Segment Pattern Matching** (Brunelli) | 물리 점수판 숫자 인식 — `score_reader.py` |
+| 9 | **Body Height Normalization** (Winter) | 거리 정규화 — `pose_analyzer.py` |
+| 10 | **Allez Go** (Meinecke et al., 2024) | 오디오 Allez/Halt 감지 참조 (향후 구현 예정) |
+| 11 | **fencing-AI** (sholtodouglas, GitHub) | 초기 파이프라인 참조 (InceptionV3+LSTM → 우리는 VideoMAE로 대체) |
+| 12 | **Biomechanics of Fencing Lunge** (Gholipour et al., 2008) | 풋워크 감지 임계값 설계 |
+| 13 | **Finite State Machine** (Hopcroft et al.) | 교환 감지, 시계 상태, 점수 추적 |
+| 14 | **yt-dlp** (yt-dlp project) | YouTube 영상 다운로드 |
+| 15 | **Rhizomatiks × WFSF** | 블레이드 추적 불가 판단 근거 (24대 4K 카메라 필요) |
+
+---
+
+## 🗺️ Phase 8+ 로드맵 (2026-06-07 업데이트)
+
+### 최고 우선순위 (사업적 임팩트 최대)
+
+#### 8-1. VideoMAE FACTS 파인튜닝 (블레이드 액션 분류 활성화) 🔴 PRIORITY #1
+- **상세 문서**: [`docs/PRIORITY_1_FACTS_FINETUNING.md`](docs/PRIORITY_1_FACTS_FINETUNING.md)
+- **문제**: 현재 모든 동작이 "unknown" → 리포트 핵심 가치 미제공
+- **작업**: FACTS 데이터 확보 → `train_videomae.py` 실행 → 모델 배포
+- **자체 데이터 확보 대안**: TVDataCollector → labeling_server.py 검수 → labels_reviewed.csv
+- **목표**: 8클래스 분류 정확도 85%+
+- **의존**: FACTS 데이터셋 or 자체 4,000+ 라벨링 클립
+- **코드 준비**: 100% 완료 (학습/평가/배포 전체 파이프라인), 데이터만 필요
+
+#### 8-2. OCR 엔진 교체 (Tesseract → EasyOCR/PaddleOCR)
+- **문제**: 8분 영상에 23분 소요 (Tesseract 병목)
+- **목표**: 5x+ 속도 개선 (영상 길이 이하로 분석 시간 단축)
+- **검토 대상**: EasyOCR(GPU 지원), PaddleOCR(정확도 높음), MMOCR
+
+#### 8-3. Supabase DB 실적용
+- **문제**: in-memory dict → 서버 재시작 시 모든 작업 소실
+- **작업**: `007_analytics_tables.sql` 마이그레이션 적용 → server.py DB 연결
+- **테이블**: analytics_videos, analytics_analysis_jobs, analytics_analysis_results 등 8개
+
+### 높은 우선순위 (분석 품질 향상)
+
+#### 8-4. Object Tracking 통합 (ByteTrack/BoT-SORT)
+- **문제**: 매 프레임 독립적 좌/우 할당 → 교차 시 ID swap
+- **작업**: YOLO11 내장 tracker 활성화 또는 ByteTrack 통합
+- **효과**: 선수 일관성 ↑, 프로필 정확도 ↑
+
+#### 8-5. 풋워크 감지 개선
+- **런지 문제**: hip_drop 조건 외에 front_knee_angle < 130° 보조 조건 추가
+- **fleche 과감지**: ankle 교차 여부 확인 추가
+- **목표**: 런지 감지율 0% → 60%+
+
+#### 8-6. 동작 상태 분류 ML 전환
+- **문제**: 규칙 기반 ActionState 분류가 임계값 민감
+- **작업**: 현재 규칙으로 pseudo-label 생성 → LSTM/Transformer 시퀀스 분류기 학습
+- **입력**: (keypoints, kinematics) per frame → ActionState
+
+#### 8-7. 종목별 분석기 (Weapon-specific Analyzer)
+- **플뢰레**: 우선권 판정 (공격 시작점 분석)
+- **에페**: 카운터어택 기회 감지, 거리 관리 분석
+- **사브르**: 전진 가속도 분석, 마르쉬-아탁 패턴
+- **구현 위치**: `ml/weapon_analyzers/{foil,epee,sabre}.py`
+
+### 중간 우선순위 (사용자 경험 + 인프라)
+
+#### 8-8. 오디오 Allez/Halt 감지
+- **참조**: Allez Go 논문 (89.1% 정확도)
+- **방법**: librosa로 오디오 특징 추출 → 이진 분류기 (allez/halt/noise)
+- **효과**: 프레이즈 경계 정확도 대폭 향상 (시각+오디오 융합)
+
+#### 8-9. 인증 + 결제 연동
+- **인증**: members 테이블 + JWT/카카오 로그인
+- **결제**: Stripe or 토스 → analytics_credits 실결제
+
+#### 8-10. PDF 내보내기
+- **도구**: weasyprint 또는 reportlab
+- **용도**: 코치 → 학부모 공유, 인쇄 가능한 리포트
+
+#### 8-11. 다중 방송국 레이아웃 자동 감지
+- **현재**: USA Fencing 전용 → FIE, KFF(대한펜싱협회), 올림픽 방송 지원 필요
+- **방법**: 오버레이 영역 히스토그램 분석 → 레이아웃 템플릿 매칭
+
+### 장기 비전
+
+#### 9-1. 실시간 분석 (클럽 대회)
+- WebSocket 스트리밍 → 프레임 단위 분석 → 실시간 대시보드
+- 지연시간 목표: < 500ms (포즈 추정 150ms + 분석 50ms + 렌더링)
+
+#### 9-2. 선수 자동 식별 (Face/Body Recognition)
+- 경기 영상에서 선수를 자동 식별하여 FencerProfile에 자동 연결
+- OCR 이름 매칭 (TV) + 체형/키 매칭 (코치 촬영)
+
+#### 9-3. 대회 전 상대 분석 브리핑
+- 대진표 공개 → 상대 FencerProfile 자동 조회 → 전략 리포트 자동 생성
+- 의존: 선수별 최소 5경기 데이터 축적
+
+#### 9-4. 모바일 앱 (iOS/Android)
+- React Native or Flutter → 현장 촬영 + 즉시 분석 요청
+- 오프라인 모드: YOLO-Pose만 on-device 실행
+
+---
+
+## 미커밋 변경사항 요약 (2026-06-07 기준)
+
+### 신규 기능 (미커밋)
+1. **손잡이(Handedness) 감지** — `pose_analyzer.py` + `fencer_profile.py` + `report.html` + `generate_continuous_report.py`
+2. **스마트 클립 경계** — `server.py: _compute_touch_clip_bounds()` + `clip_overlay.py` 비대칭 패딩
+3. **갤러리 추가** — `gallery.py`: NAC Y12 LEE vs ESAKI 리포트
+4. **버그 픽스** — `tv_overlay_ocr.py`: 빈 문자열 파싱
+5. **테스트** — `test_pose_analyzer.py`(+116줄), `test_clip_overlay.py`(+125줄)

@@ -27,10 +27,14 @@ class ClipOverlayGenerator:
         self,
         model_path: Optional[str] = None,
         pad_seconds: float = 2.0,
+        pad_before: Optional[float] = None,
+        pad_after: Optional[float] = None,
     ):
         self.estimator = PoseEstimator(model_path=model_path)
         self.analyzer = PoseAnalyzer()
         self.pad_seconds = pad_seconds
+        self.pad_before = pad_before  # None → falls back to pad_seconds
+        self.pad_after = pad_after    # None → falls back to pad_seconds
 
     # ------------------------------------------------------------------
     # Public API
@@ -68,9 +72,12 @@ class ClipOverlayGenerator:
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-        pad_frames = int(self.pad_seconds * fps)
-        actual_start = max(0, start_frame - pad_frames)
-        actual_end = min(total_frames - 1, end_frame + pad_frames)
+        pb = self.pad_before if self.pad_before is not None else self.pad_seconds
+        pa = self.pad_after if self.pad_after is not None else self.pad_seconds
+        pad_frames_before = int(pb * fps)
+        pad_frames_after = int(pa * fps)
+        actual_start = max(0, start_frame - pad_frames_before)
+        actual_end = min(total_frames - 1, end_frame + pad_frames_after)
 
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
@@ -183,8 +190,9 @@ class ClipOverlayGenerator:
                 self.generate_clip(
                     video_path, frame, frame, clip_path, event_info
                 )
-                pad_frames = int(self.pad_seconds * fps)
-                duration = (2 * pad_frames + 1) / fps
+                pb = self.pad_before if self.pad_before is not None else self.pad_seconds
+                pa = self.pad_after if self.pad_after is not None else self.pad_seconds
+                duration = (int(pb * fps) + int(pa * fps) + 1) / fps
                 results.append({
                     "event_type": "touch",
                     "event_number": touch_num,
@@ -210,8 +218,9 @@ class ClipOverlayGenerator:
                     self.generate_clip(
                         video_path, start_frame, end_frame, clip_path, event_info
                     )
-                    pad_frames = int(self.pad_seconds * fps)
-                    duration = (end_frame - start_frame + 2 * pad_frames) / fps
+                    pb = self.pad_before if self.pad_before is not None else self.pad_seconds
+                    pa = self.pad_after if self.pad_after is not None else self.pad_seconds
+                    duration = (end_frame - start_frame + int(pb * fps) + int(pa * fps)) / fps
                     results.append({
                         "event_type": "exchange",
                         "event_number": ex_num,

@@ -361,3 +361,368 @@ def test_augmentation_flip_swaps_label():
 
     # At least some should have flipped (prob 0.5)
     assert flipped_count > 0, "No flips occurred in 100 seeds"
+
+
+# ------------------------------------------------------------------
+# FACTSCsvZipDataset tests (mock data — no real ZIP needed)
+# ------------------------------------------------------------------
+
+def test_import_facts_csv_zip_dataset():
+    from ml.training.dataset import FACTSCsvZipDataset
+    assert FACTSCsvZipDataset is not None
+
+
+def test_facts_csv_zip_empty_no_files():
+    """Dataset with non-existent paths should be empty."""
+    from ml.training.dataset import FACTSCsvZipDataset
+    from pathlib import Path
+
+    ds = FACTSCsvZipDataset(
+        facts_dir=Path("/nonexistent"),
+        csv_path=Path("/nonexistent/data.csv"),
+        clip_index_path=Path("/nonexistent/index.json"),
+        zip_path=Path("/nonexistent/data.zip"),
+    )
+    assert len(ds) == 0
+
+
+def test_facts_csv_zip_empty_no_clip_index():
+    """Dataset with missing clip_index.json should be empty."""
+    import tempfile
+    from ml.training.dataset import FACTSCsvZipDataset
+    from pathlib import Path
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # CSV exists but clip_index.json does not
+        csv_path = Path(tmpdir) / "data.csv"
+        csv_path.write_text("id,video_url,label\n1,clip.mp4,Attack left\n")
+
+        ds = FACTSCsvZipDataset(
+            facts_dir=Path(tmpdir),
+            csv_path=csv_path,
+            clip_index_path=Path(tmpdir) / "nonexistent.json",
+            zip_path=Path(tmpdir) / "nonexistent.zip",
+        )
+        assert len(ds) == 0
+
+
+def test_facts_csv_zip_label_normalization():
+    """CSV title-case labels should be normalized via FACTS_CSV_LABEL_MAP."""
+    import tempfile, json
+    from ml.training.dataset import FACTSCsvZipDataset
+    from ml.training.config import LABEL_TO_IDX
+    from pathlib import Path
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = Path(tmpdir)
+
+        # Create clip index with one clip
+        clip_index = {"bout/video1/combined/001.mp4": "inner_001.zip"}
+        (tmpdir / "clip_index.json").write_text(json.dumps(clip_index))
+
+        # Create CSV with title-case labels
+        csv_content = (
+            "id,video_url,label\n"
+            "1,storage/bout/video1/combined/001.mp4,Attack left\n"
+            "2,storage/bout/video1/combined/001.mp4,Attack left\n"
+        )
+        csv_path = tmpdir / "data.csv"
+        csv_path.write_text(csv_content)
+
+        ds = FACTSCsvZipDataset(
+            facts_dir=tmpdir,
+            csv_path=csv_path,
+            clip_index_path=tmpdir / "clip_index.json",
+            zip_path=tmpdir / "nonexistent.zip",
+            split="all",
+        )
+        assert len(ds) == 2
+        # Both should map to attack_left (index 0)
+        for _, label_idx in ds.samples:
+            assert label_idx == LABEL_TO_IDX["attack_left"]
+
+
+def test_facts_csv_zip_storage_prefix_strip():
+    """CSV video_url 'storage/' prefix should be stripped for ZIP path matching."""
+    import tempfile, json
+    from ml.training.dataset import FACTSCsvZipDataset
+    from pathlib import Path
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = Path(tmpdir)
+
+        # Clip index WITHOUT storage/ prefix
+        clip_index = {"bout/vid/combined/1.mp4": "inner.zip"}
+        (tmpdir / "clip_index.json").write_text(json.dumps(clip_index))
+
+        # CSV WITH storage/ prefix
+        csv_content = "id,video_url,label\n1,storage/bout/vid/combined/1.mp4,Riposte right\n"
+        csv_path = tmpdir / "data.csv"
+        csv_path.write_text(csv_content)
+
+        ds = FACTSCsvZipDataset(
+            facts_dir=tmpdir,
+            csv_path=csv_path,
+            clip_index_path=tmpdir / "clip_index.json",
+            zip_path=tmpdir / "nonexistent.zip",
+            split="all",
+        )
+        assert len(ds) == 1
+
+
+def test_facts_csv_zip_conflicting_labels_skipped():
+    """Clips with multiple different labels should be skipped."""
+    import tempfile, json
+    from ml.training.dataset import FACTSCsvZipDataset
+    from pathlib import Path
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = Path(tmpdir)
+
+        # One clip with conflicting labels, one clean
+        clip_index = {
+            "bout/a/1.mp4": "inner.zip",
+            "bout/b/2.mp4": "inner.zip",
+        }
+        (tmpdir / "clip_index.json").write_text(json.dumps(clip_index))
+
+        csv_content = (
+            "id,video_url,label\n"
+            "1,storage/bout/a/1.mp4,Attack left\n"
+            "2,storage/bout/a/1.mp4,Riposte right\n"  # CONFLICT
+            "3,storage/bout/b/2.mp4,Remise left\n"     # Clean
+        )
+        csv_path = tmpdir / "data.csv"
+        csv_path.write_text(csv_content)
+
+        ds = FACTSCsvZipDataset(
+            facts_dir=tmpdir,
+            csv_path=csv_path,
+            clip_index_path=tmpdir / "clip_index.json",
+            zip_path=tmpdir / "nonexistent.zip",
+            split="all",
+        )
+        # Only the clean clip should survive
+        assert len(ds) == 1
+        assert ds.samples[0][0] == "bout/b/2.mp4"
+
+
+def test_facts_csv_zip_data_leakage_prevention():
+    """Same clip should NOT appear in both train and val splits."""
+    import tempfile, json
+    from ml.training.dataset import FACTSCsvZipDataset
+    from pathlib import Path
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = Path(tmpdir)
+
+        # Create 10 unique clips with oversampling (2 rows each)
+        clip_index = {}
+        csv_lines = ["id,video_url,label"]
+        idx = 1
+        for i in range(10):
+            clip_key = f"bout/v{i}/combined/{i}.mp4"
+            clip_index[clip_key] = "inner.zip"
+            label = "Attack left" if i % 2 == 0 else "Attack right"
+            csv_lines.append(f"{idx},storage/{clip_key},{label}")
+            idx += 1
+            csv_lines.append(f"{idx},storage/{clip_key},{label}")  # Oversample
+            idx += 1
+
+        (tmpdir / "clip_index.json").write_text(json.dumps(clip_index))
+        csv_path = tmpdir / "data.csv"
+        csv_path.write_text("\n".join(csv_lines) + "\n")
+
+        train_ds = FACTSCsvZipDataset(
+            facts_dir=tmpdir, csv_path=csv_path,
+            clip_index_path=tmpdir / "clip_index.json",
+            zip_path=tmpdir / "nonexistent.zip",
+            split="train", seed=42,
+        )
+        val_ds = FACTSCsvZipDataset(
+            facts_dir=tmpdir, csv_path=csv_path,
+            clip_index_path=tmpdir / "clip_index.json",
+            zip_path=tmpdir / "nonexistent.zip",
+            split="val", seed=42,
+        )
+        test_ds = FACTSCsvZipDataset(
+            facts_dir=tmpdir, csv_path=csv_path,
+            clip_index_path=tmpdir / "clip_index.json",
+            zip_path=tmpdir / "nonexistent.zip",
+            split="test", seed=42,
+        )
+
+        # Collect clip keys per split
+        train_clips = {clip for clip, _ in train_ds.samples}
+        val_clips = {clip for clip, _ in val_ds.samples}
+        test_clips = {clip for clip, _ in test_ds.samples}
+
+        # No overlap between splits
+        assert train_clips.isdisjoint(val_clips), "Train/val clip overlap detected"
+        assert train_clips.isdisjoint(test_clips), "Train/test clip overlap detected"
+        assert val_clips.isdisjoint(test_clips), "Val/test clip overlap detected"
+
+        # All clips covered
+        all_clips = train_clips | val_clips | test_clips
+        assert len(all_clips) == 10
+
+        # Total samples should equal 20 (10 clips × 2 rows each)
+        total = len(train_ds) + len(val_ds) + len(test_ds)
+        assert total == 20
+
+
+def test_facts_csv_zip_class_distribution():
+    """get_class_distribution should return correct counts."""
+    import tempfile, json
+    from ml.training.dataset import FACTSCsvZipDataset
+    from pathlib import Path
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = Path(tmpdir)
+
+        clip_index = {
+            "a.mp4": "inner.zip",
+            "b.mp4": "inner.zip",
+            "c.mp4": "inner.zip",
+        }
+        (tmpdir / "clip_index.json").write_text(json.dumps(clip_index))
+
+        csv_content = (
+            "id,video_url,label\n"
+            "1,storage/a.mp4,Attack left\n"
+            "2,storage/a.mp4,Attack left\n"
+            "3,storage/b.mp4,Counter Attack right\n"
+            "4,storage/c.mp4,Counter Attack right\n"
+        )
+        csv_path = tmpdir / "data.csv"
+        csv_path.write_text(csv_content)
+
+        ds = FACTSCsvZipDataset(
+            facts_dir=tmpdir, csv_path=csv_path,
+            clip_index_path=tmpdir / "clip_index.json",
+            zip_path=tmpdir / "nonexistent.zip",
+            split="all",
+        )
+        dist = ds.get_class_distribution()
+        assert dist["attack_left"] == 2
+        assert dist["counter_attack_right"] == 2
+
+
+def test_facts_csv_zip_unknown_labels_skipped():
+    """CSV rows with labels not in FACTS_CSV_LABEL_MAP should be skipped."""
+    import tempfile, json
+    from ml.training.dataset import FACTSCsvZipDataset
+    from pathlib import Path
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = Path(tmpdir)
+
+        clip_index = {"a.mp4": "inner.zip"}
+        (tmpdir / "clip_index.json").write_text(json.dumps(clip_index))
+
+        csv_content = (
+            "id,video_url,label\n"
+            "1,storage/a.mp4,Unknown action\n"  # Not in FACTS_CSV_LABEL_MAP
+            "2,storage/a.mp4,Attack left\n"      # Valid
+        )
+        csv_path = tmpdir / "data.csv"
+        csv_path.write_text(csv_content)
+
+        ds = FACTSCsvZipDataset(
+            facts_dir=tmpdir, csv_path=csv_path,
+            clip_index_path=tmpdir / "clip_index.json",
+            zip_path=tmpdir / "nonexistent.zip",
+            split="all",
+        )
+        assert len(ds) == 1
+
+
+def test_facts_csv_zip_clips_not_in_index_skipped():
+    """CSV rows referencing clips not in clip_index.json should be skipped."""
+    import tempfile, json
+    from ml.training.dataset import FACTSCsvZipDataset
+    from pathlib import Path
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = Path(tmpdir)
+
+        # Index only has clip_a
+        clip_index = {"clip_a.mp4": "inner.zip"}
+        (tmpdir / "clip_index.json").write_text(json.dumps(clip_index))
+
+        csv_content = (
+            "id,video_url,label\n"
+            "1,storage/clip_a.mp4,Attack left\n"     # In index
+            "2,storage/clip_b.mp4,Attack right\n"    # NOT in index
+        )
+        csv_path = tmpdir / "data.csv"
+        csv_path.write_text(csv_content)
+
+        ds = FACTSCsvZipDataset(
+            facts_dir=tmpdir, csv_path=csv_path,
+            clip_index_path=tmpdir / "clip_index.json",
+            zip_path=tmpdir / "nonexistent.zip",
+            split="all",
+        )
+        assert len(ds) == 1
+        assert ds.samples[0][0] == "clip_a.mp4"
+
+
+def test_facts_csv_zip_close_idempotent():
+    """Calling close() multiple times should not raise."""
+    from ml.training.dataset import FACTSCsvZipDataset
+    from pathlib import Path
+
+    ds = FACTSCsvZipDataset(
+        facts_dir=Path("/nonexistent"),
+        csv_path=Path("/nonexistent/data.csv"),
+        clip_index_path=Path("/nonexistent/index.json"),
+        zip_path=Path("/nonexistent/data.zip"),
+    )
+    ds.close()
+    ds.close()  # Should not raise
+
+
+def test_facts_csv_zip_inherits_augmentation_methods():
+    """FACTSCsvZipDataset should inherit _sample_frames and _apply_augmentation."""
+    from ml.training.dataset import FACTSCsvZipDataset
+    from pathlib import Path
+
+    ds = FACTSCsvZipDataset(
+        facts_dir=Path("/nonexistent"),
+        csv_path=Path("/nonexistent/data.csv"),
+        clip_index_path=Path("/nonexistent/index.json"),
+        zip_path=Path("/nonexistent/data.zip"),
+    )
+    # Should have parent class methods
+    assert hasattr(ds, "_sample_frames")
+    assert hasattr(ds, "_apply_augmentation")
+    assert ds.num_frames == 16
+
+
+def test_facts_csv_zip_augment_only_on_train():
+    """Augmentation should only be enabled for train split."""
+    import tempfile, json
+    from ml.training.dataset import FACTSCsvZipDataset
+    from pathlib import Path
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = Path(tmpdir)
+        (tmpdir / "clip_index.json").write_text("{}")
+        csv_path = tmpdir / "data.csv"
+        csv_path.write_text("id,video_url,label\n")
+
+        ds_train = FACTSCsvZipDataset(
+            facts_dir=tmpdir, csv_path=csv_path,
+            clip_index_path=tmpdir / "clip_index.json",
+            zip_path=tmpdir / "nonexistent.zip",
+            split="train", augment=True,
+        )
+        ds_val = FACTSCsvZipDataset(
+            facts_dir=tmpdir, csv_path=csv_path,
+            clip_index_path=tmpdir / "clip_index.json",
+            zip_path=tmpdir / "nonexistent.zip",
+            split="val", augment=True,
+        )
+        assert ds_train.augment is True
+        assert ds_val.augment is False  # augment forced off for non-train

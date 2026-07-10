@@ -181,6 +181,22 @@ def main():
     profile_left = builder_left.build()
     profile_right = builder_right.build()
 
+    # Detect handedness
+    handedness_left, hconf_left = analyzer.detect_handedness(pose_results, "left")
+    handedness_right, hconf_right = analyzer.detect_handedness(pose_results, "right")
+
+    profile_left.handedness = handedness_left
+    profile_left.handedness_confidence = hconf_left
+    profile_right.handedness = handedness_right
+    profile_right.handedness_confidence = hconf_right
+
+    if handedness_left:
+        hand_ko = "오른손잡이" if handedness_left == "right" else "왼손잡이"
+        print(f"  Left fencer: {hand_ko} (confidence: {hconf_left})")
+    if handedness_right:
+        hand_ko = "오른손잡이" if handedness_right == "right" else "왼손잡이"
+        print(f"  Right fencer: {hand_ko} (confidence: {hconf_right})")
+
     # Build exchange list for report
     exchanges_list = []
     event_type_ko = {
@@ -284,6 +300,8 @@ def main():
         "left_fencer": {
             "name": "Left Fencer",
             "club": "",
+            "handedness": handedness_left,
+            "handedness_confidence": hconf_left,
             "total_touches_scored": 0,
             "total_touches_conceded": 0,
             "most_common_action": None,
@@ -293,6 +311,8 @@ def main():
         "right_fencer": {
             "name": "Right Fencer",
             "club": "",
+            "handedness": handedness_right,
+            "handedness_confidence": hconf_right,
             "total_touches_scored": 0,
             "total_touches_conceded": 0,
             "most_common_action": None,
@@ -322,6 +342,7 @@ def main():
             "confidence_threshold": 0.0,
             "source_type": "tv_broadcast",
             "analysis_mode": "continuous_only",
+            "fps": fps,
         },
     }
 
