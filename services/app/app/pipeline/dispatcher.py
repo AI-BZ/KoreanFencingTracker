@@ -36,6 +36,16 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _is_unique_violation(exc: Exception) -> bool:
+    """예외가 UNIQUE 제약 위반(중복 INSERT)인지 판별.
+
+    supabase-py/PostgREST는 구체 예외 타입이 환경마다 달라 문자열로 판별한다.
+    PostgreSQL unique_violation SQLSTATE는 23505.
+    """
+    text = str(exc).lower()
+    return "23505" in text or "unique" in text or "duplicate" in text
+
+
 class NotificationDispatcher:
     def __init__(self, supabase: Any = None):
         self._db = supabase
@@ -381,4 +391,14 @@ class NotificationDispatcher:
                 }
             ).execute()
         except Exception as exc:  # noqa: BLE001
-            logger.warning("로그 기록 실패 member=%s channel=%s: %s", member_id, channel, exc)
+            # UNIQUE 제약(uq_app_notif_log_member_channel_event) 위반은 다른 워커가
+            # 먼저 같은 (member, channel, event_type, event_id) 로그를 INSERT했다는 뜻 →
+            # 중복 발송이 DB에서 차단된 정상 동작이므로 debug로만 남긴다.
+            if _is_unique_violation(exc):
+                logger.debug(
+                    "중복 로그 스킵 (UNIQUE 위반) member=%s channel=%s", member_id, channel
+                )
+            else:
+                logger.warning(
+                    "로그 기록 실패 member=%s channel=%s: %s", member_id, channel, exc
+                )
