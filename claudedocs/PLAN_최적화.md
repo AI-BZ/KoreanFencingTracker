@@ -108,11 +108,40 @@
 - shared_core 수정(2·4·7): feature/shared/* 브랜치 분리 + account·data 기동 스모크 필수.
 - account 전용(3·5·6·10·11) 및 공통(A·1·8·9): feature/account/* 또는 refactor/eval-20260710.
 
+## ✅ 3단계 완료 요약 (2026-07-10)
+브랜치 `refactor/eval-account-20260710` (master 미머지, 미push). 승인된 12개 항목 전부 완료, 항목별 커밋 분리.
+
+**최종 검증 상태**
+- account 테스트: **61 pass / 2 fail**. 2건은 `test_profile.py::TestGetMe`의 **기존 실패**(우리 변경 이전부터 실패, 스코프 밖 — verification/profile 로직).
+- 서버 통합 스모크: `/auth/login`·`/auth/register`·`/auth/public/player-search` 모두 200, 기동 에러 없음. i18n 테마 en=dark/ko=light 실증.
+
+**⚠️ 남은 사용자 액션 (코드로 끝나지 않는 것)**
+1. **[P0-2 필수] Supabase 토큰 회전**: `.mcp.json`에서 평문 토큰은 빠졌으나 **git 히스토리엔 여전히 존재**. Supabase 대시보드에서 해당 액세스 토큰을 revoke+재발급해야 실질 위험 해소.
+2. **[P0-2] 셸 env 설정**: 재발급 토큰을 `~/.zshrc`에 `export SUPABASE_ACCESS_TOKEN=...` 추가 후 Claude Code 재시작. (`.mcp.json`의 `${}` 치환은 .env가 아니라 셸 env를 읽음 — 안 하면 supabase MCP 끊김.)
+3. **[P0-1] JWT 배포 env 확인**: JWT_SECRET_KEY fail-fast 적용됨. 로컬 .env엔 값 있으나 **배포/프로덕션 환경에 모든 서비스별로 JWT_SECRET_KEY가 주입되는지 미검증** — 배포 전 확인(없으면 전 서비스 기동 실패).
+4. **push/PR 결정**: shared_core 수정(항목 2·4·7)이 이 브랜치에 포함됨(R2는 feature/shared/* 권장이나 커밋 분리로 절충). master 머지 전 data 등 타 서비스 기동 스모크 권장.
+
+**커밋 목록**
+`7a3b200` P0-1 JWT · `8363609` P0-2 mcp토큰 · `5e979f1` P1-1 리다이렉트 · `761c477` P1-5/P2 OAuth·datetime · `c20818b` P1-2/P1-3 공개검색·claim · `c313ccd` P1-4 i18n · `689a64b` 항목A/8 테스트인프라·main.py · `2326fd2` 항목9 마이그레이션문서 · `fe522bf` P2 register분할
+
 ## ⛔ 타 워크트리 이관 권고 (이 계획 제외)
 - data 서비스 i18n 자체복제 제거 → FencingMind-data 워크트리.
 - club/community/shop/blog/analytics 5개 auth shim 부재 → 각 워크트리에서 data shim 패턴 복사.
 
-## 항목별 진행 상태 (3단계에서 갱신)
-| 항목 | 상태 |
-|------|------|
-| A, 1~11 | ⏳ 승인 대기 |
+## 항목별 진행 상태 (3단계)
+브랜치: `refactor/eval-account-20260710`
+
+| 항목 | 상태 | 커밋/비고 |
+|------|------|-----------|
+| A 검증인프라 | ✅ 완료 | 689a64b — py3.13fw+pytest importlib, account 35 pass / 2 기존실패(test_profile) |
+| 1 .mcp.json 토큰 | ✅ 완료 | 8363609. ⚠️ 사용자 액션 2건 미완: 토큰 회전 + ~/.zshrc export |
+| 2 JWT fail-fast | ✅ 완료 | 7a3b200 — 배포 env 미검증 주의 |
+| 3 오픈 리다이렉트 | ✅ 완료 | 5e979f1 — 12/12 검증 |
+| 4 OAuth state 파싱 | ✅ 완료 | 761c477 — build_auth_url_with_state 신설, 하위호환 유지 |
+| 5 공개검색 rate limit | ✅ 완료 | c20818b — slowapi 20/분·200/시간, 생년구간화+미성년마스킹 |
+| 6 claim 자동승인 | ✅ 완료 | c20818b — CLAIM_AUTO_APPROVE_ENABLED=False, 두 경로 차단 |
+| 7 i18n 수렴 | ✅ 완료 | c313ccd — shared_core 미들웨어+extra_dirs, en=dark/ko=light 실증 |
+| 8 루트 레거시 정리 | ✅ 완료 | main.py 삭제(689a64b에 병합됨) + rsync 쓰레기 제거 |
+| 9 마이그레이션 002 문서 | ✅ 완료 | 2326fd2 |
+| 10 register.html 분할 | ✅ 완료 | fe522bf — 1000줄→41줄, partials 6개+register.js/css, 렌더 200 |
+| 11 datetime.utcnow | ✅ 완료 | 761c477 — aware 전환 + 레거시 naive 방어 |
