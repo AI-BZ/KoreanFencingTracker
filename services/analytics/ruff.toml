@@ -1,0 +1,10 @@
+# Minimal baseline config — measurement only, no auto-fix policy yet.
+line-length = 120
+target-version = "py313"
+
+[lint]
+# Start with error-level + common correctness rules only.
+select = ["E9", "F"]
+
+[lint.per-file-ignores]
+"tests/*" = ["F841"]
