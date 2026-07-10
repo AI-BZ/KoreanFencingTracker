@@ -23,6 +23,21 @@ from analyzer.models import (
 )
 
 
+def compute_success_rates(
+    counts: Dict[str, int], scored: Dict[str, int]
+) -> Dict[str, float]:
+    """Success rate per category = scored / attempts (0.0 when attempts == 0).
+
+    Shared by FencerProfileBuilder and the server's on-the-fly report
+    enrichment so both compute zone/footwork success rates identically.
+    Keys follow the insertion order of ``counts``.
+    """
+    return {
+        key: scored.get(key, 0) / attempts if attempts > 0 else 0.0
+        for key, attempts in counts.items()
+    }
+
+
 @dataclass
 class DistanceStats:
     """Distance zone statistics across bouts."""
@@ -243,10 +258,7 @@ class FencerProfileBuilder:
 
         # Distance stats
         if self._zone_attempts:
-            zone_success: Dict[str, float] = {}
-            for zone, attempts in self._zone_attempts.items():
-                scores = self._zone_scores.get(zone, 0)
-                zone_success[zone] = scores / attempts if attempts > 0 else 0.0
+            zone_success = compute_success_rates(self._zone_attempts, self._zone_scores)
 
             preferred = max(zone_success, key=zone_success.get) if zone_success else ""  # type: ignore[arg-type]
             avg_speed = (
@@ -263,10 +275,7 @@ class FencerProfileBuilder:
 
         # Footwork stats
         if self._fw_attempts:
-            fw_success: Dict[str, float] = {}
-            for fw_type, attempts in self._fw_attempts.items():
-                scores = self._fw_scores.get(fw_type, 0)
-                fw_success[fw_type] = scores / attempts if attempts > 0 else 0.0
+            fw_success = compute_success_rates(self._fw_attempts, self._fw_scores)
 
             preferred_fw = max(fw_success, key=fw_success.get) if fw_success else ""  # type: ignore[arg-type]
 

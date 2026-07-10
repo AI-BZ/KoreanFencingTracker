@@ -556,6 +556,8 @@ def _enrich_report_stats(report_dict: dict) -> dict:
     fencer_profile.distance_stats / footwork_stats. This function computes them
     on-the-fly from the available touch and exchange data.
     """
+    from ml.fencer_profile import compute_success_rates
+
     touches = report_dict.get("touches") or []
     exchanges = report_dict.get("exchanges") or []
     fencer_profile = report_dict.get("fencer_profile") or {}
@@ -614,10 +616,7 @@ def _enrich_report_stats(report_dict: dict) -> dict:
 
         # Build distance_stats if we have data
         if not has_distance and zone_counts:
-            zone_success_rate = {}
-            for z, cnt in zone_counts.items():
-                scored = zone_scored.get(z, 0)
-                zone_success_rate[z] = scored / cnt if cnt > 0 else 0.0
+            zone_success_rate = compute_success_rates(zone_counts, zone_scored)
 
             # Preferred zone = zone with most touches
             preferred = max(zone_counts, key=zone_counts.get) if zone_counts else None
@@ -631,10 +630,7 @@ def _enrich_report_stats(report_dict: dict) -> dict:
 
         # Build footwork_stats if we have data
         if not has_footwork and footwork_counts:
-            fw_success_rate = {}
-            for fw_type, cnt in footwork_counts.items():
-                scored = footwork_scored.get(fw_type, 0)
-                fw_success_rate[fw_type] = scored / cnt if cnt > 0 else 0.0
+            fw_success_rate = compute_success_rates(footwork_counts, footwork_scored)
 
             preferred_fw = max(footwork_counts, key=footwork_counts.get) if footwork_counts else None
 
