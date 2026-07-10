@@ -54,7 +54,12 @@ class AccountSettings(SharedAuthSettings):
     NTS_API_KEY: str = os.getenv("NTS_API_KEY", "")
 
     # Player Claim thresholds
-    CLAIM_AUTO_APPROVE_THRESHOLD: float = 0.85
+    # 점수 기반 자동승인 비활성화 (EVAL P1-3: 공개데이터 조합만으로 타인 프로필 탈취 방지).
+    # confidence 점수는 관리자 검토·AI 리포트 참고용으로 계속 계산하되,
+    # 이 플래그가 False인 한 어떤 점수도 자동 approved를 만들지 않고 항상 pending으로 보낸다.
+    # 재활성화하려면 명시적으로 True로 설정 → 아래 임계값 로직이 다시 동작.
+    CLAIM_AUTO_APPROVE_ENABLED: bool = False
+    CLAIM_AUTO_APPROVE_THRESHOLD: float = 0.85  # 관리자 참고용 상한 (플래그 활성화 시에만 적용)
     CLAIM_MANUAL_REVIEW_THRESHOLD: float = 0.50
 
     # Parent Claim (학부모 인증은 자동 승인 없음, AI는 판단 보조만)

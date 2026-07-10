@@ -13,7 +13,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 
-from .auth.router import router as auth_router
+from slowapi.errors import RateLimitExceeded
+
+from .auth.router import router as auth_router, limiter
 from .profile.router import router as profile_router
 from .verification.router import router as verification_router
 from .subscriptions.router import router as subscriptions_router
@@ -34,6 +36,20 @@ app = FastAPI(
     description="인증/프로필/구독 관리 서비스",
     version="0.1.0",
 )
+
+# Rate limiter (공개 검색 엔드포인트 남용/스크레이핑 차단)
+# limiter는 auth.router에 정의됨(엔드포인트 데코레이터와 동일 인스턴스 공유).
+app.state.limiter = limiter
+
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    """rate limit 초과 시 429 JSON 반환."""
+    return JSONResponse(
+        status_code=429,
+        content={"detail": "요청이 너무 많습니다. 잠시 후 다시 시도해주세요."},
+    )
+
 
 # Language detection middleware (must be before CORS)
 app.add_middleware(LanguageMiddleware)

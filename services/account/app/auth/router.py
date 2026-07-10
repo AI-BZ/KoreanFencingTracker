@@ -17,6 +17,8 @@ from fastapi import APIRouter, HTTPException, Request, Form
 from fastapi.responses import RedirectResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 from loguru import logger
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from shared_core.auth.jwt import (
     create_access_token,
@@ -39,6 +41,26 @@ from app.verification.claims import calculate_claim_confidence, _link_player_to_
 from app.verification.notification_service import VerificationNotificationService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+def _client_ip_key(request: Request) -> str:
+    """공개 검색 rate limit용 클라이언트 IP 취득.
+
+    Cloudflare Tunnel 뒤에서는 remote address가 터널 내부 IP이므로,
+    실제 클라이언트 IP를 CF-Connecting-IP → X-Forwarded-For 첫 IP →
+    remote address 순으로 취득한다.
+    """
+    cf = request.headers.get("CF-Connecting-IP")
+    if cf and cf.strip():
+        return cf.strip()
+    xff = request.headers.get("X-Forwarded-For")
+    if xff and xff.strip():
+        return xff.split(",")[0].strip()
+    return get_remote_address(request)
+
+
+# 공개 검색 엔드포인트 rate limiter (server.py에서 app.state.limiter로 등록됨)
+limiter = Limiter(key_func=_client_ip_key)
 
 # 템플릿
 _templates = Jinja2Templates(directory=str(Path(__file__).parent.parent.parent / "templates"))
@@ -221,12 +243,92 @@ def _annotate_and_filter_by_weapon_league(
     return filtered
 
 
+# 성인 리그(고/대/일반) — 이 중 하나라도 기록이 있으면 성인으로 간주.
+# register.html의 ADULT_LEAGUES / isMinorLeaguePlayer 게이팅과 동일 기준.
+_ADULT_LEAGUES = {"high", "university", "senior"}
+
+
+def _is_minor_player(leagues: Optional[list], birth_year) -> bool:
+    """공개 검색 결과에서 미성년 여부 판정(이름 마스킹용).
+
+    - 리그 정보가 있으면 프론트 `isMinorLeaguePlayer`와 동일하게 판정:
+      성인 리그(고/대/일반) 기록이 하나도 없으면 미성년.
+    - 리그 정보가 없으면(랭킹 데이터 부재) 출생연도로 fallback:
+      만 19세 미만이면 미성년으로 간주(과다노출 방지 위해 보수적으로 마스킹).
+    """
+    leagues = leagues or []
+    if leagues:
+        return not any(l in _ADULT_LEAGUES for l in leagues)
+    if birth_year:
+        try:
+            from datetime import date
+            return (date.today().year - int(birth_year)) < 19
+        except (TypeError, ValueError):
+            return False
+    return False
+
+
+def _mask_name_partial(name: str) -> str:
+    """미성년 선수 이름 부분 마스킹.
+
+    홍길동 → 홍*동, 홍길 → 홍*, 김하늘새 → 김**새.
+    (shared_core.mask_korean_name은 이니셜 'H.G.D.'로 과마스킹되어 자녀 식별이
+    어려우므로, 부모/본인이 후보를 식별할 수 있도록 부분 마스킹을 사용.)
+    """
+    n = (name or "").strip()
+    if len(n) <= 1:
+        return n
+    if len(n) == 2:
+        return n[0] + "*"
+    return n[0] + "*" * (len(n) - 2) + n[-1]
+
+
+def _birth_decade(birth_year) -> Optional[str]:
+    """정밀 출생연도 → 생년 구간 문자열. 2011 → '2010년대'."""
+    try:
+        y = int(birth_year)
+    except (TypeError, ValueError):
+        return None
+    if y < 1900 or y > 2100:
+        return None
+    return f"{(y // 10) * 10}년대"
+
+
+def _sanitize_public_player_results(candidates: list) -> list:
+    """공개 선수 검색 응답 최소화(EVAL P1-2/P1-3).
+
+    - 정밀 birth_year(정수) 제거 → birth_decade 구간 문자열로 대체.
+    - 미성년 후보 이름 부분 마스킹(성인은 실명 유지).
+    - id·소속·무기·리그는 유지하여 가입 식별 UX 보존.
+    """
+    sanitized = []
+    for c in candidates:
+        leagues = c.get("leagues") or []
+        weapons = c.get("weapons") or []
+        birth_year = c.get("birth_year")
+        name = c.get("player_name") or c.get("name") or ""
+        minor = _is_minor_player(leagues, birth_year)
+        sanitized.append({
+            "id": c.get("id"),
+            "player_name": _mask_name_partial(name) if minor else name,
+            "team_name": c.get("team_name"),
+            "weapons": weapons,
+            "leagues": leagues,
+            "birth_decade": _birth_decade(birth_year),
+            "is_minor": minor,
+        })
+    return sanitized
+
+
 # =============================================
 # 공개 검색 API (회원가입 폼에서 인증 없이 사용)
 # =============================================
 
 @router.get("/public/player-search")
+@limiter.limit("20/minute")
+@limiter.limit("200/hour")
 async def public_player_search(
+    request: Request,
     name: str,
     birth_year: Optional[int] = None,
     team: Optional[str] = None,
@@ -265,15 +367,20 @@ async def public_player_search(
         logger.error(f"Public player search error: {e}")
         raise HTTPException(status_code=500, detail="검색 중 오류가 발생했습니다")
 
-    results = _annotate_and_filter_by_weapon_league(
-        result.data or [], weapon=weapon, league=league
-    )[:15]
+    results = _sanitize_public_player_results(
+        _annotate_and_filter_by_weapon_league(
+            result.data or [], weapon=weapon, league=league
+        )[:15]
+    )
 
     return {"results": results, "total": len(results)}
 
 
 @router.get("/public/child-search")
+@limiter.limit("20/minute")
+@limiter.limit("200/hour")
 async def public_child_search(
+    request: Request,
     name: str,
     birth_year: Optional[int] = None,
     team: Optional[str] = None,
@@ -309,15 +416,20 @@ async def public_child_search(
         logger.error(f"Public child search error: {e}")
         raise HTTPException(status_code=500, detail="검색 중 오류가 발생했습니다")
 
-    results = _annotate_and_filter_by_weapon_league(
-        result.data or [], weapon=weapon, league=league
-    )[:15]
+    results = _sanitize_public_player_results(
+        _annotate_and_filter_by_weapon_league(
+            result.data or [], weapon=weapon, league=league
+        )[:15]
+    )
 
     return {"results": results, "total": len(results)}
 
 
 @router.get("/public/org-search")
+@limiter.limit("20/minute")
+@limiter.limit("200/hour")
 async def public_org_search(
+    request: Request,
     name: str,
 ):
     """
@@ -911,12 +1023,16 @@ async def _create_registration_claims(
                 player = player_result.data
                 confidence = calculate_claim_confidence(member, player)
 
-                auto_approve = confidence >= settings.CLAIM_AUTO_APPROVE_THRESHOLD
-                auto_reject = confidence < settings.CLAIM_MANUAL_REVIEW_THRESHOLD
-                if auto_approve:
-                    status = "approved"
-                elif auto_reject:
-                    status = "rejected"
+                # 점수 기반 자동승인 비활성화(EVAL P1-3). 플래그가 False인 한
+                # confidence가 아무리 높아도 approved가 되지 않고 항상 pending으로
+                # 관리자 검토 큐에 넣는다. confidence는 검토 참고용으로만 계산.
+                if settings.CLAIM_AUTO_APPROVE_ENABLED:
+                    if confidence >= settings.CLAIM_AUTO_APPROVE_THRESHOLD:
+                        status = "approved"
+                    elif confidence < settings.CLAIM_MANUAL_REVIEW_THRESHOLD:
+                        status = "rejected"
+                    else:
+                        status = "pending"
                 else:
                     status = "pending"
 

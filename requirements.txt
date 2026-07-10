@@ -21,3 +21,7 @@ loguru>=0.7.0
 
 # Utilities
 python-dateutil>=2.8.0
+
+# --- eval (account security hardening) ---
+# 공개 검색 엔드포인트 rate limiting (account 서비스)
+slowapi>=0.1.9

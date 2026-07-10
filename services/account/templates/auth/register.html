@@ -872,7 +872,7 @@ function _renderPlayerResults(data, containerId, selectFn, gateMinor) {
         const pName = p.player_name || p.name || '';
         const detail = [
             p.team_name || '',
-            p.birth_year ? p.birth_year + '년생' : '',
+            p.birth_decade || '',
         ].filter(Boolean).join(' · ');
         const badges = []
             .concat((p.weapons || []).map(w => WEAPON_LABELS[w] || w))
@@ -885,7 +885,7 @@ function _renderPlayerResults(data, containerId, selectFn, gateMinor) {
         const blocked = gateMinor && isMinorLeaguePlayer(p.leagues);
         const action = blocked
             ? '<span class="result-blocked">보호자 계정 필요</span>'
-            : '<button type="button" class="result-select-btn" onclick="' + selectFn + '(' + p.id + ', \'' + _esc(pName) + '\', \'' + _esc(p.team_name || '') + '\', ' + (p.birth_year || 'null') + ')">선택</button>';
+            : '<button type="button" class="result-select-btn" onclick="' + selectFn + '(' + p.id + ', \'' + _esc(pName) + '\', \'' + _esc(p.team_name || '') + '\', \'' + _esc(p.birth_decade || '') + '\')">선택</button>';
 
         return '<div class="search-result-item' + (blocked ? ' result-item-blocked' : '') + '">' +
             '<div class="result-info">' +
@@ -911,10 +911,10 @@ async function searchPlayers() {
     } catch (e) { alert('검색 중 오류가 발생했습니다.'); }
 }
 
-function selectPlayer(id, name, team, birthYear) {
+function selectPlayer(id, name, team, birthLabel) {
     document.getElementById('selectedPlayerId').value = id;
     document.getElementById('playerSelected').style.display = 'flex';
-    const detail = [name, team, birthYear ? birthYear + '년생' : ''].filter(Boolean).join(' · ');
+    const detail = [name, team, birthLabel || ''].filter(Boolean).join(' · ');
     document.getElementById('playerSelectedInfo').textContent = detail;
     document.getElementById('playerSearchResults').innerHTML = '';
 }
@@ -939,13 +939,15 @@ async function searchChildren() {
     } catch (e) { alert('검색 중 오류가 발생했습니다.'); }
 }
 
-function selectChild(id, name, team, birthYear) {
+function selectChild(id, name, team, birthLabel) {
     document.getElementById('selectedChildPlayerId').value = id;
     document.getElementById('selectedChildName').value = name;
-    document.getElementById('selectedChildBirthYear').value = birthYear || '';
+    // 정밀 생년은 더 이상 공개검색 응답에 포함되지 않음(EVAL P1-2).
+    // 서버가 matched_player_id로 관리자 검토 시 대조하므로 클라이언트는 연도를 보관하지 않는다.
+    document.getElementById('selectedChildBirthYear').value = '';
     document.getElementById('selectedChildTeam').value = team;
     document.getElementById('childSelected').style.display = 'flex';
-    const detail = [name, team, birthYear ? birthYear + '년생' : ''].filter(Boolean).join(' · ');
+    const detail = [name, team, birthLabel || ''].filter(Boolean).join(' · ');
     document.getElementById('childSelectedInfo').textContent = detail;
     document.getElementById('childSearchResults').innerHTML = '';
 }
