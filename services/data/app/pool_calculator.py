@@ -10,7 +10,7 @@ pool_rounds 데이터를 집계하여 풀 종합 순위를 계산한다.
 2. 지수 (indicator = 득점 - 실점) - 내림차순
 3. 득점 (touches scored) - 내림차순
 """
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any
 
 from loguru import logger
 

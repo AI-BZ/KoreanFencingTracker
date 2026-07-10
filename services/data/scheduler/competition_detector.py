@@ -536,7 +536,6 @@ class EventBasedScraper:
 
         try:
             from scraper.full_scraper import KFFFullScraper
-            from scraper.models import Competition
 
             async with KFFFullScraper(headless=True) as scraper:
                 # 1. 해당 대회의 종목 목록 가져오기 (직접 URL 접근 - 최적화)
@@ -1579,7 +1578,6 @@ class EventBasedScraper:
 
         try:
             from scraper.full_scraper import KFFFullScraper
-            from scraper.models import Competition
 
             async with KFFFullScraper(headless=True) as scraper:
                 # 1. 종목 목록 가져오기

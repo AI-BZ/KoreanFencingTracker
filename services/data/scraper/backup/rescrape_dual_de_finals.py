@@ -15,7 +15,7 @@ import json
 import logging
 import os
 import sys
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Optional
 
 # Path setup
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -51,7 +51,7 @@ async def navigate_to_de_bracket(page: Page, comp_cd: str, sub_event_cd: str) ->
     """KFF 사이트에서 특정 이벤트의 DE 브라켓 페이지로 이동"""
 
     # 1. 대회 목록으로 이동
-    logger.info(f"  대회 목록 페이지 이동...")
+    logger.info("  대회 목록 페이지 이동...")
     await page.goto(COMP_LIST_URL, wait_until="networkidle", timeout=30000)
     await page.wait_for_timeout(2000)
 
@@ -78,18 +78,18 @@ async def navigate_to_de_bracket(page: Page, comp_cd: str, sub_event_cd: str) ->
             return False
 
     # 2. 대회 클릭
-    logger.info(f"  대회 클릭...")
+    logger.info("  대회 클릭...")
     await comp_link.click(timeout=5000)
     await page.wait_for_timeout(2000)
 
     # 3. "경기결과" 탭 클릭
-    logger.info(f"  경기결과 탭 클릭...")
+    logger.info("  경기결과 탭 클릭...")
     try:
         result_tab = page.locator("a[onclick*='funcLeftSub']:has-text('경기결과')").first
         await result_tab.click(timeout=5000)
         await page.wait_for_timeout(2000)
     except PlaywrightTimeout:
-        logger.error(f"  경기결과 탭을 찾을 수 없음!")
+        logger.error("  경기결과 탭을 찾을 수 없음!")
         return False
 
     # 4. 종목 선택
@@ -103,17 +103,17 @@ async def navigate_to_de_bracket(page: Page, comp_cd: str, sub_event_cd: str) ->
         await search_btn.click(timeout=5000)
         await page.wait_for_timeout(2000)
     except PlaywrightTimeout:
-        logger.error(f"  종목 선택 실패!")
+        logger.error("  종목 선택 실패!")
         return False
 
     # 5. "대진표" 메인 탭 클릭
-    logger.info(f"  대진표 탭 클릭...")
+    logger.info("  대진표 탭 클릭...")
     try:
         bracket_tab = page.locator("a:has-text('대진표')").first
         await bracket_tab.click(timeout=5000, force=True)
         await page.wait_for_timeout(2000)
     except PlaywrightTimeout:
-        logger.error(f"  대진표 탭을 찾을 수 없음!")
+        logger.error("  대진표 탭을 찾을 수 없음!")
         return False
 
     # 6. 종목 재선택 (탭 전환 시 리셋될 수 있음)
@@ -128,23 +128,23 @@ async def navigate_to_de_bracket(page: Page, comp_cd: str, sub_event_cd: str) ->
         pass
 
     # 7. "엘리미나시옹디렉트" 서브탭 클릭
-    logger.info(f"  엘리미나시옹디렉트 탭 클릭...")
+    logger.info("  엘리미나시옹디렉트 탭 클릭...")
     try:
         de_tab = page.locator("a:has-text('엘리미나시옹디렉트')").first
         await de_tab.click(timeout=5000, force=True)
         await page.wait_for_timeout(3000)
     except PlaywrightTimeout:
-        logger.error(f"  엘리미나시옹디렉트 탭을 찾을 수 없음!")
+        logger.error("  엘리미나시옹디렉트 탭을 찾을 수 없음!")
         return False
 
     # 8. Second DE로 전환
-    logger.info(f"  Second DE로 전환...")
+    logger.info("  Second DE로 전환...")
     try:
         has_dual = await page.evaluate("""
             () => !!document.querySelector('select#schEtc01')
         """)
         if not has_dual:
-            logger.error(f"  Dual DE 셀렉터(#schEtc01)가 없음!")
+            logger.error("  Dual DE 셀렉터(#schEtc01)가 없음!")
             return False
 
         await page.evaluate("""
@@ -399,10 +399,10 @@ async def update_db_final_bout(sub_event_cd: str, final_data: Dict) -> bool:
         raw_data["de_bracket"]["second_de"] = second_de
 
         sb.table("events").update({"raw_data": raw_data}).eq("sub_event_cd", sub_event_cd).execute()
-        logger.info(f"  ✅ DB 업데이트 완료")
+        logger.info("  ✅ DB 업데이트 완료")
         return True
 
-    logger.error(f"  결승 bout을 찾을 수 없음")
+    logger.error("  결승 bout을 찾을 수 없음")
     return False
 
 
@@ -433,20 +433,20 @@ async def main():
                 # DE 브라켓 페이지로 이동
                 success = await navigate_to_de_bracket(page, comp_cd, sub_event_cd)
                 if not success:
-                    logger.error(f"  ❌ 네비게이션 실패")
+                    logger.error("  ❌ 네비게이션 실패")
                     results["failed"].append((sub_event_cd, event_name, "navigation_failed"))
                     continue
 
                 # 결승 데이터 추출
                 final_data = await extract_final_bout(page)
                 if not final_data:
-                    logger.error(f"  ❌ 결승 데이터 추출 실패")
+                    logger.error("  ❌ 결승 데이터 추출 실패")
                     results["failed"].append((sub_event_cd, event_name, "extraction_failed"))
                     continue
 
                 winner = final_data.get("winner")
                 if not winner:
-                    logger.warning(f"  ⚠️ 결승 승자를 결정할 수 없음 (KFF에도 데이터 없을 수 있음)")
+                    logger.warning("  ⚠️ 결승 승자를 결정할 수 없음 (KFF에도 데이터 없을 수 있음)")
                     logger.info(f"  디버그: {json.dumps(final_data.get('debug', {}), ensure_ascii=False)}")
                     results["failed"].append((sub_event_cd, event_name, "no_winner"))
                     continue

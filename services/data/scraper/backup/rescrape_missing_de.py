@@ -6,7 +6,7 @@
 import asyncio
 import json
 from datetime import datetime
-from typing import List, Dict, Any, Optional, Set
+from typing import List, Dict
 from dataclasses import dataclass
 from loguru import logger
 import sys
@@ -24,7 +24,7 @@ logger.add(
     level="DEBUG"
 )
 
-from full_scraper import KFFFullScraper, Competition
+from full_scraper import KFFFullScraper
 
 
 @dataclass
@@ -172,10 +172,10 @@ async def rescrape_de_data(
 
                     if has_new_de:
                         success_count += 1
-                        logger.info(f"    ✅ DE 데이터 수집 성공")
+                        logger.info("    ✅ DE 데이터 수집 성공")
                     else:
                         fail_count += 1
-                        logger.warning(f"    ⚠️ DE 데이터 없음 (대회에 DE 없을 수 있음)")
+                        logger.warning("    ⚠️ DE 데이터 없음 (대회에 DE 없을 수 있음)")
 
                 except Exception as e:
                     fail_count += 1
@@ -186,7 +186,7 @@ async def rescrape_de_data(
             # 대회별 중간 저장
             with open(output_file, 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, indent=2, default=str)
-            logger.info(f"중간 저장 완료")
+            logger.info("중간 저장 완료")
 
     # 5. 최종 저장
     data['meta']['last_de_rescrape'] = datetime.now().isoformat()
@@ -194,8 +194,8 @@ async def rescrape_de_data(
     with open(output_file, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2, default=str)
 
-    logger.info(f"")
-    logger.info(f"=== 재수집 완료 ===")
+    logger.info("")
+    logger.info("=== 재수집 완료 ===")
     logger.info(f"성공: {success_count}개")
     logger.info(f"실패/없음: {fail_count}개")
     logger.info(f"출력: {output_file}")
@@ -227,7 +227,7 @@ async def main():
                 by_comp[m.competition_name] = 0
             by_comp[m.competition_name] += 1
 
-        print(f"\n대회별 누락 현황:")
+        print("\n대회별 누락 현황:")
         for comp, count in sorted(by_comp.items(), key=lambda x: -x[1])[:20]:
             print(f"  {comp}: {count}개")
 

@@ -5,7 +5,7 @@
 만료된 구독은 자동으로 FREE로 강등.
 """
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from loguru import logger
 

@@ -3,8 +3,6 @@
 """
 from pydantic_settings import SettingsConfigDict, BaseSettings
 from pydantic import Field
-from typing import Optional
-import os
 from dotenv import load_dotenv
 
 load_dotenv()

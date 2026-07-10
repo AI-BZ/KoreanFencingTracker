@@ -20,10 +20,8 @@ ID 체계 (2글자 국가코드):
 
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set, Tuple
-from datetime import datetime, date
 from collections import defaultdict
 import hashlib
-import json
 import re
 import logging
 
@@ -294,7 +292,7 @@ def is_gender_consistent(records: List[Dict]) -> Tuple[bool, str]:
         male_record = next((r for r in gender_records if r['gender'] == '남자'), None)
         female_record = next((r for r in gender_records if r['gender'] == '여자'), None)
 
-        warning = f"성별 불일치 감지 (동명이인): "
+        warning = "성별 불일치 감지 (동명이인): "
         if male_record and female_record:
             warning += f"남자({male_record['date']}) vs 여자({female_record['date']})"
 

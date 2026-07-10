@@ -9,7 +9,6 @@ from datetime import datetime, timedelta
 from loguru import logger
 from enum import Enum
 from dataclasses import dataclass, field
-import json
 
 
 class AlertSeverity(str, Enum):

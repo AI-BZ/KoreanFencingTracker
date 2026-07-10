@@ -571,7 +571,7 @@ def print_report(results: Dict):
     """Print human-readable audit report."""
     s = results["summary"]
     print(f"\n{'=' * 70}")
-    print(f"동명이인 종합 감사 결과 (Homonym Comprehensive Audit)")
+    print("동명이인 종합 감사 결과 (Homonym Comprehensive Audit)")
     print(f"{'=' * 70}")
     print(f"감사일: {results['audit_date']}")
     print(f"총 고유 이름: {results['total_unique_names']:,}명")
@@ -590,7 +590,7 @@ def print_report(results: Dict):
             for susp in entry["suspicions"]:
                 code_counts[susp["code"]] += 1
 
-        print(f"\nSUSPECTED 기준별 분포:")
+        print("\nSUSPECTED 기준별 분포:")
         code_descs = {
             "C1": "같은 학교 레벨, 다른 도/광역시",
             "C2": "3년+ 활동 공백 후 다른 조직",
@@ -602,7 +602,7 @@ def print_report(results: Dict):
 
     # Top 10 suspected
     if results["suspected"]:
-        print(f"\nSUSPECTED 상위 10건:")
+        print("\nSUSPECTED 상위 10건:")
         for entry in results["suspected"][:10]:
             codes = ", ".join(s["code"] for s in entry["suspicions"])
             teams_str = ", ".join(entry["teams"][:4])
@@ -620,13 +620,13 @@ def print_report(results: Dict):
             for anom in entry["anomalies"]:
                 inv_counts[anom["code"]] += 1
 
-        print(f"\nINVESTIGATION 코드별 분포:")
+        print("\nINVESTIGATION 코드별 분포:")
         for code in sorted(inv_counts.keys()):
             print(f"  {code}: {inv_counts[code]:>4}")
 
     # Top 10 investigation
     if results["investigation"]:
-        print(f"\nINVESTIGATION 상위 10건:")
+        print("\nINVESTIGATION 상위 10건:")
         for entry in results["investigation"][:10]:
             codes = ", ".join(a["code"] for a in entry["anomalies"])
             teams_str = ", ".join(entry["teams"][:3])

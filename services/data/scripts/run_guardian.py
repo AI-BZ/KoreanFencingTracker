@@ -89,7 +89,7 @@ async def cmd_report():
     print(f"대회 수집: {result.get('scrape_competitions', 0)}개")
     print(f"종목 수집: {result.get('scrape_events', 0)}개")
     print(f"변경 감지: {result.get('changes_detected', 0)}건")
-    print(f"\n주간 통계 리셋 완료")
+    print("\n주간 통계 리셋 완료")
 
 
 async def cmd_status():

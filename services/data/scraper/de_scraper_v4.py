@@ -1819,7 +1819,7 @@ async def test_de_scraper():
             # 결과 출력
             result = bracket.to_dict()
 
-            print(f"\n=== DE 스크래핑 결과 ===")
+            print("\n=== DE 스크래핑 결과 ===")
             print(f"시작 라운드: {result['starting_round']}")
             print(f"브래킷 크기: {result['bracket_size']}")
             print(f"참가자 수: {result['participant_count']}")

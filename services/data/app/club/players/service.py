@@ -6,7 +6,7 @@ Player Data Service
 """
 
 from typing import Optional, List, Dict, Any
-from datetime import date, datetime
+from datetime import datetime
 import os
 import httpx
 from supabase import create_client, Client
@@ -700,7 +700,7 @@ class PlayerService:
             try:
                 async with httpx.AsyncClient() as client:
                     response = await client.get(
-                        f"http://localhost:71/api/players/search",
+                        "http://localhost:71/api/players/search",
                         params={"q": player_name},
                         timeout=5.0
                     )
@@ -726,7 +726,7 @@ class PlayerService:
                                     "recent_result": recent_result
                                 }
                                 break
-            except Exception as e:
+            except Exception:
                 # 실패해도 무시하고 기본값 사용
                 pass
 
@@ -813,7 +813,7 @@ class PlayerService:
             # 메인 API에서 클럽 소속 선수 검색 (현재 + 과거 소속 모두 포함)
             async with httpx.AsyncClient() as client:
                 response = await client.get(
-                    f"http://localhost:71/api/players/search",
+                    "http://localhost:71/api/players/search",
                     params={"q": organization_name, "limit": 200, "include_history": "true"},
                     timeout=10.0
                 )
@@ -1014,7 +1014,7 @@ class PlayerService:
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.get(
-                    f"http://localhost:71/api/players/search",
+                    "http://localhost:71/api/players/search",
                     params={"q": player_name},
                     timeout=5.0
                 )

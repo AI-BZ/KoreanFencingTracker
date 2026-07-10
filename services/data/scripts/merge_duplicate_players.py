@@ -16,7 +16,6 @@
 
 import os
 import sys
-import json
 import argparse
 from datetime import datetime
 from typing import Optional
@@ -391,20 +390,20 @@ class PlayerMerger:
         team_history, event_details = self.get_player_team_history(player_name)
 
         if not team_history:
-            print(f"  ⚠️ 대회 출전 기록 없음 - 스킵")
+            print("  ⚠️ 대회 출전 기록 없음 - 스킵")
             self.skip_count += 1
             return False
 
         # 2. 동명이인 검사
         is_same, reason = self.is_likely_same_person(event_details)
         if not is_same:
-            print(f"  ⚠️ 동명이인으로 판정 - 스킵")
+            print("  ⚠️ 동명이인으로 판정 - 스킵")
             print(f"     사유: {reason}")
             self.skip_count += 1
             return False
 
         print(f"  ✅ {reason}")
-        print(f"  소속 이력:")
+        print("  소속 이력:")
         for th in team_history:
             print(f"    - {th['team']}: {th['first_seen']} ~ {th['last_seen']} ({th['count']}회)")
 
@@ -412,7 +411,7 @@ class PlayerMerger:
         main_id, merge_ids = self.determine_main_record(player_ids, team_history)
 
         if not main_id:
-            print(f"  ⚠️ 메인 레코드를 결정할 수 없음 - 스킵")
+            print("  ⚠️ 메인 레코드를 결정할 수 없음 - 스킵")
             self.skip_count += 1
             return False
 
@@ -421,7 +420,7 @@ class PlayerMerger:
         print(f"  → 병합 대상: {merge_ids}")
 
         if self.dry_run:
-            print(f"  [DRY-RUN] 실제 변경 없음")
+            print("  [DRY-RUN] 실제 변경 없음")
             self.merge_count += 1
             return True
 
@@ -443,7 +442,7 @@ class PlayerMerger:
                 'updated_at': datetime.now().isoformat()
             }).eq('id', main_id).execute()
 
-            print(f"  ✅ 메인 레코드 업데이트 완료")
+            print("  ✅ 메인 레코드 업데이트 완료")
 
             # 3-2. 중복 레코드 비활성화
             for merge_id in merge_ids:
@@ -466,7 +465,7 @@ class PlayerMerger:
         """병합 실행"""
 
         print(f"\n{'#'*60}")
-        print(f"# 중복 선수 레코드 병합")
+        print("# 중복 선수 레코드 병합")
         print(f"# 모드: {'DRY-RUN (실제 변경 없음)' if self.dry_run else '실제 실행'}")
         print(f"{'#'*60}")
 
@@ -485,14 +484,14 @@ class PlayerMerger:
 
         # 결과 요약
         print(f"\n{'='*60}")
-        print(f"# 결과 요약")
+        print("# 결과 요약")
         print(f"{'='*60}")
         print(f"  병합 완료: {self.merge_count}명")
         print(f"  스킵: {self.skip_count}명")
         print(f"  오류: {self.error_count}명")
 
         if self.dry_run:
-            print(f"\n⚠️ DRY-RUN 모드였습니다. 실제 실행하려면 --execute 옵션을 사용하세요.")
+            print("\n⚠️ DRY-RUN 모드였습니다. 실제 실행하려면 --execute 옵션을 사용하세요.")
 
 
 def main():

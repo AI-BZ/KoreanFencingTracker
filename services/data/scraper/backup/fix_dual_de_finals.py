@@ -7,7 +7,6 @@ Dual DE 결승 데이터 수정 스크립트 v3
 """
 
 import asyncio
-import json
 import sys
 import os
 import httpx
@@ -57,7 +56,7 @@ async def scrape_second_de_rankings(page, comp_cd: str, sub_event_cd: str) -> Op
         await result_tab.click(timeout=5000)
         await page.wait_for_timeout(1500)
     else:
-        print(f"    경기결과 탭 없음")
+        print("    경기결과 탭 없음")
         return None
 
     # 3. 종목 선택 + 검색
@@ -77,7 +76,7 @@ async def scrape_second_de_rankings(page, comp_cd: str, sub_event_cd: str) -> Op
         }}
     """)
     if not selected:
-        print(f"    종목 선택 실패")
+        print("    종목 선택 실패")
         return None
     print(f"    종목: {selected}")
     await page.wait_for_timeout(1000)
@@ -103,7 +102,7 @@ async def scrape_second_de_rankings(page, comp_cd: str, sub_event_cd: str) -> Op
         de_tab = page.locator("a:has-text('엘리미나시옹디렉트')").first
         await de_tab.click(timeout=5000, force=True)
         await page.wait_for_timeout(2000)
-        print(f"    엘리미나시옹디렉트 탭 클릭")
+        print("    엘리미나시옹디렉트 탭 클릭")
     except Exception as e:
         print(f"    엘리미나시옹디렉트 탭 실패: {e}")
         return None
@@ -116,7 +115,7 @@ async def scrape_second_de_rankings(page, comp_cd: str, sub_event_cd: str) -> Op
         has_dual = await page.evaluate("() => !!document.querySelector('select#schEtc01')")
 
     if has_dual:
-        print(f"    Dual DE 감지 → Second DE 전환")
+        print("    Dual DE 감지 → Second DE 전환")
         await page.evaluate("""
             () => {
                 const sel = document.querySelector('select#schEtc01');
@@ -132,7 +131,7 @@ async def scrape_second_de_rankings(page, comp_cd: str, sub_event_cd: str) -> Op
         """)
         await page.wait_for_timeout(3000)
     else:
-        print(f"    ⚠️ Dual DE selector 없음 (단일 DE일 수 있음)")
+        print("    ⚠️ Dual DE selector 없음 (단일 DE일 수 있음)")
 
     # 6. 순위 테이블 파싱 (full_scraper._parse_final_rankings_v2 방식)
     rankings = await page.evaluate("""
@@ -215,7 +214,7 @@ async def scrape_second_de_rankings(page, comp_cd: str, sub_event_cd: str) -> Op
             print(f"      {r['rank']}위: {r['name']} ({r['team']})")
         return rankings
     else:
-        print(f"    순위 데이터 없음")
+        print("    순위 데이터 없음")
 
         # 디버그: 페이지에 있는 테이블들 확인
         debug_info = await page.evaluate("""
@@ -263,13 +262,13 @@ def update_db_with_rankings(sub_event_cd: str, rankings: List[Dict]) -> bool:
     resp = httpx.get(url, headers=headers)
     events = resp.json()
     if not events:
-        print(f"    ❌ Event not found in DB")
+        print("    ❌ Event not found in DB")
         return False
 
     raw_data = events[0]["raw_data"]
     second_de = raw_data.get("de_bracket", {}).get("second_de", {})
     if not second_de:
-        print(f"    ❌ No second_de data")
+        print("    ❌ No second_de data")
         return False
 
     # Find the 결승 bout and check if it matches the rankings
@@ -308,7 +307,7 @@ def update_db_with_rankings(sub_event_cd: str, rankings: List[Dict]) -> bool:
             fb["winner_name"] = champion_name
             fb["winner_seed"] = winner_seed
     else:
-        print(f"    ⚠️ 결승 bout 없음 (순위에서 champion만 설정)")
+        print("    ⚠️ 결승 bout 없음 (순위에서 champion만 설정)")
 
     # Update champion
     champion_obj = {
@@ -336,7 +335,7 @@ def update_db_with_rankings(sub_event_cd: str, rankings: List[Dict]) -> bool:
     update_url = f"{SUPABASE_URL}/rest/v1/events?sub_event_cd=eq.{sub_event_cd}"
     update_resp = httpx.patch(update_url, headers=headers, json={"raw_data": raw_data})
     if update_resp.status_code in (200, 204):
-        print(f"    ✅ DB 업데이트 성공")
+        print("    ✅ DB 업데이트 성공")
         return True
     else:
         print(f"    ❌ DB 업데이트 실패: {update_resp.status_code}")

@@ -2137,7 +2137,7 @@ def validate_dual_de_bracket(dual_de: NormalizedDualDEBracket) -> Dict[str, Any]
     seeded_count = len(dual_de.seeded_players)
     if seeded_count != 32:
         if seeded_count == 0:
-            issues.append(f"시드 선수 없음 (예상: 32명)")
+            issues.append("시드 선수 없음 (예상: 32명)")
         else:
             warnings.append(f"시드 선수 {seeded_count}명 (예상: 32명)")
 

@@ -4,7 +4,7 @@ Verification Module - Gemini API를 통한 자동 인증
 import json
 import re
 import base64
-from datetime import date, datetime
+from datetime import datetime
 from typing import Optional
 from uuid import UUID
 import httpx

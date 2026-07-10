@@ -9,7 +9,6 @@ Discord Webhook을 통한 데이터 품질 알림, 검증 결과 보고, 정기 
 """
 
 import os
-import json
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 from loguru import logger

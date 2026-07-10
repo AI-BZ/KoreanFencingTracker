@@ -19,14 +19,14 @@ import os
 import sys
 import time
 from datetime import datetime
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional
 from loguru import logger
 from supabase import create_client, Client
 
 # 경로 설정
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from scraper.full_scraper import KFFFullScraper, throttle_request, post_process_de_bracket
+from scraper.full_scraper import KFFFullScraper, throttle_request
 from app.bracket_utils import compute_full_final_rankings
 
 

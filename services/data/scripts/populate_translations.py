@@ -14,7 +14,6 @@ Usage:
 import os
 import sys
 import argparse
-import json
 from datetime import datetime
 from pathlib import Path
 
@@ -319,7 +318,7 @@ def sync_verified_mappings(dry_run: bool = False):
 
     print(f"  Competitions synced: {comp_synced}/{len(VERIFIED_COMPETITION_MAPPINGS)}")
 
-    print(f"\n=== Sync Complete ===")
+    print("\n=== Sync Complete ===")
     print(f"  Players: {player_synced}, Organizations: {org_synced}, Competitions: {comp_synced}")
 
 

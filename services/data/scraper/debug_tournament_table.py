@@ -105,7 +105,6 @@ async def debug_multi_tab():
         print(f"   8강전 tab xpositions: {data_8['xpositions']}")
 
         # Show matches for each xposition
-        import json
         for xpos in sorted(data_8['matchesByXpos'].keys(), key=lambda x: int(x), reverse=True):
             matches = data_8['matchesByXpos'][xpos]
             print(f"\n   xposition {xpos}:")

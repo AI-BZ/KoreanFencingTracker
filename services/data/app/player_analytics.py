@@ -11,7 +11,6 @@ FencingLab - 선수 경기 분석 엔진 v3
 - 평균 점수차
 """
 
-import json
 from typing import Optional, List, Dict, Tuple
 from dataclasses import dataclass, field, asdict
 from collections import defaultdict

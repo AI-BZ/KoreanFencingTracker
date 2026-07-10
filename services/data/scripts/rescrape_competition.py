@@ -16,7 +16,7 @@ sys.path.insert(0, f'{PROJECT_ROOT}/services/data')
 sys.path.insert(0, PROJECT_ROOT)
 
 from loguru import logger
-from scraper.full_scraper import KFFFullScraper, Competition
+from scraper.full_scraper import KFFFullScraper
 from database.supabase_client import get_supabase_client
 
 logger.remove()
@@ -92,7 +92,7 @@ async def rescrape_competition(comp_idx: str):
                 comp_data,
                 on_conflict="comp_idx"
             ).execute()
-            logger.info(f"✅ competitions 테이블 업데이트 완료")
+            logger.info("✅ competitions 테이블 업데이트 완료")
         except Exception as e:
             logger.error(f"competitions 업데이트 실패: {e}")
 
@@ -119,7 +119,7 @@ async def rescrape_competition(comp_idx: str):
             except Exception as e:
                 logger.error(f"events 업데이트 실패 ({event.get('event_name')}): {e}")
 
-        logger.info(f"✅ events 테이블 업데이트 완료")
+        logger.info("✅ events 테이블 업데이트 완료")
 
         return result
 

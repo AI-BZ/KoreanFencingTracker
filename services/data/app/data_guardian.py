@@ -18,9 +18,8 @@ Data Guardian — 자동 데이터 무결성 관리 시스템
 
 import os
 import json
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Dict, Any, List, Optional
-from collections import defaultdict
 from loguru import logger
 
 
@@ -150,7 +149,7 @@ class DataGuardian:
             competitions = self._load_competitions(limit=20)
             validation_issues = []
             if competitions:
-                from app.data_validator import DataValidator, run_validation
+                from app.data_validator import run_validation
                 validation = run_validation(competitions)
                 results["checks"]["validation"] = {
                     "total_issues": validation.get("total_issues", 0),

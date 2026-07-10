@@ -35,7 +35,6 @@ from app.international_data import (
 from app.organization_identity import (
     OrganizationIdentityResolver,
     VERIFIED_ORG_MAPPINGS,
-    KOREAN_TO_ENGLISH_ORG,
     KOREAN_REGIONS,
 )
 

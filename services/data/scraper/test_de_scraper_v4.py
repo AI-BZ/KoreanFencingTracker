@@ -50,7 +50,7 @@ async def test_de_scraper():
         scraper = DEScraper(page)
         bracket = await scraper.parse_de_bracket()
 
-        print(f"\n3. Results:")
+        print("\n3. Results:")
         print(f"   Starting round: {bracket.starting_round}")
         print(f"   Bracket size: {bracket.bracket_size}")
         print(f"   Participant count: {bracket.participant_count}")

@@ -11,7 +11,6 @@ Dual DE 리스크래핑 결과 검증
 
 import os
 import sys
-from typing import Dict, List
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -101,7 +100,7 @@ def verify_all(supabase: Client) -> bool:
             print(line)
         all_pass = False
     else:
-        print(f"✅ flat dual_de 잔존 = 0개")
+        print("✅ flat dual_de 잔존 = 0개")
 
     # 검증 2+3: format 키 + first_de/second_de (위에서 이미 확인)
     print(f"\n✅ 검증 2-3: format=='dual_de' + first_de/second_de 키 → {'통과' if flat_count == 0 else '실패'}")
@@ -112,7 +111,7 @@ def verify_all(supabase: Client) -> bool:
         for line in low_rankings:
             print(line)
     else:
-        print(f"\n✅ 검증 4: final_rankings 모두 bracket_size 50% 이상")
+        print("\n✅ 검증 4: final_rankings 모두 bracket_size 50% 이상")
 
     # 검증 5: flat dual_de 이벤트가 DB에 아직 남아있는지 (de_format은 dual_de이지만 de_bracket.format은 없는 경우)
     print(f"\n{'=' * 60}")
@@ -127,7 +126,7 @@ def verify_all(supabase: Client) -> bool:
         print(f"❌ de_format='dual_de' but de_bracket.format!='dual_de': {flat_sql_count}개")
         all_pass = False
     else:
-        print(f"✅ 모든 dual_de 이벤트의 de_bracket.format 일치")
+        print("✅ 모든 dual_de 이벤트의 de_bracket.format 일치")
 
     # 최종 결과
     print(f"\n{'=' * 60}")

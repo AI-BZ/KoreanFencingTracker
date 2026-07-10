@@ -13,7 +13,6 @@
 """
 import asyncio
 import sys
-from datetime import datetime
 
 # 경로 설정
 sys.path.insert(0, '/Users/gyejinpark/Documents/GitHub/FencingMind-data/services/data')
@@ -62,7 +61,7 @@ def test_fingerprint_classes():
         final_ranking_rows=0
     )
 
-    print(f"\n  ✓ 변경된 EventFingerprint:")
+    print("\n  ✓ 변경된 EventFingerprint:")
     print(f"    - 이전 해시: {event1.state_hash}")
     print(f"    - 새 해시: {event2.state_hash}")
     print(f"    - 변경 여부: {event2.has_changed(event1)}")
@@ -116,7 +115,7 @@ def test_state_manager():
     )
 
     changes1 = manager.compare_and_update(fp1)
-    print(f"  ✓ 첫 번째 지문 저장 (새 대회)")
+    print("  ✓ 첫 번째 지문 저장 (새 대회)")
     print(f"    - 변경 기록 수: {len(changes1)}")
     print(f"    - 변경 유형: {[c.change_type for c in changes1]}")
 
@@ -136,14 +135,14 @@ def test_state_manager():
     )
 
     changes2 = manager.compare_and_update(fp2)
-    print(f"\n  ✓ 두 번째 지문 (일부 변경)")
+    print("\n  ✓ 두 번째 지문 (일부 변경)")
     print(f"    - 변경 기록 수: {len(changes2)}")
     for change in changes2:
         print(f"      - {change.event_name}: {change.change_type}")
 
     # 통계 확인
     stats = manager.get_statistics()
-    print(f"\n  ✓ StateManager 통계:")
+    print("\n  ✓ StateManager 통계:")
     print(f"    - 추적 중인 대회: {stats['competitions_tracked']}")
     print(f"    - 총 변경 감지: {stats['total_changes_detected']}")
     print(f"    - 변경 유형별: {stats['changes_by_type']}")
@@ -172,8 +171,8 @@ async def test_detector_dry_run():
     test_comp_cd = "COMPM00714"  # 실제 대회 코드로 변경 필요
 
     print(f"  - 테스트 대회 코드: {test_comp_cd}")
-    print(f"  - 이 테스트는 실제 협회 사이트에 접근합니다.")
-    print(f"  - 진행하시겠습니까? (y/n): ", end="")
+    print("  - 이 테스트는 실제 협회 사이트에 접근합니다.")
+    print("  - 진행하시겠습니까? (y/n): ", end="")
 
     # 자동 테스트 모드에서는 스킵
     try:
@@ -204,13 +203,13 @@ async def test_detector_dry_run():
                 print(f"  ❌ 지문 캡처 실패: {fingerprint.error}")
                 return False
 
-            print(f"\n  ✓ 지문 캡처 성공:")
+            print("\n  ✓ 지문 캡처 성공:")
             print(f"    - 종목 수: {fingerprint.event_count}")
             print(f"    - 유효 종목: {fingerprint.valid_event_count}")
             print(f"    - 소요 시간: {fingerprint.detection_duration_ms}ms")
             print(f"    - 통합 해시: {fingerprint.combined_hash}")
 
-            print(f"\n  ✓ 종목별 상태:")
+            print("\n  ✓ 종목별 상태:")
             for sub_cd, event_fp in fingerprint.events.items():
                 print(f"    - {event_fp.event_name}")
                 print(f"      Pool V/D: {event_fp.pool_vd_count}")
@@ -243,10 +242,10 @@ def test_scheduler_integration():
 
         # 상태 조회 (스케줄러 시작 전)
         status = scheduler.get_status()
-        print(f"\n  ✓ 스케줄러 상태:")
+        print("\n  ✓ 스케줄러 상태:")
         print(f"    - 실행 중: {status['is_running']}")
         print(f"    - 변경 감지 실행 중: {status['change_detection_running']}")
-        print(f"    - 스케줄:")
+        print("    - 스케줄:")
         for key, value in status['schedule'].items():
             print(f"      - {key}: {value}")
 

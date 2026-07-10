@@ -11,7 +11,7 @@ from loguru import logger
 from .config import scraper_config, Endpoints
 from .models import (
     Competition, Event, Player, Match, Ranking,
-    CompetitionListResponse, CompetitionStatus
+    CompetitionListResponse
 )
 
 

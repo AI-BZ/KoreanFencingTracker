@@ -12,7 +12,7 @@ import os
 import re
 import sys
 import time
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import httpx
 from dotenv import load_dotenv

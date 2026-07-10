@@ -16,11 +16,9 @@ from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass, field, asdict
 from playwright.async_api import async_playwright, Browser, Page
 from loguru import logger
-import aiohttp
-from bs4 import BeautifulSoup
 
 # DE Scraper v4 import
-from scraper.de_scraper_v4 import DEScraper, DualDEBracket
+from scraper.de_scraper_v4 import DEScraper
 
 # ============================================
 # 스로틀링 설정 (봇 차단 방지)
@@ -790,7 +788,7 @@ class KFFFullScraper:
                 return events
 
             # 3. 대회 클릭
-            logger.debug(f"  대회 링크 발견, 클릭...")
+            logger.debug("  대회 링크 발견, 클릭...")
             await link.first.click(timeout=7000)
             await page.wait_for_timeout(3000)
             await throttle_request()
@@ -802,9 +800,9 @@ class KFFFullScraper:
                 if tab_count > 0:
                     await result_tab.click(timeout=5000)
                     await page.wait_for_timeout(2000)
-                    logger.debug(f"  경기결과 탭 클릭 성공")
+                    logger.debug("  경기결과 탭 클릭 성공")
                 else:
-                    logger.debug(f"  경기결과 탭 없음")
+                    logger.debug("  경기결과 탭 없음")
             except Exception as e:
                 logger.debug(f"  경기결과 탭 클릭 실패: {e}")
 
@@ -887,9 +885,9 @@ class KFFFullScraper:
                 if tab_count > 0:
                     await result_tab.click(timeout=5000)
                     await page.wait_for_timeout(2000)
-                    logger.debug(f"  경기결과 탭 클릭 성공")
+                    logger.debug("  경기결과 탭 클릭 성공")
                 else:
-                    logger.debug(f"  경기결과 탭 없음")
+                    logger.debug("  경기결과 탭 없음")
             except Exception as e:
                 logger.debug(f"  경기결과 탭 클릭 실패: {e}")
 

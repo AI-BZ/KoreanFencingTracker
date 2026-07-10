@@ -8,8 +8,8 @@ Playwright를 사용하여 협회 사이트에서 종목별 상태 지문을 추
 import asyncio
 import time
 from datetime import datetime
-from typing import List, Dict, Any, Optional, Tuple
-from dataclasses import dataclass, field
+from typing import List, Dict, Optional, Tuple
+from dataclasses import dataclass
 
 from playwright.async_api import async_playwright, Browser, Page, Playwright
 from loguru import logger

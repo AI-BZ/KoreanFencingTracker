@@ -10,9 +10,6 @@ Detects language from:
 
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import RedirectResponse
-from typing import Optional
-import re
 
 from .manager import SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE, LANGUAGE_NAMES, i18n, get_translator
 

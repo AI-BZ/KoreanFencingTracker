@@ -10,15 +10,11 @@
 - 단체전: 참가자 수 기반 포인트 × 순위 비율
 - 팀 점수 = 개인전 전원 합산 + 단체전 보너스
 """
-from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional, Tuple
+from dataclasses import dataclass
+from typing import List, Dict, Optional
 from collections import defaultdict
-from loguru import logger
 
 from .calculator import (
-    get_base_points_by_participants,
-    get_competition_prestige,
-    get_rank_ratio,
     calculate_points,
     extract_weapon,
     extract_gender,

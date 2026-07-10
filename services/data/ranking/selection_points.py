@@ -12,7 +12,7 @@
 import re
 from datetime import date, datetime
 from typing import Optional, Dict, List, Any, Tuple
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from collections import defaultdict
 
 from loguru import logger

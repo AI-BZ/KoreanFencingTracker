@@ -10,7 +10,7 @@ Club Management Router
 """
 
 from datetime import date, datetime
-from typing import Optional, List
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -48,8 +48,7 @@ from .models import (
     CompetitionEntryDetail,
     CompetitionParticipantAdd,
     CompetitionParticipantResponse,
-    MessageCreate,
-    MessageResponse
+    MessageCreate
 )
 from .players import players_router, player_service
 from .players.service import get_supabase_client

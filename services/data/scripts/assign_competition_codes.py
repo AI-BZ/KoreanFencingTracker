@@ -18,7 +18,6 @@
 import os
 import sys
 import argparse
-import re
 from datetime import datetime, date
 from typing import Optional, Dict, Tuple
 from dotenv import load_dotenv
@@ -28,7 +27,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from supabase import create_client, Client
 from app.competition_codes import (
-    generate_competition_code,
     generate_code_from_date,
     infer_competition_type,
     infer_level_from_type,
@@ -340,7 +338,7 @@ class CompetitionCodeAssigner:
                 })
                 self.success_count += 1
             else:
-                print(f"  → 코드 생성 실패")
+                print("  → 코드 생성 실패")
                 self.error_count += 1
 
             print()

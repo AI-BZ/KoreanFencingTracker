@@ -13,17 +13,15 @@
    - ~33분 지연 → ~6분 지연으로 개선
 """
 import asyncio
-import os
-import signal
 import random
 from typing import Optional, Dict, Any
-from datetime import datetime, date, time, timedelta
+from datetime import datetime, date
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from loguru import logger
 
-from scraper.config import scheduler_config, stealth_config
+from scraper.config import stealth_config
 
 # 변경 감지 시스템
 from scheduler.change_detection import ChangeDetector, StateManager
@@ -682,7 +680,7 @@ class FencingScheduler:
                 ).execute()
 
                 if not events.data:
-                    logger.info(f"  📋 종목 없음 → 종목 목록 스크래핑 (경량)")
+                    logger.info("  📋 종목 없음 → 종목 목록 스크래핑 (경량)")
                     result = await scraper._scrape_competition_direct(comp, scrape_type="events_only")
                     events_created = result.get("events_saved", 0)
                     total_events_created += events_created
@@ -864,7 +862,7 @@ class FencingScheduler:
         logger.info("   - Pool 대진표: 30분 간격 (D-1/D-day 대회만, 중복 방지)")
         logger.info(f"   - 🔥 변경 감지 스크래핑: 5분 간격 (메인) "
                    f"({stealth_config.active_hours_start}:00~{stealth_config.active_hours_end}:00)")
-        logger.info(f"   - 🥷 스텔스 스크래핑: 30분 간격 (백업)")
+        logger.info("   - 🥷 스텔스 스크래핑: 30분 간격 (백업)")
         logger.info("   - 🛡️ Data Guardian 건강 점검: 매일 22:00")
         logger.info("   - 📊 Data Guardian 주간 리포트: 매주 월요일 08:00")
 
@@ -906,7 +904,7 @@ class FencingScheduler:
                 "pre_competition": "30분 간격 (D-1/D-day 대회만, 중복 방지)",
                 "change_detection": f"🔥 5분 간격 (메인) "
                                    f"({stealth_config.active_hours_start}:00~{stealth_config.active_hours_end}:00)",
-                "stealth_scraping": f"🥷 30분 간격 (백업)",
+                "stealth_scraping": "🥷 30분 간격 (백업)",
                 "guardian_health": "🛡️ 매일 22:00 (Data Guardian 건강 점검)",
                 "guardian_weekly": "📊 매주 월요일 08:00 (Data Guardian 주간 리포트)",
             }

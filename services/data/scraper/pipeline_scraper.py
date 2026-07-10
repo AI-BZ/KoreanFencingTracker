@@ -8,7 +8,7 @@ KFFFullScraper + DataPipeline + Supabase 통합
 import asyncio
 import os
 from datetime import datetime
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, Optional
 from dataclasses import asdict
 from loguru import logger
 from dotenv import load_dotenv
@@ -21,7 +21,6 @@ from data_pipeline import (
     DataPipeline,
     DataQualityMonitor,
     DataSynchronizer,
-    ValidationResult,
 )
 
 # Supabase

@@ -7,7 +7,6 @@
 """
 import asyncio
 import argparse
-import json
 import sys
 import os
 from pathlib import Path
@@ -43,7 +42,7 @@ def print_result(result: MigrationResult, verbose: bool = False):
     print(f"소요 시간: {result.duration_seconds:.2f}초")
 
     if verbose and result.changes:
-        print(f"\n변경 내역 (상위 20건):")
+        print("\n변경 내역 (상위 20건):")
         for i, change in enumerate(result.changes[:20]):
             print(f"  {i+1}. ID: {change.get('id')}")
             if 'changes' in change:
@@ -109,8 +108,8 @@ async def run_migration(dry_run: bool = True, verbose: bool = False):
     print(f"총 소요 시간: {total_time:.2f}초")
 
     if dry_run:
-        print(f"\n💡 실제 적용하려면 --execute 옵션을 사용하세요:")
-        print(f"   python -m data_pipeline.run_migration --execute")
+        print("\n💡 실제 적용하려면 --execute 옵션을 사용하세요:")
+        print("   python -m data_pipeline.run_migration --execute")
 
     return results
 

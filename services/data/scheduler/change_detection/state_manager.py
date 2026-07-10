@@ -8,7 +8,6 @@
 - Supabase (선택): 영구 저장 및 감사 로그
 """
 
-import json
 import os
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any

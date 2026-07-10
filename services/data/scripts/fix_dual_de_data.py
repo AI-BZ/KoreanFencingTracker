@@ -16,7 +16,6 @@ Dual DE 기존 데이터 일괄 보정 스크립트
 """
 
 import argparse
-import json
 import os
 import sys
 from copy import deepcopy
@@ -318,26 +317,26 @@ def main():
                 supabase.table("events").update({
                     "raw_data": fixed_data
                 }).eq("id", event_id).execute()
-                print(f"  ✅ DB 업데이트 완료")
+                print("  ✅ DB 업데이트 완료")
             except Exception as e:
                 print(f"  ❌ DB 업데이트 실패: {e}")
                 error_count += 1
 
     # 최종 결과
     print("\n" + "=" * 70)
-    print(f"\n📊 보정 결과 요약:")
+    print("\n📊 보정 결과 요약:")
     print(f"  전체 이벤트: {len(events)}개")
     print(f"  변경된 이벤트: {updated_count}개")
     print(f"  총 변경 항목: {total_changes}건")
     print(f"  오류: {error_count}건")
-    print(f"\n  상세:")
+    print("\n  상세:")
     print(f"    winner_name 추론: {stats['winner_inferred']}개 이벤트")
     print(f"    champion 추론: {stats['champion_inferred']}개 이벤트")
     print(f"    status 변경: {stats['status_changed']}개 이벤트")
     print(f"    full_bouts 재구성: {stats['full_bouts_fixed']}개 이벤트")
 
     if not execute and updated_count > 0:
-        print(f"\n💡 실제 적용하려면: PYTHONPATH=\".:../../packages\" python scripts/fix_dual_de_data.py --execute")
+        print("\n💡 실제 적용하려면: PYTHONPATH=\".:../../packages\" python scripts/fix_dual_de_data.py --execute")
 
 
 if __name__ == "__main__":

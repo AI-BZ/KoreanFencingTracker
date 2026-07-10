@@ -201,7 +201,7 @@ async def rescrape_full_missing(
                 data["meta"]["updated_at"] = datetime.now().isoformat()
                 with open(output_file, 'w', encoding='utf-8') as f:
                     json.dump(data, f, ensure_ascii=False, indent=2, default=str)
-                logger.info(f"  💾 중간 저장")
+                logger.info("  💾 중간 저장")
 
             await throttle_request()
 

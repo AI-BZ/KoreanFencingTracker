@@ -17,7 +17,7 @@ Test Categories:
 5. Round order validation
 """
 import pytest
-from typing import Dict, List, Any, Optional
+from typing import Dict, Any
 import sys
 import os
 
@@ -25,16 +25,11 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.bracket_utils import (
-    NormalizedBracket,
-    NormalizedDualDEBracket,
-    DualDEPlayer,
-    BracketBout,
     normalize_bracket_data,
     normalize_dual_de_bracket_data,
     is_dual_de_format,
     validate_dual_de_bracket,
     get_dual_de_combined_seeding,
-    ROUND_SEQUENCE,
     EXPECTED_BOUT_COUNT,
 )
 

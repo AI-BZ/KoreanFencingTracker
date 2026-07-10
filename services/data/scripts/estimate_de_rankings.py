@@ -12,11 +12,10 @@ DE 대진표에서 순위 추정 스크립트
     PYTHONPATH="." python scripts/estimate_de_rankings.py --comp COMPM00691 --event-id 5824
 """
 import argparse
-import json
 import os
 import sys
 from collections import defaultdict
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 from dotenv import load_dotenv
 from loguru import logger

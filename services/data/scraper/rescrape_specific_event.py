@@ -18,7 +18,7 @@ from loguru import logger
 from supabase import create_client, Client
 
 # 기존 스크래퍼 import
-from scraper.full_scraper import KFFFullScraper, throttle_request
+from scraper.full_scraper import KFFFullScraper
 
 
 def get_supabase_client() -> Client:

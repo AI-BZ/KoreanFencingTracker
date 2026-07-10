@@ -7,7 +7,6 @@ Korean Fencing Tracker - FastAPI 웹 서버
 데이터 파이프라인: 4단계 검증 시스템
 """
 import os
-import json
 import re
 from contextlib import asynccontextmanager
 from datetime import date, datetime
@@ -43,8 +42,6 @@ except ImportError:
 from ranking.calculator import (
     RankingCalculator,
     AGE_GROUP_CODES,
-    AGE_GROUP_NAMES_KR,
-    LEGACY_AGE_GROUP_MAP,
     CATEGORY_CODES,
     CATEGORY_APPLICABLE_AGE_GROUPS,
     classify_competition_level,
@@ -56,20 +53,19 @@ from ranking.selection_points import (
     NATIONAL_TEAM_COMP_PATTERNS,
 )
 from ranking.team_ranking import (
-    calculate_team_scores_for_event,
     calculate_competition_team_rankings,
     calculate_season_team_rankings,
     classify_team_category,
 )
 
 # 선수 식별 시스템
-from app.player_identity import PlayerIdentityResolver, PlayerProfile as IdentityProfile, is_team_event
+from app.player_identity import PlayerIdentityResolver, is_team_event
 
 # 조직 유형 분류 (org_type audit)
-from app.organization_identity import detect_org_type, OrganizationType
+from app.organization_identity import detect_org_type
 
 # DE 대진표 정규화 및 순위 계산
-from app.bracket_utils import normalize_bracket_data, NormalizedBracket, compute_full_final_rankings
+from app.bracket_utils import normalize_bracket_data, compute_full_final_rankings
 
 # 풀 종합 순위 계산기
 from app.pool_calculator import calculate_pool_total_ranking, enrich_with_advancement_status
@@ -8067,7 +8063,7 @@ async def get_live_competitions(lang: str = "ko"):
 
     프론트엔드 NOW 배너용 통합 API
     """
-    from datetime import date, timedelta
+    from datetime import date
     from app.translation_service import VERIFIED_COMPETITION_MAPPINGS
 
     competitions = get_competitions()

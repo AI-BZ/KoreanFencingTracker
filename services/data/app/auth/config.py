@@ -5,17 +5,11 @@ Auth Config - data 서비스 인증 설정
 Gemini/Verification 설정은 data 서비스 전용으로 잔류.
 """
 import os
-from typing import Optional, List
-from pydantic_settings import SettingsConfigDict, BaseSettings
+from pydantic_settings import SettingsConfigDict
 from functools import lru_cache
 
 # === 공유 설정 re-export ===
-from shared_core.auth.config import SharedAuthSettings, get_shared_auth_settings
-from shared_core.auth.oauth.providers import (
-    OAUTH_PROVIDERS,
-    get_available_providers,
-    get_promotional_providers,
-)
+from shared_core.auth.config import SharedAuthSettings
 
 
 class AuthSettings(SharedAuthSettings):

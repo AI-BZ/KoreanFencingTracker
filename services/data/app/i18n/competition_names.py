@@ -9,7 +9,6 @@ Supported languages: ko (base), en, fr, it, ja, zh, tr
 """
 
 import re
-from typing import Optional
 
 
 # =============================================================================

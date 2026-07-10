@@ -981,7 +981,7 @@ if __name__ == "__main__":
 
     # 코드 파싱 예시
     parsed = parse_competition_code("KoNaA1Yg26Ja1422")
-    print(f"\nParsed code:")
+    print("\nParsed code:")
     print(f"  Country: {parsed.country_name}")
     print(f"  Type: {parsed.comp_type_name}")
     print(f"  Level: {parsed.level_description}")

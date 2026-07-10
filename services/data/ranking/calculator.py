@@ -11,9 +11,9 @@ FIE + USA Fencing 방식을 참고한 랭킹 시스템
 import json
 import re
 import warnings
-from datetime import datetime, date, timedelta
-from typing import List, Dict, Any, Optional, Tuple
-from dataclasses import dataclass, field, asdict
+from datetime import datetime, date
+from typing import List, Dict
+from dataclasses import dataclass
 from collections import defaultdict
 from loguru import logger
 

@@ -4,7 +4,6 @@ COMPM00691 pool_total_ranking 중복 수정 스크립트
 문제: pool_total_ranking에 동일 선수가 2번씩 등장 (진출+탈락 동일 테이블 재스크래핑)
 해결: pool_rounds에서 자체 계산한 결과로 교체
 """
-import json
 import os
 import sys
 
@@ -67,7 +66,7 @@ def fix_pool_ranking_duplicates(comp_id: str = "COMPM00691", dry_run: bool = Tru
         )
 
         if not pool_rounds:
-            logger.warning(f"    pool_rounds 없음 → 이름 기반 중복 제거")
+            logger.warning("    pool_rounds 없음 → 이름 기반 중복 제거")
             # pool_rounds 없으면 이름 기반으로 중복 제거 (첫 번째 것 유지)
             seen = set()
             deduped = []
@@ -86,7 +85,7 @@ def fix_pool_ranking_duplicates(comp_id: str = "COMPM00691", dry_run: bool = Tru
                 new_ranking = calculated
                 logger.info(f"    자체 계산: {len(calculated)}명")
             else:
-                logger.warning(f"    자체 계산 실패 → 이름 기반 중복 제거")
+                logger.warning("    자체 계산 실패 → 이름 기반 중복 제거")
                 seen = set()
                 deduped = []
                 for r in pool_ranking:

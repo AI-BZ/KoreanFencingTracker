@@ -8,7 +8,6 @@ ID 체계:
 """
 
 import re
-import hashlib
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set, Tuple
 from enum import Enum

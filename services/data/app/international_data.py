@@ -12,11 +12,9 @@ Test cases:
 - 공하이 ↔ Hai Gong (FencingTracker ID: 100370147)
 """
 
-import re
 import json
-import hashlib
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple, Set
+from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 import httpx
 from pathlib import Path

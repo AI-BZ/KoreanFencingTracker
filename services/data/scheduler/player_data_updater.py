@@ -23,11 +23,10 @@ Usage:
 import os
 import sys
 from datetime import datetime, date, timedelta
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
 from enum import Enum
 from collections import defaultdict
-import json
 from loguru import logger
 
 # Add project root to path
@@ -1010,8 +1009,8 @@ def main():
         print(f"Duration: {summary['duration_seconds']:.1f}s")
 
         if dry_run:
-            print(f"\n[DRY-RUN] No actual changes were made.")
-            print(f"Run with --execute to apply changes.")
+            print("\n[DRY-RUN] No actual changes were made.")
+            print("Run with --execute to apply changes.")
 
 
 if __name__ == '__main__':

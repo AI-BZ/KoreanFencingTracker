@@ -15,7 +15,7 @@ This module parses the components and reassembles them per language.
 """
 
 import re
-from typing import Optional, Tuple
+from typing import Optional
 
 # ============================================================================
 # Component translation tables: Korean token -> {lang: translation}

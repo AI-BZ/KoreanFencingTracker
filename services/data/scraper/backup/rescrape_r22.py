@@ -112,7 +112,7 @@ async def rescrape():
             if len(pool_rounds) > 0:
                 print(f"  ✅ DB 업데이트 완료: event_id={eid}, pool_rounds={len(pool_rounds)}개 풀")
             else:
-                print(f"  ⚠️ pool_rounds 여전히 0 — 진단 데이터 저장 완료")
+                print("  ⚠️ pool_rounds 여전히 0 — 진단 데이터 저장 완료")
 
 
 if __name__ == "__main__":
