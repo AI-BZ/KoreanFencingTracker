@@ -109,6 +109,17 @@ DEMO_REPORTS = [
 ]
 
 
+def _report_path(report_id: str) -> Path | None:
+    """Resolve a curated report ID to its on-disk JSON path.
+
+    Centralizes the mechanical path derivation and existence check against
+    REPORTS_DIR so curated entries reference reports by ID only. Returns None
+    when the backing file is absent, letting callers skip it gracefully.
+    """
+    path = REPORTS_DIR / f"{report_id}.json"
+    return path if path.exists() else None
+
+
 def extract_youtube_id(report_id: str) -> str | None:
     """Extract YouTube video ID from a report ID.
 
@@ -134,8 +145,7 @@ def get_demo_reports(lang: str = "ko") -> list[dict]:
     """Return gallery-ready report list with localized titles."""
     result = []
     for r in DEMO_REPORTS:
-        report_path = REPORTS_DIR / f"{r['id']}.json"
-        if not report_path.exists():
+        if _report_path(r["id"]) is None:
             continue
         result.append({
             "id": r["id"],
@@ -154,8 +164,8 @@ def get_demo_reports(lang: str = "ko") -> list[dict]:
 
 def get_demo_report(report_id: str) -> dict | None:
     """Load a specific demo report JSON."""
-    report_path = REPORTS_DIR / f"{report_id}.json"
-    if not report_path.exists():
+    report_path = _report_path(report_id)
+    if report_path is None:
         return None
     with open(report_path) as f:
         return json.load(f)
