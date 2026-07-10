@@ -5,6 +5,7 @@ OAuth 사용자 정보 정규화
 """
 import httpx
 from fastapi import HTTPException
+from loguru import logger
 
 from .providers import OAUTH_PROVIDERS
 

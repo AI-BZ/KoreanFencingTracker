@@ -16,7 +16,7 @@ from shared_core.types.member import (
     VerificationStatus,
     OAuthProvider,
 )
-from shared_core.types.service import ServiceType, SubscriptionTier
+from shared_core.types.service import ServiceType, SubscriptionTier, SubscriptionStatus
 
 
 # =============================================

@@ -8,7 +8,7 @@ oauth_states도 Supabase에 저장 (서버 재시작에도 유지)
 import base64
 import hashlib
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 import httpx
