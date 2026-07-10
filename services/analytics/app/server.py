@@ -1416,13 +1416,26 @@ def _run_broadcast_analysis(
                 if clock_events:
                     report_dict["clock_events"] = clock_events
 
+                # Low-confidence gate: if OCR read no touches, the scoreboard
+                # was unreadable. Keep the job "completed" so the user still
+                # gets a report, but tv_ocr_to_match_report has embedded an
+                # error-level "no_touches_detected" warning flagging it as
+                # untrustworthy. Surface it in the logs too.
+                touches_detected = summary.get("total_touches", 0)
+                if touches_detected == 0:
+                    logging.getLogger(__name__).warning(
+                        "OCR fallback for job %s detected 0 touches — "
+                        "result flagged untrustworthy (no_touches_detected)",
+                        job_id,
+                    )
+
                 _jobs[job_id]["progress_pct"] = 100.0
                 _jobs[job_id]["status"] = "completed"
                 _jobs[job_id]["result"] = report_dict
                 _persist_report(job_id, report_dict)
                 logging.getLogger(__name__).info(
                     "OCR fallback completed for job %s: %d touches detected",
-                    job_id, summary.get("total_touches", 0),
+                    job_id, touches_detected,
                 )
 
             except Exception as ocr_err:

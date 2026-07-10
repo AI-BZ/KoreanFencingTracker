@@ -271,6 +271,75 @@ class TestVideoTruncationWarning:
         assert warnings[0]["type"] == "video_truncated"
 
 
+class TestNoTouchesGate:
+    """Test the low-confidence gate: 0 touches → error-level warning.
+
+    Regression: OCR-failed broadcast analyses were saved as trustworthy
+    even when the scoreboard could not be read (0 touches detected).
+    """
+
+    def test_zero_touches_produces_error_warning(self):
+        """No events + total_touches 0 → error-level no_touches_detected warning."""
+        summary = {
+            "total_touches": 0,
+            "final_score": "0-0",
+            "left_touches": 0,
+            "right_touches": 0,
+        }
+
+        report = tv_ocr_to_match_report(
+            events=[],
+            summary=summary,
+            left_name="LEE",
+            right_name="ESAKI",
+            video_path="test.mp4",
+            analysis_time_sec=10.0,
+            total_frames=600,
+        )
+
+        gate = [w for w in report["warnings"] if w["type"] == "no_touches_detected"]
+        assert len(gate) == 1
+        assert gate[0]["severity"] == "error"
+
+    def test_normal_touches_no_gate_warning(self):
+        """Detected touches → no no_touches_detected warning."""
+        events = [
+            _make_event(100, 3.3, "left", "0-0", "1-0"),
+            _make_event(200, 6.6, "right", "1-0", "1-1"),
+        ]
+        summary = {
+            "total_touches": 2,
+            "final_score": "1-1",
+            "left_touches": 1,
+            "right_touches": 1,
+        }
+
+        report = tv_ocr_to_match_report(
+            events=events,
+            summary=summary,
+            left_name="LEE",
+            right_name="ESAKI",
+            video_path="test.mp4",
+            analysis_time_sec=10.0,
+            total_frames=600,
+        )
+
+        gate = [w for w in report["warnings"] if w["type"] == "no_touches_detected"]
+        assert gate == []
+
+    def test_zero_touches_gate_direct(self):
+        """_generate_warnings with total_touches=0 emits the error warning."""
+        warnings = _generate_warnings("0-0", expected_final_score=None, total_touches=0)
+        assert len(warnings) == 1
+        assert warnings[0]["type"] == "no_touches_detected"
+        assert warnings[0]["severity"] == "error"
+
+    def test_gate_skipped_when_touches_none(self):
+        """Direct callers omitting total_touches keep prior behavior (no gate)."""
+        warnings = _generate_warnings("3-2", expected_final_score=None)
+        assert warnings == []
+
+
 class TestReportStructure:
     """Test that report has correct structure with new fields."""
 

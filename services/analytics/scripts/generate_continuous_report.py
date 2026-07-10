@@ -206,6 +206,7 @@ def main():
         "off_target": "비유효면",
         "missed_entirely": "완전 빗나감",
         "unknown_exchange": "분류 미정",
+        "neutral": "판정 보류",
     }
 
     for i, ex in enumerate(continuous_result.exchanges, 1):

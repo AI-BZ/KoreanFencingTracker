@@ -460,13 +460,24 @@ class PoseAnalysisResult:
 
 
 class NonScoringEventType(Enum):
-    """Non-scoring exchange outcomes."""
+    """Exchange outcome labels.
+
+    Most values describe non-scoring exchanges. Two are special:
+      UNKNOWN_EXCHANGE — a scoring exchange (a touch landed) whose scorer
+        attribution is not resolved here; the scoring label lives in the
+        touch analysis. It is NOT a low-confidence marker.
+      NEUTRAL — a low-confidence non-scoring exchange with no clear aggressor
+        (both fencers stationary/unknown, or the window is too short to
+        analyse). Excluded from attack/defense stats so noise exchanges do
+        not get counted as failed attacks or successful defenses.
+    """
     FAILED_ATTACK = "failed_attack"
     SUCCESSFUL_DEFENSE = "successful_defense"
     MUTUAL_RETREAT = "mutual_retreat"
     OFF_TARGET = "off_target"
     MISSED_ENTIRELY = "missed_entirely"
     UNKNOWN_EXCHANGE = "unknown_exchange"
+    NEUTRAL = "neutral"
 
 
 class ExchangePhase(Enum):

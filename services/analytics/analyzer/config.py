@@ -265,6 +265,11 @@ CAMERA_CUT_MAX_RATIO = 0.3       # if > 30% of frames are camera cuts, analysis 
 # ==================================================================
 
 # --- Exchange detection (continuous analysis) ---
+# Footwork types that count as a committed attacking approach. A non-scoring
+# exchange without one of these on either fencer has no clear aggressor, so it
+# is labelled NEUTRAL instead of FAILED_ATTACK to keep low-confidence noise
+# exchanges out of the attack/defense statistics.
+EXCHANGE_ATTACK_FOOTWORK_TYPES = frozenset({"lunge", "fleche", "advance"})
 EXCHANGE_MIN_APPROACH_FRAMES = 3          # min frames of decreasing distance to start exchange
 EXCHANGE_DISTANCE_DECREASE_THRESHOLD = 0.05  # BH/frame: approach detection
 EXCHANGE_MIN_DISTANCE_CHANGE_BH = 0.2    # min total distance change for valid exchange

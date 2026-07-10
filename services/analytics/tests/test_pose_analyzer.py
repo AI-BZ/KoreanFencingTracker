@@ -1396,6 +1396,137 @@ class TestActionStateClassification:
 
 
 # ==================================================================
+# Multi-frame window wiring: FENTE / FLECHE / PARADE must be reachable
+# ==================================================================
+
+
+class TestActionStateMultiFrameWindow:
+    """Regression tests for the multi-frame window wiring.
+
+    Before the fix, classify_frame_action received only a 2-frame pair, so
+    detect_footwork/detect_parry (which need >= 3 frames) always returned
+    UNKNOWN and the FENTE/FLECHE/PARADE branches were dead code. These tests
+    build synthetic sequences that unambiguously exhibit a lunge, a fleche
+    and a parry, and assert classify_action_sequence surfaces each state.
+    """
+
+    def setup_method(self):
+        self.analyzer = PoseAnalyzer()
+
+    @staticmethod
+    def _make_lunge_sequence(side: str = "left", n: int = 15) -> List[PoseResult]:
+        """Front foot shoots forward 60px while rear stays and hip drops 15px."""
+        seq: List[PoseResult] = []
+        left_x, right_x = 200.0, 600.0
+        anchor_x = left_x if side == "left" else right_x
+        for i in range(n):
+            progress = i / (n - 1)
+            front_offset = progress * 60.0
+            hip_drop = progress * 15.0
+            if side == "left":
+                l = make_fencer(
+                    "left", shoulder_cx=anchor_x, hip_cx=anchor_x,
+                    hip_cy=200.0 + hip_drop, ankle_cx=anchor_x,
+                )
+                l.keypoints[KP_LEFT_ANKLE] = make_kp(anchor_x - 20, 400.0)
+                l.keypoints[KP_RIGHT_ANKLE] = make_kp(anchor_x + 20 + front_offset, 400.0)
+                r = make_fencer("right", shoulder_cx=right_x, hip_cx=right_x, ankle_cx=right_x)
+            else:
+                l = make_fencer("left", shoulder_cx=left_x, hip_cx=left_x, ankle_cx=left_x)
+                r = make_fencer(
+                    "right", shoulder_cx=anchor_x, hip_cx=anchor_x,
+                    hip_cy=200.0 + hip_drop, ankle_cx=anchor_x,
+                )
+                r.keypoints[KP_LEFT_ANKLE] = make_kp(anchor_x - 20 - front_offset, 400.0)
+                r.keypoints[KP_RIGHT_ANKLE] = make_kp(anchor_x + 20, 400.0)
+            seq.append(make_pose_result(i, l, r))
+        return seq
+
+    @staticmethod
+    def _make_fleche_sequence(n: int = 15) -> List[PoseResult]:
+        """Both feet advance ~60px with a low front/rear ratio (fleche)."""
+        seq: List[PoseResult] = []
+        for i in range(n):
+            offset = (i / (n - 1)) * 60.0
+            left = make_fencer(
+                "left", shoulder_cx=200 + offset, hip_cx=200 + offset, ankle_cx=200 + offset,
+            )
+            left.keypoints[KP_LEFT_ANKLE] = make_kp(180 + offset, 400.0)
+            left.keypoints[KP_RIGHT_ANKLE] = make_kp(220 + offset, 400.0)
+            right = make_fencer("right", shoulder_cx=600, hip_cx=600, ankle_cx=600)
+            seq.append(make_pose_result(i, left, right))
+        return seq
+
+    @staticmethod
+    def _make_parry_sequence(side: str = "left", magnitude: float = 35.0, n: int = 10) -> List[PoseResult]:
+        """Weapon-hand wrist makes a rapid lateral sweep at frames 4-5 (parry)."""
+        wrist_idx = KP_RIGHT_WRIST if side == "left" else KP_LEFT_WRIST
+        seq: List[PoseResult] = []
+        for i in range(n):
+            left = make_fencer("left", shoulder_cx=200, hip_cx=200, ankle_cx=200)
+            right = make_fencer("right", shoulder_cx=600, hip_cx=600, ankle_cx=600)
+            fencer = left if side == "left" else right
+            if 4 <= i <= 5:
+                dy = magnitude if i == 4 else -magnitude
+                fencer.keypoints[wrist_idx] = make_kp(
+                    fencer.keypoints[wrist_idx].x, 150.0 + dy,
+                )
+            seq.append(make_pose_result(i, left, right))
+        return seq
+
+    def test_lunge_sequence_yields_fente(self):
+        """A lunge sequence must surface FENTE (was unreachable pre-fix)."""
+        for side in ("left", "right"):
+            seq = self._make_lunge_sequence(side)
+            results = self.analyzer.classify_action_sequence(seq, side)
+            states = [fas.state for fas in results]
+            assert ActionState.FENTE in states, (
+                f"{side}: expected FENTE somewhere, got {[s.value for s in states]}"
+            )
+
+    def test_fleche_sequence_yields_fleche(self):
+        """A fleche sequence must surface FLECHE (was unreachable pre-fix)."""
+        seq = self._make_fleche_sequence()
+        results = self.analyzer.classify_action_sequence(seq, "left")
+        states = [fas.state for fas in results]
+        assert ActionState.FLECHE in states, (
+            f"expected FLECHE somewhere, got {[s.value for s in states]}"
+        )
+
+    def test_parry_sequence_yields_parade(self):
+        """A parry sequence must surface PARADE (was unreachable pre-fix)."""
+        for side in ("left", "right"):
+            seq = self._make_parry_sequence(side)
+            results = self.analyzer.classify_action_sequence(seq, side)
+            states = [fas.state for fas in results]
+            assert ActionState.PARADE in states, (
+                f"{side}: expected PARADE somewhere, got {[s.value for s in states]}"
+            )
+
+    def test_two_frame_caller_still_falls_back(self):
+        """Direct 2-frame classify_frame_action keeps the hip/velocity fallback.
+
+        classify_frame_action without window_frames must not crash and must
+        return a valid state (footwork/parry can't fire on 2 frames, so the
+        velocity/hip-direction fallback governs)."""
+        f1 = make_pose_result(
+            0,
+            make_fencer("left", shoulder_cx=200, hip_cx=200, ankle_cx=200),
+            make_fencer("right", shoulder_cx=600, hip_cx=600, ankle_cx=600),
+        )
+        f2 = make_pose_result(
+            1,
+            make_fencer("left", shoulder_cx=240, hip_cx=240, ankle_cx=240),
+            make_fencer("right", shoulder_cx=600, hip_cx=600, ankle_cx=600),
+        )
+        state = self.analyzer.classify_frame_action(f1, f2, "left")
+        assert isinstance(state, FrameActionState)
+        assert state.state in (
+            ActionState.MARCHE, ActionState.PREPARATION, ActionState.EN_GARDE,
+        )
+
+
+# ==================================================================
 # Helper: approach-separate sequence generator
 # ==================================================================
 
@@ -1769,3 +1900,97 @@ class TestHandednessDetection:
         handedness, confidence = self.analyzer.detect_handedness(seq, "left")
         assert handedness is None
         assert confidence == 0.0
+
+
+# ==================================================================
+# Quality fix C: NEUTRAL bucket for low-confidence exchanges
+# ==================================================================
+
+
+class TestNeutralExchangeBucket:
+    """Low-confidence non-scoring exchanges must be labelled NEUTRAL, not
+    FAILED_ATTACK, and excluded from attack/defense statistics."""
+
+    def _classify(self, sub_seq: List[PoseResult], is_scoring: bool = False):
+        from analyzer.config import (
+            FOOTWORK_ANALYSIS_WINDOW,
+            PARRY_DETECTION_WINDOW,
+            FOOTWORK_USE_RATIO_BASED_HIP_DROP,
+        )
+        from ml.pose_analysis import exchanges as exch
+        return exch.classify_exchange(
+            sub_seq, is_scoring, 0, len(sub_seq) - 1, set(),
+            FOOTWORK_ANALYSIS_WINDOW, PARRY_DETECTION_WINDOW,
+            FOOTWORK_USE_RATIO_BASED_HIP_DROP,
+        )
+
+    def test_clear_advance_without_score_is_failed_attack(self):
+        """A committed forward approach that does not score stays FAILED_ATTACK."""
+        # Left fencer steps forward (toward opponent) ~40px over the window;
+        # right fencer stays put → clear single aggressor, no score.
+        seq: List[PoseResult] = []
+        for i in range(15):
+            offset = (i / 14) * 40.0
+            left_x = 200.0 + offset
+            left = make_fencer("left", shoulder_cx=left_x, hip_cx=left_x, ankle_cx=left_x)
+            right = make_fencer("right", shoulder_cx=600, hip_cx=600, ankle_cx=600)
+            seq.append(make_pose_result(i, left, right))
+        assert self._classify(seq) == NonScoringEventType.FAILED_ATTACK
+
+    def test_both_stationary_is_neutral(self):
+        """Both fencers stationary (no aggressor) → NEUTRAL, not FAILED_ATTACK."""
+        seq = make_static_sequence(20, left_x=200.0, right_x=600.0)
+        assert self._classify(seq) == NonScoringEventType.NEUTRAL
+
+    def test_too_short_window_is_neutral(self):
+        """A sub-sequence too short to analyse footwork → NEUTRAL, not FAILED_ATTACK."""
+        seq = make_static_sequence(2, left_x=200.0, right_x=600.0)
+        assert self._classify(seq) == NonScoringEventType.NEUTRAL
+
+    def test_neutral_excluded_from_attack_denominator(self):
+        """A NEUTRAL exchange must not count as an attack attempt, even if its
+        stored footwork looks aggressive."""
+        from ml.pose_analysis import exchanges as exch
+
+        advance = FootworkResult(footwork_type=FootworkType.ADVANCE, confidence=0.9)
+        failed = ExchangeEvent(
+            start_frame=0, end_frame=10, min_distance_frame=5, min_distance_bh=1.0,
+            event_type=NonScoringEventType.FAILED_ATTACK, footwork_left=advance,
+        )
+        neutral = ExchangeEvent(
+            start_frame=20, end_frame=30, min_distance_frame=25, min_distance_bh=1.0,
+            event_type=NonScoringEventType.NEUTRAL, footwork_left=advance,
+        )
+        summary = exch.build_my_fencer_summary(
+            [failed, neutral], "left", set(), fps=30.0,
+        )
+        # Only the FAILED_ATTACK exchange is counted; the NEUTRAL one is skipped.
+        assert summary.attacks_attempted == 1
+        assert summary.attacks_failed == 1
+
+    def test_neutral_analyze_continuous_end_to_end(self):
+        """analyze_continuous on an ambiguous approach-engage-separate sequence
+        yields NEUTRAL exchanges that stay out of the my-fencer attack stats."""
+        analyzer = PoseAnalyzer()
+        seq = []
+        for i in range(90):
+            # Right fencer approaches then retreats; left fencer never commits.
+            if i < 30:
+                right_x = 600.0 - i * 5
+            elif i < 60:
+                right_x = 450.0
+            else:
+                right_x = 450.0 + (i - 60) * 5
+            left = make_fencer("left", shoulder_cx=200, hip_cx=200, ankle_cx=200)
+            right = make_fencer("right", shoulder_cx=right_x, hip_cx=right_x, ankle_cx=right_x)
+            seq.append(make_pose_result(i, left, right))
+
+        result = analyzer.analyze_continuous(seq, sample_every_n=1, my_fencer="left")
+        neutral = [
+            ex for ex in result.exchanges
+            if ex.event_type == NonScoringEventType.NEUTRAL
+        ]
+        assert len(neutral) >= 1
+        # my_fencer (left) never advanced → no attack attempts recorded.
+        assert result.my_fencer_summary is not None
+        assert result.my_fencer_summary.attacks_attempted == 0
