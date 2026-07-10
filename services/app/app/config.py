@@ -126,5 +126,13 @@ class AppSettings:
     NOTIFY_RETRY_MAX_ATTEMPTS: int = int(os.getenv("NOTIFY_RETRY_MAX_ATTEMPTS", "3"))
     NOTIFY_RETRY_WINDOW_HOURS: int = int(os.getenv("NOTIFY_RETRY_WINDOW_HOURS", "24"))
 
+    # 재정정 알림 스팸 억제 쿨다운 (EVAL P1-4). 대회 결과를 재스크래핑/정정하면 매번
+    # 새 data_events 행(새 id)이 생겨 참가 선수 전원에게 알림이 재발송된다(스팸).
+    # 같은 논리 엔티티(dedup_key = "{category}:{entity_type}:{entity_id}")에 대해 이
+    # 시간 이내에 이미 발송(sent)한 회원에게는 재알림을 억제한다. 0 이하면 억제 비활성화.
+    #   대가: 이 시간 안의 실제 정정 알림도 묶여 지연/생략될 수 있으나, 대회 결과/랭킹
+    #   특성상 정정이 짧은 시간에 여러 번 일어나는 게 스팸의 원인이므로 이득이 크다.
+    NOTIFY_DEDUP_COOLDOWN_HOURS: int = int(os.getenv("NOTIFY_DEDUP_COOLDOWN_HOURS", "6"))
+
 
 settings = AppSettings()

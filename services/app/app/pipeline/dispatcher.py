@@ -12,6 +12,12 @@
 
 멱등성: app_notification_log(event_type, event_id, member_id, channel) 존재 시 재발송 안 함
 (폴러 재시작 시 중복 알림 방지).
+
+재정정 스팸 억제(EVAL P1-4): 멱등키는 data_events.id(행 id) 기준이라, 결과를 재스크래핑/
+정정하면 새 event_id가 생겨 멱등성 검사를 통과 → 전원 재발송(스팸)된다. dedup_key
+("{category}:{entity_type}:{entity_id}")로 "같은 논리 엔티티"를 묶어, 최초 발송에 한해
+쿨다운(NOTIFY_DEDUP_COOLDOWN_HOURS) 이내 재알림을 회원별·채널별로 억제한다. 재시도 스윕
+(retry_failed)은 이 게이트를 타지 않는다(채널 코어를 직접 호출 → 복구 경로).
 """
 from __future__ import annotations
 
@@ -81,6 +87,10 @@ class NotificationDispatcher:
         title, body, link = et.build_message(event)
         summary["targets"] = len(member_ids)
 
+        # 재정정 스팸 억제 키 (EVAL P1-4): event_id가 아니라 논리 엔티티 기준.
+        # entity_type/entity_id가 불완전하면 None → 억제하지 않고 정상 발송.
+        dedup_key = self._dedup_key(category, event)
+
         for member_id in member_ids:
             try:
                 pref = prefs.get_member_preference(member_id, category, self.db)
@@ -89,10 +99,10 @@ class NotificationDispatcher:
                 continue
 
             if pref.get("in_app"):
-                if self._send_in_app(member_id, category, title, body, link, event):
+                if self._send_in_app(member_id, category, title, body, link, event, dedup_key):
                     summary["in_app"] += 1
             if pref.get("web_push"):
-                if self._send_web_push(member_id, event):
+                if self._send_web_push(member_id, event, dedup_key):
                     summary["web_push"] += 1
             # 카카오 알림톡은 현재 계획에서 보류 — ENABLE_KAKAO_ALIMTALK(기본 False)로 게이트.
             # 코드(_send_kakao, kakao.py)는 재활성화 대비 보존. 플래그를 켜면 다시 동작.
@@ -100,6 +110,59 @@ class NotificationDispatcher:
                 self._send_kakao(member_id, event)
 
         return summary
+
+    # ----------------------------------------------------- dedup (P1-4)
+
+    @staticmethod
+    def _dedup_key(category: str, event: dict) -> Optional[str]:
+        """재정정 스팸 억제용 논리 엔티티 키. entity 정보가 불완전하면 None.
+
+        포맷: "{category}:{entity_type}:{entity_id}"
+              예: "competition_result:competition:132".
+        entity_type/entity_id 중 하나라도 None이면 억제 대상이 아니라고 판단해 None을
+        반환한다(키가 불완전하면 억제하지 않고 정상 발송 — 억제 실패 < 알림 유실).
+        """
+        entity_type = event.get("entity_type")
+        entity_id = event.get("entity_id")
+        if entity_type is None or entity_id is None:
+            return None
+        return f"{category}:{entity_type}:{entity_id}"
+
+    def _dedup_suppressed(
+        self, member_id: str, channel: str, dedup_key: Optional[str]
+    ) -> bool:
+        """이 (member, channel, dedup_key)에 대해 쿨다운 창 안에 이미 'sent' 로그가
+        있으면 True(발송 억제). 억제할 이유가 없으면 False.
+
+        회원별·채널별로 판정한다: 같은 논리 엔티티라도 회원 A는 이미 받았고 B는 아직일
+        수 있고, 채널마다 도달 여부가 다르기 때문이다('sent' 로그가 남는 in_app/web_push
+        각각을 자기 채널 이력으로 억제). dedup_key가 None이거나 쿨다운이 0 이하이면
+        억제하지 않는다. 조회 실패는 안전측으로 False(억제 실패 < 알림 유실).
+        """
+        if not dedup_key or settings.NOTIFY_DEDUP_COOLDOWN_HOURS <= 0:
+            return False
+        try:
+            window_start = (
+                datetime.now(timezone.utc)
+                - timedelta(hours=settings.NOTIFY_DEDUP_COOLDOWN_HOURS)
+            ).isoformat()
+            res = (
+                self.db.table("app_notification_log")
+                .select("id")
+                .eq("member_id", member_id)
+                .eq("channel", channel)
+                .eq("dedup_key", dedup_key)
+                .eq("status", "sent")
+                .gte("created_at", window_start)
+                .limit(1)
+                .execute()
+            )
+            return bool(res.data)
+        except Exception as exc:  # noqa: BLE001 - 폴러 생존, 억제 실패 < 알림 유실
+            logger.warning(
+                "쿨다운 조회 실패 member=%s key=%s: %s", member_id, dedup_key, exc
+            )
+            return False
 
     # ----------------------------------------------------- target resolution
 
@@ -160,15 +223,26 @@ class NotificationDispatcher:
         body: str,
         link: Optional[str],
         event: dict,
+        dedup_key: Optional[str] = None,
     ) -> bool:
-        """notifications 테이블에 인앱 알림 생성. 중복이면 False."""
+        """notifications 테이블에 인앱 알림 생성. 중복/쿨다운이면 False.
+
+        최초 발송 경로에서만 호출된다(재시도는 _in_app_core 직접 호출 → 게이트 우회).
+        """
         if self._already_sent(member_id, "in_app", event):
+            return False
+        # 재정정 스팸 억제 (P1-4): 같은 논리 엔티티를 쿨다운 안에 이미 받았으면 skip.
+        if self._dedup_suppressed(member_id, "in_app", dedup_key):
+            logger.debug("쿨다운 억제 member=%s channel=in_app key=%s", member_id, dedup_key)
             return False
         ok, notif_id, error = self._in_app_core(member_id, category, title, body, link, event)
         if ok:
-            self._log(member_id, "in_app", "sent", event, notification_id=notif_id)
+            self._log(
+                member_id, "in_app", "sent", event,
+                notification_id=notif_id, dedup_key=dedup_key,
+            )
             return True
-        self._log(member_id, "in_app", "failed", event, error=error)
+        self._log(member_id, "in_app", "failed", event, error=error, dedup_key=dedup_key)
         return False
 
     def _in_app_core(
@@ -212,7 +286,9 @@ class NotificationDispatcher:
             logger.error("인앱 알림 발송 실패 member=%s: %s", member_id, exc)
             return False, None, str(exc)
 
-    def _send_web_push(self, member_id: str, event: dict) -> bool:
+    def _send_web_push(
+        self, member_id: str, event: dict, dedup_key: Optional[str] = None
+    ) -> bool:
         """웹 푸시 발송 (FCM은 표준 Web Push 위에서 동작 → pywebpush 사용).
 
         graceful degradation:
@@ -220,23 +296,29 @@ class NotificationDispatcher:
           - 만료 구독(404/410) → 해당 구독 is_active=false.
           - 발송 성공 → app_notification_log status='sent'.
         멱등성: app_notification_log(channel='web_push') 존재 시 재발송 안 함.
+        재정정 스팸 억제(P1-4): 같은 논리 엔티티를 쿨다운 안에 이미 발송했으면 skip.
+
+        최초 발송 경로에서만 호출된다(재시도는 _web_push_core 직접 호출 → 게이트 우회).
 
         Returns:
-            이번 호출에서 1건 이상 실제 발송했으면 True, 그 외(중복/미설정/구독 없음/실패)는 False.
+            이번 호출에서 1건 이상 실제 발송했으면 True, 그 외(중복/쿨다운/미설정/구독 없음/실패)는 False.
             메트릭(dispatched) 집계용 신호이며 발송 로직 자체에는 영향을 주지 않는다.
         """
         if self._already_sent(member_id, "web_push", event):
             return False
+        if self._dedup_suppressed(member_id, "web_push", dedup_key):
+            logger.debug("쿨다운 억제 member=%s channel=web_push key=%s", member_id, dedup_key)
+            return False
 
         status, error = self._web_push_core(member_id, event)
         if status == "sent":
-            self._log(member_id, "web_push", "sent", event)
+            self._log(member_id, "web_push", "sent", event, dedup_key=dedup_key)
             return True
         if status == "no_subscription":
             # 원본 동작 보존: 활성 구독이 없으면 로그를 남기지 않는다 (debug만).
             return False
         # pending(VAPID/pywebpush 미설정) 또는 failed(구독 조회 실패/발송 실패)
-        self._log(member_id, "web_push", status, event, error=error)
+        self._log(member_id, "web_push", status, event, error=error, dedup_key=dedup_key)
         return False
 
     def _web_push_core(self, member_id: str, event: dict) -> tuple[str, Optional[str]]:
@@ -590,7 +672,9 @@ class NotificationDispatcher:
         event: dict,
         notification_id: Optional[str] = None,
         error: Optional[str] = None,
+        dedup_key: Optional[str] = None,
     ) -> None:
+        now = _now_iso()
         try:
             self.db.table("app_notification_log").insert(
                 {
@@ -601,7 +685,12 @@ class NotificationDispatcher:
                     "error_message": error,
                     "event_type": event.get("event_type", ""),
                     "event_id": event.get("id"),
-                    "sent_at": _now_iso() if status == "sent" else None,
+                    # dedup_key: 재정정 스팸 억제 조회 대상(P1-4). None이면 억제 대상 아님.
+                    "dedup_key": dedup_key,
+                    # created_at을 명시적으로 기록 → 쿨다운 창(created_at >= window) 조회 근거.
+                    # (DB DEFAULT now()와 동일 의미. 명시 기록으로 조회 시점 정합성 보장.)
+                    "created_at": now,
+                    "sent_at": now if status == "sent" else None,
                 }
             ).execute()
         except Exception as exc:  # noqa: BLE001
