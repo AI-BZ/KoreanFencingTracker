@@ -25,7 +25,7 @@ from .admin.router import router as admin_router
 from .admin.notifications import router as notifications_router
 from .messenger.router import router as messenger_router
 from .legal.router import router as legal_router
-from .i18n.middleware import LanguageMiddleware
+from shared_core.i18n import LanguageMiddleware, create_shared_i18n
 
 SERVICE_DIR = Path(__file__).parent.parent
 TEMPLATES_DIR = SERVICE_DIR / "templates"
@@ -52,7 +52,11 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
 
 
 # Language detection middleware (must be before CORS)
-app.add_middleware(LanguageMiddleware)
+# Shared i18n infra + account-specific translations merged via extra_dirs (deep merge).
+account_i18n = create_shared_i18n(
+    extra_dirs=[Path(__file__).parent / "i18n" / "translations"]
+)
+app.add_middleware(LanguageMiddleware, i18n=account_i18n)
 
 # CORS 미들웨어 (서브도메인 간 API 호출 허용)
 app.add_middleware(
