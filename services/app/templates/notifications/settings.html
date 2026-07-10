@@ -254,9 +254,11 @@
             category,
             in_app: get('in_app'),
             web_push: get('web_push'),
-            // 카카오 알림톡은 현재 계획에서 보류(UI 숨김) → 항상 false 유지.
-            // 저장된 값을 건드리지 않으려 토글 복원 전까지 false로 전송.
-            kakao_alimtalk: get('kakao_alimtalk'),
+            // 카카오 알림톡은 현재 계획에서 보류(UI 숨김) → 토글 행이 없다.
+            // 서버 PrefUpdate가 kakao_alimtalk를 필수(bool)로 요구하므로 필드는 유지하되,
+            // DOM에 없는 요소를 조회하지 않고 false를 직접 전송한다.
+            // 재활성화 시: 위 채널 행에 카카오 토글을 복원하고 이 줄을 get('kakao_alimtalk')로 되돌릴 것.
+            kakao_alimtalk: false,
         };
     }
 

@@ -64,7 +64,7 @@ class NotificationDispatcher:
         event_type = event.get("event_type", "")
         category = et.category_for_event(event_type)
 
-        summary = {"event_id": event_id, "category": category, "targets": 0, "in_app": 0}
+        summary = {"event_id": event_id, "category": category, "targets": 0, "in_app": 0, "web_push": 0}
         if not category:
             return summary
 
@@ -92,7 +92,8 @@ class NotificationDispatcher:
                 if self._send_in_app(member_id, category, title, body, link, event):
                     summary["in_app"] += 1
             if pref.get("web_push"):
-                self._send_web_push(member_id, event)
+                if self._send_web_push(member_id, event):
+                    summary["web_push"] += 1
             # 카카오 알림톡은 현재 계획에서 보류 — ENABLE_KAKAO_ALIMTALK(기본 False)로 게이트.
             # 코드(_send_kakao, kakao.py)는 재활성화 대비 보존. 플래그를 켜면 다시 동작.
             if settings.ENABLE_KAKAO_ALIMTALK and pref.get("kakao_alimtalk"):
@@ -190,7 +191,7 @@ class NotificationDispatcher:
             self._log(member_id, "in_app", "failed", event, error=str(exc))
             return False
 
-    def _send_web_push(self, member_id: str, event: dict) -> None:
+    def _send_web_push(self, member_id: str, event: dict) -> bool:
         """웹 푸시 발송 (FCM은 표준 Web Push 위에서 동작 → pywebpush 사용).
 
         graceful degradation:
@@ -198,16 +199,20 @@ class NotificationDispatcher:
           - 만료 구독(404/410) → 해당 구독 is_active=false.
           - 발송 성공 → app_notification_log status='sent'.
         멱등성: app_notification_log(channel='web_push') 존재 시 재발송 안 함.
+
+        Returns:
+            이번 호출에서 1건 이상 실제 발송했으면 True, 그 외(중복/미설정/구독 없음/실패)는 False.
+            메트릭(dispatched) 집계용 신호이며 발송 로직 자체에는 영향을 주지 않는다.
         """
         if self._already_sent(member_id, "web_push", event):
-            return
+            return False
 
         # 1) VAPID 비밀키 확인 (없으면 발송 불가 → pending 로그)
         private_key = settings.FCM_VAPID_PRIVATE_KEY
         if not private_key:
             logger.info("web_push skip member=%s: VAPID key 미설정", member_id)
             self._log(member_id, "web_push", "pending", event, error="VAPID key 미설정")
-            return
+            return False
 
         # 2) pywebpush 지연 import (미설치여도 모듈 import는 깨지지 않음)
         try:
@@ -215,7 +220,7 @@ class NotificationDispatcher:
         except Exception as exc:  # noqa: BLE001 - ImportError 등
             logger.warning("web_push skip member=%s: pywebpush 미설치 (%s)", member_id, exc)
             self._log(member_id, "web_push", "pending", event, error="pywebpush 미설치")
-            return
+            return False
 
         # 3) 활성 구독 조회
         try:
@@ -230,11 +235,11 @@ class NotificationDispatcher:
         except Exception as exc:  # noqa: BLE001
             logger.error("구독 조회 실패 member=%s: %s", member_id, exc)
             self._log(member_id, "web_push", "failed", event, error=str(exc))
-            return
+            return False
 
         if not subscriptions:
             logger.debug("web_push: 활성 구독 없음 member=%s", member_id)
-            return
+            return False
 
         title, body, link = et.build_message(event)
         payload = json.dumps(
@@ -284,6 +289,7 @@ class NotificationDispatcher:
             self._log(member_id, "web_push", "sent", event)
         else:
             self._log(member_id, "web_push", "failed", event, error=last_error or "발송 대상 없음")
+        return sent_any
 
     def _deactivate_subscription(self, sub_id: Optional[str]) -> None:
         if not sub_id:

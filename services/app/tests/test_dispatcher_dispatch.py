@@ -45,7 +45,7 @@ def test_dispatch_unmapped_event_is_noop():
     summary = NotificationDispatcher(supabase=db).dispatch(
         {"id": 1, "event_type": "player.deleted", "data": {}}
     )
-    assert summary == {"event_id": 1, "category": None, "targets": 0, "in_app": 0}
+    assert summary == {"event_id": 1, "category": None, "targets": 0, "in_app": 0, "web_push": 0}
     assert db.count("notifications") == 0
 
 

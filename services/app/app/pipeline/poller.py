@@ -112,7 +112,9 @@ class EventPoller:
         for ev in events:
             try:
                 summary = self.dispatcher.dispatch(ev)
-                dispatched += summary.get("in_app", 0)
+                # 인앱 + 웹 푸시 실제 발송 건수를 집계. dispatch 요약에 web_push 키가
+                # 없어도(구버전/스텁 디스패처) get 기본값 0으로 안전하게 처리된다.
+                dispatched += summary.get("in_app", 0) + summary.get("web_push", 0)
             except Exception as exc:  # noqa: BLE001 - 한 이벤트 실패가 루프를 막지 않음
                 logger.error("디스패치 실패 event=%s: %s", ev.get("id"), exc)
             try:
