@@ -110,6 +110,13 @@ class AppSettings:
     # 이벤트 폴링 간격 (초)
     EVENT_POLL_INTERVAL: int = int(os.getenv("EVENT_POLL_INTERVAL", "30"))
 
+    # 워터마크 안전 지연 (초). data_events.id는 BIGSERIAL이라 커밋 순서를 보장하지 않는다.
+    # (트랜잭션 A가 id=100을 먼저 채번하고 B가 id=101을 나중에 채번해도, B가 먼저 커밋될 수 있음.)
+    # 방금 만들어진(=아직 in-flight일 수 있는) 이벤트를 이 시간만큼 건너뛰고 폴링해,
+    # 늦게 커밋된 낮은 id가 워터마크에 추월당해 영구 누락되는 것을 막는다 (EVAL P1-2 최소 처방).
+    # 대가는 알림이 최대 이 시간만큼 지연되는 것뿐(대회 결과/랭킹 특성상 무해).
+    EVENT_SAFETY_LAG_SECONDS: int = int(os.getenv("EVENT_SAFETY_LAG_SECONDS", "15"))
+
     # 이벤트 폴러 활성화 (Phase 3). 테스트/로컬에서 끄려면 APP_ENABLE_POLLER=false
     ENABLE_POLLER: bool = os.getenv("APP_ENABLE_POLLER", "true").lower() == "true"
 

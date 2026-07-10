@@ -14,11 +14,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from shared_core.db.client import get_supabase_client
 
+from ..config import settings
 from .dispatcher import NotificationDispatcher
 
 logger = logging.getLogger("app.pipeline.poller")
@@ -87,10 +88,16 @@ class EventPoller:
     def poll_once(self) -> dict:
         """한 배치 폴링 + 디스패치. (동기 — to_thread로 호출)."""
         last_id, processed_total = self._read_cursor()
+        # 안전 지연: created_at이 (now - safety_lag) 이하인 이벤트만 처리한다.
+        # BIGSERIAL id의 커밋 순서 무보장으로 늦게 커밋된 낮은 id가 누락되는 것을 방지 (P1-2).
+        cutoff = (
+            datetime.now(timezone.utc) - timedelta(seconds=settings.EVENT_SAFETY_LAG_SECONDS)
+        ).isoformat()
         res = (
             self.db.table("data_events")
             .select("*")
             .gt("id", last_id)
+            .lte("created_at", cutoff)
             .order("id")
             .limit(self.batch_size)
             .execute()
