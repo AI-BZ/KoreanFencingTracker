@@ -942,16 +942,20 @@
 
     <!-- Analysis Warnings -->
     {% if report.warnings is defined and report.warnings %}
-    <div class="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-6 mb-8">
-        <h2 class="text-lg font-bold text-amber-400 mb-4">분석 경고</h2>
+    {% set has_error = report.warnings | selectattr('severity', 'equalto', 'error') | list | length > 0 %}
+    <div class="{% if has_error %}bg-red-500/10 border border-red-500/20{% else %}bg-amber-500/10 border border-amber-500/20{% endif %} rounded-2xl p-6 mb-8">
+        <h2 class="text-lg font-bold {% if has_error %}text-red-400{% else %}text-amber-400{% endif %} mb-4">
+            {% if has_error %}분석 신뢰 불가{% else %}분석 경고{% endif %}
+        </h2>
         <div class="space-y-3">
             {% for w in report.warnings %}
+            {% set is_error = w.severity == 'error' %}
             <div class="flex items-start gap-3">
-                <svg class="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-5 h-5 {% if is_error %}text-red-400{% else %}text-amber-400{% endif %} flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                           d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
                 </svg>
-                <span class="text-sm text-amber-400">{{ w.message }}</span>
+                <span class="text-sm {% if is_error %}text-red-400{% else %}text-amber-400{% endif %}">{{ w.message }}</span>
             </div>
             {% endfor %}
         </div>

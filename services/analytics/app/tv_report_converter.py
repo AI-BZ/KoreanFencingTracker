@@ -97,7 +97,7 @@ def tv_ocr_to_match_report(
     )
 
     # Generate analysis warnings
-    warnings = _generate_warnings(final_score, expected_final_score)
+    warnings = _generate_warnings(final_score, expected_final_score, total_touches)
 
     return {
         "summary": {
@@ -244,9 +244,36 @@ def _generate_ocr_insights(
 def _generate_warnings(
     final_score: str,
     expected_final_score: Optional[int],
+    total_touches: Optional[int] = None,
 ) -> list:
-    """Generate analysis warnings (e.g., video truncation)."""
+    """Generate analysis warnings (e.g., video truncation, OCR failure).
+
+    Args:
+        final_score: Final score string ("L-R").
+        expected_final_score: Expected winning score for the bout, if known.
+        total_touches: Number of touches OCR detected. When 0, the scoreboard
+            could not be read and the analysis is not trustworthy — an
+            error-level warning is emitted. When None, this gate is skipped
+            (e.g. direct callers that do not track touch counts).
+
+    Note:
+        An OCR read-rate gate (successful frames / sampled frames below a
+        threshold) is not implemented here: read-rate data is not available in
+        this conversion function. It is left as a follow-up.
+    """
     warnings = []
+
+    # Low-confidence gate: OCR detected zero touches → scoreboard unreadable.
+    # Results must not be presented as trustworthy.
+    if total_touches is not None and total_touches == 0:
+        warnings.append({
+            "type": "no_touches_detected",
+            "message": (
+                "OCR가 점수판을 읽지 못했습니다 (감지된 터치 0개). "
+                "분석 결과를 신뢰할 수 없습니다."
+            ),
+            "severity": "error",
+        })
 
     if expected_final_score:
         parts = final_score.split("-")
