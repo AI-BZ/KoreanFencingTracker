@@ -7,13 +7,17 @@ Override via command-line args in train_videomae.py.
 
 from pathlib import Path
 
+# Service root anchor: ml/training/config.py → parents[2] = services/analytics.
+# Paths resolve identically regardless of CWD (previously assumed `cd services/analytics`).
+_SERVICE_ROOT = Path(__file__).resolve().parents[2]
+
 # ------------------------------------------------------------------
 # Paths
 # ------------------------------------------------------------------
-DATA_DIR = Path("data/labeled")           # Labeled clips root
+DATA_DIR = _SERVICE_ROOT / "data/labeled"  # Labeled clips root
 CLIPS_DIR = DATA_DIR / "clips"            # Individual clip videos
 LABELS_FILE = DATA_DIR / "labels.csv"     # clip_path, action_label
-OUTPUT_DIR = Path("ml/models/videomae-fencing-v1")
+OUTPUT_DIR = _SERVICE_ROOT / "ml/models/videomae-fencing-v1"
 
 # ------------------------------------------------------------------
 # Model
@@ -84,7 +88,7 @@ FLIP_LABEL_MAP = {
 # ------------------------------------------------------------------
 # Paths (FACTS dataset)
 # ------------------------------------------------------------------
-FACTS_DATA_DIR = Path("data/facts")  # FACTS dataset root directory
+FACTS_DATA_DIR = _SERVICE_ROOT / "data/facts"  # FACTS dataset root directory
 FACTS_ZIP_PATH = FACTS_DATA_DIR / "facts_dataset.zip"  # 30.3GB nested ZIP
 FACTS_CLIP_INDEX_PATH = FACTS_DATA_DIR / "clip_index.json"  # clip → inner ZIP mapping
 FACTS_CSV_PATH = FACTS_DATA_DIR / "filtered_data_800_fencing.csv"  # 6,400 annotations
