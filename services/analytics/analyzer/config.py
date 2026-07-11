@@ -271,8 +271,17 @@ CAMERA_CUT_MAX_RATIO = 0.3       # if > 30% of frames are camera cuts, analysis 
 # exchanges out of the attack/defense statistics.
 EXCHANGE_ATTACK_FOOTWORK_TYPES = frozenset({"lunge", "fleche", "advance"})
 EXCHANGE_MIN_APPROACH_FRAMES = 3          # min frames of decreasing distance to start exchange
-EXCHANGE_DISTANCE_DECREASE_THRESHOLD = 0.05  # BH/frame: approach detection
-EXCHANGE_MIN_DISTANCE_CHANGE_BH = 0.2    # min total distance change for valid exchange
+# Hysteresis band (BH) on the approach→separation turn in detect_exchanges: a
+# rise smaller than this above the closest point is treated as pose noise and
+# does not end the exchange, preventing jitter-driven over-segmentation.
+EXCHANGE_DISTANCE_DECREASE_THRESHOLD = 0.05
+# Minimum total closing (BH) for an approach to count as a real exchange.
+# Raised 0.2 → 0.3: 0.2 BH is within pose-jitter range and produced phantom
+# exchanges; a committed engagement closes ≥0.3 BH (see DISTANCE_ZONE_THRESHOLDS).
+# Empirically this drops non-scoring phantom exchanges while retaining every
+# real scoring exchange (validated on div1_epee div1 final: 334→143 exchanges,
+# scoring-exchange count unchanged).
+EXCHANGE_MIN_DISTANCE_CHANGE_BH = 0.3
 EXCHANGE_MERGE_SEPARATION_FRAMES = 10    # if re-approach within N frames of separation → merge into same exchange
 CONTINUOUS_SAMPLE_EVERY_N = 5            # analyze every N frames
 CONTINUOUS_MAX_FRAMES = 10800            # max frames to analyze (6min @30fps)

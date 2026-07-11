@@ -7,24 +7,44 @@ from analyzer.models import (
     ExchangeEvent, MyFencerSummary,
 )
 from analyzer.config import (
+    DISTANCE_SMOOTHING_WINDOW,
     EXCHANGE_MIN_APPROACH_FRAMES,
     EXCHANGE_MIN_DISTANCE_CHANGE_BH,
     EXCHANGE_MERGE_SEPARATION_FRAMES,
+    EXCHANGE_DISTANCE_DECREASE_THRESHOLD,
     EXCHANGE_ATTACK_FOOTWORK_TYPES,
     SCORING_FRAME_TOLERANCE_SEC,
 )
+from ml.pose_analysis.body_metrics import smooth_distances
 from ml.pose_analysis.footwork import detect_footwork
 from ml.pose_analysis.parry import detect_parry
 
 
 def detect_exchanges(
     sampled: List[Tuple[int, Optional[float]]],
+    smoothing_window: int = DISTANCE_SMOOTHING_WINDOW,
+    turn_hysteresis_bh: float = EXCHANGE_DISTANCE_DECREASE_THRESHOLD,
 ) -> List[Tuple[int, int, int, float]]:
     """
-    State machine to detect exchanges from sampled distance series.
+    State machine to detect exchanges from a sampled distance series.
+
+    The raw distance series carries pose jitter and small camera motion that
+    fragment a single approach into many spurious exchanges. Two guards
+    suppress this without merging genuinely separate exchanges:
+
+    1. The series is smoothed (moving average) before the state machine runs,
+       preserving frame indices and None gaps.
+    2. A hysteresis band (``turn_hysteresis_bh``) on the approach→separation
+       turn: a rise smaller than the band is treated as noise and does not end
+       the exchange; only a rise beyond it counts as a real turn-around.
 
     Returns list of (start_frame, end_frame, min_distance_frame, min_distance_bh).
     """
+    # Smooth the distance series while keeping frame indices and None gaps.
+    frames = [f for f, _ in sampled]
+    smoothed = smooth_distances([d for _, d in sampled], smoothing_window)
+    sampled = list(zip(frames, smoothed))
+
     exchanges: List[Tuple[int, int, int, float]] = []
     state = "IDLE"
     approach_start = 0
@@ -39,7 +59,11 @@ def detect_exchanges(
             continue
 
         if state == "IDLE":
-            # Check if distance is decreasing
+            # Enter APPROACH on any decrease. Entry alone never emits an
+            # exchange — the validity gate (min frames + min total change) and
+            # the turn hysteresis below reject noise-started approaches — so
+            # gating entry on a per-step rate here would only risk dropping
+            # genuine slow approaches (under-segmentation) without benefit.
             if i > 0:
                 _, prev_dist = sampled[i - 1]
                 if prev_dist is not None and dist < prev_dist:
@@ -55,8 +79,11 @@ def detect_exchanges(
                 min_dist = dist
                 min_dist_frame = frame_idx
                 approach_count += 1
+            elif (dist - min_dist) < turn_hysteresis_bh:
+                # Small rise within the hysteresis band → noise, stay engaged.
+                approach_count += 1
             else:
-                # Distance started increasing → engagement → separation
+                # Distance rose beyond the band → engagement → separation
                 if (approach_count >= EXCHANGE_MIN_APPROACH_FRAMES
                         and (start_dist - min_dist) >= EXCHANGE_MIN_DISTANCE_CHANGE_BH):
                     # Valid exchange

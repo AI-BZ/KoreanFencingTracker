@@ -329,6 +329,7 @@ def main():
             "total_exchanges": continuous_result.total_exchanges,
             "scoring_exchanges": continuous_result.scoring_exchanges,
             "non_scoring_exchanges": continuous_result.non_scoring_exchanges,
+            "camera_cut_ratio": round(continuous_result.camera_cut_ratio, 3),
             "type_distribution": dict(type_counts),
             "fencer_stats": fencer_exchange_stats,
         },
@@ -554,6 +555,8 @@ def main():
     report_dict["insights"] = insights
 
     # Add warnings
+    for qw in continuous_result.quality_warnings:
+        report_dict["warnings"].append(qw)
     report_dict["warnings"].append({
         "type": "continuous_only",
         "message": "이 리포트는 연속 포즈 분석 결과입니다. 득점 정보(OCR/LED)가 포함되지 않아 공격 성공률이 정확하지 않을 수 있습니다.",

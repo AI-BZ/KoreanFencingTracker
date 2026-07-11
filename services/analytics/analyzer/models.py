@@ -601,6 +601,11 @@ class ContinuousAnalysisResult:
     non_scoring_exchanges: int = 0
     my_fencer_summary: Optional[MyFencerSummary] = None
     frame_actions: Optional[Dict[str, List[FrameActionState]]] = None
+    # Fraction of frames dropped as camera cuts (0.0-1.0). High values mean the
+    # footage jumps too much for reliable exchange detection.
+    camera_cut_ratio: float = 0.0
+    # Quality warnings ({type, message, severity}) surfaced to the report.
+    quality_warnings: List[dict] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         d: dict = {
@@ -608,7 +613,10 @@ class ContinuousAnalysisResult:
             "scoring_exchanges": self.scoring_exchanges,
             "non_scoring_exchanges": self.non_scoring_exchanges,
             "exchanges": [e.to_dict() for e in self.exchanges],
+            "camera_cut_ratio": round(self.camera_cut_ratio, 3),
         }
+        if self.quality_warnings:
+            d["quality_warnings"] = self.quality_warnings
         if self.my_fencer_summary is not None:
             d["my_fencer_summary"] = self.my_fencer_summary.to_dict()
         if self.frame_actions is not None:
