@@ -1,0 +1,283 @@
+{% extends "base.html" %}
+
+{% block title %}{{ i18n.common.fencinglab.page_title|default('FencingLab - Player Analysis') }}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/fencinglab.css">
+<style>
+    .fl-club-section {
+        margin-bottom: 2rem;
+    }
+
+    .fl-club-header {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 2px solid var(--fl-primary, #00d4ff);
+    }
+
+    .fl-club-header h3 {
+        color: var(--fl-text-primary, #fff);
+        margin: 0;
+        font-size: 1.1rem;
+    }
+
+    .fl-club-header .badge {
+        background: var(--fl-primary, #00d4ff);
+        color: #000;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+
+    .fl-player-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 1rem;
+    }
+
+    .fl-player-card {
+        background: rgba(255,255,255,0.05);
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 12px;
+        padding: 1rem;
+        text-decoration: none;
+        transition: all 0.3s ease;
+    }
+
+    .fl-player-card:hover {
+        background: rgba(255,255,255,0.1);
+        border-color: var(--fl-primary, #00d4ff);
+        transform: translateY(-2px);
+    }
+
+    .fl-player-card .name {
+        color: var(--fl-text-primary, #fff);
+        font-weight: 600;
+        font-size: 1rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .fl-player-card .team {
+        color: var(--fl-text-muted, #888);
+        font-size: 0.8rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .fl-player-stats {
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+
+    .fl-stat-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .fl-stat-value {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: var(--fl-primary, #00d4ff);
+    }
+
+    .fl-stat-label {
+        font-size: 0.7rem;
+        color: var(--fl-text-muted, #888);
+    }
+
+    .fl-trend {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+
+    .fl-trend.up {
+        background: rgba(0, 255, 136, 0.2);
+        color: #00ff88;
+    }
+
+    .fl-trend.down {
+        background: rgba(255, 68, 68, 0.2);
+        color: #ff4444;
+    }
+
+    .fl-trend.stable {
+        background: rgba(255, 255, 255, 0.1);
+        color: var(--fl-text-secondary, #aaa);
+    }
+
+    .fl-affiliated-badge {
+        background: rgba(255, 170, 0, 0.2);
+        color: #ffaa00;
+        padding: 2px 6px;
+        border-radius: 8px;
+        font-size: 0.65rem;
+        margin-left: 0.5rem;
+    }
+
+    .fl-loading {
+        text-align: center;
+        padding: 3rem;
+        color: var(--fl-text-muted, #888);
+    }
+
+    .fl-loading-spinner {
+        width: 40px;
+        height: 40px;
+        border: 3px solid rgba(255,255,255,0.1);
+        border-top-color: var(--fl-primary, #00d4ff);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 1rem;
+    }
+
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="fencinglab-container">
+    <div class="fl-header">
+        <div class="fl-logo">Fencing<span>Lab</span></div>
+        <p class="fl-subtitle">{{ i18n.common.fencinglab.ai_subtitle|default('AI-powered Player Analysis Service') }}</p>
+    </div>
+
+    <!-- Tracked Players by Club -->
+    <div class="fl-section">
+        <h3 style="color: var(--fl-text-primary); margin-bottom: 0.5rem;">
+            {{ i18n.common.fencinglab.tracked_players|default('Tracked Players') }}
+        </h3>
+        <p style="color: var(--fl-text-secondary); margin-bottom: 1.5rem;">
+            {{ i18n.common.fencinglab.tracked_players_desc|default('Real-time analysis data for tracked players') }}
+        </p>
+
+        <div id="trackedPlayers">
+            <div class="fl-loading">
+                <div class="fl-loading-spinner"></div>
+                <p>{{ i18n.common.fencinglab.loading_players|default('Loading player data...') }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="/static/js/fencinglab.js"></script>
+<script>
+// i18n translations for JavaScript
+const i18n = {
+    fencinglab: {
+        no_registered_players: "{{ i18n.common.fencinglab.no_registered_players|default('No registered players.')|e }}",
+        cannot_load_data: "{{ i18n.common.fencinglab.cannot_load_data|default('Unable to load data.')|e }}",
+        players_count: "{{ i18n.common.fencinglab.players_count|default('{count} players')|e }}",
+        affiliated: "{{ i18n.common.fencinglab.affiliated|default('Affiliated')|e }}",
+        overall_win_rate: "{{ i18n.common.fencinglab.overall_win_rate|default('Overall Win Rate')|e }}",
+        match_count: "{{ i18n.common.fencinglab.match_count|default('Matches')|e }}",
+        recent_6_matches: "{{ i18n.common.fencinglab.recent_6_matches|default('Recent 6')|e }}",
+        trend_up: "{{ i18n.common.fencinglab.trend_up|default('Rising')|e }}",
+        trend_down: "{{ i18n.common.fencinglab.trend_down|default('Falling')|e }}",
+        trend_stable: "{{ i18n.common.fencinglab.trend_stable|default('Stable')|e }}"
+    }
+};
+
+document.addEventListener('DOMContentLoaded', async function() {
+    const container = document.getElementById('trackedPlayers');
+    const currentLang = '{{ lang }}' || 'ko';
+
+    try {
+        const response = await fetch(`/api/fencinglab/tracked-players?lang=${currentLang}`);
+        const data = await response.json();
+
+        if (!data.tracked_clubs || Object.keys(data.tracked_clubs).length === 0) {
+            container.innerHTML = `<p style="color: var(--fl-text-muted);">${i18n.fencinglab.no_registered_players}</p>`;
+            return;
+        }
+
+        let html = '';
+
+        // 클럽 순서: 최병철펜싱클럽을 먼저, 나머지는 알파벳순
+        const clubs = Object.keys(data.tracked_clubs).sort((a, b) => {
+            // 한글 또는 영문 체크
+            if (a.includes('최병철') || a.includes('Choi Byeongcheol')) return -1;
+            if (b.includes('최병철') || b.includes('Choi Byeongcheol')) return 1;
+            return a.localeCompare(b);
+        });
+
+        for (const clubName of clubs) {
+            const players = data.tracked_clubs[clubName];
+            const isMainClub = clubName.includes('최병철') || clubName.includes('Choi Byeongcheol');
+            const playersCountText = i18n.fencinglab.players_count.replace('{count}', players.length);
+
+            html += `
+                <div class="fl-club-section">
+                    <div class="fl-club-header">
+                        <h3>${clubName}</h3>
+                        <span class="badge">${playersCountText}</span>
+                        ${!isMainClub ? `<span class="fl-affiliated-badge">${i18n.fencinglab.affiliated}</span>` : ''}
+                    </div>
+                    <div class="fl-player-grid">
+            `;
+
+            // 승률 높은 순으로 정렬
+            players.sort((a, b) => b.win_rate - a.win_rate);
+
+            for (const player of players) {
+                // Trend detection using Korean values from API, display using i18n
+                const isUp = player.recent_6_trend === '상승';
+                const isDown = player.recent_6_trend === '하락';
+                const trendClass = isUp ? 'up' : isDown ? 'down' : 'stable';
+                const trendIcon = isUp ? '↑' : isDown ? '↓' : '→';
+                const trendText = isUp ? i18n.fencinglab.trend_up : isDown ? i18n.fencinglab.trend_down : i18n.fencinglab.trend_stable;
+
+                html += `
+                    <a href="/fencinglab/player/${encodeURIComponent(player.name)}?team=${encodeURIComponent(player.team)}" class="fl-player-card">
+                        <div class="name">${player.display_name || player.name}</div>
+                        <div class="team">${player.display_team || player.team}</div>
+                        <div class="fl-player-stats">
+                            <div class="fl-stat-item">
+                                <span class="fl-stat-value">${player.win_rate}%</span>
+                                <span class="fl-stat-label">${i18n.fencinglab.overall_win_rate}</span>
+                            </div>
+                            <div class="fl-stat-item">
+                                <span class="fl-stat-value">${player.total_matches}</span>
+                                <span class="fl-stat-label">${i18n.fencinglab.match_count}</span>
+                            </div>
+                            <div class="fl-stat-item">
+                                <span class="fl-stat-value">${player.recent_6_win_rate}%</span>
+                                <span class="fl-stat-label">${i18n.fencinglab.recent_6_matches}</span>
+                            </div>
+                            <div class="fl-stat-item">
+                                <span class="fl-trend ${trendClass}">${trendIcon} ${trendText}</span>
+                            </div>
+                        </div>
+                    </a>
+                `;
+            }
+
+            html += `
+                    </div>
+                </div>
+            `;
+        }
+
+        container.innerHTML = html;
+
+    } catch (error) {
+        console.error('Error loading tracked players:', error);
+        container.innerHTML = `<p style="color: var(--fl-accent-red);">${i18n.fencinglab.cannot_load_data}</p>`;
+    }
+});
+</script>
+{% endblock %}

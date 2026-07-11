@@ -1,0 +1,163 @@
+<!-- Director Verification Flow: 조직 소유권 Claim (BRN 업로드) -->
+<div class="verification-methods">
+    <h2>조직 인증 - 클럽/학교 소유권 확인</h2>
+    <p class="flow-desc">사업자등록증을 업로드하면 AI가 자동 검증합니다. 사업자등록증은 공개 정보이므로 안전하게 처리됩니다.</p>
+
+    <div class="director-form-section">
+        <form id="orgClaimForm" enctype="multipart/form-data">
+            <div class="form-group">
+                <label for="orgSearchName">조직 검색</label>
+                <input type="text" id="orgSearchName" placeholder="클럽/학교 이름 입력">
+                <div class="search-results" id="orgSearchResults" style="display:none;"></div>
+                <input type="hidden" id="orgId" name="organization_id">
+            </div>
+
+            <div class="form-group">
+                <label for="claimType">역할</label>
+                <select id="claimType" name="claim_type">
+                    <option value="director">감독/관장</option>
+                    <option value="head_coach">수석 코치</option>
+                    <option value="representative">대표</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>사업자등록증 (선택)</label>
+                <div class="upload-area" id="orgUploadArea">
+                    <input type="file" id="orgFileInput" name="file" accept="image/*" style="display: none;">
+                    <div id="orgUploadPlaceholder">
+                        <span class="upload-icon">📄</span>
+                        <p>사업자등록증 이미지를 업로드하세요</p>
+                        <p class="upload-hint">업로드 시 3단계 자동 검증 (OCR → 검증식 → 국세청)</p>
+                    </div>
+                    <img id="orgPreviewImage" style="display: none; max-width: 100%; border-radius: 8px;">
+                </div>
+            </div>
+
+            <button type="submit" class="upload-btn" id="orgSubmitBtn" disabled>
+                조직 Claim 요청하기
+            </button>
+        </form>
+        <div class="upload-result" id="orgClaimResult" style="display: none;"></div>
+    </div>
+</div>
+
+<!-- Existing claims -->
+{% if org_claims %}
+<div class="verification-history">
+    <h2>조직 Claim 내역</h2>
+    <table class="history-table">
+        <thead>
+            <tr><th>조직 ID</th><th>유형</th><th>상태</th><th>BRN</th><th>날짜</th></tr>
+        </thead>
+        <tbody>
+            {% for oc in org_claims %}
+            <tr>
+                <td>#{{ oc.organization_id }}</td>
+                <td>{{ oc.claim_type }}</td>
+                <td>
+                    {% if oc.status == 'approved' %}<span class="badge badge-success">승인</span>
+                    {% elif oc.status == 'auto_verified' %}<span class="badge badge-success">자동 검증</span>
+                    {% elif oc.status == 'rejected' %}<span class="badge badge-danger">거부</span>
+                    {% else %}<span class="badge badge-secondary">대기</span>{% endif %}
+                </td>
+                <td>{{ oc.brn_number or '-' }}</td>
+                <td>{{ oc.created_at[:10] if oc.created_at else '-' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<style>
+.flow-desc { color: var(--text-secondary); margin-bottom: 1.5rem; }
+.director-form-section { margin-top: 1rem; }
+.form-group { margin-bottom: 1rem; }
+.form-group label { display: block; font-weight: 600; margin-bottom: 0.25rem; font-size: 0.9rem; }
+.form-group input, .form-group select { width: 100%; padding: 0.75rem; border: 1px solid var(--border-light); border-radius: 8px; font-size: 0.95rem; background: var(--bg-tertiary); color: var(--text-primary); }
+.form-group input:focus, .form-group select:focus { outline: none; border-color: var(--accent-primary); box-shadow: 0 0 0 3px var(--glow-primary); }
+.search-results { border: 1px solid var(--border-color); border-radius: 8px; margin-top: 4px; max-height: 200px; overflow-y: auto; background: var(--bg-secondary); }
+.search-result-item { padding: 8px 12px; border-bottom: 1px solid var(--border-color); cursor: pointer; font-size: 0.85rem; }
+.search-result-item:hover { background: rgba(255,255,255,0.05); }
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const orgNameInput = document.getElementById('orgSearchName');
+    const orgResults = document.getElementById('orgSearchResults');
+    const orgUploadArea = document.getElementById('orgUploadArea');
+    const orgFileInput = document.getElementById('orgFileInput');
+    const orgSubmitBtn = document.getElementById('orgSubmitBtn');
+    let orgSearchTimeout;
+
+    // Org search
+    orgNameInput.addEventListener('input', function() {
+        clearTimeout(orgSearchTimeout);
+        const name = this.value.trim();
+        if (name.length < 2) { orgResults.style.display = 'none'; return; }
+
+        orgSearchTimeout = setTimeout(async () => {
+            try {
+                const resp = await fetch(`/account/verification/player-search?name=_&team=${encodeURIComponent(name)}`);
+                // Use organizations table directly is not exposed, so we search via a simple approach
+                // For now, enable submit if orgId is set manually or via search
+            } catch(e) {}
+        }, 300);
+    });
+
+    // Enable submit when org is selected
+    orgNameInput.addEventListener('change', function() {
+        if (this.value.trim().length >= 2) orgSubmitBtn.disabled = false;
+    });
+
+    // File upload
+    orgUploadArea.addEventListener('click', () => orgFileInput.click());
+    orgFileInput.addEventListener('change', (e) => {
+        if (e.target.files.length) {
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                document.getElementById('orgPreviewImage').src = ev.target.result;
+                document.getElementById('orgPreviewImage').style.display = 'block';
+                document.getElementById('orgUploadPlaceholder').style.display = 'none';
+            };
+            reader.readAsDataURL(e.target.files[0]);
+            orgSubmitBtn.disabled = false;
+        }
+    });
+
+    // Submit
+    document.getElementById('orgClaimForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const orgId = document.getElementById('orgId').value;
+        if (!orgId) { alert('조직을 선택해주세요'); return; }
+
+        orgSubmitBtn.disabled = true;
+        orgSubmitBtn.textContent = '처리 중...';
+
+        const formData = new FormData(e.target);
+        const result = document.getElementById('orgClaimResult');
+
+        try {
+            const resp = await fetch('/account/verification/org-claim', { method: 'POST', body: formData });
+            const data = await resp.json();
+            result.style.display = 'block';
+            if (resp.ok) {
+                result.className = 'upload-result success';
+                result.innerHTML = `<strong>${data.message}</strong>`;
+                setTimeout(() => location.reload(), 2000);
+            } else {
+                result.className = 'upload-result error';
+                result.textContent = data.detail || '오류가 발생했습니다';
+            }
+        } catch (error) {
+            result.style.display = 'block';
+            result.className = 'upload-result error';
+            result.textContent = '네트워크 오류가 발생했습니다';
+        }
+
+        orgSubmitBtn.disabled = false;
+        orgSubmitBtn.textContent = '조직 Claim 요청하기';
+    });
+});
+</script>

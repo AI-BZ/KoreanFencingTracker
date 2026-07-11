@@ -9,24 +9,9 @@ from scraper.config import supabase_config
 from scraper.models import Competition, Event, Player, Match, Ranking
 
 
-# 싱글톤 클라이언트 (Club SaaS용)
-_supabase_client: Optional[Client] = None
-
-
-def get_supabase_client() -> Client:
-    """
-    Supabase 클라이언트 인스턴스 반환 (싱글톤)
-    Club Management SaaS에서 사용
-    """
-    global _supabase_client
-    if _supabase_client is None:
-        if not supabase_config.supabase_url or not supabase_config.supabase_key:
-            raise ValueError("SUPABASE_URL과 SUPABASE_KEY 환경변수를 설정해주세요")
-        _supabase_client = create_client(
-            supabase_config.supabase_url,
-            supabase_config.supabase_key
-        )
-    return _supabase_client
+# 싱글톤 클라이언트는 shared_core에서 제공
+# 기존 호환성 유지를 위해 re-export
+from shared_core.db.client import get_supabase_client  # noqa: F401
 
 
 class SupabaseDB:

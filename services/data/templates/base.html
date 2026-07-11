@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="{{ lang|default('ko') }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}{{ i18n.common.site.title|default('Korean Fencing Tracker') }}{% endblock %}</title>
+
+    <!-- SEO: hreflang for multi-language support -->
+    {% if alternate_urls %}
+    {% for alt_lang, alt_url in alternate_urls.items() %}
+    <link rel="alternate" hreflang="{{ alt_lang }}" href="{{ alt_url }}" />
+    {% endfor %}
+    {% endif %}
+
+    <!-- Modern Fonts: Pretendard (Korean) + Inter (English) -->
+    <link rel="preconnect" href="https://cdn.jsdelivr.net">
+    {% if lang == 'ko' %}
+    <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" rel="stylesheet">
+    {% endif %}
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="/static/css/dark-theme.css?v=20250110">
+    <link rel="stylesheet" href="/static/css/components.css?v=20250110">
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <!-- Parallax Background Container -->
+    <div class="parallax-bg" id="parallaxBg">
+        <div class="parallax-overlay"></div>
+    </div>
+
+    <nav class="navbar">
+        <div class="container">
+            <a href="/{{ lang|default('ko') }}/" class="logo">
+                <span class="logo-icon">⚔️</span>
+                <span class="logo-text">{{ i18n.common.site.title|default('Korean Fencing Tracker') }}</span>
+            </a>
+            <div class="auth-nav" id="authNav">
+                <a href="https://account.fencingmind.ai/auth/login?redirect=https://data.fencingmind.ai" class="auth-btn login-btn" id="loginBtn">{{ i18n.common.nav.login|default('Login') }}</a>
+            </div>
+            <div class="nav-links">
+                <a href="/{{ lang|default('ko') }}/">{{ i18n.common.nav.search|default('Search') }}</a>
+                <a href="/{{ lang|default('ko') }}/rankings">{{ i18n.common.nav.rankings|default('Ranking') }}</a>
+                <a href="/{{ lang|default('ko') }}/fencinglab">{{ i18n.common.nav.fencinglab|default('FencingLab') }}</a>
+            </div>
+            <div class="search-box">
+                <input type="text" id="global-search" placeholder="{{ i18n.common.search.placeholder|default('Search player or team...') }}">
+            </div>
+            <!-- Language Switcher -->
+            <div class="lang-switcher">
+                {% for switch_lang in supported_langs|default(['ko', 'en']) %}
+                <a href="/{{ switch_lang }}{{ request.url.path|replace('/' ~ lang, '')|default('/') }}"
+                   class="lang-btn {% if switch_lang == lang %}active{% endif %}"
+                   title="{{ switch_lang|upper }}">
+                    {{ switch_lang|upper }}
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>{{ i18n.common.footer.copyright|default('Korean Fencing Tracker') }} &copy; 2024-2026</p>
+            <p>{{ i18n.common.footer.data_source|default('데이터 출처') }}: <a href="https://fencing.sports.or.kr" target="_blank">KFF</a></p>
+            <p>
+                <a href="https://account.fencingmind.ai/legal/terms">이용약관</a> |
+                <a href="https://account.fencingmind.ai/legal/privacy">개인정보처리방침</a>
+            </p>
+        </div>
+    </footer>
+
+    <script src="/static/js/main.js"></script>
+    <script>
+    // Parallax Scrolling Effect
+    (function() {
+        const parallaxBg = document.getElementById('parallaxBg');
+        let ticking = false;
+
+        function updateParallax() {
+            const scrollY = window.scrollY;
+            const windowHeight = window.innerHeight;
+            const docHeight = document.documentElement.scrollHeight;
+
+            // Calculate scroll progress (0 to 1)
+            const scrollProgress = scrollY / (docHeight - windowHeight);
+
+            // Move background from top (mask area) to bottom (legs area)
+            // Image moves slower than scroll for parallax effect
+            const bgPosition = scrollProgress * 50; // 0% to 50% vertical movement
+
+            parallaxBg.style.backgroundPositionY = `${bgPosition}%`;
+            ticking = false;
+        }
+
+        window.addEventListener('scroll', function() {
+            if (!ticking) {
+                requestAnimationFrame(updateParallax);
+                ticking = true;
+            }
+        });
+
+        // Initial position
+        updateParallax();
+    })();
+
+    // 로그인 상태 확인 (user_display 쿠키 - JS 읽기 가능)
+    document.addEventListener('DOMContentLoaded', function() {
+        try {
+            const cookies = document.cookie.split(';').reduce((acc, c) => {
+                const [k, ...v] = c.trim().split('=');
+                acc[k] = v.join('=');
+                return acc;
+            }, {});
+            const displayRaw = cookies['user_display'];
+            if (displayRaw) {
+                const info = JSON.parse(decodeURIComponent(displayRaw));
+                const authNav = document.getElementById('authNav');
+                authNav.innerHTML = `
+                    <a href="https://account.fencingmind.ai/account/me" class="auth-btn profile-btn">
+                        ${info.email || '마이페이지'}
+                    </a>
+                    <a href="https://account.fencingmind.ai/auth/logout" class="auth-btn login-btn" style="margin-left:8px;">로그아웃</a>
+                `;
+            }
+        } catch (e) {
+            // 로그인 안됨 - 기본 상태 유지
+        }
+    });
+    </script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

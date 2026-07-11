@@ -1,0 +1,1048 @@
+/**
+ * DE Bracket Component Styles
+ * Responsive tournament bracket for fencing competitions
+ *
+ * Desktop: Horizontal tree view with connecting lines
+ * Mobile: Card-based list view with round tabs
+ */
+
+/* ========================================
+   CSS Variables - Dark Mode
+   ======================================== */
+:root {
+    --bracket-bg: #1a1a2e;
+    --bracket-border: #2d2d44;
+    --bracket-card-bg: #16213e;
+    --bracket-line-color: #3d3d5c;
+    --bracket-winner-bg: #1e3a29;
+    --bracket-winner-border: #22c55e;
+    --bracket-winner-text: #4ade80;
+    --bracket-loser-bg: #2d1f1f;
+    --bracket-loser-text: #6b7280;
+    --bracket-score-bg: #252540;
+    --bracket-score-winning: #4ade80;
+    --bracket-champion-bg: linear-gradient(135deg, #854d0e, #a16207);
+    --bracket-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    --bracket-hover-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    --bracket-round-spacing: 40px;
+    --bracket-match-height: 72px;
+    --bracket-match-spacing: 16px;
+    /* Dark mode text colors */
+    --bracket-text-primary: #e5e7eb;
+    --bracket-text-secondary: #9ca3af;
+    --bracket-text-muted: #6b7280;
+}
+
+/* ========================================
+   Container & Controls
+   ======================================== */
+.bracket-container {
+    background: var(--bracket-bg);
+    border-radius: 12px;
+    padding: 16px;
+    margin: 16px 0;
+}
+
+.bracket-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.bracket-view-toggle {
+    display: flex;
+    background: var(--bracket-card-bg);
+    border-radius: 8px;
+    padding: 4px;
+    box-shadow: var(--bracket-shadow);
+}
+
+.view-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border: none;
+    background: transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    color: var(--bracket-text-secondary);
+    transition: all 0.2s ease;
+}
+
+.view-btn:hover {
+    background: var(--bracket-score-bg);
+}
+
+.view-btn.active {
+    background: var(--primary, #3b82f6);
+    color: white;
+}
+
+.view-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+.view-label {
+    display: none;
+}
+
+@media (min-width: 480px) {
+    .view-label {
+        display: inline;
+    }
+}
+
+.bracket-info {
+    font-size: 14px;
+    color: var(--bracket-text-secondary);
+}
+
+.participant-count {
+    background: var(--bracket-card-bg);
+    padding: 6px 12px;
+    border-radius: 16px;
+    font-weight: 500;
+    color: var(--bracket-text-primary);
+}
+
+.bracket-size-toggle {
+    display: flex;
+    background: var(--bracket-card-bg);
+    border-radius: 6px;
+    padding: 2px;
+    margin-left: 8px;
+}
+
+.size-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: transparent;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--bracket-text-secondary);
+    transition: all 0.2s ease;
+}
+
+.size-btn:hover {
+    background: var(--bracket-score-bg);
+    color: var(--bracket-text-primary);
+}
+
+.size-btn.active {
+    background: var(--primary, #3b82f6);
+    color: white;
+}
+
+.size-btn svg {
+    width: 14px;
+    height: 14px;
+}
+
+.bracket-info {
+    display: flex;
+    align-items: center;
+}
+
+/* ========================================
+   Seeding Section
+   ======================================== */
+.bracket-seeding {
+    background: var(--bracket-card-bg);
+    border-radius: 8px;
+    margin-bottom: 16px;
+    overflow: hidden;
+}
+
+.seeding-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--bracket-text-primary);
+    background: var(--bracket-score-bg);
+    border-bottom: 1px solid var(--bracket-border);
+}
+
+.seeding-header::-webkit-details-marker {
+    display: none;
+}
+
+.seeding-icon {
+    font-size: 18px;
+}
+
+.seeding-toggle {
+    margin-left: auto;
+    font-size: 18px;
+    font-weight: bold;
+    color: var(--bracket-text-secondary);
+}
+
+.seeding-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 8px;
+    padding: 12px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.seeding-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--bracket-score-bg);
+    border-radius: 6px;
+    font-size: 13px;
+    color: var(--bracket-text-primary);
+}
+
+.seeding-rank {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--primary, #3b82f6);
+    color: white;
+    border-radius: 50%;
+    font-weight: 600;
+    font-size: 12px;
+    flex-shrink: 0;
+}
+
+.seeding-name {
+    font-weight: 500;
+    color: var(--bracket-text-primary);
+    text-decoration: none;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.seeding-name:hover {
+    color: var(--primary, #3b82f6);
+}
+
+.seeding-team {
+    color: var(--bracket-text-secondary);
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 80px;
+}
+
+/* ========================================
+   Bracket Views
+   ======================================== */
+.bracket-view {
+    display: none;
+}
+
+.bracket-view.active {
+    display: block;
+}
+
+/* ========================================
+   Tree View (Desktop)
+   ======================================== */
+.bracket-tree {
+    display: flex;
+    gap: var(--bracket-round-spacing);
+    overflow-x: auto;
+    padding: 20px 10px;
+    min-height: 400px;
+}
+
+.bracket-round {
+    display: flex;
+    flex-direction: column;
+    min-width: 200px;
+    flex-shrink: 0;
+}
+
+.round-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: var(--bracket-card-bg);
+    border-radius: 8px 8px 0 0;
+    border: 1px solid var(--bracket-border);
+    border-bottom: none;
+}
+
+.round-name {
+    font-weight: 600;
+    color: var(--bracket-text-primary);
+    font-size: 14px;
+}
+
+.round-count {
+    font-size: 12px;
+    color: var(--bracket-text-secondary);
+    background: var(--bracket-score-bg);
+    padding: 2px 8px;
+    border-radius: 10px;
+}
+
+.round-matches {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around;
+    flex: 1;
+    background: var(--bracket-card-bg);
+    border: 1px solid var(--bracket-border);
+    border-radius: 0 0 8px 8px;
+    padding: 12px;
+    gap: var(--bracket-match-spacing);
+}
+
+/* Individual Match in Tree View */
+.bracket-match {
+    position: relative;
+    background: var(--bracket-score-bg);
+    border: 1px solid var(--bracket-border);
+    border-radius: 8px;
+    padding: 6px;
+    transition: all 0.2s ease;
+}
+
+.bracket-match:hover {
+    box-shadow: var(--bracket-hover-shadow);
+    border-color: var(--primary, #3b82f6);
+}
+
+.match-player {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 4px;
+    background: var(--bracket-card-bg);
+    margin-bottom: 4px;
+    transition: background 0.2s ease;
+}
+
+.match-player:last-of-type {
+    margin-bottom: 0;
+}
+
+.match-player.winner {
+    background: var(--bracket-winner-bg);
+    border-left: 3px solid var(--bracket-winner-border);
+}
+
+.match-player.winner .player-name {
+    color: var(--bracket-winner-text);
+    font-weight: 600;
+}
+
+.match-player.winner .player-score {
+    color: var(--bracket-winner-border);
+    font-weight: 700;
+}
+
+.player-seed {
+    font-size: 11px;
+    color: var(--bracket-text-muted);
+    min-width: 24px;
+}
+
+.player-name {
+    flex: 1;
+    font-size: 13px;
+    color: var(--bracket-text-primary);
+    text-decoration: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.player-name:hover {
+    color: var(--primary, #3b82f6);
+}
+
+/* Tree view player info with team */
+.player-info-tree {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.player-info-tree .player-name {
+    flex: none;
+}
+
+.player-team-tree {
+    font-size: 10px;
+    color: var(--bracket-text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+.match-player.winner .player-team-tree {
+    color: var(--bracket-text-secondary);
+}
+
+/* Bye (empty slot) styling */
+.match-player.bye,
+.card-player.bye {
+    opacity: 0.6;
+}
+
+.player-name.bye-text {
+    color: var(--bracket-text-muted);
+    font-style: italic;
+    cursor: default;
+}
+
+.player-name.bye-text:hover {
+    color: var(--bracket-text-muted);
+}
+
+.player-score {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--bracket-text-secondary);
+    min-width: 24px;
+    text-align: right;
+}
+
+/* Connector Lines */
+.match-connector {
+    position: absolute;
+    right: -20px;
+    top: 50%;
+    width: 20px;
+    height: 2px;
+    background: var(--bracket-line-color);
+}
+
+.bracket-round:last-of-type .match-connector {
+    display: none;
+}
+
+/* Vertical connectors between matches */
+.round-matches::after {
+    content: '';
+    position: absolute;
+    right: -20px;
+    top: 25%;
+    bottom: 25%;
+    width: 2px;
+    background: var(--bracket-line-color);
+}
+
+.bracket-round:last-of-type .round-matches::after {
+    display: none;
+}
+
+/* ========================================
+   Champion Display
+   ======================================== */
+.bracket-champion {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 150px;
+    padding: 20px;
+}
+
+.champion-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 700;
+    color: #fbbf24;
+    margin-bottom: 12px;
+}
+
+.champion-icon {
+    font-size: 24px;
+}
+
+.champion-info {
+    background: var(--bracket-champion-bg);
+    padding: 16px 24px;
+    border-radius: 12px;
+    text-align: center;
+    box-shadow: 0 4px 12px rgba(217, 119, 6, 0.2);
+}
+
+.champion-name {
+    font-size: 18px;
+    font-weight: 700;
+    color: #fef3c7;
+    text-decoration: none;
+}
+
+.champion-name:hover {
+    color: #ffffff;
+    text-decoration: underline;
+}
+
+/* ========================================
+   List View (Mobile)
+   ======================================== */
+.bracket-list-view {
+    display: none;
+}
+
+.bracket-list-view.active {
+    display: block;
+}
+
+.round-tabs {
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+    padding-bottom: 8px;
+    margin-bottom: 16px;
+    border-bottom: 2px solid var(--bracket-border);
+    -webkit-overflow-scrolling: touch;
+}
+
+.round-tab {
+    flex-shrink: 0;
+    padding: 10px 16px;
+    border: none;
+    background: transparent;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--bracket-text-secondary);
+    cursor: pointer;
+    border-radius: 8px 8px 0 0;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.round-tab:hover {
+    background: var(--bracket-score-bg);
+    color: var(--bracket-text-primary);
+}
+
+.round-tab.active {
+    color: var(--primary, #3b82f6);
+    background: var(--bracket-card-bg);
+}
+
+.round-tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--primary, #3b82f6);
+}
+
+.round-panel {
+    display: none;
+}
+
+.round-panel.active {
+    display: block;
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.round-title-mobile {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--bracket-text-primary);
+    margin-bottom: 12px;
+}
+
+.round-icon {
+    font-size: 18px;
+}
+
+.match-count {
+    font-weight: normal;
+    color: var(--bracket-text-secondary);
+    font-size: 14px;
+}
+
+/* Match Cards */
+.match-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.match-card {
+    background: var(--bracket-card-bg);
+    border-radius: 12px;
+    box-shadow: var(--bracket-shadow);
+    overflow: hidden;
+    border: 1px solid var(--bracket-border);
+}
+
+.match-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 16px;
+    background: var(--bracket-score-bg);
+    border-bottom: 1px solid var(--bracket-border);
+}
+
+.match-number {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--bracket-text-secondary);
+}
+
+.match-status {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 10px;
+    font-weight: 500;
+}
+
+.match-status.complete {
+    background: rgba(34, 197, 94, 0.2);
+    color: #4ade80;
+}
+
+.match-status.pending {
+    background: rgba(251, 191, 36, 0.2);
+    color: #fbbf24;
+}
+
+.match-content {
+    padding: 12px 16px;
+}
+
+.card-player {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: var(--bracket-score-bg);
+    margin-bottom: 8px;
+    transition: all 0.2s ease;
+}
+
+.card-player:last-of-type {
+    margin-bottom: 0;
+}
+
+.card-player.winner {
+    background: var(--bracket-winner-bg);
+    border: 1px solid var(--bracket-winner-border);
+}
+
+.player-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    min-width: 0;
+}
+
+.player-seed-badge {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bracket-border);
+    color: var(--bracket-text-secondary);
+    border-radius: 50%;
+    font-size: 12px;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.card-player.winner .player-seed-badge {
+    background: var(--bracket-winner-border);
+    color: white;
+}
+
+.player-details {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.player-details .player-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--bracket-text-primary);
+    text-decoration: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.player-details .player-name:hover {
+    color: var(--primary, #3b82f6);
+}
+
+.card-player.winner .player-details .player-name {
+    color: var(--bracket-winner-text);
+    font-weight: 600;
+}
+
+.player-team {
+    font-size: 12px;
+    color: var(--bracket-text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.player-score-badge {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--bracket-text-secondary);
+    min-width: 32px;
+    text-align: center;
+}
+
+.player-score-badge.winning {
+    color: var(--bracket-winner-border);
+}
+
+.match-vs {
+    text-align: center;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--bracket-text-muted);
+    padding: 4px 0;
+}
+
+.match-footer {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    background: rgba(251, 191, 36, 0.1);
+    border-top: 1px solid rgba(251, 191, 36, 0.3);
+}
+
+.winner-label {
+    font-size: 13px;
+    color: #fbbf24;
+}
+
+.winner-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: #fef3c7;
+    text-decoration: none;
+}
+
+.winner-name:hover {
+    color: #ffffff;
+    text-decoration: underline;
+}
+
+/* ========================================
+   Empty State
+   ======================================== */
+.bracket-empty {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--bracket-text-muted);
+}
+
+.bracket-empty p {
+    font-size: 16px;
+    margin: 0;
+    color: var(--bracket-text-muted);
+}
+
+/* Scrollbar styling for dark mode */
+.bracket-tree::-webkit-scrollbar,
+.seeding-grid::-webkit-scrollbar,
+.round-tabs::-webkit-scrollbar {
+    height: 8px;
+    width: 8px;
+}
+
+.bracket-tree::-webkit-scrollbar-track,
+.seeding-grid::-webkit-scrollbar-track,
+.round-tabs::-webkit-scrollbar-track {
+    background: var(--bracket-card-bg);
+    border-radius: 4px;
+}
+
+.bracket-tree::-webkit-scrollbar-thumb,
+.seeding-grid::-webkit-scrollbar-thumb,
+.round-tabs::-webkit-scrollbar-thumb {
+    background: var(--bracket-border);
+    border-radius: 4px;
+}
+
+.bracket-tree::-webkit-scrollbar-thumb:hover,
+.seeding-grid::-webkit-scrollbar-thumb:hover,
+.round-tabs::-webkit-scrollbar-thumb:hover {
+    background: var(--bracket-line-color);
+}
+
+/* ========================================
+   Bracket Size Variants (Responsive to match count)
+   ======================================== */
+
+/* Small Bracket (32-63 matches) - slightly reduced */
+.bracket-tree.bracket-small {
+    --bracket-round-spacing: 28px;
+    --bracket-match-spacing: 8px;
+}
+
+.bracket-tree.bracket-small .bracket-round {
+    min-width: 160px;
+}
+
+.bracket-tree.bracket-small .round-header {
+    padding: 6px 10px;
+}
+
+.bracket-tree.bracket-small .round-name {
+    font-size: 12px;
+}
+
+.bracket-tree.bracket-small .round-count {
+    font-size: 10px;
+    padding: 1px 6px;
+}
+
+.bracket-tree.bracket-small .bracket-match {
+    padding: 4px;
+}
+
+.bracket-tree.bracket-small .match-player {
+    padding: 4px 6px;
+    margin-bottom: 2px;
+}
+
+.bracket-tree.bracket-small .player-seed {
+    font-size: 9px;
+    min-width: 18px;
+}
+
+.bracket-tree.bracket-small .player-name {
+    font-size: 11px;
+}
+
+.bracket-tree.bracket-small .player-team-tree {
+    font-size: 8px;
+}
+
+.bracket-tree.bracket-small .player-score {
+    font-size: 11px;
+    min-width: 18px;
+}
+
+.bracket-tree.bracket-small .round-matches {
+    padding: 8px;
+}
+
+/* Compact Bracket (64+ matches) - very compact for large tournaments */
+.bracket-tree.bracket-compact {
+    --bracket-round-spacing: 20px;
+    --bracket-match-spacing: 4px;
+}
+
+.bracket-tree.bracket-compact .bracket-round {
+    min-width: 130px;
+}
+
+.bracket-tree.bracket-compact .round-header {
+    padding: 4px 8px;
+}
+
+.bracket-tree.bracket-compact .round-name {
+    font-size: 10px;
+}
+
+.bracket-tree.bracket-compact .round-count {
+    font-size: 9px;
+    padding: 1px 4px;
+}
+
+.bracket-tree.bracket-compact .bracket-match {
+    padding: 2px;
+}
+
+.bracket-tree.bracket-compact .match-player {
+    padding: 2px 4px;
+    margin-bottom: 1px;
+    gap: 4px;
+}
+
+.bracket-tree.bracket-compact .player-seed {
+    font-size: 8px;
+    min-width: 14px;
+}
+
+.bracket-tree.bracket-compact .player-name {
+    font-size: 10px;
+}
+
+.bracket-tree.bracket-compact .player-info-tree {
+    gap: 0;
+}
+
+.bracket-tree.bracket-compact .player-team-tree {
+    display: none; /* Hide team in compact mode to save space */
+}
+
+.bracket-tree.bracket-compact .player-score {
+    font-size: 10px;
+    min-width: 14px;
+}
+
+.bracket-tree.bracket-compact .round-matches {
+    padding: 4px;
+}
+
+.bracket-tree.bracket-compact .match-connector {
+    right: -10px;
+    width: 10px;
+}
+
+/* Champion in compact mode */
+.bracket-tree.bracket-compact .bracket-champion {
+    min-width: 100px;
+    padding: 10px;
+}
+
+.bracket-tree.bracket-compact .champion-header {
+    font-size: 11px;
+    margin-bottom: 8px;
+}
+
+.bracket-tree.bracket-compact .champion-icon {
+    font-size: 18px;
+}
+
+.bracket-tree.bracket-compact .champion-info {
+    padding: 10px 14px;
+}
+
+.bracket-tree.bracket-compact .champion-name {
+    font-size: 13px;
+}
+
+/* Small variant champion */
+.bracket-tree.bracket-small .bracket-champion {
+    min-width: 120px;
+    padding: 14px;
+}
+
+.bracket-tree.bracket-small .champion-header {
+    font-size: 12px;
+}
+
+.bracket-tree.bracket-small .champion-icon {
+    font-size: 20px;
+}
+
+.bracket-tree.bracket-small .champion-name {
+    font-size: 15px;
+}
+
+/* ========================================
+   Responsive Adjustments
+   ======================================== */
+@media (max-width: 768px) {
+    .bracket-container {
+        padding: 12px;
+        border-radius: 8px;
+    }
+
+    .bracket-tree-view {
+        display: none !important;
+    }
+
+    .bracket-list-view.active {
+        display: block !important;
+    }
+
+    .view-btn[data-view="tree"] {
+        display: none;
+    }
+
+    .seeding-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (min-width: 769px) and (max-width: 1024px) {
+    .bracket-round {
+        min-width: 180px;
+    }
+
+    --bracket-round-spacing: 30px;
+}
+
+@media (min-width: 1200px) {
+    .bracket-round {
+        min-width: 220px;
+    }
+
+    .match-player {
+        padding: 8px 12px;
+    }
+
+    .player-name {
+        font-size: 14px;
+    }
+}
+
+/* ========================================
+   Print Styles
+   ======================================== */
+@media print {
+    .bracket-controls {
+        display: none;
+    }
+
+    .bracket-tree-view {
+        display: block !important;
+        overflow: visible;
+    }
+
+    .bracket-list-view {
+        display: none !important;
+    }
+
+    .bracket-round {
+        break-inside: avoid;
+    }
+}

@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ player.name }} - Competition Record Certificate</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            font-size: 10pt;
+            color: #1a202c;
+            background: white;
+            padding: 0.4in;
+        }
+
+        .certificate {
+            max-width: 8in;
+            margin: 0 auto;
+        }
+
+        /* Header */
+        .header {
+            text-align: center;
+            margin-bottom: 0.2in;
+            border-bottom: 2px solid #1a365d;
+            padding-bottom: 0.1in;
+        }
+
+        .header h1 {
+            font-size: 18pt;
+            color: #1a365d;
+            margin-bottom: 2pt;
+            letter-spacing: 2px;
+        }
+
+        .header p {
+            font-size: 10pt;
+            color: #4a5568;
+        }
+
+        /* Player Info */
+        .player-info {
+            margin-bottom: 0.15in;
+        }
+
+        .player-info h2 {
+            font-size: 10pt;
+            color: #2d3748;
+            margin-bottom: 4pt;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 2pt;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 2pt 8pt;
+            font-size: 9pt;
+        }
+
+        .info-item {
+            display: flex;
+        }
+
+        .info-label {
+            font-weight: bold;
+            min-width: 50pt;
+        }
+
+        /* Stats Summary */
+        .stats-section {
+            margin-bottom: 0.15in;
+        }
+
+        .stats-section h2 {
+            font-size: 10pt;
+            color: #2d3748;
+            margin-bottom: 4pt;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 2pt;
+        }
+
+        .stats-row {
+            display: flex;
+            gap: 24pt;
+            font-size: 9pt;
+        }
+
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 6pt;
+        }
+
+        .stat-label {
+            font-weight: bold;
+            white-space: nowrap;
+        }
+
+        .stat-value {
+            min-width: 20pt;
+        }
+
+        .stat-gold {
+            background: #ffd700;
+            padding: 1pt 4pt;
+            border-radius: 2pt;
+        }
+
+        /* Competition History Table */
+        .history-section h2 {
+            font-size: 10pt;
+            color: #2d3748;
+            margin-bottom: 4pt;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 2pt;
+        }
+
+        .history-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 7pt;
+        }
+
+        .history-table th {
+            background: #2d3748;
+            color: white;
+            padding: 4pt 3pt;
+            text-align: left;
+            font-weight: bold;
+            font-size: 7pt;
+        }
+
+        .history-table th:first-child {
+            width: 60pt;
+        }
+
+        .history-table th:last-child {
+            width: 35pt;
+            text-align: center;
+        }
+
+        .history-table td {
+            padding: 3pt;
+            border-bottom: 0.5pt solid #e2e8f0;
+            vertical-align: middle;
+        }
+
+        .history-table tr:nth-child(even) {
+            background: #f7fafc;
+        }
+
+        .history-table td:last-child {
+            text-align: center;
+            font-weight: bold;
+        }
+
+        .place-gold {
+            background: #ffd700 !important;
+            font-weight: bold;
+        }
+
+        .place-silver {
+            background: #c0c0c0 !important;
+        }
+
+        .place-bronze {
+            background: #cd7f32 !important;
+            color: white;
+        }
+
+        /* Footer */
+        .footer {
+            margin-top: 0.15in;
+            padding-top: 0.1in;
+            border-top: 1px solid #e2e8f0;
+            text-align: center;
+            font-size: 7pt;
+            color: #718096;
+        }
+
+        /* Print button - hidden on print */
+        .print-controls {
+            text-align: center;
+            margin-bottom: 0.2in;
+            padding: 10pt;
+            background: #f7fafc;
+            border-radius: 4pt;
+        }
+
+        .print-controls button {
+            background: #2d3748;
+            color: white;
+            border: none;
+            padding: 8pt 20pt;
+            font-size: 10pt;
+            cursor: pointer;
+            border-radius: 4pt;
+            margin: 0 5pt;
+        }
+
+        .print-controls button:hover {
+            background: #1a365d;
+        }
+
+        /* Print styles */
+        @media print {
+            body {
+                padding: 0;
+            }
+
+            .print-controls {
+                display: none !important;
+            }
+
+            .certificate {
+                max-width: 100%;
+            }
+
+            @page {
+                size: A4;
+                margin: 0.4in;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="print-controls">
+        <button onclick="window.print()">Print Certificate</button>
+        <button onclick="window.close()">Close</button>
+    </div>
+
+    <div class="certificate">
+        <div class="header">
+            <h1>KOREAN FENCING LEAGUE</h1>
+            <p>Official Competition Record Certificate</p>
+        </div>
+
+        <div class="player-info">
+            <h2>Athlete Information</h2>
+            <div class="info-grid">
+                <div class="info-item">
+                    <span class="info-label">Name:</span>
+                    <span>{{ player.name_en or player.name }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Player ID:</span>
+                    <span>{{ player.player_id or 'N/A' }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Birth:</span>
+                    <span>{{ player.birth_date or 'N/A' }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Weapon:</span>
+                    <span>{{ weapon_filter or 'All' }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Gender:</span>
+                    <span>{{ player.gender_en or 'N/A' }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Club:</span>
+                    <span>{{ player.club_en or player.current_team or 'N/A' }}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="stats-section">
+            <h2>Performance Summary</h2>
+            <div class="stats-row">
+                <div class="stat-item">
+                    <span class="stat-label">Total:</span>
+                    <span class="stat-value">{{ stats.total }}</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Gold:</span>
+                    <span class="stat-value {% if stats.gold > 0 %}stat-gold{% endif %}">{{ stats.gold }}</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Silver:</span>
+                    <span class="stat-value">{{ stats.silver }}</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Bronze:</span>
+                    <span class="stat-value">{{ stats.bronze }}</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Top 8:</span>
+                    <span class="stat-value">{{ stats.top8 }}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="history-section">
+            <h2>Competition History{% if weapon_filter %} ({{ weapon_filter }}){% endif %}</h2>
+            <table class="history-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Competition</th>
+                        <th>Event</th>
+                        <th>Place</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for record in records %}
+                    <tr>
+                        <td>{{ record.date }}</td>
+                        <td>{{ record.competition }}</td>
+                        <td>{{ record.event }}</td>
+                        <td class="{% if record.rank == 1 %}place-gold{% elif record.rank == 2 %}place-silver{% elif record.rank == 3 %}place-bronze{% endif %}">
+                            {{ record.place }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="footer">
+            <p>Issued by Korean Fencing League &bull; {{ issue_date }}</p>
+            <p>This certificate is generated from official competition records of the Korea Fencing Association.</p>
+        </div>
+    </div>
+</body>
+</html>

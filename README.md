@@ -78,7 +78,7 @@ mitmdump -s tools/app_api_analyzer.py -p 8080
 ## 프로젝트 구조
 
 ```
-FencingCommunityDropShipping/
+fencingmind/
 ├── scraper/                 # 스크래퍼 모듈
 │   ├── __init__.py
 │   ├── config.py            # 설정
