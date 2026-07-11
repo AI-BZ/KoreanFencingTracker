@@ -658,13 +658,25 @@ python scraper/full_scraper.py --competition-id 123
 개발 서버: PYTHONPATH=".:../../packages" python -m uvicorn app.server:app --host 0.0.0.0 --port 9071
 ```
 
-### 🔴 프로덕션 PYTHONPATH 주의사항 (CRITICAL)
-프로덕션 `start-data.sh`의 PYTHONPATH: `${BASE}:${BASE}/packages:${BASE}/services/data`
+### 🔴 프로덕션 PYTHONPATH 섀도잉 (CRITICAL — 2026-07-11 근본 해결)
 - `${BASE}` = `/Users/gyejinpark/opt/fencingmind/data`
-- Python은 PYTHONPATH 순서대로 모듈을 탐색하므로, `${BASE}/ranking/`에 파일이 있으면 `${BASE}/services/data/ranking/` 대신 먼저 import됨
-- **2026-06-22 사고**: `${BASE}/ranking/calculator.py` (구버전)이 `${BASE}/services/data/ranking/calculator.py` (신버전)을 섀도잉 → NT 서브랭킹 포인트가 840점으로 부풀려짐 (정확값: 560점)
-- **해결**: 구버전 `${BASE}/ranking/` 디렉토리 삭제
-- **예방**: `${BASE}/` 루트에 `services/data/` 내부와 동일한 이름의 패키지/모듈 폴더를 절대 생성하지 말 것
+- 현재 `start-data.sh` PYTHONPATH: `${BASE}/services/data:${BASE}:${BASE}/packages` (2026-07-11 재정렬 — services/data 우선)
+
+**진짜 원인 (2026-07-11 규명)**: PYTHONPATH 순서만이 문제가 아니었다. `start-data.sh`가 `cd ${BASE}` 후 `python -m uvicorn`을 실행하는데, `python -m`은 **현재 작업 디렉토리(cwd=`${BASE}`)를 sys.path 맨 앞(sys.path[0])에 넣는다.** 따라서 `${BASE}/app`, `${BASE}/scheduler` 같은 루트 섀도 폴더가 있으면 PYTHONPATH를 어떻게 정렬하든 **cwd가 무조건 먼저 이겨서** 구버전이 import된다. `from app.X` → `${BASE}/app` (구버전), `from ranking.X` → `${BASE}/services/data/ranking` (섀도 없어 정상) 처럼 갈렸다.
+
+**증상 이력**:
+- 2026-06-22: `${BASE}/ranking/calculator.py` (구버전)이 신버전을 섀도잉 → NT 서브랭킹 포인트 부풀려짐. `${BASE}/ranking/` 삭제로 부분 해결(나머지 섀도는 방치됨).
+- 2026-07-11: `${BASE}/app`, `scheduler`, `scraper`, `data_pipeline` 섀도가 남아있어, `services/data/`에만 배포한 신 server.py가 `from app.de_transforms`를 못 찾아 재시작 시 크래시할 뻔함(재시작 전 import 스모크로 발견·롤백).
+
+**근본 해결 (2026-07-11)**:
+1. 루트 섀도 4개(`app`/`scheduler`/`scraper`/`data_pipeline`)를 `${BASE}/_shadow_disabled_20260711/`로 이동(비활성화). cwd에서 사라지니 `from app.X`가 `${BASE}/services/data/`로 폴백.
+2. PYTHONPATH를 `services/data` 우선으로 재정렬(start-data.sh + launchd plist 둘 다).
+- 검증: 4개 패키지(app/scheduler/scraper/ranking) 모두 `services/data/`에서 로드됨 확인. 이제 **`services/data/`에만 배포하면 반영**된다(루트 이중 배포 불필요).
+
+**예방 (절대 규칙)**:
+- `${BASE}/` 루트에 `services/data/` 내부와 동일한 이름의 패키지/모듈 폴더(app, ranking, scheduler, scraper, data_pipeline 등)를 **절대 생성하지 말 것**. `cd ${BASE}` + `python -m` 조합이 cwd를 sys.path[0]에 넣으므로 그런 폴더는 즉시 섀도잉이 된다.
+- 배포는 `${BASE}/services/data/`에만 한다. 루트에 코드 폴더가 다시 생기면 이 사고가 재발한다.
+- `_shadow_disabled_20260711/`는 며칠 안정 운영 확인 후 삭제 가능.
 
 ## Environment Variables
 ```
