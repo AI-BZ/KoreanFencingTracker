@@ -35,6 +35,27 @@ class TestIsSafeRedirect:
     def test_rejects_none(self):
         assert _is_safe_redirect(None) is False
 
+    def test_allows_apex_fencingmind_domain(self):
+        assert _is_safe_redirect("https://fencingmind.ai/x") is True
+
+    def test_allows_account_subdomain(self):
+        assert _is_safe_redirect("https://account.fencingmind.ai/x") is True
+
+    def test_blocks_suffix_bypass_domain(self):
+        # "evilfencingmind.ai"는 "fencingmind.ai"로 끝나지만 하위 도메인이 아님
+        assert _is_safe_redirect("https://evilfencingmind.ai/x") is False
+
+    def test_blocks_scheme_relative_url(self):
+        # "//evil.com"은 스킴 상대 URL → 외부 호스트로 리다이렉트되므로 거부
+        assert _is_safe_redirect("//evil.com") is False
+
+    def test_blocks_backslash_bypass(self):
+        # 브라우저가 백슬래시를 슬래시로 해석하는 우회
+        assert _is_safe_redirect("/\\evil.com") is False
+
+    def test_blocks_javascript_scheme(self):
+        assert _is_safe_redirect("javascript:alert(1)") is False
+
 
 # ---------------------
 # Endpoint tests

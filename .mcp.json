@@ -8,7 +8,7 @@
                 "--project-ref=tjfjuasvjzjawyckengv"
             ],
             "env": {
-                "SUPABASE_ACCESS_TOKEN": "sbp_7150f050eca12b8c26e2dc54d71980e2b817cf5a"
+                "SUPABASE_ACCESS_TOKEN": "${SUPABASE_ACCESS_TOKEN}"
             }
         },
         "github": {

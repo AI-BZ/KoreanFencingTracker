@@ -274,14 +274,17 @@ async def submit_player_claim(
     if claim.evidence_text:
         evidence["user_provided"] = claim.evidence_text
 
-    # Determine status based on confidence
-    auto_approve = confidence >= settings.CLAIM_AUTO_APPROVE_THRESHOLD
-    auto_reject = confidence < settings.CLAIM_MANUAL_REVIEW_THRESHOLD
-
-    if auto_approve:
-        status = "approved"
-    elif auto_reject:
-        status = "rejected"
+    # Determine status based on confidence.
+    # 점수 기반 자동승인 비활성화(EVAL P1-3: 공개데이터 조합만으로 타인 프로필 탈취 방지).
+    # 플래그가 False인 한 confidence가 아무리 높아도 approved가 되지 않고 항상 pending으로
+    # 관리자 검토를 거친다. confidence 점수는 관리자 검토·AI 리포트 참고용으로 계속 계산됨.
+    if settings.CLAIM_AUTO_APPROVE_ENABLED:
+        if confidence >= settings.CLAIM_AUTO_APPROVE_THRESHOLD:
+            status = "approved"
+        elif confidence < settings.CLAIM_MANUAL_REVIEW_THRESHOLD:
+            status = "rejected"
+        else:
+            status = "pending"
     else:
         status = "pending"
 

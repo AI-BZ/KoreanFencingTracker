@@ -1,0 +1,41 @@
+<!-- ========== 2. 조건부: 자녀 연결 (선수 학부모) ========== -->
+<section class="form-section conditional" id="childConnectSection" style="display:none">
+    <h2 class="section-title">자녀 선수 데이터 연결</h2>
+    <p class="section-desc">자녀의 무기·리그를 고른 뒤 이름으로 검색하세요.</p>
+
+    <div class="filter-row">
+        <div class="filter-group">
+            <span class="filter-label">무기</span>
+            <div class="segmented" data-target="child">
+                <button type="button" class="seg-btn" data-weapon="epee">에페</button>
+                <button type="button" class="seg-btn" data-weapon="foil">플뢰레</button>
+                <button type="button" class="seg-btn" data-weapon="sabre">사브르</button>
+            </div>
+        </div>
+        <div class="filter-group">
+            <span class="filter-label">리그</span>
+            <div class="segmented segmented-league" data-target="child">
+                <button type="button" class="seg-btn" data-league="elementary">초등부</button>
+                <button type="button" class="seg-btn" data-league="middle">중등부</button>
+                <button type="button" class="seg-btn" data-league="high">고등부</button>
+                <button type="button" class="seg-btn" data-league="university">대학부</button>
+                <button type="button" class="seg-btn" data-league="senior">일반부</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="search-form-row">
+        <input type="text" id="childSearchName" placeholder="자녀 이름" class="fm-input search-input">
+        <input type="text" id="childSearchTeam" placeholder="소속(선택)" class="fm-input search-input">
+        <button type="button" class="fm-btn fm-btn-primary search-btn" onclick="searchChildren()">검색</button>
+    </div>
+    <div id="childSearchResults" class="search-results"></div>
+    <div id="childSelected" class="selected-card" style="display: none;">
+        <span class="selected-label">선택된 자녀:</span>
+        <span id="childSelectedInfo"></span>
+        <button type="button" class="deselect-btn" onclick="deselectChild()">&times;</button>
+    </div>
+    <div class="inline-notice">
+        학부모 인증은 자녀 선수 데이터 교차검증 + AI 추론으로 진행되며, 가입 후 관리자 검토를 거칩니다.
+    </div>
+</section>

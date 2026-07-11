@@ -68,13 +68,36 @@ class OAuthHandler:
 
     def build_auth_url(self, provider: str, promotional: bool = False,
                        extra_scopes: List[str] = None, purpose: str = "login") -> str:
-        """OAuth 인증 URL 생성
+        """OAuth 인증 URL 생성 (하위호환: auth_url 문자열만 반환)
+
+        state가 필요하면 build_auth_url_with_state를 사용할 것.
 
         Args:
             provider: OAuth 프로바이더 이름
             promotional: 홍보용 연동 여부
             extra_scopes: 기본 scope 외 추가 scope (예: 메시징용 talk_message)
             purpose: 인증 목적 ("login" | "messaging")
+        """
+        auth_url, _ = self.build_auth_url_with_state(
+            provider, promotional, extra_scopes, purpose
+        )
+        return auth_url
+
+    def build_auth_url_with_state(self, provider: str, promotional: bool = False,
+                                  extra_scopes: List[str] = None,
+                                  purpose: str = "login") -> tuple[str, str]:
+        """OAuth 인증 URL과 생성된 state를 함께 반환
+
+        auth_url 문자열을 되파싱하지 않고 state를 직접 얻기 위한 메서드.
+
+        Args:
+            provider: OAuth 프로바이더 이름
+            promotional: 홍보용 연동 여부
+            extra_scopes: 기본 scope 외 추가 scope (예: 메시징용 talk_message)
+            purpose: 인증 목적 ("login" | "messaging")
+
+        Returns:
+            (auth_url, state) 튜플
         """
         if provider not in OAUTH_PROVIDERS:
             raise HTTPException(status_code=400, detail=f"지원하지 않는 제공자: {provider}")
@@ -145,7 +168,7 @@ class OAuthHandler:
         # State를 DB에 저장 (서버 재시작에도 유지)
         self._store_state(state, provider, promotional, code_verifier, purpose=purpose)
 
-        return auth_url
+        return auth_url, state
 
     def validate_state(self, state: str, provider: str) -> dict:
         """OAuth state 토큰 검증 및 반환 (DB에서 조회 후 삭제)"""

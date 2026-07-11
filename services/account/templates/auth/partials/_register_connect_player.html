@@ -1,0 +1,45 @@
+<!-- ========== 2. 조건부: 선수 연결 (선수회원) ========== -->
+<section class="form-section conditional" id="playerConnectSection" style="display:none">
+    <h2 class="section-title">본인 선수 데이터 연결</h2>
+    <p class="section-desc">무기와 리그를 고른 뒤 이름으로 검색하면, 소속과 함께 본인을 찾을 수 있습니다.</p>
+
+    <div class="inline-notice notice-info">
+        <strong>중등부 이하 선수</strong>는 본인 명의 가입이 아니라 <strong>보호자(선수 학부모) 계정</strong>으로 등록·인증해야 합니다.
+        검색 결과에서 중등부 이하로 확인되면 선택이 제한되며, 위에서 <strong>선수 학부모</strong> 유형을 선택해 주세요.
+    </div>
+
+    <div class="filter-row">
+        <div class="filter-group">
+            <span class="filter-label">무기</span>
+            <div class="segmented" data-target="player">
+                <button type="button" class="seg-btn" data-weapon="epee">에페</button>
+                <button type="button" class="seg-btn" data-weapon="foil">플뢰레</button>
+                <button type="button" class="seg-btn" data-weapon="sabre">사브르</button>
+            </div>
+        </div>
+        <div class="filter-group">
+            <span class="filter-label">리그</span>
+            <div class="segmented segmented-league" data-target="player">
+                <button type="button" class="seg-btn" data-league="elementary">초등부</button>
+                <button type="button" class="seg-btn" data-league="middle">중등부</button>
+                <button type="button" class="seg-btn" data-league="high">고등부</button>
+                <button type="button" class="seg-btn" data-league="university">대학부</button>
+                <button type="button" class="seg-btn" data-league="senior">일반부</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="search-form-row">
+        <input type="text" id="playerSearchName" placeholder="선수 이름" class="fm-input search-input">
+        <button type="button" class="fm-btn fm-btn-primary search-btn" onclick="searchPlayers()">검색</button>
+    </div>
+    <div id="playerSearchResults" class="search-results"></div>
+    <div id="playerSelected" class="selected-card" style="display: none;">
+        <span class="selected-label">선택된 선수:</span>
+        <span id="playerSelectedInfo"></span>
+        <button type="button" class="deselect-btn" onclick="deselectPlayer()">&times;</button>
+    </div>
+    <div class="inline-notice">
+        선택은 <strong>연결 요청</strong>일 뿐이며, 대회 기록 등 선수 정보를 수정하려면 가입 후 <strong>본인 인증(도복/마스크/협회 등록증 사진)</strong>이 필요합니다.
+    </div>
+</section>

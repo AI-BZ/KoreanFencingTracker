@@ -13,7 +13,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 
-from .auth.router import router as auth_router
+from slowapi.errors import RateLimitExceeded
+
+from .auth.router import router as auth_router, limiter
 from .profile.router import router as profile_router
 from .verification.router import router as verification_router
 from .subscriptions.router import router as subscriptions_router
@@ -23,7 +25,7 @@ from .admin.router import router as admin_router
 from .admin.notifications import router as notifications_router
 from .messenger.router import router as messenger_router
 from .legal.router import router as legal_router
-from .i18n.middleware import LanguageMiddleware
+from shared_core.i18n import LanguageMiddleware, create_shared_i18n
 
 SERVICE_DIR = Path(__file__).parent.parent
 TEMPLATES_DIR = SERVICE_DIR / "templates"
@@ -35,8 +37,26 @@ app = FastAPI(
     version="0.1.0",
 )
 
+# Rate limiter (공개 검색 엔드포인트 남용/스크레이핑 차단)
+# limiter는 auth.router에 정의됨(엔드포인트 데코레이터와 동일 인스턴스 공유).
+app.state.limiter = limiter
+
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    """rate limit 초과 시 429 JSON 반환."""
+    return JSONResponse(
+        status_code=429,
+        content={"detail": "요청이 너무 많습니다. 잠시 후 다시 시도해주세요."},
+    )
+
+
 # Language detection middleware (must be before CORS)
-app.add_middleware(LanguageMiddleware)
+# Shared i18n infra + account-specific translations merged via extra_dirs (deep merge).
+account_i18n = create_shared_i18n(
+    extra_dirs=[Path(__file__).parent / "i18n" / "translations"]
+)
+app.add_middleware(LanguageMiddleware, i18n=account_i18n)
 
 # CORS 미들웨어 (서브도메인 간 API 호출 허용)
 app.add_middleware(

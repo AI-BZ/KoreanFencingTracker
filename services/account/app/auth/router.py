@@ -17,6 +17,8 @@ from fastapi import APIRouter, HTTPException, Request, Form
 from fastapi.responses import RedirectResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 from loguru import logger
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from shared_core.auth.jwt import (
     create_access_token,
@@ -39,6 +41,26 @@ from app.verification.claims import calculate_claim_confidence, _link_player_to_
 from app.verification.notification_service import VerificationNotificationService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+def _client_ip_key(request: Request) -> str:
+    """공개 검색 rate limit용 클라이언트 IP 취득.
+
+    Cloudflare Tunnel 뒤에서는 remote address가 터널 내부 IP이므로,
+    실제 클라이언트 IP를 CF-Connecting-IP → X-Forwarded-For 첫 IP →
+    remote address 순으로 취득한다.
+    """
+    cf = request.headers.get("CF-Connecting-IP")
+    if cf and cf.strip():
+        return cf.strip()
+    xff = request.headers.get("X-Forwarded-For")
+    if xff and xff.strip():
+        return xff.split(",")[0].strip()
+    return get_remote_address(request)
+
+
+# 공개 검색 엔드포인트 rate limiter (server.py에서 app.state.limiter로 등록됨)
+limiter = Limiter(key_func=_client_ip_key)
 
 # 템플릿
 _templates = Jinja2Templates(directory=str(Path(__file__).parent.parent.parent / "templates"))
@@ -87,13 +109,30 @@ _AGE_GROUP_TO_LEAGUE = {
 
 
 def _is_safe_redirect(url: str) -> bool:
-    """오픈 리다이렉트 방지 - 허용된 도메인만 리다이렉트"""
+    """오픈 리다이렉트 방지 - 허용된 도메인만 리다이렉트.
+
+    - 내부 상대 경로("/dashboard")는 허용
+    - 절대 URL은 hostname이 허용 도메인과 정확히 일치하거나 그 하위 도메인일 때만 허용.
+      접미사 우회 차단: "evilfencingmind.ai"는 "fencingmind.ai"로 끝나지만 하위 도메인이
+      아니므로 거부.
+    - 스킴 상대("//evil.com")·백슬래시 우회("/\\evil.com")는 거부.
+    """
     if not url:
         return False
-    parsed = urlparse(url)
-    if not parsed.hostname:
-        return True  # 상대 경로는 허용
-    return any(parsed.hostname.endswith(d) for d in ALLOWED_REDIRECT_DOMAINS)
+    # 브라우저가 백슬래시를 슬래시로 해석하는 우회를 차단하기 위해 정규화 후 파싱.
+    normalized = url.replace("\\", "/")
+    parsed = urlparse(normalized)
+    if parsed.hostname:
+        hostname = parsed.hostname.lower()
+        return any(
+            hostname == d or hostname.endswith("." + d)
+            for d in ALLOWED_REDIRECT_DOMAINS
+        )
+    # hostname이 없는데 netloc이 있으면 비정상 절대 URL → 거부.
+    if parsed.netloc:
+        return False
+    # 진짜 내부 상대 경로만 허용 ("/..."). "javascript:", "dashboard" 등은 거부.
+    return normalized.startswith("/")
 
 
 def get_supabase():
@@ -204,12 +243,92 @@ def _annotate_and_filter_by_weapon_league(
     return filtered
 
 
+# 성인 리그(고/대/일반) — 이 중 하나라도 기록이 있으면 성인으로 간주.
+# register.html의 ADULT_LEAGUES / isMinorLeaguePlayer 게이팅과 동일 기준.
+_ADULT_LEAGUES = {"high", "university", "senior"}
+
+
+def _is_minor_player(leagues: Optional[list], birth_year) -> bool:
+    """공개 검색 결과에서 미성년 여부 판정(이름 마스킹용).
+
+    - 리그 정보가 있으면 프론트 `isMinorLeaguePlayer`와 동일하게 판정:
+      성인 리그(고/대/일반) 기록이 하나도 없으면 미성년.
+    - 리그 정보가 없으면(랭킹 데이터 부재) 출생연도로 fallback:
+      만 19세 미만이면 미성년으로 간주(과다노출 방지 위해 보수적으로 마스킹).
+    """
+    leagues = leagues or []
+    if leagues:
+        return not any(l in _ADULT_LEAGUES for l in leagues)
+    if birth_year:
+        try:
+            from datetime import date
+            return (date.today().year - int(birth_year)) < 19
+        except (TypeError, ValueError):
+            return False
+    return False
+
+
+def _mask_name_partial(name: str) -> str:
+    """미성년 선수 이름 부분 마스킹.
+
+    홍길동 → 홍*동, 홍길 → 홍*, 김하늘새 → 김**새.
+    (shared_core.mask_korean_name은 이니셜 'H.G.D.'로 과마스킹되어 자녀 식별이
+    어려우므로, 부모/본인이 후보를 식별할 수 있도록 부분 마스킹을 사용.)
+    """
+    n = (name or "").strip()
+    if len(n) <= 1:
+        return n
+    if len(n) == 2:
+        return n[0] + "*"
+    return n[0] + "*" * (len(n) - 2) + n[-1]
+
+
+def _birth_decade(birth_year) -> Optional[str]:
+    """정밀 출생연도 → 생년 구간 문자열. 2011 → '2010년대'."""
+    try:
+        y = int(birth_year)
+    except (TypeError, ValueError):
+        return None
+    if y < 1900 or y > 2100:
+        return None
+    return f"{(y // 10) * 10}년대"
+
+
+def _sanitize_public_player_results(candidates: list) -> list:
+    """공개 선수 검색 응답 최소화(EVAL P1-2/P1-3).
+
+    - 정밀 birth_year(정수) 제거 → birth_decade 구간 문자열로 대체.
+    - 미성년 후보 이름 부분 마스킹(성인은 실명 유지).
+    - id·소속·무기·리그는 유지하여 가입 식별 UX 보존.
+    """
+    sanitized = []
+    for c in candidates:
+        leagues = c.get("leagues") or []
+        weapons = c.get("weapons") or []
+        birth_year = c.get("birth_year")
+        name = c.get("player_name") or c.get("name") or ""
+        minor = _is_minor_player(leagues, birth_year)
+        sanitized.append({
+            "id": c.get("id"),
+            "player_name": _mask_name_partial(name) if minor else name,
+            "team_name": c.get("team_name"),
+            "weapons": weapons,
+            "leagues": leagues,
+            "birth_decade": _birth_decade(birth_year),
+            "is_minor": minor,
+        })
+    return sanitized
+
+
 # =============================================
 # 공개 검색 API (회원가입 폼에서 인증 없이 사용)
 # =============================================
 
 @router.get("/public/player-search")
+@limiter.limit("20/minute")
+@limiter.limit("200/hour")
 async def public_player_search(
+    request: Request,
     name: str,
     birth_year: Optional[int] = None,
     team: Optional[str] = None,
@@ -248,15 +367,20 @@ async def public_player_search(
         logger.error(f"Public player search error: {e}")
         raise HTTPException(status_code=500, detail="검색 중 오류가 발생했습니다")
 
-    results = _annotate_and_filter_by_weapon_league(
-        result.data or [], weapon=weapon, league=league
-    )[:15]
+    results = _sanitize_public_player_results(
+        _annotate_and_filter_by_weapon_league(
+            result.data or [], weapon=weapon, league=league
+        )[:15]
+    )
 
     return {"results": results, "total": len(results)}
 
 
 @router.get("/public/child-search")
+@limiter.limit("20/minute")
+@limiter.limit("200/hour")
 async def public_child_search(
+    request: Request,
     name: str,
     birth_year: Optional[int] = None,
     team: Optional[str] = None,
@@ -292,15 +416,20 @@ async def public_child_search(
         logger.error(f"Public child search error: {e}")
         raise HTTPException(status_code=500, detail="검색 중 오류가 발생했습니다")
 
-    results = _annotate_and_filter_by_weapon_league(
-        result.data or [], weapon=weapon, league=league
-    )[:15]
+    results = _sanitize_public_player_results(
+        _annotate_and_filter_by_weapon_league(
+            result.data or [], weapon=weapon, league=league
+        )[:15]
+    )
 
     return {"results": results, "total": len(results)}
 
 
 @router.get("/public/org-search")
+@limiter.limit("20/minute")
+@limiter.limit("200/hour")
 async def public_org_search(
+    request: Request,
     name: str,
 ):
     """
@@ -492,18 +621,17 @@ async def login_page(request: Request, redirect: Optional[str] = None):
 @router.get("/login/{provider}")
 async def oauth_login(provider: str, request: Request, promotional: bool = False, redirect: Optional[str] = None):
     """OAuth 로그인 시작 (OAuthHandler 사용)"""
-    auth_url = _oauth_handler.build_auth_url(provider, promotional)
+    auth_url, state = _oauth_handler.build_auth_url_with_state(provider, promotional)
     # redirect URL을 DB의 oauth_states에 저장
     if redirect and _is_safe_redirect(redirect):
-        state = auth_url.split("state=")[1].split("&")[0] if "state=" in auth_url else None
-        if state:
-            supabase = get_supabase()
-            try:
-                supabase.table("oauth_states").update(
-                    {"redirect_url": redirect}
-                ).eq("state", state).execute()
-            except Exception:
-                pass  # redirect 저장 실패는 치명적이지 않음
+        supabase = get_supabase()
+        try:
+            supabase.table("oauth_states").update(
+                {"redirect_url": redirect}
+            ).eq("state", state).execute()
+        except Exception as e:
+            # redirect 저장 실패는 치명적이지 않음 (로그인 플로우는 계속 진행)
+            logger.warning(f"oauth_states redirect_url 저장 실패: state={state}, error={e}")
     return RedirectResponse(url=auth_url)
 
 
@@ -745,7 +873,7 @@ async def register_member(
     if existing_nick.data:
         raise HTTPException(status_code=400, detail="이미 사용 중인 닉네임입니다")
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     is_email_provider = pending["provider"] == "email"
 
     # 이메일 가입: 이미 인증코드로 검증 완료 → email_verified = True
@@ -895,12 +1023,16 @@ async def _create_registration_claims(
                 player = player_result.data
                 confidence = calculate_claim_confidence(member, player)
 
-                auto_approve = confidence >= settings.CLAIM_AUTO_APPROVE_THRESHOLD
-                auto_reject = confidence < settings.CLAIM_MANUAL_REVIEW_THRESHOLD
-                if auto_approve:
-                    status = "approved"
-                elif auto_reject:
-                    status = "rejected"
+                # 점수 기반 자동승인 비활성화(EVAL P1-3). 플래그가 False인 한
+                # confidence가 아무리 높아도 approved가 되지 않고 항상 pending으로
+                # 관리자 검토 큐에 넣는다. confidence는 검토 참고용으로만 계산.
+                if settings.CLAIM_AUTO_APPROVE_ENABLED:
+                    if confidence >= settings.CLAIM_AUTO_APPROVE_THRESHOLD:
+                        status = "approved"
+                    elif confidence < settings.CLAIM_MANUAL_REVIEW_THRESHOLD:
+                        status = "rejected"
+                    else:
+                        status = "pending"
                 else:
                     status = "pending"
 
@@ -919,7 +1051,7 @@ async def _create_registration_claims(
                     "status": status,
                 }
                 if status == "approved":
-                    claim_data["reviewed_at"] = datetime.utcnow().isoformat()
+                    claim_data["reviewed_at"] = datetime.now(timezone.utc).isoformat()
 
                 claim_result = supabase.table("player_claims").insert(claim_data).execute()
 
@@ -1116,13 +1248,16 @@ async def verify_email(request: Request, token: str):
     # Check expiration
     if member.get("email_verification_expires_at"):
         expires_at = datetime.fromisoformat(member["email_verification_expires_at"].replace("Z", "+00:00"))
-        if datetime.now(expires_at.tzinfo) > expires_at:
+        # 레거시 naive 값(과거 datetime.utcnow() 저장분)은 UTC로 간주하여 aware 비교로 통일
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) > expires_at:
             raise HTTPException(status_code=400, detail="인증 링크가 만료되었습니다. 재발송해주세요.")
 
     # Mark email as verified
     supabase.table("members").update({
         "email_verified": True,
-        "email_verified_at": datetime.utcnow().isoformat(),
+        "email_verified_at": datetime.now(timezone.utc).isoformat(),
         "email_verification_token": None,
         "email_verification_expires_at": None,
     }).eq("id", member["id"]).execute()
@@ -1159,7 +1294,7 @@ async def resend_verification_email(request: Request):
     # Generate new token
     new_token = secrets.token_urlsafe(64)
     settings = get_account_settings()
-    expires_at = datetime.utcnow() + timedelta(hours=settings.EMAIL_VERIFICATION_EXPIRE_HOURS)
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=settings.EMAIL_VERIFICATION_EXPIRE_HOURS)
 
     supabase = get_supabase()
     supabase.table("members").update({
