@@ -36,6 +36,7 @@ from analyzer.config import (
     CONTINUOUS_MAX_FRAMES,
     FOOTWORK_USE_RATIO_BASED_HIP_DROP,
     SCORING_FRAME_TOLERANCE_SEC,
+    CAMERA_CUT_MAX_RATIO,
 )
 
 # Pure-function modules (behavior-preserving extractions)
@@ -413,6 +414,21 @@ class PoseAnalyzer:
         clean_indices = self.filter_camera_cuts(seq)
         clean_set = set(clean_indices)
 
+        # Quality gate: if too many frames are camera cuts, exchange detection
+        # is unreliable (TV zooms/pans produce phantom approaches). Surface a
+        # warning rather than silently trusting the count.
+        camera_cut_ratio = 1.0 - (len(clean_indices) / len(seq)) if seq else 0.0
+        quality_warnings: List[dict] = []
+        if camera_cut_ratio > CAMERA_CUT_MAX_RATIO:
+            quality_warnings.append({
+                "type": "low_quality_high_camera_cuts",
+                "message": (
+                    f"카메라 컷 비율이 높습니다 ({camera_cut_ratio:.0%}). "
+                    "화면 전환이 많아 교환(exchange) 감지 정확도가 낮을 수 있습니다."
+                ),
+                "severity": "warning",
+            })
+
         # Compute sampled distance series
         sampled: List[Tuple[int, Optional[float]]] = []  # (frame_idx, distance_bh)
         for i in range(0, len(seq), sample_every_n):
@@ -523,6 +539,8 @@ class PoseAnalyzer:
             non_scoring_exchanges=non_scoring_count,
             my_fencer_summary=my_summary,
             frame_actions=frame_actions,
+            camera_cut_ratio=camera_cut_ratio,
+            quality_warnings=quality_warnings,
         )
 
     def _detect_exchanges(

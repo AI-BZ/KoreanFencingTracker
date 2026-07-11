@@ -1146,6 +1146,156 @@ class TestExchangeMerge:
 
 
 # ==================================================================
+# Exchange over-segmentation guards (smoothing + turn hysteresis)
+# ==================================================================
+
+
+class TestExchangeOverSegmentation:
+    """Smoothing + turn hysteresis must suppress jitter-driven over-splitting
+    without merging genuinely separate exchanges (under-segmentation)."""
+
+    def setup_method(self):
+        self.analyzer = PoseAnalyzer()
+
+    @staticmethod
+    def _v_cycle(start_frame, jitter=0.0):
+        """One approach→separate V-cycle (2.0→0.4→2.0) over 40 samples.
+
+        ``jitter`` adds a deterministic alternating wobble of that amplitude to
+        each sample — the kind of pose noise that fragments a single approach
+        into spurious sub-exchanges when the series is not smoothed.
+        """
+        pts = []
+        f = start_frame
+        for i in range(20):  # approach 2.0 → 0.4
+            d = 2.0 - i * (1.6 / 19)
+            pts.append((f, d + (jitter if i % 2 == 0 else -jitter)))
+            f += 1
+        for i in range(20):  # separate 0.4 → 2.0
+            d = 0.4 + i * (1.6 / 19)
+            pts.append((f, d + (jitter if i % 2 == 0 else -jitter)))
+            f += 1
+        return pts, f
+
+    def test_noisy_curve_not_oversplit(self):
+        """3 real approaches with jitter → ~3 detected, not a fragmented pile."""
+        sampled = []
+        frame = 0
+        for _ in range(3):
+            cycle, frame = self._v_cycle(frame, jitter=0.03)
+            sampled.extend(cycle)
+
+        detected = self.analyzer._detect_exchanges(sampled)
+        # 3 genuine approaches: allow a small edge-effect margin but reject
+        # the jitter-driven explosion (would be many more without smoothing).
+        assert 3 <= len(detected) <= 4, (
+            f"Expected ~3 exchanges from 3 noisy approaches, got {len(detected)}"
+        )
+
+    def test_smoothing_collapses_ripple_oversplit(self):
+        """A single genuine approach carrying a medium-frequency ripple (camera
+        drift / breathing) fragments into many phantom exchanges without
+        smoothing; smoothing collapses it back toward the one real exchange.
+
+        This mirrors the production symptom (one bout, hundreds of exchanges).
+        """
+        import math
+        from ml.pose_analysis.exchanges import detect_exchanges
+        from analyzer.config import EXCHANGE_MIN_DISTANCE_CHANGE_BH
+
+        # Ripple amplitude sized off the validity threshold so each phantom dip
+        # clears it when unsmoothed (robust to future threshold tuning).
+        amp = 1.5 * EXCHANGE_MIN_DISTANCE_CHANGE_BH
+        n = 80
+        sampled = []
+        for i in range(n):
+            base = (2.0 - i * (1.6 / (n // 2 - 1))) if i < n // 2 \
+                else (0.4 + (i - n // 2) * (1.6 / (n // 2 - 1)))
+            ripple = amp * math.sin(2 * math.pi * i / 6)
+            sampled.append((i, max(0.1, base + ripple)))
+
+        unsmoothed = detect_exchanges(sampled, smoothing_window=1)
+        smoothed = detect_exchanges(sampled)
+        assert len(unsmoothed) >= 5, (
+            f"Ripple should fragment badly without smoothing, got {len(unsmoothed)}"
+        )
+        assert len(smoothed) <= 2, (
+            f"Smoothing should collapse the ripple to ~1 exchange, got {len(smoothed)}"
+        )
+
+    def test_separated_exchanges_not_merged(self):
+        """Two clearly separated real exchanges → detected as 2 (no under-split)."""
+        sampled = []
+        frame = 0
+        cycle1, frame = self._v_cycle(frame, jitter=0.02)
+        sampled.extend(cycle1)
+        # Long flat gap fully out of distance between the two exchanges.
+        for _ in range(15):
+            sampled.append((frame, 2.0))
+            frame += 1
+        cycle2, frame = self._v_cycle(frame, jitter=0.02)
+        sampled.extend(cycle2)
+
+        detected = self.analyzer._detect_exchanges(sampled)
+        assert len(detected) == 2, (
+            f"Two separated exchanges must not merge, got {len(detected)}"
+        )
+
+    def test_none_gaps_are_safe(self):
+        """None gaps in the distance series must not crash smoothing/detection,
+        and a genuine approach spanning the gaps is still detected."""
+        sampled = []
+        frame = 0
+        for i in range(20):  # approach 2.0 → 0.4
+            d = 2.0 - i * (1.6 / 19)
+            # Punch holes: every 4th sample is missing (pose dropout).
+            sampled.append((frame, None if i % 4 == 3 else d))
+            frame += 1
+        for i in range(20):  # separate back out
+            d = 0.4 + i * (1.6 / 19)
+            sampled.append((frame, None if i % 4 == 3 else d))
+            frame += 1
+
+        detected = self.analyzer._detect_exchanges(sampled)  # must not raise
+        assert len(detected) >= 1, "Approach spanning None gaps should still detect"
+
+    def test_all_none_series_is_safe(self):
+        """A fully-missing series yields no exchanges and does not crash."""
+        sampled = [(i, None) for i in range(30)]
+        assert self.analyzer._detect_exchanges(sampled) == []
+
+
+class TestCameraCutQualityGate:
+    """analyze_continuous surfaces a warning when too much footage is camera cuts."""
+
+    def setup_method(self):
+        self.analyzer = PoseAnalyzer()
+
+    def test_high_camera_cut_ratio_warns(self):
+        """A jumpy sequence (hips teleport most frames) → ratio > threshold + warning."""
+        seq = []
+        for i in range(20):
+            # Left fencer hip teleports >100px every frame → each frame a cut.
+            lx = 200.0 if i % 2 == 0 else 450.0
+            left = make_fencer("left", shoulder_cx=lx, hip_cx=lx, ankle_cx=lx)
+            right = make_fencer("right", shoulder_cx=800, hip_cx=800, ankle_cx=800)
+            seq.append(make_pose_result(i, left, right))
+
+        result = self.analyzer.analyze_continuous(seq, sample_every_n=1)
+        assert result.camera_cut_ratio > 0.3
+        types = [w["type"] for w in result.quality_warnings]
+        assert "low_quality_high_camera_cuts" in types
+
+    def test_stable_sequence_no_camera_cut_warning(self):
+        """A steady approach-separate sequence → low cut ratio, no warning."""
+        seq = make_static_sequence(30, left_x=200.0, right_x=600.0)
+        result = self.analyzer.analyze_continuous(seq, sample_every_n=1)
+        assert result.camera_cut_ratio <= 0.3
+        types = [w["type"] for w in result.quality_warnings]
+        assert "low_quality_high_camera_cuts" not in types
+
+
+# ==================================================================
 # Joint kinematics tests (4)
 # ==================================================================
 
