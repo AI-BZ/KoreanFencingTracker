@@ -1598,12 +1598,12 @@ async def api_competitions(
                 continue
 
         filtered.append(CompetitionSummary(
-            event_cd=comp_info.get("event_cd", ""),
-            name=comp_info.get("name", ""),
+            event_cd=comp_info.get("event_cd", "") or "",
+            name=comp_info.get("name", "") or "",
             start_date=comp_info.get("start_date"),
             end_date=comp_info.get("end_date"),
-            status=comp_info.get("status", ""),
-            location=comp_info.get("location", ""),
+            status=comp_info.get("status", "") or "",
+            location=comp_info.get("location", "") or "",  # None 방지 (pydantic str 필드)
             event_count=len(comp.get("events", [])),
             year=comp_year
         ))
