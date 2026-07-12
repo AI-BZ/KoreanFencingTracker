@@ -23,6 +23,7 @@ from .admin.router import router as admin_router
 from .admin.notifications import router as notifications_router
 from .messenger.router import router as messenger_router
 from .legal.router import router as legal_router
+from .broadcasts.router import router as broadcasts_router, public_router as broadcasts_public_router
 from .i18n.middleware import LanguageMiddleware
 
 SERVICE_DIR = Path(__file__).parent.parent
@@ -82,6 +83,8 @@ app.include_router(admin_router)        # /account/admin/*
 app.include_router(notifications_router)  # /account/notifications/*
 app.include_router(messenger_router)    # /account/messenger/*
 app.include_router(legal_router)        # /legal/terms, /legal/privacy, /terms, /privacy
+app.include_router(broadcasts_router)   # /admin/broadcasts/* (admin 전용)
+app.include_router(broadcasts_public_router)  # /auth/unsubscribe (공개)
 
 
 @app.exception_handler(HTTPException)

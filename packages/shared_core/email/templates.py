@@ -31,6 +31,11 @@ EMAIL_TEXTS = {
         "admin_greeting": "안녕하세요, <strong>{name}</strong>님.",
         "svc_goto": "바로가기",
         "svc_coming_soon": "서비스는 현재 준비 중입니다.<br>오픈 시 알려드리겠습니다!",
+        "broadcast_greeting": "안녕하세요, <strong>{name}</strong>님.",
+        "broadcast_footer_reason": "이 메일은 FencingMind 마케팅 정보 수신에 동의하신 회원님께 발송되었습니다.",
+        "broadcast_unsubscribe_prefix": "더 이상 수신을 원하지 않으시면 ",
+        "broadcast_unsubscribe_link": "수신거부",
+        "broadcast_unsubscribe_suffix": "를 눌러주세요.",
     },
     "en": {
         "verification_title": "Email Verification",
@@ -59,6 +64,11 @@ EMAIL_TEXTS = {
         "admin_greeting": "Hello, <strong>{name}</strong>.",
         "svc_goto": "Go",
         "svc_coming_soon": "services are currently in preparation.<br>We'll notify you when they launch!",
+        "broadcast_greeting": "Hello, <strong>{name}</strong>.",
+        "broadcast_footer_reason": "You are receiving this email because you opted in to FencingMind marketing communications.",
+        "broadcast_unsubscribe_prefix": "If you no longer wish to receive these emails, please ",
+        "broadcast_unsubscribe_link": "unsubscribe",
+        "broadcast_unsubscribe_suffix": ".",
     },
 }
 
@@ -340,6 +350,54 @@ def get_admin_email_html(recipient_name: str, subject: str, body: str, lang: str
     <p style="color:#aaa;font-size:12px;">
         {t["admin_footer"]}<br>
         <a href="mailto:support@fencingmind.ai" style="color:#3182ce;">support@fencingmind.ai</a>
+    </p>
+</td></tr>
+</table>
+</body>
+</html>"""
+
+
+def get_broadcast_email_html(
+    name: str,
+    subject: str,
+    body_html: str,
+    unsubscribe_url: str,
+    lang: str = "ko",
+) -> str:
+    """관리자 배치 발송(공지/뉴스레터) 이메일 HTML
+
+    기존 관리자 이메일 스타일과 일관되게 렌더링하고, 하단에 마케팅 수신동의
+    안내와 필수 수신거부(unsubscribe) 링크를 포함한다.
+
+    Args:
+        name: 수신자 이름
+        subject: 제목 (HTML 헤딩에 표시)
+        body_html: 본문 HTML (관리자가 작성, 그대로 삽입)
+        unsubscribe_url: 수신거부 링크 URL
+        lang: 언어 코드 ("ko" 또는 "en")
+    """
+    t = EMAIL_TEXTS.get(lang, EMAIL_TEXTS["ko"])
+    return f"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#f5f7fa;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:40px auto;">
+<tr><td style="background:#fff;border-radius:12px;padding:40px;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
+    <div style="text-align:center;margin-bottom:32px;">
+        <h1 style="color:#3182ce;font-size:24px;margin:0;">FencingMind</h1>
+    </div>
+    <h2 style="font-size:20px;color:#333;margin-bottom:16px;">{subject}</h2>
+    <p style="color:#555;font-size:16px;line-height:1.6;">
+        {t["broadcast_greeting"].format(name=name)}
+    </p>
+    <div style="color:#555;font-size:16px;line-height:1.8;margin:16px 0;">
+        {body_html}
+    </div>
+    <hr style="border:none;border-top:1px solid #eee;margin:24px 0;">
+    <p style="color:#aaa;font-size:12px;line-height:1.6;">
+        {t["broadcast_footer_reason"]}<br>
+        {t["broadcast_unsubscribe_prefix"]}<a href="{unsubscribe_url}" style="color:#3182ce;">{t["broadcast_unsubscribe_link"]}</a>{t["broadcast_unsubscribe_suffix"]}<br>
+        {t["welcome_tagline"]}
     </p>
 </td></tr>
 </table>

@@ -13,6 +13,7 @@ from shared_core.email.templates import (
     get_verification_code_email_html,
     get_welcome_email_html,
     get_admin_email_html,
+    get_broadcast_email_html,
 )
 
 
@@ -140,4 +141,24 @@ class EmailService:
             lang: 언어 코드 ("ko" 또는 "en")
         """
         html = get_admin_email_html(recipient_name, subject, body, lang=lang)
+        return await self._send(to, f"[FencingMind] {subject}", html)
+
+    async def send_broadcast_email(
+        self, to: str, name: str, subject: str, body_html: str,
+        unsubscribe_url: str, lang: str = "ko",
+    ) -> bool:
+        """관리자 배치 발송(공지/뉴스레터) 메일 발송
+
+        마케팅 수신동의 회원에게 발송하는 공지/뉴스레터. 하단에 필수 수신거부
+        링크를 포함한 템플릿을 렌더링한 뒤 기존 _send 로 전송한다.
+
+        Args:
+            to: 수신자 이메일
+            name: 수신자 이름
+            subject: 제목
+            body_html: 본문 HTML
+            unsubscribe_url: 수신거부 링크 URL
+            lang: 언어 코드 ("ko" 또는 "en")
+        """
+        html = get_broadcast_email_html(name, subject, body_html, unsubscribe_url, lang=lang)
         return await self._send(to, f"[FencingMind] {subject}", html)
