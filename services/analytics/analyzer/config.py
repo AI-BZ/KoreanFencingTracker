@@ -282,6 +282,25 @@ EXCHANGE_DISTANCE_DECREASE_THRESHOLD = 0.05
 # real scoring exchange (validated on div1_epee div1 final: 334→143 exchanges,
 # scoring-exchange count unchanged).
 EXCHANGE_MIN_DISTANCE_CHANGE_BH = 0.3
+# Absolute proximity gate (BH): an exchange is only emitted if the fencers
+# actually closed to within this distance at their nearest point. The relative
+# closing test above (EXCHANGE_MIN_DISTANCE_CHANGE_BH) accepts an approach even
+# when the fencers never come within striking range — e.g. drifting from 4.5 to
+# 4.0 BH — producing "phantom" out-of-distance exchanges that inflate the count.
+#
+# This is a deliberately conservative *global* value. It must not drop any real
+# touch, so it is set above the coverage floor of both validation weapons — the
+# largest nearest-distance among exchanges that still cover a real scored touch:
+# epee floor 2.28 BH, foil floor 1.38 BH. Epee scores at longer range and sets
+# the floor. Pose estimation is non-deterministic on these clips (the epee floor
+# ranged 1.74–2.28 BH across runs), so 2.5 keeps a margin above the worst
+# observed floor and holds 22/22 touch coverage on both bouts. A nearest
+# approach beyond 2.5 BH is out of striking range in any weapon → phantom.
+#
+# Note this does NOT fully resolve epee over-segmentation: most epee exchanges
+# are genuine long-range engagements, not phantoms, so a coverage-safe gate
+# cannot cut them. It removes the clearly out-of-distance tail only.
+EXCHANGE_MAX_MIN_DISTANCE_BH = 2.5
 EXCHANGE_MERGE_SEPARATION_FRAMES = 10    # if re-approach within N frames of separation → merge into same exchange
 CONTINUOUS_SAMPLE_EVERY_N = 5            # analyze every N frames
 CONTINUOUS_MAX_FRAMES = 10800            # max frames to analyze (6min @30fps)

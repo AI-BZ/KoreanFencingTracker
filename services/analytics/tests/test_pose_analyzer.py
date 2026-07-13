@@ -2144,3 +2144,88 @@ class TestNeutralExchangeBucket:
         # my_fencer (left) never advanced → no attack attempts recorded.
         assert result.my_fencer_summary is not None
         assert result.my_fencer_summary.attacks_attempted == 0
+
+
+# ==================================================================
+# Absolute proximity gate: reject out-of-distance phantom exchanges
+# ==================================================================
+
+
+class TestExchangeProximityGate:
+    """detect_exchanges must reject approaches that never reach striking range
+    (phantom out-of-distance exchanges) while keeping every in-distance
+    exchange — including deep scoring exchanges.
+
+    All tests drive detect_exchanges with controlled BH distance series.
+    """
+
+    @staticmethod
+    def _v_cycle(start_frame, hi, lo):
+        """One approach→separate V-cycle from ``hi`` down to ``lo`` and back,
+        over 40 samples. The relative closing (hi-lo) drives the existing
+        validity test; the floor ``lo`` is what the proximity gate inspects.
+        """
+        pts = []
+        f = start_frame
+        for i in range(20):  # approach hi → lo
+            pts.append((f, hi - i * ((hi - lo) / 19)))
+            f += 1
+        for i in range(20):  # separate lo → hi
+            pts.append((f, lo + i * ((hi - lo) / 19)))
+            f += 1
+        return pts, f
+
+    def test_out_of_distance_phantom_rejected(self):
+        """An approach that closes enough relatively (0.5 BH) but never comes
+        within striking range (min_dist 4.0 BH) is a phantom → rejected."""
+        from ml.pose_analysis.exchanges import detect_exchanges
+        sampled, _ = self._v_cycle(0, hi=4.5, lo=4.0)
+        assert detect_exchanges(sampled) == []
+
+    def test_in_distance_exchange_retained(self):
+        """A genuine approach reaching striking range (min_dist 0.4 BH) is
+        kept."""
+        from ml.pose_analysis.exchanges import detect_exchanges
+        sampled, _ = self._v_cycle(0, hi=2.0, lo=0.4)
+        assert len(detect_exchanges(sampled)) == 1
+
+    def test_deep_scoring_exchange_always_kept(self):
+        """A deep infighting exchange (min_dist 0.15 BH) is never gated out."""
+        from ml.pose_analysis.exchanges import detect_exchanges
+        sampled, _ = self._v_cycle(0, hi=2.0, lo=0.15)
+        detected = detect_exchanges(sampled)
+        assert len(detected) == 1
+        # min_distance_bh is the recorded floor of the exchange.
+        assert detected[0][3] < 0.5
+
+    def test_gate_threshold_boundary(self):
+        """The gate compares the exchange's nearest distance against
+        max_min_distance_bh: an exchange whose floor sits just above the gate
+        is rejected, one just below is kept."""
+        from ml.pose_analysis.exchanges import detect_exchanges
+        sampled, _ = self._v_cycle(0, hi=2.5, lo=1.0)
+        # Floor 1.0 BH: gate 0.8 rejects, gate 1.2 keeps.
+        assert detect_exchanges(sampled, max_min_distance_bh=0.8) == []
+        assert len(detect_exchanges(sampled, max_min_distance_bh=1.2)) == 1
+
+    def test_phantom_rejection_does_not_drop_adjacent_real_exchange(self):
+        """Gating a phantom must only drop that phantom — an adjacent genuine
+        exchange is unaffected (no accidental merge or loss)."""
+        from ml.pose_analysis.exchanges import detect_exchanges
+        # Real deep exchange, a flat out-of-distance gap, then a far phantom.
+        sampled = []
+        frame = 0
+        real, frame = self._v_cycle(frame, hi=2.0, lo=0.3)
+        sampled.extend(real)
+        for _ in range(15):
+            sampled.append((frame, 4.5))
+            frame += 1
+        phantom, frame = self._v_cycle(frame, hi=4.5, lo=4.0)
+        sampled.extend(phantom)
+
+        detected = detect_exchanges(sampled)
+        assert len(detected) == 1, (
+            f"Only the in-distance exchange should survive, got {len(detected)}"
+        )
+        # The surviving exchange is the real (deep) one, not the phantom.
+        assert detected[0][3] < 0.5

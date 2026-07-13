@@ -10,6 +10,7 @@ from analyzer.config import (
     DISTANCE_SMOOTHING_WINDOW,
     EXCHANGE_MIN_APPROACH_FRAMES,
     EXCHANGE_MIN_DISTANCE_CHANGE_BH,
+    EXCHANGE_MAX_MIN_DISTANCE_BH,
     EXCHANGE_MERGE_SEPARATION_FRAMES,
     EXCHANGE_DISTANCE_DECREASE_THRESHOLD,
     EXCHANGE_ATTACK_FOOTWORK_TYPES,
@@ -24,12 +25,13 @@ def detect_exchanges(
     sampled: List[Tuple[int, Optional[float]]],
     smoothing_window: int = DISTANCE_SMOOTHING_WINDOW,
     turn_hysteresis_bh: float = EXCHANGE_DISTANCE_DECREASE_THRESHOLD,
+    max_min_distance_bh: float = EXCHANGE_MAX_MIN_DISTANCE_BH,
 ) -> List[Tuple[int, int, int, float]]:
     """
     State machine to detect exchanges from a sampled distance series.
 
     The raw distance series carries pose jitter and small camera motion that
-    fragment a single approach into many spurious exchanges. Two guards
+    fragment a single approach into many spurious exchanges. Three guards
     suppress this without merging genuinely separate exchanges:
 
     1. The series is smoothed (moving average) before the state machine runs,
@@ -37,6 +39,13 @@ def detect_exchanges(
     2. A hysteresis band (``turn_hysteresis_bh``) on the approach→separation
        turn: a rise smaller than the band is treated as noise and does not end
        the exchange; only a rise beyond it counts as a real turn-around.
+    3. An absolute proximity gate (``max_min_distance_bh``): an exchange is only
+       emitted if the fencers actually closed to within that distance at their
+       nearest point. The relative closing test accepts an approach that never
+       reaches striking range (e.g. 4.5→4.0 BH), so without this gate the
+       detector reports out-of-distance "phantom" exchanges. Rejecting an emit
+       only drops that exchange — the state transitions are unchanged — so a
+       phantom is never merged into an adjacent real exchange.
 
     Returns list of (start_frame, end_frame, min_distance_frame, min_distance_bh).
     """
@@ -105,8 +114,12 @@ def detect_exchanges(
                             min_dist = dist
                             min_dist_frame = frame_idx
                     else:
-                        # Long separation → end current exchange, start new one
-                        exchanges.append((approach_start, frame_idx, min_dist_frame, min_dist))
+                        # Long separation → end current exchange, start new one.
+                        # The proximity gate only decides whether this exchange
+                        # is recorded; the state reset below runs regardless so a
+                        # rejected phantom never merges into the next approach.
+                        if min_dist <= max_min_distance_bh:
+                            exchanges.append((approach_start, frame_idx, min_dist_frame, min_dist))
                         state = "APPROACH"
                         approach_start = frame_idx
                         approach_count = 1
@@ -116,13 +129,15 @@ def detect_exchanges(
                 # else still separating
                 elif (dist - min_dist) > EXCHANGE_MIN_DISTANCE_CHANGE_BH:
                     # Sufficiently separated — exchange complete
-                    exchanges.append((approach_start, frame_idx, min_dist_frame, min_dist))
+                    if min_dist <= max_min_distance_bh:
+                        exchanges.append((approach_start, frame_idx, min_dist_frame, min_dist))
                     state = "IDLE"
 
     # Handle unfinished exchange
     if state in ("APPROACH", "SEPARATION") and approach_count >= EXCHANGE_MIN_APPROACH_FRAMES:
         last_frame = sampled[-1][0] if sampled else 0
-        if (start_dist - min_dist) >= EXCHANGE_MIN_DISTANCE_CHANGE_BH:
+        if ((start_dist - min_dist) >= EXCHANGE_MIN_DISTANCE_CHANGE_BH
+                and min_dist <= max_min_distance_bh):
             exchanges.append((approach_start, last_frame, min_dist_frame, min_dist))
 
     return exchanges
