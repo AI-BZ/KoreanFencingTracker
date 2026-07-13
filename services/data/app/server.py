@@ -76,6 +76,7 @@ from app.de_transforms import (
     _extract_bout_player_info,
     compute_dual_de_final_rankings,
     transform_de_bracket,
+    _is_de_final_complete,
     _ROUND_PROGRESSION,
     _ROUND_RANK,
 )
@@ -6616,17 +6617,32 @@ async def competition_detail_page(request: Request, event_cd: str, event: Option
                  original_de_bracket["second_de"].get("full_bouts"))
             )
 
+            # 🔴 결승 완료 게이트: 최종순위는 해당 이벤트의 결승 경기가 끝난 뒤에만
+            # 표시한다. 결승 전에는 DE 진행 결과일 뿐이므로, 브래킷 위치/시드로 추정한
+            # 조기 1·2·3등이 확정 순위처럼 노출되어 사용자를 오도하는 것을 막는다.
+            #
+            # 게이트는 진행 중 이벤트(=DB에 저장된 final_rankings가 없는 경우)의
+            # render-time 계산에만 적용한다. DB에 이미 순위가 있으면 종료된 이벤트의
+            # KFA/스크래핑 순위이므로 게이트하지 않는다(일부 종료 이벤트는 full_bouts가
+            # self-bout 플레이스홀더라 결승 감지가 불가하지만 순위는 KFA에서 확정됨).
+            # → existing_rankings(DB 저장분)가 있으면 신뢰, 없으면 결승 완료 시에만 계산.
+            can_finalize = _is_de_final_complete(original_de_bracket) or bool(existing_rankings)
+
             if has_second_de:
-                # Dual DE: Second DE(본선) 경기 결과에서 최종 순위 계산
-                dual_rankings = compute_dual_de_final_rankings(original_de_bracket, pool_total_ranking)
-                if dual_rankings:
-                    selected_event["final_rankings"] = dual_rankings
-                    top_rank = dual_rankings[0] if dual_rankings else {}
-                    logger.info(
-                        f"Dual DE final_rankings computed from Second DE: "
-                        f"{len(dual_rankings)} players "
-                        f"(rank {top_rank.get('rank', '?')}: {top_rank.get('name', 'N/A')})"
-                    )
+                # Dual DE: Second DE(본선) 경기 결과에서 최종 순위 계산 (확정 가능 시에만)
+                if can_finalize:
+                    dual_rankings = compute_dual_de_final_rankings(original_de_bracket, pool_total_ranking)
+                    if dual_rankings:
+                        selected_event["final_rankings"] = dual_rankings
+                        top_rank = dual_rankings[0] if dual_rankings else {}
+                        logger.info(
+                            f"Dual DE final_rankings computed from Second DE: "
+                            f"{len(dual_rankings)} players "
+                            f"(rank {top_rank.get('rank', '?')}: {top_rank.get('name', 'N/A')})"
+                        )
+                else:
+                    # 진행 중 + 결승 미완료 → 조기 순위 숨김 (DE 대진표만 표시)
+                    selected_event["final_rankings"] = []
             else:
                 # 단일 DE: 기존 데이터가 불완전할 때만 재계산
                 # 불완전 기준: 4등 이하만 있거나 (메달 순위만), 1등이 없는 경우
@@ -6641,12 +6657,16 @@ async def competition_detail_page(request: Request, event_cd: str, event: Option
                     needs_recompute = True
 
                 if needs_recompute and (original_de_bracket or pool_total_ranking):
-                    computed_rankings = compute_full_final_rankings(
-                        original_de_bracket,
-                        pool_total_ranking
-                    )
-                    if computed_rankings:
-                        selected_event["final_rankings"] = computed_rankings
+                    if can_finalize:
+                        computed_rankings = compute_full_final_rankings(
+                            original_de_bracket,
+                            pool_total_ranking
+                        )
+                        if computed_rankings:
+                            selected_event["final_rankings"] = computed_rankings
+                    else:
+                        # 진행 중(DB 순위 없음) + 결승 미완료 → 조기 순위 숨김
+                        selected_event["final_rankings"] = []
 
             # 포인트 계산 및 추가
             comp_name = comp.get("competition", {}).get("name", "")

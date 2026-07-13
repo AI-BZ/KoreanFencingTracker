@@ -675,3 +675,39 @@ def transform_de_bracket(event_data: Dict) -> Dict:
     event_data["de_rounds"] = getattr(normalized, 'rounds', [])
 
     return event_data
+
+
+def _is_de_final_complete(de_bracket: Dict) -> bool:
+    """이벤트의 결승(Final) 경기가 완료되었는지 판정.
+
+    최종순위는 결승이 끝난 뒤에만 확정된다. 결승 전에는 DE 진행 결과일 뿐이므로,
+    진행 중 이벤트에서 브래킷 위치/시드로 추정한 조기 1·2·3등이 확정 순위처럼
+    노출되는 것을 막는 게이트로 쓰인다.
+
+    완료 조건: round_name이 '결승'인 bout이 존재하고, 그 bout에 승자가 기록되어
+    있어야 한다 (winner_name이 있거나, 양쪽 점수가 확정적이어야 함).
+
+    Args:
+        de_bracket: DE bracket 데이터 (dual_de 포함). 원본(정규화 전) 딕셔너리.
+
+    Returns:
+        결승이 완료되었으면 True, 결승 bout이 없거나 미결이면 False.
+    """
+    if not de_bracket or not isinstance(de_bracket, dict):
+        return False
+
+    for bout in _get_full_bouts_from_de_bracket(de_bracket):
+        round_name = (bout.get("round_name") or bout.get("round") or "").strip()
+        if round_name != "결승":
+            continue
+        # 결승 bout 발견 — 승자 확정 여부 확인
+        if (bout.get("winner_name") or "").strip():
+            return True
+        s1, s2 = bout.get("player1_score"), bout.get("player2_score")
+        try:
+            if s1 is not None and s2 is not None and str(s1) != "" and str(s2) != "" \
+                    and int(s1) != int(s2):
+                return True
+        except (TypeError, ValueError):
+            pass
+    return False
