@@ -6840,9 +6840,12 @@ async def competition_detail_page(request: Request, event_cd: str, event: Option
                         else:
                             p["league_rank"] = 9999
                             p["league_best"] = 9999
-                    # 대진표용: rank 순으로 정렬 + scores 재배열
+                    # 대진표용: 실제 경기 결과가 있을 때만 rank 순 정렬 + scores 재배열.
+                    # 대회 전(결과 없음)에는 KFA 풀 편성(position) 순서를 보존해야
+                    # 풀 순번과 예상 경기 순서가 협회와 일치한다.
                     results = pool.get("results", [])
-                    if results and results[0].get("scores"):
+                    pool["has_bouts"] = any((p.get("wins") or p.get("losses")) for p in results)
+                    if pool["has_bouts"] and results and results[0].get("scores"):
                         old_order = list(range(len(results)))
                         ranked = sorted(enumerate(results), key=lambda x: x[1].get("rank", 999))
                         idx_map = [r[0] for r in ranked]

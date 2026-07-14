@@ -89,6 +89,65 @@
     border-color: var(--primary-color);
 }
 
+/* 내 선수가 속한 풀 버튼 강조 (active 와 시각적으로 구분: 링 + ⭐ 마커) */
+.pool-btn.my-player-pool {
+    border-color: var(--fm-accent-primary, #c9302c);
+    box-shadow: inset 0 0 0 1px var(--fm-accent-primary, #c9302c);
+    font-weight: 700;
+}
+
+.pool-btn.my-player-pool::before {
+    content: "\2b50 ";
+    font-size: 0.85em;
+}
+
+.pool-btn.my-player-pool.active {
+    box-shadow: 0 0 0 2px rgba(201, 48, 44, 0.35);
+}
+
+/* 내 선수 풀 빠른 이동 바 */
+.my-player-pool-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    margin-bottom: 12px;
+    background: rgba(201, 48, 44, 0.06);
+    border: 1px solid rgba(201, 48, 44, 0.25);
+    border-radius: 8px;
+    font-size: 0.85rem;
+}
+
+.my-player-pool-bar .mpp-label {
+    font-weight: 700;
+    color: var(--fm-accent-primary, #c9302c);
+}
+
+.my-player-pool-bar .mpp-item {
+    color: var(--text-secondary, #555);
+    background: rgba(0, 0, 0, 0.03);
+    padding: 2px 8px;
+    border-radius: 12px;
+}
+
+.my-player-pool-bar .mpp-jump-btn {
+    margin-left: auto;
+    padding: 6px 14px;
+    border: none;
+    border-radius: 16px;
+    background: var(--fm-accent-primary, #c9302c);
+    color: #fff;
+    font-weight: 600;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.my-player-pool-bar .mpp-jump-btn:hover {
+    background: var(--fm-accent-primary-hover, #a82824);
+}
+
 .pool-container {
     background: white;
     border-radius: 10px;

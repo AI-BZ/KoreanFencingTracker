@@ -1150,6 +1150,9 @@ tr.player-highlighted td {
             {% endif %}
         </div>
 
+        <!-- My Player pool quick-access bar (populated client-side) -->
+        <div id="my-player-pool-bar" class="my-player-pool-bar" style="display:none"></div>
+
         <!-- Pool Total Ranking Section -->
         {% if event.pool_total_ranking %}
         {% set is_calculated = event.pool_total_ranking[0].source == 'calculated' if event.pool_total_ranking else false %}
@@ -1213,7 +1216,7 @@ tr.player-highlighted td {
             <table class="result-table pool-standings-table">
                 <thead>
                     <tr>
-                        <th>{{ _t("순위") }}</th>
+                        <th>{{ _t("순위") if pool.has_bouts else _t("순번") }}</th>
                         <th style="text-align:left">{{ _t("이름") }}</th>
                         <th style="text-align:left">{{ _t("소속") }}</th>
                         <th class="pool-rank-col">{{ _t("리그") }}</th>
@@ -1224,10 +1227,9 @@ tr.player-highlighted td {
                     </tr>
                 </thead>
                 <tbody>
-                    {% set has_results = pool.results|selectattr('wins')|list|length > 0 %}
-                    {% for player in pool.results|sort(attribute='rank' if has_results else 'league_rank') %}
+                    {% for player in pool.results|sort(attribute='rank' if pool.has_bouts else 'position') %}
                     <tr>
-                        <td class="rank">{{ player.rank or '-' }}</td>
+                        <td class="rank">{{ (player.rank if pool.has_bouts else player.position) or '-' }}</td>
                         <td class="player-name"><a href="/player/{{ player.name|urlencode }}?team={{ player.team|urlencode }}" class="player-link">{{ tr_player(player.name) }}</a></td>
                         <td><a href="/search?q={{ player.team|urlencode }}" class="team-link">{{ tr_team(player.team) }}</a></td>
                         <td class="pool-rank-col">{% if player.league_rank and player.league_rank < 9999 %}<span class="league-rank">#{{ player.league_rank }}</span>{% if player.league_best and player.league_best != player.league_rank %}<span class="best-rank">({{ _t("최고") }}{{ player.league_best }})</span>{% endif %}{% else %}-{% endif %}</td>
@@ -1870,7 +1872,165 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     listContainer.innerHTML = html;
 })();
 
-// Pool selector
+// ==========================================
+// My Player Pool Finder (내 선수 풀 찾기 헬퍼)
+// - 두 소스 병합: Favorites(로그인, 복수) 우선 → My Player(localStorage, 단일)
+// - 전부 클라이언트 사이드. 서버 미변경.
+// ==========================================
+var _MY_PLAYER_LS_KEY = 'fencingmind_my_player';
+var _myPlayerNamesCache = null; // 비동기 병합 결과 캐시 [{ko, display}]
+
+function _mpEscapeHtml(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// localStorage 의 단일 My Player (동기)
+function _getMyPlayerLocal() {
+    try {
+        var raw = localStorage.getItem(_MY_PLAYER_LS_KEY);
+        if (!raw) return null;
+        var p = JSON.parse(raw);
+        if (p && p.name) {
+            var ko = String(p.name).trim();
+            return { ko: ko, display: (typeof _tr_player === 'function' ? _tr_player(ko) : ko) || ko };
+        }
+    } catch (e) {}
+    return null;
+}
+
+// 동기: My Player(localStorage)만. Favorites fetch 완료 전 즉시 기본 선택에 사용.
+window.getMyPlayerNamesSync = function() {
+    var out = [];
+    var mp = _getMyPlayerLocal();
+    if (mp) out.push(mp);
+    return out;
+};
+
+// 비동기: Favorites(우선) + My Player 병합, 중복 제거. Promise<[{ko, display}]>
+window.getMyPlayerNames = function() {
+    if (_myPlayerNamesCache) return Promise.resolve(_myPlayerNamesCache);
+    var mp = _getMyPlayerLocal();
+    function finish(favList) {
+        var out = [], seen = {};
+        function add(ko, display) {
+            var key = (ko == null ? '' : String(ko)).trim();
+            if (!key) return;
+            var lk = key.toLowerCase();
+            if (seen[lk]) return;
+            seen[lk] = true;
+            out.push({ ko: key, display: (display || (typeof _tr_player === 'function' ? _tr_player(key) : key) || key) });
+        }
+        (favList || []).forEach(function(f) { add(f.player_name, f.display_name); }); // Favorites 우선
+        if (mp) add(mp.ko, mp.display);                                              // 그다음 My Player
+        _myPlayerNamesCache = out;
+        return out;
+    }
+    var subCd = (typeof SUB_EVENT_CD !== 'undefined') ? SUB_EVENT_CD : '';
+    if (!subCd) return Promise.resolve(finish([]));
+    return fetch('/api/favorites/event/' + encodeURIComponent(subCd))
+        .then(function(r) { return r.ok ? r.json() : null; })   // 401/실패 → null
+        .then(function(data) { return finish(data && data.favorites_in_event ? data.favorites_in_event : []); })
+        .catch(function() { return finish([]); });
+};
+
+// 렌더된 풀 DOM 에서 선수의 풀 번호(정수) 찾기. 없으면 null.
+// 한/영 페이지 모두 지원: 원문(ko)과 로마자(_tr_player) 둘 다 후보로 매칭.
+window.findPlayerPoolNumber = function(name) {
+    if (!name) return null;
+    var cands = {};
+    var raw = String(name).trim();
+    if (raw) cands[raw.toLowerCase()] = true;
+    try {
+        var tr = (typeof _tr_player === 'function') ? _tr_player(raw) : null;
+        if (tr) cands[String(tr).trim().toLowerCase()] = true;
+    } catch (e) {}
+    var pools = document.querySelectorAll('.pool-item[data-pool-id]');
+    for (var i = 0; i < pools.length; i++) {
+        var pid = pools[i].getAttribute('data-pool-id');
+        var pidNum = parseInt(pid, 10);
+        if (pid === 'total' || isNaN(pidNum)) continue; // Pool Total / 비숫자 제외
+        var cells = pools[i].querySelectorAll('.pool-standings-table tbody tr .player-name a');
+        if (cells.length === 0) cells = pools[i].querySelectorAll('.player-name a');
+        for (var j = 0; j < cells.length; j++) {
+            var txt = (cells[j].textContent || '').trim().toLowerCase();
+            if (cands[txt]) return pidNum;
+        }
+    }
+    return null;
+};
+
+// 특정 선수(ko)의 풀로 점프 + 하이라이트. window 노출(즐겨찾기 배너 등에서 호출).
+window.jumpToPlayerPool = function(koName) {
+    var display = (typeof _tr_player === 'function' ? _tr_player(koName) : koName) || koName;
+    var pn = window.findPlayerPoolNumber(koName);
+    if (pn) {
+        navigateToPool(pn);
+        setTimeout(function() { if (window.playerHighlighter) window.playerHighlighter.highlight(display); }, 350);
+    } else if (window.playerHighlighter) {
+        window.playerHighlighter.highlight(display);
+    } else {
+        if (typeof showToast === 'function') showToast((typeof _t === 'function' ? (_t('내 선수를 찾을 수 없습니다') || '내 선수를 찾을 수 없습니다') : '내 선수를 찾을 수 없습니다'), 'warning');
+    }
+};
+
+// 첫 내 선수의 풀로 점프 ("내 선수 풀 보기" 버튼)
+window.goToMyPlayerPool = function() {
+    var names = _myPlayerNamesCache || window.getMyPlayerNamesSync();
+    if (names && names.length) { window.jumpToPlayerPool(names[0].ko); return; }
+    window.getMyPlayerNames().then(function(n) { if (n && n.length) window.jumpToPlayerPool(n[0].ko); });
+};
+
+// 내 선수가 속한 모든 풀 버튼에 my-player-pool 클래스 부여
+function _markMyPlayerPools(names) {
+    document.querySelectorAll('.pool-btn.my-player-pool').forEach(function(b) { b.classList.remove('my-player-pool'); });
+    (names || []).forEach(function(n) {
+        var pn = window.findPlayerPoolNumber(n.ko);
+        if (pn) {
+            var b = document.querySelector('.pool-btn[data-pool="' + pn + '"]');
+            if (b) b.classList.add('my-player-pool');
+        }
+    });
+}
+
+// 풀 셀렉터 근처 텍스트 배너 + 원클릭 버튼 렌더
+function _renderMyPlayerPoolBar(names) {
+    var bar = document.getElementById('my-player-pool-bar');
+    if (!bar) return;
+    var entries = [];
+    (names || []).forEach(function(n) {
+        var pn = window.findPlayerPoolNumber(n.ko);
+        if (pn) entries.push({ display: n.display, pool: pn });
+    });
+    if (!entries.length) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
+    var label = (typeof _t === 'function' ? (_t('내 선수') || '내 선수') : '내 선수');
+    var btnText = (typeof _t === 'function' ? (_t('내 선수 풀 보기') || '내 선수 풀 보기') : '내 선수 풀 보기');
+    var items = entries.map(function(e) {
+        return '<span class="mpp-item">' + _mpEscapeHtml(e.display) + ' &rarr; Pool ' + e.pool + '</span>';
+    }).join('');
+    bar.innerHTML = '<span class="mpp-label">⭐ ' + _mpEscapeHtml(label) + ':</span> ' + items +
+        '<button type="button" class="mpp-jump-btn" onclick="goToMyPlayerPool()">' + _mpEscapeHtml(btnText) + '</button>';
+    bar.style.display = 'flex';
+}
+
+// 풀 선택(버튼 active + 해당 풀만 표시) — 기본 선택/전환에 재사용
+function _selectPool(poolNumber) {
+    var pid = String(poolNumber);
+    document.querySelectorAll('.pool-btn').forEach(function(b) { b.classList.remove('active'); });
+    var btn = document.querySelector('.pool-btn[data-pool="' + pid + '"]');
+    if (btn) btn.classList.add('active');
+    document.querySelectorAll('.pool-item').forEach(function(pool) {
+        pool.style.display = pool.dataset.poolId === pid ? 'block' : 'none';
+    });
+}
+
+function _currentSelectedPool() {
+    var active = document.querySelector('.pool-btn.active');
+    return active ? active.dataset.pool : null;
+}
+
+// Pool selector (버튼 클릭 → 전환)
 document.querySelectorAll('.pool-btn').forEach(btn => {
     btn.addEventListener('click', () => {
         document.querySelectorAll('.pool-btn').forEach(b => b.classList.remove('active'));
@@ -1882,11 +2042,33 @@ document.querySelectorAll('.pool-btn').forEach(btn => {
     });
 });
 
-// Initialize: show only first pool (not Pool Total)
+// Initialize: 기본은 Pool 1, 단 내 선수가 이 이벤트에 있으면 그 풀을 기본 선택
 document.addEventListener('DOMContentLoaded', () => {
-    document.querySelectorAll('.pool-item').forEach((pool) => {
-        // Show only Pool 1, hide Pool Total and other pools
-        pool.style.display = pool.dataset.poolId === '1' ? 'block' : 'none';
+    // 기본값: Pool 1 (기존 동작)
+    _selectPool('1');
+
+    // highlight URL 파라미터가 있으면 그 선수 하이라이트가 우선 → 풀 자동전환 생략(기존 동작 보존)
+    var hasHighlightParam = false;
+    try { hasHighlightParam = !!new URLSearchParams(window.location.search).get('highlight'); } catch (e) {}
+
+    if (!hasHighlightParam) {
+        // My Player(localStorage, 동기)로 먼저 기본 선택 → 깜빡임 최소화
+        var syncNames = window.getMyPlayerNamesSync();
+        if (syncNames.length) {
+            var pnSync = window.findPlayerPoolNumber(syncNames[0].ko);
+            if (pnSync) _selectPool(pnSync);
+        }
+    }
+
+    // Favorites(비동기) 병합 후: 풀 버튼 색상 강조 + 배너 렌더 + (Favorites 우선) 기본 선택 갱신
+    window.getMyPlayerNames().then(function(names) {
+        _markMyPlayerPools(names);
+        _renderMyPlayerPoolBar(names);
+        if (!hasHighlightParam && names.length) {
+            var pn = window.findPlayerPoolNumber(names[0].ko);
+            // 이미 같은 풀이 선택돼 있으면 재선택 생략(불필요한 리플로우/깜빡임 방지)
+            if (pn && String(pn) !== _currentSelectedPool()) _selectPool(pn);
+        }
     });
 });
 
@@ -1944,7 +2126,7 @@ const FIE_BOUT_ORDER = {
     4: [[1,4],[2,3],[1,3],[2,4],[3,4],[1,2]],
     5: [[1,2],[3,4],[5,1],[2,3],[4,5],[1,3],[5,2],[4,1],[3,5],[2,4]],
     6: [[1,2],[4,5],[2,3],[5,6],[1,3],[4,6],[5,2],[1,6],[3,4],[2,6],[3,5],[1,4],[2,4],[5,1],[6,3]],
-    7: [[1,4],[2,5],[3,6],[7,1],[2,4],[5,3],[6,7],[4,5],[1,3],[7,2],[6,4],[5,1],[3,7],[2,6],[4,1],[5,7],[6,3],[1,2],[7,4],[3,5],[6,2]],
+    7: [[1,4],[2,5],[3,6],[7,1],[5,4],[2,6],[3,7],[1,5],[4,6],[2,3],[7,5],[1,6],[4,2],[3,5],[6,7],[1,3],[4,7],[5,6],[2,7],[3,4],[1,2]],
     8: [[1,2],[3,4],[5,6],[7,8],[1,3],[2,4],[5,7],[6,8],[1,4],[2,3],[5,8],[6,7],[1,5],[2,6],[3,7],[4,8],[1,6],[2,5],[3,8],[4,7],[1,7],[2,8],[3,5],[4,6],[1,8],[2,7],[3,6],[4,5]]
 };
 
@@ -2045,6 +2227,7 @@ const EVENT_CD = "{{ competition.competition.event_cd }}";
 
 // Initialize components
 const playerHighlighter = new PlayerHighlighter();
+window.playerHighlighter = playerHighlighter; // window 노출 (즐겨찾기 배너/내 선수 풀 점프에서 사용)
 const deResult = new DEResultTable(
     document.getElementById('de-result-container'),
     SUB_EVENT_CD

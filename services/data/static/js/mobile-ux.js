@@ -479,14 +479,24 @@
                 data.favorites_in_event.forEach(function(f) {
                     var displayName = (lang === 'ko') ? f.player_name : (f.display_name || f.player_name);
                     var rankText = f.rank ? (f.rank + (_t('위') || 'th') + '/' + (f.total_participants || '?')) : '-';
-                    var poolSeed = f.pool_rank ? ('#' + f.pool_rank + ' ') : '';
+                    // 풀 번호(pool_number) — 렌더된 풀 DOM 에서 조회 (event_result.html 의 window.findPlayerPoolNumber)
+                    var poolNum = (typeof window.findPlayerPoolNumber === 'function') ? window.findPlayerPoolNumber(f.player_name) : null;
+                    var poolNumLabel = poolNum ? ('Pool ' + poolNum) : '';
+                    var seedLabel = f.pool_rank ? ((_t('풀내') || '풀내') + ' #' + f.pool_rank) : ''; // pool_rank = 풀내 순위
+                    // 풀 번호와 풀내 순위를 명확히 구분: "Pool 3 (풀내 #1)"
+                    var poolHead = poolNumLabel;
+                    if (seedLabel) poolHead = poolNumLabel ? (poolNumLabel + ' (' + seedLabel + ')') : seedLabel;
                     var poolText = (f.pool_wins || 0) + 'W-' + (f.pool_losses || 0) + 'L';
                     var deText = (f.de_wins || 0) + 'W-' + (f.de_losses || 0) + 'L';
+                    var statsStr = (poolHead ? poolHead + ' · ' : '') + poolText + ' | DE ' + deText;
 
-                    html += '<div class="favorite-event-row" onclick="if(window.PlayerHighlighter){PlayerHighlighter.highlight(\'' + f.player_name.replace(/'/g, "\\'") + '\')}">';
+                    var nmEsc = f.player_name.replace(/'/g, "\\'");
+                    // 클릭 시 해당 풀로 점프 + 하이라이트(event 페이지). 미정의 시 조용히 무시.
+                    var onClick = "if(window.jumpToPlayerPool){window.jumpToPlayerPool('" + nmEsc + "')}";
+                    html += '<div class="favorite-event-row" onclick="' + onClick + '">';
                     html += '<span class="favorite-heart">&#9829;</span> ';
                     html += '<span class="fev-name">' + displayName + '</span>';
-                    html += '<span class="fev-stats">' + poolSeed + 'Pool ' + poolText + ' | DE ' + deText + '</span>';
+                    html += '<span class="fev-stats">' + statsStr + '</span>';
                     html += '<span class="fev-rank">' + rankText + '</span>';
                     html += '</div>';
                 });
