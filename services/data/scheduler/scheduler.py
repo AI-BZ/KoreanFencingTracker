@@ -236,17 +236,13 @@ class FencingScheduler:
                 logger.debug("📋 수집할 대진표 없음 (내일/오늘 시작 대회 없음)")
                 return
 
-            # 이미 풀 데이터가 있는 대회 제외
-            comps_to_scrape = []
-            for comp in pre_comps:
-                if not await self._has_pool_data(comp, scraper):
-                    comps_to_scrape.append(comp)
-                else:
-                    logger.debug(f"📋 풀 대진표 이미 수집됨: {comp.get('comp_name', 'Unknown')}")
-
-            if not comps_to_scrape:
-                logger.debug("📋 모든 대회 풀 대진표 이미 수집됨")
-                return
+            # 🔴 D-1/D-day 대회는 항상 재스크래핑한다 (30분 간격).
+            # KFA는 대회 전날에도 Pool 대진표를 계속 올리거나 갱신하므로, 일부 이벤트에
+            # Pool이 있다고 대회 전체를 스킵하면 나머지 종목의 신규 Pool과 기존 Pool의
+            # 갱신을 놓친다. 변경 감지(5분)는 '진행 중(ongoing)' 대회만 대상이라 D-1
+            # 구간을 커버하지 못하므로, 이 사전 스크래핑이 유일한 D-1 갱신 경로다.
+            # (과거 _has_pool_data 기반 스킵이 이 공백을 유발함 — 2026-07-14 수정)
+            comps_to_scrape = list(pre_comps)
 
             # 실제 스크래핑 실행
             self._is_running = True
