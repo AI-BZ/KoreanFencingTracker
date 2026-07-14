@@ -341,20 +341,25 @@ class FencingScheduler:
         try:
             from scheduler.competition_detector import EventBasedScraper
 
-            # 1. 진행 중인 대회 조회
+            # 1. 진행 중 + D-1/D-day 대회 조회
             scraper = EventBasedScraper()
             comps = await scraper.get_competitions_to_scrape()
             ongoing_comps = comps.get("ongoing", [])
+            pre_comps = comps.get("pre_competition", [])  # D-1/D-day (재편성/참가자 변동 감지·기록용)
 
-            if not ongoing_comps:
-                logger.debug("🔥 진행 중인 대회 없음, 변경 감지 스킵")
+            if not ongoing_comps and not pre_comps:
+                logger.debug("🔥 진행 중/D-1 대회 없음, 변경 감지 스킵")
                 return
 
-            logger.info(f"🔥 변경 감지: {len(ongoing_comps)}개 대회 체크 중...")
+            if ongoing_comps:
+                logger.info(f"🔥 변경 감지: 진행중 {len(ongoing_comps)}개 대회 체크 중...")
+            if pre_comps:
+                logger.info(f"🔥 변경 감지(D-1): {len(pre_comps)}개 대회 지문 기록 중...")
 
             # 2. 각 대회의 상태 지문 캡처 및 변경 감지
             total_changes = 0
             total_scraped_events = 0
+            d1_changes = 0
 
             async with ChangeDetector() as detector:
                 for comp in ongoing_comps:
@@ -401,11 +406,46 @@ class FencingScheduler:
                         logger.error(f"🔥 대회 변경 감지 오류 ({comp_name}): {e}")
                         continue
 
+                # D-1/D-day 대회: 지문 기록 + 변경 감지(audit)만.
+                # 실제 데이터 반영은 _run_pre_competition_scraping(30분 간격)이 담당하므로,
+                # 여기서는 대회 전 재편성/참가자 변동을 fingerprint로 감지·기록만 한다.
+                for comp in pre_comps:
+                    comp_cd = comp.get("comp_idx")
+                    comp_name = comp.get("comp_name", "Unknown")
+                    if not comp_cd:
+                        continue
+                    try:
+                        fingerprint = await detector.capture_competition_fingerprint(
+                            comp_cd, comp_name
+                        )
+                        if fingerprint.error:
+                            logger.warning(f"🔥 D-1 지문 캡처 실패 ({comp_name}): {fingerprint.error}")
+                            continue
+
+                        changed_events = self._state_manager.get_changed_event_codes(fingerprint)
+                        if changed_events:
+                            changes = self._state_manager.compare_and_update(fingerprint)
+                            d1_changes += len(changes)
+                            logger.info(
+                                f"🔥 D-1 변경 기록: {comp_name} - {len(changed_events)}개 종목 변경 "
+                                f"(대회 전 재편성/참가자 변동 추정; 데이터 반영은 사전수집 작업이 처리)"
+                            )
+                        else:
+                            # 변경 없음 - 지문만 갱신
+                            self._state_manager.save_fingerprint(fingerprint)
+                            logger.debug(f"🔥 D-1 변경 없음: {comp_name}")
+
+                    except Exception as e:
+                        logger.error(f"🔥 D-1 변경 감지 오류 ({comp_name}): {e}")
+                        continue
+
             # 결과 기록
             self._last_change_detection = datetime.now()
             self._last_stats["change_detection"] = {
                 "competitions_checked": len(ongoing_comps),
+                "d1_competitions_checked": len(pre_comps),
                 "changes_detected": total_changes,
+                "d1_changes_recorded": d1_changes,
                 "events_scraped": total_scraped_events,
                 "checked_at": datetime.now().isoformat()
             }
