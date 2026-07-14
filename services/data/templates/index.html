@@ -1549,20 +1549,25 @@ function appendMyLeagueCard(compEventCd, targetContainer) {
                             detailHtml = '<div class="ml-detail">' + total + '{{ _t("명 참가") }}</div>';
                         }
 
-                        _renderMyLeagueCard(targetContainer, url, best.name, detailHtml);
+                        _renderMyLeagueCard(targetContainer, compEventCd, url, best.name, detailHtml);
                     })
                     .catch(function() {
-                        _renderMyLeagueCard(targetContainer, url, best.name, '');
+                        _renderMyLeagueCard(targetContainer, compEventCd, url, best.name, '');
                     });
             })
             .catch(function() {});
     } catch(e) {}
 }
 
-function _renderMyLeagueCard(container, url, eventName, detailHtml) {
+function _renderMyLeagueCard(container, eventCd, url, eventName, detailHtml) {
+    // 같은 대회의 리그 카드가 이미 붙어 있으면 중복 삽입 방지
+    if (eventCd && container.querySelector('.my-league-card[data-ml-anchor="' + eventCd + '"]')) {
+        return;
+    }
     var leagueLabel = '{{ _t("내 리그") }}';
     var card = document.createElement('a');
     card.className = 'my-league-card';
+    if (eventCd) card.setAttribute('data-ml-anchor', eventCd);
     card.href = url;
     card.innerHTML =
         '<div class="ml-card-left">' +
@@ -1573,7 +1578,21 @@ function _renderMyLeagueCard(container, url, eventName, detailHtml) {
             detailHtml +
         '</div>' +
         '<div class="ml-card-right">&rsaquo;</div>';
-    container.appendChild(card);
+    // 해당 대회 카드 바로 뒤(이미 붙은 같은 대회 리그카드가 있으면 그 뒤)에 삽입
+    var anchor = eventCd ? container.querySelector('[data-comp-anchor="' + eventCd + '"]') : null;
+    if (anchor) {
+        var insertAfter = anchor;
+        var sib = anchor.nextElementSibling;
+        while (sib && sib.classList.contains('my-league-card') &&
+               sib.getAttribute('data-ml-anchor') === eventCd) {
+            insertAfter = sib;
+            sib = sib.nextElementSibling;
+        }
+        insertAfter.insertAdjacentElement('afterend', card);
+    } else {
+        // 앵커를 못 찾으면 기존 동작대로 맨 뒤에 추가 (비동기 타이밍 안전장치)
+        container.appendChild(card);
+    }
 }
 
 // Activate filter buttons to match current state (visual sync)
@@ -2069,7 +2088,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                 if (comp.comp_idx) _ongoingCompIds.add(comp.comp_idx);
             });
             liveCards.innerHTML = data.ongoing.map(comp => `
-                <a href="/competition/${comp.comp_idx || comp.event_cd}" class="live-card">
+                <a href="/competition/${comp.comp_idx || comp.event_cd}" class="live-card" data-comp-anchor="${comp.event_cd}">
                     <div class="live-card-icon">🏆</div>
                     <div class="live-card-info">
                         <h4>${_tr_comp(comp.name)}</h4>
@@ -2096,7 +2115,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             if (filteredUpcoming.length > 0) {
                 upcomingBanner.style.display = 'block';
                 upcomingCards.innerHTML = filteredUpcoming.map(comp => `
-                    <a href="/competition/${comp.comp_idx || comp.event_cd}" class="upcoming-card">
+                    <a href="/competition/${comp.comp_idx || comp.event_cd}" class="upcoming-card" data-comp-anchor="${comp.event_cd}">
                         <div class="upcoming-card-icon">
                             <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                                 <path d="M12 2L4 6v6c0 5.55 3.84 10.74 8 12 4.16-1.26 8-6.45 8-12V6l-8-4z"/>
@@ -2150,7 +2169,7 @@ async function loadUpcomingCompetitions() {
             if (additionalComps.length > 0) {
                 upcomingBanner.style.display = 'block';
                 const newHtml = additionalComps.slice(0, 5).map(comp => `
-                    <a href="/competition/${comp.comp_idx || comp.event_cd}" class="upcoming-card">
+                    <a href="/competition/${comp.comp_idx || comp.event_cd}" class="upcoming-card" data-comp-anchor="${comp.event_cd}">
                         <div class="upcoming-card-icon">
                             <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                                 <rect x="3" y="4" width="18" height="18" rx="2"/>
@@ -2170,7 +2189,9 @@ async function loadUpcomingCompetitions() {
                 `).join('');
 
                 if (hasExistingCards) {
-                    upcomingCards.innerHTML += newHtml;
+                    // innerHTML += 는 컨테이너를 통째로 재파싱하여 비동기로 붙은
+                    // .my-league-card를 덮어쓰므로, 기존 DOM을 보존하는 방식으로 추가
+                    upcomingCards.insertAdjacentHTML('beforeend', newHtml);
                 } else {
                     upcomingCards.innerHTML = newHtml;
                 }
