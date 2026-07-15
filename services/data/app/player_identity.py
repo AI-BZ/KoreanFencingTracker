@@ -54,6 +54,22 @@ def is_team_event(event_name: str) -> bool:
 # KNOWN_HOMONYMS는 위 규칙으로 감지 불가한 예외 케이스에만 사용
 # ============================================================
 
+
+# 같은 클럽의 표기 변형 → 정규 표시명 (예: 영문 병기 제거).
+# team_history 그룹화·표시에만 적용. 동명이인 분리(KNOWN_HOMONYMS)는
+# raw 팀명을 그대로 쓰므로 이 정규화의 영향을 받지 않는다.
+TEAM_NAME_CANONICAL = {
+    "에이치펜싱클럽(H FENCING CLUB)": "에이치펜싱클럽",
+}
+
+
+def canonical_team_name(name: str) -> str:
+    """같은 클럽의 표기 변형을 정규 표시명으로 통일."""
+    if not name:
+        return name
+    return TEAM_NAME_CANONICAL.get(name.strip(), name)
+
+
 def detect_homonyms_from_competitions(competitions_data: list) -> Dict[str, Set[str]]:
     """대회 데이터에서 동명이인을 자동 감지.
 
@@ -412,17 +428,19 @@ class PlayerProfile:
         current_period = None
 
         for record in sorted_records:
+            # 같은 클럽의 표기 변형(예: 영문 병기)을 정규명으로 통일해 그룹화
+            ct = canonical_team_name(record.team)
             if current_period is None:
                 # 첫 번째 기록
                 current_period = TeamRecord(
-                    team=record.team,
+                    team=ct,
                     team_id=record.team_id,
                     team_en=record.team_en,
                     first_seen=record.first_seen,
                     last_seen=record.last_seen,
                     competition_count=record.competition_count
                 )
-            elif current_period.team == record.team:
+            elif current_period.team == ct:
                 # 연속된 같은 팀 - 기간 연장
                 current_period.last_seen = record.last_seen
                 current_period.competition_count += record.competition_count
@@ -430,7 +448,7 @@ class PlayerProfile:
                 # 다른 팀 - 현재 기간 저장, 새 기간 시작
                 new_history.append(current_period)
                 current_period = TeamRecord(
-                    team=record.team,
+                    team=ct,
                     team_id=record.team_id,
                     team_en=record.team_en,
                     first_seen=record.first_seen,
