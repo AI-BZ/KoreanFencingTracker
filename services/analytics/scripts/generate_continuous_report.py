@@ -225,6 +225,7 @@ def main():
             "event_type": ex.event_type.value,
             "event_type_ko": event_type_ko.get(ex.event_type.value, ex.event_type.value),
             "duration_sec": round(duration, 1),
+            "min_distance_frame": actual_min,
             "min_distance_bh": round(ex.min_distance_bh, 2),
         }
 

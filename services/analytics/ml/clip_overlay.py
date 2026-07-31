@@ -154,6 +154,7 @@ class ClipOverlayGenerator:
         report_dict: dict,
         output_dir: str,
         touches_only: bool = True,
+        touch_bounds: Optional[dict] = None,
     ) -> List[dict]:
         """
         Generate overlay clips for all events in a report JSON.
@@ -163,6 +164,11 @@ class ClipOverlayGenerator:
             report_dict: Parsed report JSON dict.
             output_dir: Directory for output clips.
             touches_only: If True, only generate clips for touches (scoring).
+            touch_bounds: Optional {touch_number: (start_frame, end_frame)} of
+                anchored clip bounds (real-touch anchoring, see
+                app.server._compute_touch_clip_bounds). When provided, a touch's
+                clip uses these bounds instead of the point-in-time OCR frame,
+                keeping batch clips consistent with the on-demand endpoint.
 
         Returns:
             List of dicts: [{event_type, event_number, clip_path, duration_sec}, ...]
@@ -186,9 +192,16 @@ class ClipOverlayGenerator:
             clip_path = str(out / f"touch_{touch_num:03d}.mp4")
             event_info = self._extract_touch_info(touch)
 
+            # Anchor on the real touch when bounds are supplied; otherwise fall
+            # back to the point-in-time OCR frame.
+            if touch_bounds and touch_num in touch_bounds:
+                sf, ef = touch_bounds[touch_num]
+            else:
+                sf, ef = frame, frame
+
             try:
                 self.generate_clip(
-                    video_path, frame, frame, clip_path, event_info
+                    video_path, sf, ef, clip_path, event_info
                 )
                 pb = self.pad_before if self.pad_before is not None else self.pad_seconds
                 pa = self.pad_after if self.pad_after is not None else self.pad_seconds
