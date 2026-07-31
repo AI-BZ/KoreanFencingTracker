@@ -2704,6 +2704,9 @@ TRANSLATIONS = {
     "전국체전·소년체전 제외": {"en": "National & Youth Sports Festivals excluded", "fr": "Hors Festivals nationaux et juniors des sports", "it": "Esclusi i Festival sportivi nazionale e giovanile", "ja": "全国体育大会・少年体育大会を除外", "zh": "不含全国体育大会·少年体育大会", "tr": "Ulusal ve Gençler Spor Festivalleri hariç"},
     "제외": {"en": "Excluded", "fr": "Exclu", "it": "Escluso", "ja": "除外", "zh": "排除", "tr": "Hariç"},
 
+    # --- 선호 리그 변경 진입점 (2026-08-01) ---
+    "선호 리그 변경": {"en": "Change preferred league", "fr": "Modifier la ligue préférée", "it": "Cambia lega preferita", "ja": "お気に入りリーグを変更", "zh": "更改偏好联赛", "tr": "Tercih edilen ligi değiştir"},
+
     # --- 랭킹 카드 리그/카테고리 라벨 (2026-07-31) ---
     "전문": {"en": "Professional", "fr": "Professionnel", "it": "Professionista", "ja": "専門", "zh": "专业", "tr": "Profesyonel"},
     "동호인": {"en": "Club", "fr": "Club", "it": "Club", "ja": "同好会", "zh": "俱乐部", "tr": "Kulüp"},

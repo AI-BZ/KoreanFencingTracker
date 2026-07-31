@@ -30,7 +30,7 @@
 
     <!-- shared-ui 디자인 토큰 (light/dark 테마 변수 포함) -->
     <link rel="stylesheet" href="/static/css/variables.css?v=20260731b">
-    <link rel="stylesheet" href="/static/css/dark-theme.css?v=20260731b">
+    <link rel="stylesheet" href="/static/css/dark-theme.css?v=20260801a">
     <link rel="stylesheet" href="/static/css/components.css?v=20260731b">
     <link rel="stylesheet" href="/static/css/mobile-ux.css?v=20260731b">
     {% block extra_css %}{% endblock %}
@@ -41,7 +41,7 @@
     .lang-dropdown.show { display: block; }
     .lang-option { display: block; padding: 8px 16px; color: var(--fm-text-secondary, #ccc); text-decoration: none; font-size: 13px; transition: background 0.2s; }
     .lang-option:hover { background: var(--fm-bg-card-hover, rgba(255,255,255,0.1)); color: var(--fm-text-primary, white); }
-    .lang-option.active { color: #6c5ce7; font-weight: 600; }
+    .lang-option.active { color: var(--fm-accent-primary, #c9302c); font-weight: 600; }
     </style>
     <script>
     window.__t = {{ _js_t|default({})|tojson }};
@@ -408,7 +408,7 @@
         </button>
     </nav>
 
-    <script src="/static/js/mobile-ux.js?v=20260613"></script>
+    <script src="/static/js/mobile-ux.js?v=20260801a"></script>
     <!-- PWA는 app.fencingmind.ai에서 구현 예정 (CLAUDE.md 참조) -->
     {% block extra_js %}{% endblock %}
 

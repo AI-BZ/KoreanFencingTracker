@@ -2211,8 +2211,24 @@ body {
     color: #191f28;
 }
 
-[data-theme="light"] .parallax-bg { display: none !important; }
-[data-theme="light"] .parallax-overlay { display: none !important; }
+/* Light theme keeps the fencer backdrop instead of hiding it, washed out to a
+   near-white haze: the silhouette only reads around the hero and is gone by the
+   time the page scrolls into content. Body background stays behind the parallax
+   (it propagates to the canvas), so the image shows through the page gutters
+   while every content surface below stays opaque. */
+[data-theme="light"] .parallax-bg {
+    filter: grayscale(0.55);
+}
+
+[data-theme="light"] .parallax-overlay {
+    background: linear-gradient(
+        180deg,
+        rgba(250, 251, 252, 0.90) 0%,
+        rgba(250, 251, 252, 0.94) 30%,
+        rgba(250, 251, 252, 0.97) 60%,
+        rgba(250, 251, 252, 0.99) 100%
+    );
+}
 
 [data-theme="light"] .main-content {
     color: #191f28;

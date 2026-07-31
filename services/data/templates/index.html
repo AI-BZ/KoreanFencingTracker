@@ -1224,6 +1224,35 @@
         color: #191f28;
     }
 
+    /* Quiet text link that reopens the selector, sitting in the ranking-preview
+       header. The whole preview section is hidden until preferences exist, so
+       the link never shows to a user who has not onboarded. */
+    .fm-prefs-edit {
+        margin-left: auto;
+        padding: 0.25rem 0.1rem;
+        border: 0;
+        background: none;
+        color: var(--fm-text-muted, #8b95a1);
+        font-family: inherit;
+        font-size: 0.78rem;
+        font-weight: 600;
+        text-decoration: underline;
+        text-underline-offset: 3px;
+        cursor: pointer;
+        -webkit-tap-highlight-color: transparent;
+    }
+    .fm-prefs-edit:hover {
+        color: var(--fm-accent-primary, #c9302c);
+    }
+    .fm-prefs-edit:focus-visible {
+        outline: 2px solid var(--fm-accent-primary, #c9302c);
+        outline-offset: 2px;
+        border-radius: 4px;
+    }
+    [data-theme="light"] .fm-prefs-edit {
+        color: #6b7684;
+    }
+
     /* Friendly events error / empty states (reuse .filter-prompt theming) */
     .events-retry { margin-top: 1.25rem; }
 
@@ -1378,6 +1407,26 @@
     </div>
 </div>
 
+<!-- Fallback league-edit entry: 미리보기가 숨겨진 상태(나이그룹 미선택 등)에서도
+     온보딩된 사용자가 선호 리그를 다시 고를 수 있어야 한다 -->
+<div class="fm-prefs-fallback" id="fm-prefs-fallback" style="display:none; text-align:right;">
+    <div class="container">
+        <button type="button" class="fm-prefs-edit" onclick="fmOpenSportSelector()">{{ _t("선호 리그 변경") }}</button>
+    </div>
+</div>
+<script>
+(function () {
+    try {
+        var p = JSON.parse(localStorage.getItem('fm_preferences') || 'null');
+        var fb = document.getElementById('fm-prefs-fallback');
+        if (!p || !p.onboarded || !fb) return;
+        // 미리보기 카드가 실제로 뜨는 경우(무기+성별+나이그룹 완비)에는 카드 내 버튼이 있으므로 숨김 유지
+        var hasFullPrefs = p.weapon && p.gender && p.age_group;
+        if (!hasFullPrefs) fb.style.display = '';
+    } catch (e) {}
+})();
+</script>
+
 <!-- Ranking Preview (온보딩 후 또는 재방문 시 - Hero 바로 아래) -->
 <div class="ranking-preview-section" id="ranking-preview-section" style="display:none;">
     <div class="container">
@@ -1385,6 +1434,7 @@
             <div class="ranking-preview-header">
                 <span class="ranking-preview-trophy">&#127942;</span>
                 <span class="ranking-preview-title" id="ranking-preview-title"></span>
+                <button type="button" class="fm-prefs-edit" onclick="fmOpenSportSelector()">{{ _t("선호 리그 변경") }}</button>
             </div>
             <div class="ranking-preview-body" id="ranking-preview-body">
                 <div class="ranking-preview-loading" id="ranking-preview-loading">
@@ -1485,7 +1535,7 @@
 
     <!-- Active Filter Tags + Advanced Search Toggle (always visible) -->
     <div class="active-filters-bar" id="active-filters-bar">
-        <button type="button" class="fm-sport-chip" id="fm-sport-chip" onclick="openSportSelector()">
+        <button type="button" class="fm-sport-chip" id="fm-sport-chip" onclick="fmOpenSportSelector()">
             <span class="fm-sport-chip-icon" aria-hidden="true">&#127919;</span>
             <span>{{ i18n.common.mobile.set_my_sport|default('내 종목 설정') }}</span>
         </button>
@@ -2758,6 +2808,7 @@ document.addEventListener('click', function (e) {
     if (!sheet || !sheet.classList.contains('visible')) return;
     if (e.target.closest('.onboarding-card')) return;   // clicks inside the card
     if (e.target.closest('.fm-sport-chip')) return;      // the opener itself
+    if (e.target.closest('.fm-prefs-edit')) return;      // "선호 리그 변경" opener
     dismissSportSheet();
 });
 

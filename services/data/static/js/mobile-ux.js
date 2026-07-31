@@ -118,6 +118,61 @@
         }
     };
 
+    // Reopen the selector for an already-onboarded user, prefilled with their
+    // saved league. Without this the overlay only ever shows once, so a wrong
+    // pick on the first visit could never be corrected.
+    window.fmOpenSportSelector = function() {
+        var overlay = document.getElementById('onboarding-overlay');
+        if (!overlay) return;
+
+        // index.html owns the non-blocking sheet controller (focus handling,
+        // auto-reveal teardown, step reset). Use it when present.
+        if (typeof window.openSportSelector === 'function') {
+            window.openSportSelector();
+        } else {
+            overlay.classList.add('visible');
+        }
+
+        prefillOnboardingFromPrefs();
+    };
+
+    function prefillOnboardingFromPrefs() {
+        var prefs = FMPreferences.get();
+        if (!prefs) return;
+
+        _pendingWeapon = prefs.weapon || null;
+        _pendingGender = prefs.gender || null;
+        _pendingAgeGroup = prefs.age_group || null;
+
+        if (prefs.weapon && prefs.gender) {
+            var cards = document.querySelectorAll('#onboarding-overlay .weapon-gender-card');
+            for (var i = 0; i < cards.length; i++) {
+                var call = cards[i].getAttribute('onclick') || '';
+                if (call.indexOf("'" + prefs.weapon + "'") !== -1 &&
+                    call.indexOf("'" + prefs.gender + "'") !== -1) {
+                    cards[i].classList.add('selected');
+                    var wEl = cards[i].querySelector('.weapon-name');
+                    var gEl = cards[i].querySelector('.gender-label');
+                    _pendingWeaponLabel = wEl ? wEl.textContent.trim() : prefs.weapon;
+                    _pendingGenderLabel = gEl ? gEl.textContent.trim() : prefs.gender;
+                    break;
+                }
+            }
+        }
+
+        if (prefs.age_group) {
+            var choices = document.querySelectorAll('#onboarding-overlay .age-group-choice');
+            for (var j = 0; j < choices.length; j++) {
+                if ((choices[j].getAttribute('onclick') || '').indexOf("'" + prefs.age_group + "'") !== -1) {
+                    choices[j].classList.add('selected');
+                    break;
+                }
+            }
+            var cta = document.getElementById('onboarding-cta');
+            if (cta && _pendingWeapon) cta.disabled = false;
+        }
+    }
+
     // Step 1: Select weapon + gender card
     var _pendingWeaponLabel = '';
     var _pendingGenderLabel = '';
