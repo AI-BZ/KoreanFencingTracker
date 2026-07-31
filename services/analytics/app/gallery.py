@@ -9,18 +9,18 @@ REPORTS_DIR = Path(__file__).parent.parent / "data" / "reports"
 
 DEMO_REPORTS = [
     {
-        "id": "usaf_hKUXgUsDOKE_continuous_report",
-        "title_ko": "주니어 플뢰레 결승 (USA Fencing)",
-        "title_en": "Junior Foil Final (USA Fencing)",
+        "id": "jr_foil_final_li_lin_hKUXgUsDOKE_continuous_report",
+        "title_ko": "주니어 플뢰레 결승 — LIN vs LI (15-7)",
+        "title_en": "Junior Foil Final — LIN vs LI (15-7)",
         "weapon": "foil",
         "bout_type": "de",
         "score": "15-7",
         "touches": 22,
-        "exchanges": 224,
+        "exchanges": 75,
         "duration": "11:49",
         "youtube_id": "hKUXgUsDOKE",
-        "description_ko": "22개 터치와 224개 교환을 AI가 분석한 플뢰레 DE 결승전",
-        "description_en": "AI analysis of foil DE final with 22 touches and 224 exchanges",
+        "description_ko": "실제 터치 시점 앵커링 + 공격 성공/실패 판정을 적용한 플뢰레 DE 결승 분석 (22터치, 75교환)",
+        "description_en": "Foil DE final with real-touch clip anchoring and attack success/failure verdicts (22 touches, 75 exchanges)",
     },
     {
         "id": "usaf_Jiq1kQLftjw_continuous_report",
