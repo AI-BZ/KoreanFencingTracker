@@ -180,12 +180,29 @@
     <!-- List View (Mobile-optimized) -->
     <div class="bracket-view bracket-list-view" id="bracket-list-view">
         {% if bracket.rounds %}
+        {# 기본 활성 라운드 = 아직 완료되지 않은 첫 라운드 (전부 완료 시 마지막=결승).
+           진행 중 대회에서 빈 결승 대신 현재 진행 라운드를 보여줌 #}
+        {% set de_dr = namespace(round=None) %}
+        {% for rn in bracket.rounds %}
+          {% if de_dr.round is none %}
+            {% set _rm = bracket.bouts_by_round.get(rn, []) if bracket.bouts_by_round else [] %}
+            {% set _c = namespace(real=0, dec=0) %}
+            {% for _m in _rm %}
+              {% if not _m.is_bye %}
+                {% set _c.real = _c.real + 1 %}
+                {% if _m.winner_name and _m.winner_name != 'None' %}{% set _c.dec = _c.dec + 1 %}{% endif %}
+              {% endif %}
+            {% endfor %}
+            {% if not (_c.real > 0 and _c.dec == _c.real) %}{% set de_dr.round = rn %}{% endif %}
+          {% endif %}
+        {% endfor %}
+        {% set de_default_round = de_dr.round if de_dr.round is not none else bracket.rounds[-1] %}
         <!-- Round Tabs for Mobile -->
         <div class="round-tabs" role="tablist">
             {% for round_name in bracket.rounds %}
-            <button class="round-tab {% if loop.last %}active{% endif %}"
+            <button class="round-tab {% if round_name == de_default_round %}active{% endif %}"
                     role="tab"
-                    aria-selected="{{ 'true' if loop.last else 'false' }}"
+                    aria-selected="{{ 'true' if round_name == de_default_round else 'false' }}"
                     data-round="{{ round_name }}">
                 {{ round_name }}
             </button>
@@ -195,7 +212,7 @@
         <!-- Match Cards -->
         {% for round_name in bracket.rounds %}
         {% set matches = bracket.bouts_by_round.get(round_name, []) %}
-        <div class="round-panel {% if loop.last %}active{% endif %}"
+        <div class="round-panel {% if round_name == de_default_round %}active{% endif %}"
              data-round-panel="{{ round_name }}"
              role="tabpanel">
             <div class="round-title-mobile">
@@ -295,15 +312,17 @@
 </div>
 
 <style>
-/* Quarterfinal Group Colors - 8 distinct colors for visual grouping */
-.qf-group-1 { border-left: 4px solid #ef4444 !important; background: linear-gradient(90deg, rgba(239, 68, 68, 0.08) 0%, transparent 30%) !important; }
-.qf-group-2 { border-left: 4px solid #f97316 !important; background: linear-gradient(90deg, rgba(249, 115, 22, 0.08) 0%, transparent 30%) !important; }
-.qf-group-3 { border-left: 4px solid #eab308 !important; background: linear-gradient(90deg, rgba(234, 179, 8, 0.08) 0%, transparent 30%) !important; }
-.qf-group-4 { border-left: 4px solid #22c55e !important; background: linear-gradient(90deg, rgba(34, 197, 94, 0.08) 0%, transparent 30%) !important; }
-.qf-group-5 { border-left: 4px solid #14b8a6 !important; background: linear-gradient(90deg, rgba(20, 184, 166, 0.08) 0%, transparent 30%) !important; }
-.qf-group-6 { border-left: 4px solid #3b82f6 !important; background: linear-gradient(90deg, rgba(59, 130, 246, 0.08) 0%, transparent 30%) !important; }
-.qf-group-7 { border-left: 4px solid #8b5cf6 !important; background: linear-gradient(90deg, rgba(139, 92, 246, 0.08) 0%, transparent 30%) !important; }
-.qf-group-8 { border-left: 4px solid #ec4899 !important; background: linear-gradient(90deg, rgba(236, 72, 153, 0.08) 0%, transparent 30%) !important; }
+/* Quarterfinal group encoding — 8 hues map bouts to the QF bracket they feed.
+   The hue is the encoding, so it stays; it reads as a field tint + hairline
+   edge rather than a slab, and the legend below names every group. */
+.qf-group-1 { border-left: 1px solid rgba(239, 68, 68, 0.55) !important; background: linear-gradient(90deg, rgba(239, 68, 68, 0.12) 0%, rgba(239, 68, 68, 0.02) 45%, transparent 70%) !important; }
+.qf-group-2 { border-left: 1px solid rgba(249, 115, 22, 0.55) !important; background: linear-gradient(90deg, rgba(249, 115, 22, 0.12) 0%, rgba(249, 115, 22, 0.02) 45%, transparent 70%) !important; }
+.qf-group-3 { border-left: 1px solid rgba(234, 179, 8, 0.55) !important; background: linear-gradient(90deg, rgba(234, 179, 8, 0.12) 0%, rgba(234, 179, 8, 0.02) 45%, transparent 70%) !important; }
+.qf-group-4 { border-left: 1px solid rgba(34, 197, 94, 0.55) !important; background: linear-gradient(90deg, rgba(34, 197, 94, 0.12) 0%, rgba(34, 197, 94, 0.02) 45%, transparent 70%) !important; }
+.qf-group-5 { border-left: 1px solid rgba(20, 184, 166, 0.55) !important; background: linear-gradient(90deg, rgba(20, 184, 166, 0.12) 0%, rgba(20, 184, 166, 0.02) 45%, transparent 70%) !important; }
+.qf-group-6 { border-left: 1px solid rgba(59, 130, 246, 0.55) !important; background: linear-gradient(90deg, rgba(59, 130, 246, 0.12) 0%, rgba(59, 130, 246, 0.02) 45%, transparent 70%) !important; }
+.qf-group-7 { border-left: 1px solid rgba(139, 92, 246, 0.55) !important; background: linear-gradient(90deg, rgba(139, 92, 246, 0.12) 0%, rgba(139, 92, 246, 0.02) 45%, transparent 70%) !important; }
+.qf-group-8 { border-left: 1px solid rgba(236, 72, 153, 0.55) !important; background: linear-gradient(90deg, rgba(236, 72, 153, 0.12) 0%, rgba(236, 72, 153, 0.02) 45%, transparent 70%) !important; }
 
 /* Group legend */
 .qf-group-legend {
@@ -336,15 +355,15 @@
 .qf-group-legend-color.g7 { background: #8b5cf6; }
 .qf-group-legend-color.g8 { background: #ec4899; }
 
-/* Match card group colors (list view) */
-.match-card.qf-group-1 { border-left: 4px solid #ef4444 !important; }
-.match-card.qf-group-2 { border-left: 4px solid #f97316 !important; }
-.match-card.qf-group-3 { border-left: 4px solid #eab308 !important; }
-.match-card.qf-group-4 { border-left: 4px solid #22c55e !important; }
-.match-card.qf-group-5 { border-left: 4px solid #14b8a6 !important; }
-.match-card.qf-group-6 { border-left: 4px solid #3b82f6 !important; }
-.match-card.qf-group-7 { border-left: 4px solid #8b5cf6 !important; }
-.match-card.qf-group-8 { border-left: 4px solid #ec4899 !important; }
+/* Match card group colors (list view) — same encoding, tint-led. */
+.match-card.qf-group-1 { border-left: 1px solid rgba(239, 68, 68, 0.55) !important; background: rgba(239, 68, 68, 0.09) !important; }
+.match-card.qf-group-2 { border-left: 1px solid rgba(249, 115, 22, 0.55) !important; background: rgba(249, 115, 22, 0.09) !important; }
+.match-card.qf-group-3 { border-left: 1px solid rgba(234, 179, 8, 0.55) !important; background: rgba(234, 179, 8, 0.09) !important; }
+.match-card.qf-group-4 { border-left: 1px solid rgba(34, 197, 94, 0.55) !important; background: rgba(34, 197, 94, 0.09) !important; }
+.match-card.qf-group-5 { border-left: 1px solid rgba(20, 184, 166, 0.55) !important; background: rgba(20, 184, 166, 0.09) !important; }
+.match-card.qf-group-6 { border-left: 1px solid rgba(59, 130, 246, 0.55) !important; background: rgba(59, 130, 246, 0.09) !important; }
+.match-card.qf-group-7 { border-left: 1px solid rgba(139, 92, 246, 0.55) !important; background: rgba(139, 92, 246, 0.09) !important; }
+.match-card.qf-group-8 { border-left: 1px solid rgba(236, 72, 153, 0.55) !important; background: rgba(236, 72, 153, 0.09) !important; }
 
 /* Forfeit styles (기권) */
 .match-player.forfeit {

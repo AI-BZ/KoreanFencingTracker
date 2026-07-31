@@ -400,9 +400,9 @@
 }
 
 .match-player.winner {
-    background: linear-gradient(90deg, rgba(34, 197, 94, 0.25) 0%, rgba(16, 185, 129, 0.15) 100%);
-    border-left: 4px solid #34d399;
-    box-shadow: 0 0 12px rgba(52, 211, 153, 0.15);
+    background: linear-gradient(90deg, rgba(34, 197, 94, 0.28) 0%, rgba(16, 185, 129, 0.14) 100%);
+    border-color: rgba(52, 211, 153, 0.55);
+    box-shadow: 0 2px 8px rgba(6, 46, 28, 0.4);
 }
 
 .match-player.winner .player-name {
@@ -422,10 +422,13 @@
 }
 
 .player-seed {
-    font-size: 11px;
+    font-size: 12px;
     color: #a5b4fc;
     min-width: 24px;
+    font-family: var(--fm-font-display);
     font-weight: 600;
+    letter-spacing: 0.01em;
+    font-variant-numeric: lining-nums tabular-nums;
 }
 
 .player-name {
@@ -474,8 +477,8 @@
 .bracket-match.bye-match,
 .match-card.bye-match {
     opacity: 0.7;
-    border-left: 3px solid #6b7280;
-    background: rgba(107, 114, 128, 0.1);
+    border-left: 1px solid rgba(107, 114, 128, 0.6);
+    background: rgba(107, 114, 128, 0.12);
 }
 
 .bracket-match.bye-match::before {
@@ -505,14 +508,25 @@
 }
 
 .player-score {
-    font-size: 15px;
+    font-size: 17px;
+    font-family: var(--fm-font-display);
     font-weight: 700;
+    letter-spacing: 0.01em;
+    font-variant-numeric: lining-nums tabular-nums;
     color: #e5e7eb;
     min-width: 28px;
     text-align: right;
     background: rgba(59, 130, 246, 0.15);
     padding: 2px 6px;
     border-radius: 4px;
+}
+
+/* 기권 = Hangul label, not a numeral — keep it in the UI face. */
+.player-score.forfeit-score,
+.player-score-badge.forfeit-badge {
+    font-family: var(--fm-font-primary);
+    font-size: 13px;
+    letter-spacing: normal;
 }
 
 /* Connector Lines */
@@ -704,8 +718,11 @@
 }
 
 .match-number {
-    font-size: 13px;
+    font-size: 14px;
+    font-family: var(--fm-font-display);
     font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
     color: var(--bracket-text-secondary);
 }
 
@@ -767,8 +784,11 @@
     background: var(--bracket-border);
     color: var(--bracket-text-secondary);
     border-radius: 50%;
-    font-size: 12px;
+    font-size: 13px;
+    font-family: var(--fm-font-display);
     font-weight: 600;
+    letter-spacing: 0.01em;
+    font-variant-numeric: lining-nums;
     flex-shrink: 0;
 }
 
@@ -811,8 +831,11 @@
 }
 
 .player-score-badge {
-    font-size: 18px;
+    font-size: 21px;
+    font-family: var(--fm-font-display);
     font-weight: 700;
+    letter-spacing: 0.01em;
+    font-variant-numeric: lining-nums tabular-nums;
     color: var(--bracket-text-secondary);
     min-width: 32px;
     text-align: center;
@@ -1202,7 +1225,7 @@
 
 .phase-indicator.active {
     background: #fbbf24;
-    box-shadow: 0 0 12px rgba(251, 191, 36, 0.6);
+    box-shadow: 0 2px 8px rgba(146, 100, 4, 0.55);
     animation: pulse-indicator 2s infinite;
 }
 
@@ -1322,16 +1345,20 @@
     min-width: 120px;
 }
 
+/* Category tint — the hue is the encoding; the icon + label carry it non-visually. */
 .summary-item.seeded {
-    border-left: 3px solid #d4a574;
+    border: 1px solid rgba(212, 165, 116, 0.45);
+    background: rgba(212, 165, 116, 0.10);
 }
 
 .summary-item.qualifiers {
-    border-left: 3px solid #4ade80;
+    border: 1px solid rgba(74, 222, 128, 0.45);
+    background: rgba(74, 222, 128, 0.10);
 }
 
 .summary-item.total {
-    border-left: 3px solid #60a5fa;
+    border: 1px solid rgba(96, 165, 250, 0.45);
+    background: rgba(96, 165, 250, 0.10);
 }
 
 .summary-icon {
@@ -1507,11 +1534,13 @@ details[open] .seeded-toggle-icon {
 }
 
 .de-info-banner.first-de {
-    border-left: 4px solid #60a5fa;
+    border: 1px solid rgba(96, 165, 250, 0.45);
+    background: rgba(96, 165, 250, 0.10);
 }
 
 .de-info-banner.second-de {
-    border-left: 4px solid #fbbf24;
+    border: 1px solid rgba(251, 191, 36, 0.45);
+    background: rgba(251, 191, 36, 0.10);
 }
 
 .banner-icon {
@@ -1588,7 +1617,7 @@ details[open] .seeded-toggle-icon {
 .progress-step.current .step-marker {
     background: #fbbf24;
     border-color: #fbbf24;
-    box-shadow: 0 0 12px rgba(251, 191, 36, 0.5);
+    box-shadow: 0 2px 8px rgba(146, 100, 4, 0.5);
     animation: pulse-indicator 2s infinite;
 }
 
@@ -1961,8 +1990,8 @@ details[open] .seeded-toggle-icon {
 }
 
 [data-theme="light"] .match-player.winner {
-    background: linear-gradient(90deg, rgba(34, 197, 94, 0.12), rgba(16, 185, 129, 0.08));
-    border-left: 4px solid #22c55e;
+    background: linear-gradient(90deg, rgba(34, 197, 94, 0.14), rgba(16, 185, 129, 0.08));
+    border-color: rgba(22, 163, 74, 0.5);
     box-shadow: none;
 }
 
@@ -2129,7 +2158,7 @@ details[open] .seeded-toggle-icon {
 
 [data-theme="light"] .phase-indicator.active {
     background: #d97706;
-    box-shadow: 0 0 12px rgba(217, 119, 6, 0.4);
+    box-shadow: 0 2px 8px rgba(217, 119, 6, 0.35);
 }
 
 [data-theme="light"] .bracket-notice.in-progress {

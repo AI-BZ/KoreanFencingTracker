@@ -12,6 +12,42 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
+// 도메인 코드 도움말 툴팁 (.fm-help)
+function fmCloseAllHelp(except) {
+    document.querySelectorAll('.fm-help-popup.show').forEach(function(p) {
+        if (p === except) return;
+        p.classList.remove('show');
+        var trigger = p.previousElementSibling;
+        if (trigger && trigger.classList.contains('fm-help')) {
+            trigger.setAttribute('aria-expanded', 'false');
+        }
+    });
+}
+
+function fmToggleHelp(btn, event) {
+    if (event) event.stopPropagation();
+    var popup = btn.nextElementSibling;
+    if (!popup || !popup.classList.contains('fm-help-popup')) return;
+    var isOpen = popup.classList.contains('show');
+    fmCloseAllHelp(popup);
+    popup.classList.toggle('show', !isOpen);
+    btn.setAttribute('aria-expanded', String(!isOpen));
+}
+
+document.addEventListener('click', function(e) {
+    if (e.target.closest && e.target.closest('.fm-help-popup')) return;
+    fmCloseAllHelp();
+});
+
+document.addEventListener('keydown', function(e) {
+    if (e.key !== 'Escape') return;
+    var open = document.querySelector('.fm-help-popup.show');
+    if (!open) return;
+    fmCloseAllHelp();
+    var trigger = open.previousElementSibling;
+    if (trigger && trigger.classList.contains('fm-help')) trigger.focus();
+});
+
 // 유틸리티 함수
 function formatDate(dateStr) {
     if (!dateStr) return '-';

@@ -22,7 +22,7 @@
 
     /* NOW 배너 - 진행 중인 대회 */
     .live-competitions {
-        background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+        background: linear-gradient(135deg, #c9302c 0%, #9d2420 100%);
         padding: 1rem 0;
         margin-bottom: 0;
     }
@@ -35,7 +35,7 @@
     }
     .live-badge {
         background: white;
-        color: #ee5a24;
+        color: #c9302c;
         padding: 0.3rem 0.8rem;
         border-radius: 20px;
         font-weight: 700;
@@ -49,7 +49,7 @@
         content: '';
         width: 8px;
         height: 8px;
-        background: #ee5a24;
+        background: #c9302c;
         border-radius: 50%;
         animation: blink 1s infinite;
     }
@@ -104,7 +104,7 @@
 
     /* UPCOMING 배너 */
     .upcoming-competitions {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: linear-gradient(135deg, #1e3a8a 0%, #16306e 100%);
         padding: 1rem 0;
         margin-bottom: 0;
     }
@@ -117,7 +117,7 @@
     }
     .upcoming-badge {
         background: white;
-        color: #667eea;
+        color: #1e3a8a;
         padding: 0.3rem 0.8rem;
         border-radius: 20px;
         font-weight: 700;
@@ -152,13 +152,13 @@
         align-items: center;
         justify-content: center;
         width: 56px;
-        background: rgba(102, 126, 234, 0.15);
+        background: rgba(96, 165, 250, 0.14);
         flex-shrink: 0;
     }
     .upcoming-card-icon svg {
         width: 24px;
         height: 24px;
-        stroke: #a8b4f0;
+        stroke: #93b4f5;
         stroke-width: 1.5;
         fill: none;
     }
@@ -195,10 +195,12 @@
         flex-shrink: 0;
     }
     .upcoming-card-status .status {
-        font-size: 0.8rem;
+        font-family: var(--fm-font-display);
+        font-size: 1.35rem;
+        line-height: 1;
         font-weight: 700;
         color: #ff8080;
-        letter-spacing: 0.5px;
+        letter-spacing: 0.04em;
     }
     .upcoming-card-status .date {
         font-size: 0.7rem;
@@ -272,6 +274,9 @@
     /* 대회 카드 목록 */
     .comp-cards {
         display: grid;
+        /* minmax(0, 1fr) caps the track at the container width so the nowrap
+           card title truncates instead of forcing max-content overflow (mobile 390px) */
+        grid-template-columns: minmax(0, 1fr);
         gap: 0.75rem;
     }
     .comp-card {
@@ -283,6 +288,7 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
+        min-width: 0;
         transition: transform 0.2s, border-color 0.2s;
         cursor: pointer;
         text-decoration: none;
@@ -425,6 +431,9 @@
         .page-header { padding: 2rem 0 1rem; }
         .competitions-controls { padding: 1rem; }
         .comp-card { flex-direction: column; align-items: flex-start; }
+        /* Column flex + align-items:flex-start would size the info block to the
+           nowrap title's max-content; force full width so the title truncates. */
+        .comp-card-info { width: 100%; min-width: 0; }
         .comp-card-right { text-align: left; margin-left: 0; margin-top: 0.5rem; }
         .year-tabs { gap: 0.35rem; }
         .year-tab { padding: 0.4rem 0.75rem; font-size: 0.8rem; }
@@ -450,10 +459,10 @@
         border-color: #c9302c;
     }
     [data-theme="light"] .upcoming-card-icon {
-        background: rgba(102, 126, 234, 0.08);
+        background: rgba(30, 58, 138, 0.08);
     }
     [data-theme="light"] .upcoming-card-icon svg {
-        stroke: #667eea;
+        stroke: #1e3a8a;
     }
     [data-theme="light"] .upcoming-card-info h4 {
         color: #191f28;
@@ -582,6 +591,36 @@
         border-color: #e5e8eb;
         border-top-color: #c9302c;
     }
+
+    /* ===== Scoreboard numerals =====
+       Countdown, dates and counts are pure latin/numeric strings, so the
+       condensed display face applies safely to the whole element. Condensed
+       runs narrow, hence the small size bumps; positive tracking only. */
+    /* .upcoming-card-status .status is fully specified above at its own rule
+       (1.35rem, matched to the home page D-day); it is deliberately not
+       repeated here, where the later font-size would override it. */
+    .live-card-status .status {
+        font-family: var(--fm-font-display);
+        font-weight: 700;
+        font-size: 0.95rem;
+        letter-spacing: 0.04em;
+    }
+    .upcoming-card-status .date,
+    .live-card-status .date,
+    .comp-card-date {
+        font-family: var(--fm-font-display);
+        font-weight: 600;
+        letter-spacing: 0.01em;
+        font-variant-numeric: lining-nums;
+    }
+    .comp-card-date {
+        font-size: 1rem;
+    }
+    /* .results-count is a translated sentence ("총 148개"); only the injected
+       .fm-num span around the figure carries the display face. */
+    .results-count .fm-num {
+        font-size: 1.05em;
+    }
 </style>
 {% endblock %}
 
@@ -700,8 +739,9 @@ async function loadCompetitions() {
         const res = await fetch('/api/competitions?' + params.toString());
         const data = await res.json();
 
-        document.getElementById('results-count').textContent =
-            i18n.total_count.replace('{count}', data.total.toLocaleString());
+        document.getElementById('results-count').innerHTML =
+            i18n.total_count.replace('{count}',
+                '<span class="fm-num">' + data.total.toLocaleString() + '</span>');
 
         if (data.competitions.length === 0) {
             cardsDiv.innerHTML = `

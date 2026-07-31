@@ -3,6 +3,25 @@
    All subdomains MUST use these variables for consistency
    ============================================================ */
 
+/* Barlow Condensed - latin subset only. Hangul in a mixed element falls back
+   to --fm-font-primary (Pretendard) by design. */
+@font-face {
+    font-family: 'Barlow Condensed';
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: url('/static/fonts/barlow-condensed-600-latin.woff2') format('woff2');
+    unicode-range: U+0000-00FF, U+2013-2014, U+2026;
+}
+@font-face {
+    font-family: 'Barlow Condensed';
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url('/static/fonts/barlow-condensed-700-latin.woff2') format('woff2');
+    unicode-range: U+0000-00FF, U+2013-2014, U+2026;
+}
+
 :root {
     /* ==================== COLORS ==================== */
 
@@ -29,7 +48,7 @@
     /* Text Colors */
     --fm-text-primary: #ffffff;         /* 주요 텍스트 */
     --fm-text-secondary: #b4b4c4;       /* 보조 텍스트 */
-    --fm-text-muted: #6b6b7b;           /* 비활성 텍스트 */
+    --fm-text-muted: #9a9aad;           /* 비활성 텍스트 (다크: WCAG AA 대비 확보) */
     --fm-text-accent: #c9302c;          /* 강조 텍스트 */
     --fm-text-link: #60a5fa;            /* 링크 */
     --fm-text-link-hover: #93c5fd;      /* 링크 호버 */
@@ -57,7 +76,8 @@
     /* ==================== TYPOGRAPHY ==================== */
 
     /* Font Family */
-    --fm-font-primary: 'Pretendard Variable', 'Pretendard', 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    --fm-font-primary: 'Pretendard Variable', 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    --fm-font-display: 'Barlow Condensed', var(--fm-font-primary);   /* 스코어보드 숫자 */
     --fm-font-mono: 'JetBrains Mono', 'Fira Code', monospace;
 
     /* Font Sizes */
@@ -69,17 +89,25 @@
     --fm-text-2xl: 1.5rem;      /* 24px */
     --fm-text-3xl: 1.875rem;    /* 30px */
     --fm-text-4xl: 2.25rem;     /* 36px */
+    --fm-text-5xl: 3rem;        /* 48px - display */
 
     /* Font Weights */
     --fm-font-normal: 400;
     --fm-font-medium: 500;
     --fm-font-semibold: 600;
     --fm-font-bold: 700;
+    --fm-font-extrabold: 800;   /* strong headings (Pretendard) */
+    --fm-font-black: 900;        /* display / hero */
 
     /* Line Heights */
     --fm-leading-tight: 1.25;
     --fm-leading-normal: 1.5;
     --fm-leading-relaxed: 1.75;
+
+    /* Letter Spacing (Tracking) - craft floor: -0.04em */
+    --fm-tracking-tighter: -0.03em;  /* large display headings */
+    --fm-tracking-tight: -0.02em;    /* headings */
+    --fm-tracking-normal: 0em;
 
     /* ==================== SPACING ==================== */
     --fm-space-1: 0.25rem;      /* 4px */
@@ -132,6 +160,50 @@
     --fm-sidebar-width: 280px;
 }
 
+/* ==================== BASE TYPOGRAPHY ==================== */
+/* Tabular numerals: data figures (rank, points, scores, dates, counts) render
+   at equal width so digits line up in columns across the whole data platform. */
+body {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1;
+}
+
+/* Type hierarchy established with WEIGHT + TRACKING + line-height (not raw scale)
+   so the step from title -> heading -> body is obvious. Color is left to the
+   per-theme rules (dark-theme.css / light tokens), so contrast is untouched. */
+h1, h2, h3 {
+    font-weight: var(--fm-font-bold);
+    line-height: var(--fm-leading-tight);
+    letter-spacing: var(--fm-tracking-tight);
+}
+h1 {
+    font-weight: var(--fm-font-extrabold);
+    line-height: 1.2;
+    letter-spacing: var(--fm-tracking-tighter);
+}
+h3 {
+    font-weight: var(--fm-font-semibold);
+}
+
+/* Display numerals — 랭크/포인트/스코어/D-day 등 데이터 숫자의 스코어보드 보이스 */
+.fm-num {
+    font-family: var(--fm-font-display);
+    font-weight: 700;
+    letter-spacing: 0.01em;   /* 콘덴스드는 음수 자간 금지 */
+    font-variant-numeric: lining-nums;
+}
+.fm-num--semi {
+    font-weight: 600;
+}
+
+/* Uppercase micro label — 데이터 라벨 (eyebrow/섹션 라벨 아님) */
+.fm-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+}
+
 /* ==================== GLASSMORPHISM UTILITIES ==================== */
 .fm-glass {
     background: var(--fm-bg-card);
@@ -167,7 +239,7 @@
     /* Text - Toss/Apple style */
     --fm-text-primary: #191f28;
     --fm-text-secondary: #4e5968;
-    --fm-text-muted: #8b95a1;
+    --fm-text-muted: #6b7280;  /* 라이트: WCAG AA 대비 확보 (흰 배경 ≈4.8:1) */
     --fm-text-accent: #c9302c;
     --fm-text-link: #1e3a8a;
     --fm-text-link-hover: #2d4cab;

@@ -18,21 +18,21 @@
     {% endfor %}
     {% endif %}
 
-    <!-- Modern Fonts: Pretendard (Korean) + Inter (English) -->
+    <!-- Fonts: Pretendard (text) + Barlow Condensed (display numerals, self-hosted) -->
     <link rel="preconnect" href="https://cdn.jsdelivr.net">
     {% if lang == 'ko' %}
     <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" rel="stylesheet">
     {% endif %}
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="preload" href="/static/fonts/barlow-condensed-700-latin.woff2" as="font" type="font/woff2" crossorigin>
 
     <!-- theme-color (브라우저 주소창 색상) -->
     <meta name="theme-color" content="{% if theme == 'light' %}#ffffff{% else %}#0a0a0f{% endif %}">
 
     <!-- shared-ui 디자인 토큰 (light/dark 테마 변수 포함) -->
-    <link rel="stylesheet" href="/static/css/variables.css?v=20260603">
-    <link rel="stylesheet" href="/static/css/dark-theme.css?v=20260704a">
-    <link rel="stylesheet" href="/static/css/components.css?v=20260613">
-    <link rel="stylesheet" href="/static/css/mobile-ux.css?v=20260614">
+    <link rel="stylesheet" href="/static/css/variables.css?v=20260731b">
+    <link rel="stylesheet" href="/static/css/dark-theme.css?v=20260731b">
+    <link rel="stylesheet" href="/static/css/components.css?v=20260731b">
+    <link rel="stylesheet" href="/static/css/mobile-ux.css?v=20260731b">
     {% block extra_css %}{% endblock %}
     <style>
     .lang-switcher { position: relative; }
@@ -111,7 +111,7 @@
                 <a href="/{{ lang|default('ko') }}/fencinglab">FencingLab</a>
             </div>
             <div class="search-box">
-                <input type="text" id="global-search" placeholder="{{ _t('선수 또는 팀 검색...') }}">
+                <input type="text" id="global-search" aria-label="{{ _t('선수 또는 팀 검색...') }}" placeholder="{{ _t('선수 또는 팀 검색...') }}">
             </div>
             <!-- Language Switcher (desktop) -->
             <div class="lang-switcher">
@@ -181,12 +181,15 @@
 
     <footer class="footer">
         <div class="container">
-            <p>FencingMind Tracker &copy; 2024-2025</p>
+            <p>FencingMind Tracker &copy; 2024&ndash;<span id="footer-year">2026</span></p>
             <p>{{ _t("데이터 출처") }}: <a href="https://fencing.sports.or.kr" target="_blank">KFF</a></p>
             <p class="footer-disclaimer">{{ _t("본 서비스의 데이터는 자동 수집(스크래핑) 기반이며, 공식 기록과 다를 수 있습니다. 참고용으로만 활용해 주세요. 오류 발견 시 제보해 주시면 확인 후 수정하겠습니다.") }}</p>
         </div>
     </footer>
 
+    <script>
+    (function () { var y = document.getElementById('footer-year'); if (y) y.textContent = new Date().getFullYear(); })();
+    </script>
     <script src="/static/js/main.js"></script>
     <script>
     // Parallax Scrolling Effect

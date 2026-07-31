@@ -3,9 +3,28 @@
 {% block title %}{{ tr_event(event.name) }} - {{ tr_comp(competition.competition.name) }}{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="/static/css/bracket.css?v=20260607">
+<link rel="stylesheet" href="/static/css/bracket.css?v=20260731a">
 <link rel="stylesheet" href="/static/css/player-search.css?v=20260613">
 <style>
+/* =====================================================
+   TAB LEGEND - section label + "?" help trigger
+   ===================================================== */
+.tab-legend {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 12px;
+}
+.tab-legend-title {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text-primary, #e5e7eb);
+    letter-spacing: var(--fm-tracking-tight, -0.01em);
+}
+[data-theme="light"] .tab-legend-title {
+    color: #191f28;
+}
+
 /* =====================================================
    PLAYER SEARCH SECTION - Dark Mode Compatible
    ===================================================== */
@@ -137,15 +156,12 @@
     padding: 14px;
     border-radius: 10px;
     margin-bottom: 10px;
-    border-left: 4px solid var(--accent-primary, #c9302c);
-    border-top: 1px solid var(--border-color, rgba(255, 255, 255, 0.05));
-    border-right: 1px solid var(--border-color, rgba(255, 255, 255, 0.05));
-    border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.05));
-    transition: all 0.2s ease;
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+    transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
 }
 
 .player-result-card:hover {
-    border-left-color: var(--accent-gold, #d4a574);
+    border-color: var(--accent-gold, #d4a574);
     transform: translateX(4px);
 }
 
@@ -254,10 +270,12 @@
 /* =====================================================
    HIGHLIGHT STYLES - Dark Mode Compatible
    ===================================================== */
+/* "내 선수" marker — amber tint + ring. Tint is the primary channel so the
+   marker survives on table rows, which have no border box of their own. */
 .player-highlighted {
-    background: rgba(245, 158, 11, 0.15) !important;
-    border-left: 4px solid #f59e0b !important;
-    box-shadow: 0 0 10px rgba(245, 158, 11, 0.2);
+    background: rgba(245, 158, 11, 0.16) !important;
+    outline: 1px solid rgba(245, 158, 11, 0.6);
+    outline-offset: -1px;
 }
 
 tr.player-highlighted {
@@ -270,7 +288,7 @@ tr.player-highlighted td {
 
 .match-card.player-highlighted {
     border: 2px solid #f59e0b !important;
-    box-shadow: 0 0 15px rgba(245, 158, 11, 0.3);
+    box-shadow: 0 3px 12px rgba(120, 76, 4, 0.35);
 }
 
 .bout-player.player-highlighted {
@@ -280,7 +298,7 @@ tr.player-highlighted td {
 }
 
 .podium-place.player-highlighted {
-    box-shadow: 0 0 20px rgba(245, 158, 11, 0.5);
+    box-shadow: 0 4px 16px rgba(120, 76, 4, 0.5);
 }
 
 /* =====================================================
@@ -651,7 +669,6 @@ tr.player-highlighted td {
     height: 100%;
     border-radius: 3px;
     background: var(--accent-primary, #c9302c);
-    transition: width 0.4s ease;
 }
 .stats-bar-count {
     font-size: 0.72rem;
@@ -977,6 +994,60 @@ tr.player-highlighted td {
 [data-theme="light"] #clear-search-btn:hover {
     background: rgba(239, 68, 68, 0.15);
 }
+
+/* =====================================================
+   SCOREBOARD NUMERALS
+   Barlow Condensed is latin-only by design, so it is bound to cells that
+   hold digits alone. Name/team/label cells stay in the UI face — a mixed
+   Hangul cell would otherwise render in two typefaces at once.
+   ===================================================== */
+
+/* Pool standings: 순위 · 승 · 패 · 지수 · 득점 (cols 1, 5-8) */
+.pool-standings-table td.rank,
+.pool-standings-table tbody td:nth-child(n+5),
+/* Pool 종합 순위: 순위 · 승 · 패 · 승률 · 지수 · 득점 (cols 1, 4-8) */
+.pool-container[data-pool-id="total"] .result-table td.rank,
+.pool-container[data-pool-id="total"] .result-table tbody td:nth-child(n+4) {
+    font-family: var(--fm-font-display);
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    font-variant-numeric: lining-nums tabular-nums;
+    font-size: 1.02rem;
+}
+
+/* Pool matrix: row index, V-scores, defeat scores, W/L/indicator tail */
+.matrix-table tbody td:first-child,
+.matrix-table td.victory,
+.matrix-table td.defeat,
+.matrix-table td.self,
+.matrix-table td.stats-col {
+    font-family: var(--fm-font-display);
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    font-variant-numeric: lining-nums tabular-nums;
+}
+
+/* League rank chip (#12) and pool bout score (15 - 8) */
+.league-rank,
+.bout-score {
+    font-family: var(--fm-font-display);
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    font-variant-numeric: lining-nums tabular-nums;
+}
+.bout-score {
+    font-size: 1.15rem;
+}
+
+/* Counts that sit inside a Hangul sentence get the face on the digits only. */
+.pool-info .fm-num,
+.pool-title h4 .fm-num {
+    font-family: var(--fm-font-display);
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    font-variant-numeric: lining-nums;
+    font-size: 1.05em;
+}
 </style>
 {% endblock %}
 
@@ -1141,6 +1212,19 @@ tr.player-highlighted td {
 
     <div id="tab-pools" class="tab-content{% if event.pool_rounds or not event.participants %} active{% endif %}">
         {% if event.pool_rounds %}
+        <div class="tab-legend">
+            <span class="tab-legend-title">Pool</span>
+            <span class="fm-help-wrap">
+                <button type="button" class="fm-help" aria-expanded="false"
+                        aria-label="{{ _t('예선 풀 설명 보기') }}"
+                        onclick="fmToggleHelp(this, event)">?</button>
+                <div class="fm-help-popup" role="tooltip">
+                    <strong>{{ _t("예선 풀이란?") }}</strong>
+                    <p>{{ _t("조별 리그전입니다. 5점 선취, 3분 1회전으로 진행합니다.") }}</p>
+                    <p>{{ _t("풀 성적으로 본선(DE) 시드가 결정됩니다.") }}</p>
+                </div>
+            </span>
+        </div>
         <div class="pool-selector">
             {% for pool in event.pool_rounds %}
             <button class="pool-btn{% if loop.first %} active{% endif %}" data-pool="{{ loop.index }}">Pool {{ loop.index }}</button>
@@ -1160,7 +1244,7 @@ tr.player-highlighted td {
             <div class="pool-title">
                 <h4>{{ _t("Pool 종합 순위") }}</h4>
                 <span class="pool-info">
-                    {{ _t("전체") }} {{ event.pool_total_ranking|length }}{{ _t("명") }}
+                    {{ _t("전체") }} <span class="fm-num">{{ event.pool_total_ranking|length }}</span>{{ _t("명") }}
                     {% if is_calculated %}
                     <span class="badge-calculated" title="pool_rounds 데이터로 자체 계산한 순위입니다">{{ _t("자체계산") }}</span>
                     {% endif %}
@@ -1204,7 +1288,7 @@ tr.player-highlighted td {
         {% for pool in event.pool_rounds %}
         <div class="pool-container pool-item" data-pool-id="{{ loop.index }}">
             <div class="pool-title">
-                <h4>Pool {{ loop.index }}</h4>
+                <h4>Pool <span class="fm-num">{{ loop.index }}</span></h4>
                 <span class="pool-info">
                     {% if pool.piste %}{{ _t("피스트") }}: {{ pool.piste }} | {% endif %}
                     {% if pool.time %}{{ _t("시간") }}: {{ pool.time }} | {% endif %}
@@ -1302,7 +1386,7 @@ tr.player-highlighted td {
             {% if pool.bouts %}
             <div class="bout-list">
                 <div class="bout-list-header" onclick="toggleBoutList(this)">
-                    <span>⚔️ {{ _t("개별 경기") }} ({{ pool.bouts|length }}{{ _t("경기") }})</span>
+                    <span>⚔️ {{ _t("개별 경기") }} (<span class="fm-num">{{ pool.bouts|length }}</span>{{ _t("경기") }})</span>
                     <span class="result-expand-icon">▼</span>
                 </div>
                 <div class="bout-items" style="display:none">
@@ -1334,6 +1418,75 @@ tr.player-highlighted td {
     </div>
 
     <div id="tab-tournament" class="tab-content">
+        <div class="tab-legend">
+            <span class="tab-legend-title">Direct Elimination</span>
+            <span class="fm-help-wrap">
+                <button type="button" class="fm-help" aria-expanded="false"
+                        aria-label="{{ _t('본선 토너먼트 설명 보기') }}"
+                        onclick="fmToggleHelp(this, event)">?</button>
+                <div class="fm-help-popup" role="tooltip">
+                    <strong>{{ _t("본선 토너먼트란?") }}</strong>
+                    <p>{{ _t("15점 선취, 3분 3회전으로 진행합니다.") }}</p>
+                    <p>{{ _t("패배하면 즉시 탈락합니다.") }}</p>
+                </div>
+            </span>
+        </div>
+        {# ===== 선수 루트 (Player Route): 내 선수/선택 선수의 대진 경로를 한눈에 ===== #}
+        {% set route_players = [] %}
+        {% if event.normalized_bracket and event.normalized_bracket.seeding %}{% set route_players = event.normalized_bracket.seeding %}
+        {% elif event.normalized_bracket and event.normalized_bracket.seeded_players %}{% set route_players = event.normalized_bracket.seeded_players %}
+        {% elif event.de_seeding %}{% set route_players = event.de_seeding %}{% endif %}
+        {% if route_players %}
+        <div class="de-route" id="de-route">
+            <div class="de-route-head">
+                <span class="de-route-title">🧭 {{ _t("선수 루트") }}</span>
+                <select id="de-route-select" class="de-route-select" aria-label="{{ _t('선수 선택') }}">
+                    <option value="">{{ _t("선수 선택") }}</option>
+                    {% set seen_r = namespace(names=[]) %}
+                    {% for p in route_players %}
+                    {% if p.name and p.name not in seen_r.names %}
+                    {% set seen_r.names = seen_r.names + [p.name] %}
+                    <option value="{{ p.name }}" data-team="{{ p.team }}">{% if p.seed %}[{{ p.seed }}] {% endif %}{{ tr_player(p.name) }}{% if p.team %} · {{ tr_team(p.team) }}{% endif %}</option>
+                    {% endif %}
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="de-route-body" id="de-route-body">
+                <div class="de-route-hint">{{ _t("내 선수 또는 선수를 선택하면 대진 경로가 표시됩니다") }}</div>
+            </div>
+        </div>
+        <style>
+        .de-route{background:var(--bg-secondary,rgba(26,26,37,.6));border:1px solid var(--border-color,rgba(255,255,255,.08));border-radius:12px;padding:12px 14px;margin-bottom:16px}
+        .de-route-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+        .de-route-title{font-weight:700;font-size:.95rem;color:var(--text-primary,#e5e7eb)}
+        .de-route-select{flex:1;min-width:180px;max-width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border-color,rgba(255,255,255,.15));background:var(--bg-primary,#12121a);color:var(--text-primary,#e5e7eb);font-size:.9rem}
+        .de-route-hint{color:var(--text-muted,#6b6b7b);font-size:.85rem;padding:6px 2px}
+        .drt-player{margin-bottom:10px;font-size:.95rem}
+        .drt-name{font-weight:700;color:var(--fm-accent-primary,#c9302c);text-decoration:none}
+        .drt-team{color:var(--text-muted,#6b6b7b);font-size:.85rem}
+        .drt-seedbadge{background:var(--bg-primary,#12121a);border:1px solid var(--border-color,rgba(255,255,255,.15));border-radius:6px;padding:1px 7px;font-family:var(--fm-font-display);font-weight:600;letter-spacing:.03em;font-size:.8rem;color:var(--text-muted,#9ca3af);margin-left:4px}
+        .drt-list{list-style:none;margin:0;padding:0}
+        /* Route node state — hue + tint. The 승/패/부전승 badge carries the same
+           state as text, so colour is never the only channel. */
+        .drt-node,.drt-end{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 10px;border-radius:8px;margin-bottom:6px;border:1px solid var(--border-color,rgba(255,255,255,.12));background:var(--bg-primary,rgba(255,255,255,.02))}
+        .drt-node.is-win{border-color:rgba(34,197,94,.5);background:rgba(34,197,94,.09)}
+        .drt-node.is-lose{border-color:rgba(239,68,68,.5);background:rgba(239,68,68,.09)}
+        .drt-node.is-bye{border-color:rgba(156,163,175,.45);background:rgba(156,163,175,.07)}
+        .drt-node.is-current{border-color:rgba(212,165,116,.65);background:rgba(212,165,116,.12)}
+        .drt-node.drt-future{opacity:.9;border-style:dashed}
+        .drt-round{font-weight:700;font-size:.85rem;min-width:52px;color:var(--text-primary,#e5e7eb)}
+        .drt-vs{font-size:.88rem;color:var(--text-primary,#d1d5db)}
+        .drt-seed{color:var(--text-muted,#6b6b7b);font-size:.78rem}
+        .drt-score{font-family:var(--fm-font-display);font-weight:700;letter-spacing:.01em;font-variant-numeric:lining-nums tabular-nums;color:var(--text-secondary,#c3c9d2);font-size:.95rem;margin-left:auto}
+        .drt-win{background:#14532d;color:#86efac;border-radius:5px;padding:1px 7px;font-size:.75rem;font-weight:700}
+        .drt-lose{background:#7f1d1d;color:#fca5a5;border-radius:5px;padding:1px 7px;font-size:.75rem;font-weight:700}
+        .drt-bye{background:#374151;color:#d1d5db;border-radius:5px;padding:1px 7px;font-size:.75rem;font-weight:700}
+        .drt-cands{font-size:.85rem;color:var(--text-muted,#9ca3af)}
+        .drt-cur{color:#d4a574;font-size:.75rem;font-weight:700}
+        .drt-end{font-weight:700;color:var(--text-primary,#e5e7eb);border-left-color:#d4a574}
+        .drt-final{color:var(--fm-medal-gold,#d4a574)}
+        </style>
+        {% endif %}
         {% if event.normalized_bracket %}
             {% if event.normalized_bracket.format == 'dual_de' %}
             {# Dual DE 포맷 (국가대표 선발전 등) - 특별 컴포넌트 사용 #}
@@ -1377,12 +1530,28 @@ tr.player-highlighted td {
             </details>
             {% endif %}
             {% if event.de_bracket %}
+            {% set rounds = event.de_rounds if event.de_rounds else ['64강', '32강', '16강', '8강', '준결승', '결승'] %}
+            {# 기본 활성 라운드 = 존재하는 라운드 중 완료되지 않은 첫 라운드 (없으면 존재하는 마지막) #}
+            {% set ldr = namespace(round=None, last=None) %}
+            {% for rn in rounds %}
+              {% if event.de_bracket.get(rn) %}
+                {% set ldr.last = rn %}
+                {% if ldr.round is none %}
+                  {% set _lc = namespace(real=0, dec=0) %}
+                  {% for _m in event.de_bracket[rn] %}
+                    {% set _lc.real = _lc.real + 1 %}
+                    {% if _m.winner_name and _m.winner_name != 'None' %}{% set _lc.dec = _lc.dec + 1 %}{% endif %}
+                  {% endfor %}
+                  {% if not (_lc.real > 0 and _lc.dec == _lc.real) %}{% set ldr.round = rn %}{% endif %}
+                {% endif %}
+              {% endif %}
+            {% endfor %}
+            {% set lg_default_round = ldr.round if ldr.round is not none else ldr.last %}
             <div class="bracket-list-view active">
-                {% set rounds = event.de_rounds if event.de_rounds else ['64강', '32강', '16강', '8강', '준결승', '결승'] %}
                 <div class="round-tabs" role="tablist">
                     {% for round_name in rounds %}
                     {% if event.de_bracket.get(round_name) %}
-                    <button class="round-tab {% if loop.last %}active{% endif %}"
+                    <button class="round-tab {% if round_name == lg_default_round %}active{% endif %}"
                             role="tab"
                             data-round="{{ round_name }}">
                         {{ round_name }}
@@ -1392,7 +1561,7 @@ tr.player-highlighted td {
                 </div>
                 {% for round_name in rounds %}
                 {% if event.de_bracket.get(round_name) %}
-                <div class="round-panel {% if loop.last %}active{% endif %}" data-round-panel="{{ round_name }}">
+                <div class="round-panel {% if round_name == lg_default_round %}active{% endif %}" data-round-panel="{{ round_name }}">
                     <div class="round-title-mobile">
                         <span class="round-icon">&#9876;</span>
                         {{ round_name }} <span class="match-count">({{ event.de_bracket[round_name]|length }}{{ _t("경기") }})</span>
@@ -1679,6 +1848,17 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
         if (btn.dataset.tab === 'team-ranking' && !window._teamRankingLoaded) {
             window._teamRankingLoaded = true;
             loadEventTeamRanking();
+        }
+        // 선수 루트 lazy-init + 활성 라운드 탭 가운데로 스크롤 (탭 열릴 때)
+        if (btn.dataset.tab === 'tournament') {
+            if (!window._deRouteLoaded) {
+                window._deRouteLoaded = true;
+                try { if (window.DERoute) window.DERoute.init(); } catch (e) { console.error('DE route init error:', e); }
+            }
+            try {
+                var _art = document.querySelector('#tab-tournament .round-tab.active');
+                if (_art && _art.scrollIntoView) _art.scrollIntoView({ inline: 'center', block: 'nearest' });
+            } catch (e) {}
         }
     });
 });
@@ -2239,6 +2419,180 @@ const dePrediction = new DEPredictionTable(
     document.getElementById('de-prediction-container'),
     SUB_EVENT_CD
 );
+
+// ==========================================
+// DE Route View (선수 루트) — 내 선수/선택 선수의 대진 경로를 한 타임라인으로
+// de-results(과거 실제) + de-prediction(향후 잠재)를 합쳐서 렌더. 서버 미변경.
+// ==========================================
+window.DERoute = (function() {
+    var _subCd = SUB_EVENT_CD;
+    function esc(s) { return (typeof _mpEscapeHtml === 'function') ? _mpEscapeHtml(s) : String(s == null ? '' : s); }
+    function trP(s) { try { return (typeof _tr_player === 'function') ? (_tr_player(s) || s) : s; } catch (e) { return s; } }
+    function trT(s) { try { return (typeof _tr_team === 'function') ? (_tr_team(s) || s) : s; } catch (e) { return s; } }
+    function t(s) { try { return (typeof _t === 'function') ? (_t(s) || s) : s; } catch (e) { return s; } }
+    function getJson(url) { return fetch(url).then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; }); }
+    // 라운드 시간순 정렬 키 (빠른 라운드=참가자 많음=먼저). 준결승/결승은 번호가 없어 별도 처리.
+    function roundOrder(r) {
+        r = String(r == null ? '' : r);
+        if (r.indexOf('결승') >= 0 && r.indexOf('준') < 0) return -2;   // 결승 = 맨 뒤
+        if (r.indexOf('준결승') >= 0 || r === '4강') return -4;         // 준결승(=4강)
+        if (r.indexOf('3') >= 0 && r.indexOf('위') >= 0) return -1;      // 3위전
+        var m = r.match(/(\d+)/);
+        if (m) return -parseInt(m[1], 10);                              // 32강→-32 ... 8강→-8
+        return -3;
+    }
+
+    function render(name, results, pred) {
+        var body = document.getElementById('de-route-body');
+        if (!body) return;
+        var pInfo = (results && results.player) || (pred && pred.player) || { name: name };
+        var resList = (results && results.results) ? results.results.slice() : [];
+        resList.sort(function(a, b) { return roundOrder(a.round) - roundOrder(b.round); }); // API가 준결승/결승 순서를 섞어 반환 → 시간순 정렬
+        var lastResult = resList.length ? resList[resList.length - 1] : null;
+        var lostLast = !!(lastResult && lastResult.result === 'lose');
+        var wonFinal = resList.some(function(r) { return String(r.round).indexOf('결승') >= 0 && String(r.round).indexOf('준') < 0 && r.result === 'win'; });
+        // 상태는 실제 결과(de-results)를 우선 신뢰: 마지막 경기가 패배면 탈락 (prediction이 놓치는 경우 보정)
+        var isEliminated = !wonFinal && (lostLast || !!(pred && pred.eliminated));
+        var elimRound = (lastResult && lostLast) ? lastResult.round : (pred && pred.elimination_round);
+        var maxDone = resList.length ? Math.max.apply(null, resList.map(function(r) { return roundOrder(r.round); })) : -999;
+        var nodes = [];
+
+        // 1) 완료된 라운드 (실제 결과)
+        resList.forEach(function(r) {
+            var opp = r.opponent || {};
+            var isBye = r.result === 'bye';
+            var win = r.result === 'win';
+            var cls = win ? 'is-win' : (isBye ? 'is-bye' : 'is-lose');
+            var badge = isBye ? '<span class="drt-bye">' + t('부전승') + '</span>'
+                       : (win ? '<span class="drt-win">' + t('승') + '</span>' : '<span class="drt-lose">' + t('패') + '</span>');
+            var vs = isBye ? t('부전승')
+                   : 'vs ' + esc(trP(opp.name || '-')) + (opp.seed ? ' <span class="drt-seed">(' + esc(opp.seed) + ')</span>' : '');
+            nodes.push(
+                '<li class="drt-node ' + cls + '">' +
+                    '<span class="drt-round">' + esc(r.round) + '</span>' +
+                    '<span class="drt-vs">' + vs + '</span>' +
+                    (r.score ? '<span class="drt-score">' + esc(r.score) + '</span>' : '') +
+                    badge +
+                '</li>'
+            );
+        });
+
+        // 2) 탈락 → 종료 노드 (+ 최종순위 비동기 채움), 아니면 3) 향후 라운드
+        if (wonFinal) {
+            nodes.push('<li class="drt-end"><span>🏆 ' + t('우승') + '</span><span class="drt-final" id="drt-final"></span></li>');
+        } else if (isEliminated) {
+            nodes.push(
+                '<li class="drt-end"><span>🏁 ' + t('이 대회 종료') +
+                (elimRound ? ' · ' + esc(elimRound) + ' ' + t('탈락') : '') +
+                '</span><span class="drt-final" id="drt-final"></span></li>'
+            );
+        } else if (pred && pred.predictions && pred.predictions.length) {
+            // 아직 진행 중: 완료된 라운드보다 뒤(미래)인 예측만 표시 (준결승=4강 라벨 불일치 중복 제거)
+            var future = pred.predictions.slice()
+                .filter(function(rd) { return roundOrder(rd.round) > maxDone; })
+                .sort(function(a, b) { return roundOrder(a.round) - roundOrder(b.round); });
+            future.forEach(function(rd, idx) {
+                var opps = rd.potential_opponents || [];
+                var isNext = idx === 0;
+                var names = opps.slice(0, 8).map(function(o) {
+                    return esc(trP(o.name)) + (o.seed ? ' (' + esc(o.seed) + ')' : '');
+                }).join(', ');
+                if (opps.length > 8) names += ' ' + t('외') + ' ' + (opps.length - 8);
+                var cand = opps.length ? (t('상대 후보') + ' ' + opps.length + t('명') + (names ? ': ' + names : '')) : t('상대 미정');
+                nodes.push(
+                    '<li class="drt-node drt-future ' + (isNext ? 'is-current' : '') + '">' +
+                        '<span class="drt-round">' + esc(rd.round) + (isNext ? ' <span class="drt-cur">▶ ' + t('다음') + '</span>' : '') + '</span>' +
+                        '<span class="drt-cands">' + cand + '</span>' +
+                    '</li>'
+                );
+            });
+        }
+
+        if (!nodes.length) {
+            body.innerHTML = '<div class="de-route-hint">' + t('이 선수의 대진 경로 정보가 없습니다') + '</div>';
+            return;
+        }
+
+        var link = '/player/' + encodeURIComponent(pInfo.name || name) + (pInfo.team ? '?team=' + encodeURIComponent(pInfo.team) : '');
+        body.innerHTML =
+            '<div class="drt-player">' +
+                '<a href="' + link + '" class="drt-name">' + esc(trP(pInfo.name || name)) + '</a>' +
+                (pInfo.team ? ' <span class="drt-team">' + esc(trT(pInfo.team)) + '</span>' : '') +
+                (pInfo.seed ? ' <span class="drt-seedbadge">Seed ' + esc(pInfo.seed) + '</span>' : '') +
+            '</div>' +
+            '<ul class="drt-list">' + nodes.join('') + '</ul>';
+
+        // 탈락/우승 시 최종순위 (KFA 기준) 조회해서 채움
+        if (isEliminated || wonFinal) {
+            getJson('/api/events/' + encodeURIComponent(_subCd) + '/players/search?q=' + encodeURIComponent(pInfo.name || name)).then(function(d) {
+                if (!d || !d.players || !d.players.length) return;
+                var team = pInfo.team || '';
+                var pl = d.players.filter(function(x) { return !team || (x.team || '') === team; })[0] || d.players[0];
+                if (pl && pl.final_rank && typeof pl.final_rank === 'number' && pl.final_rank > 0) {
+                    var el = document.getElementById('drt-final');
+                    if (el) el.textContent = ' · ' + t('최종') + ' ' + pl.final_rank + t('위');
+                }
+            });
+        }
+    }
+
+    function load(name, team) {
+        if (!name || !_subCd) return;
+        var body = document.getElementById('de-route-body');
+        if (body) body.innerHTML = '<div class="de-route-hint">' + t('불러오는 중') + '...</div>';
+        Promise.all([
+            getJson('/api/events/' + encodeURIComponent(_subCd) + '/de-results/' + encodeURIComponent(name)),
+            getJson('/api/events/' + encodeURIComponent(_subCd) + '/de-prediction/' + encodeURIComponent(name))
+        ]).then(function(arr) {
+            render(name, arr[0], arr[1]);
+            var sel = document.getElementById('de-route-select');
+            if (sel && sel.value !== name) {
+                for (var i = 0; i < sel.options.length; i++) {
+                    if (sel.options[i].value === name) { sel.selectedIndex = i; break; }
+                }
+            }
+        });
+    }
+
+    function _selectInDropdown(sel, ko) {
+        if (!ko) return false;
+        for (var i = 0; i < sel.options.length; i++) {
+            if (sel.options[i].value === ko) {
+                sel.selectedIndex = i;
+                load(ko, sel.options[i].getAttribute('data-team') || '');
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function init() {
+        var sel = document.getElementById('de-route-select');
+        if (!sel) return;
+        sel.addEventListener('change', function() {
+            var opt = sel.options[sel.selectedIndex];
+            if (opt && opt.value) load(opt.value, opt.getAttribute('data-team') || '');
+            else {
+                var body = document.getElementById('de-route-body');
+                if (body) body.innerHTML = '<div class="de-route-hint">' + t('선수를 선택하세요') + '</div>';
+            }
+        });
+        // 기본 선택: ?highlight 우선 → 내 선수(동기) → Favorites(비동기)
+        var hp = null;
+        try { hp = new URLSearchParams(window.location.search).get('highlight'); } catch (e) {}
+        if (hp) { if (!_selectInDropdown(sel, hp)) load(hp, ''); return; }
+        var sync = (typeof getMyPlayerNamesSync === 'function') ? getMyPlayerNamesSync() : [];
+        var picked = sync.length && _selectInDropdown(sel, sync[0].ko);
+        if (typeof getMyPlayerNames === 'function') {
+            getMyPlayerNames().then(function(names) {
+                if (picked || !names || !names.length) return;
+                _selectInDropdown(sel, names[0].ko); // 이벤트에 없으면 그대로 대기(선택 안내 유지)
+            });
+        }
+    }
+
+    return { init: init, load: load };
+})();
 
 // Initialize autocomplete
 const playerSearch = new PlayerSearch({

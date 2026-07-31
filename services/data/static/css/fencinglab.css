@@ -24,7 +24,7 @@
     background: var(--fl-bg-primary);
     min-height: 100vh;
     padding: 2rem;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: var(--fm-font-primary, 'Pretendard Variable', 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif);
 }
 
 /* Header */
@@ -145,21 +145,20 @@
     margin-top: 0.25rem;
 }
 
-/* Insight Cards */
+/* Insight Cards — severity reads from the surface tint, not a side rule */
 .fl-insight-card {
-    background: var(--fl-bg-secondary);
+    background: var(--fl-accent-green-dim);
     border-radius: 12px;
     padding: 1rem;
     margin-top: 1rem;
-    border-left: 3px solid var(--fl-accent-green);
 }
 
 .fl-insight-card.warning {
-    border-left-color: var(--fl-accent-yellow);
+    background: rgba(255, 204, 0, 0.12);
 }
 
 .fl-insight-card.danger {
-    border-left-color: var(--fl-accent-red);
+    background: rgba(255, 68, 102, 0.12);
 }
 
 .fl-insight-title {
@@ -500,7 +499,6 @@
 .fl-bar-fill {
     height: 100%;
     border-radius: 4px;
-    transition: width 0.5s ease;
 }
 
 .fl-comparison-rate {

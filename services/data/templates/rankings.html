@@ -415,13 +415,13 @@
 
     .team-badge {
         display: inline-block;
-        background: rgba(99, 102, 241, 0.15);
-        color: #a5b4fc;
+        background: rgba(96, 165, 250, 0.13);
+        color: #93c5fd;
         padding: 4px 10px;
         border-radius: 20px;
         font-size: 0.75rem;
         margin: 2px;
-        border: 1px solid rgba(99, 102, 241, 0.3);
+        border: 1px solid rgba(96, 165, 250, 0.26);
     }
 
     /* Loading State */
@@ -1270,6 +1270,35 @@
         .team-ranking-table .hide-mobile { display: none; }
         .team-ace-inline { display: block; }
     }
+
+    /* ===== Scoreboard numerals =====
+       Only the data cells take the condensed display face — the matching
+       header cells share these class names but hold translated words, which
+       must stay in the body face. */
+    td.rank-cell,
+    td.points-cell,
+    .team-ranking-table td.col-rank,
+    .team-ranking-table td.col-pts,
+    .team-ranking-table td.col-events,
+    .team-ranking-table td.col-members .fm-num {
+        font-family: var(--fm-font-display);
+        letter-spacing: 0.01em;
+        font-variant-numeric: lining-nums;
+    }
+    td.rank-cell,
+    td.points-cell,
+    .team-ranking-table td.col-rank,
+    .team-ranking-table td.col-pts {
+        font-weight: 700;
+    }
+    /* Size bumps are desktop-only: the ≤640px block above shrinks these cells
+       and loads earlier, so an unscoped bump here would win on mobile too. */
+    @media (min-width: 641px) {
+        td.rank-cell { font-size: 1.3rem; }
+        td.points-cell { font-size: 1.2rem; }
+        .team-ranking-table td.col-rank,
+        .team-ranking-table td.col-pts { font-size: 1.05rem; }
+    }
 </style>
 {% endblock %}
 
@@ -1305,7 +1334,7 @@
         <div class="filter-grid">
             <div class="filter-group">
                 <label>{{ i18n.common.filters.weapon|default('Weapon') }}</label>
-                <select id="weapon-select">
+                <select id="weapon-select" aria-label="{{ i18n.common.filters.weapon|default('Weapon') }} {{ _t('필터') }}">
                     <option value="foil">{{ i18n.common.weapons.foil|default('Foil') }}</option>
                     <option value="epee">{{ i18n.common.weapons.epee|default('Epee') }}</option>
                     <option value="sabre">{{ i18n.common.weapons.sabre|default('Sabre') }}</option>
@@ -1313,14 +1342,14 @@
             </div>
             <div class="filter-group">
                 <label>{{ i18n.common.filters.gender|default('Gender') }}</label>
-                <select id="gender-select">
+                <select id="gender-select" aria-label="{{ i18n.common.filters.gender|default('Gender') }} {{ _t('필터') }}">
                     <option value="남">{{ i18n.common.gender.male|default("Men's") }}</option>
                     <option value="여">{{ i18n.common.gender.female|default("Women's") }}</option>
                 </select>
             </div>
             <div class="filter-group">
                 <label>{{ i18n.common.filters.age_group|default('Age Group') }}</label>
-                <select id="age-group-select">
+                <select id="age-group-select" aria-label="{{ i18n.common.filters.age_group|default('Age Group') }} {{ _t('필터') }}">
                     <option value="E1" data-has-category="false">{{ i18n.common.rankings.elementary_1_2|default('Elementary 1-2 (U9)') }}</option>
                     <option value="E2" data-has-category="false">{{ i18n.common.rankings.elementary_3_4|default('Elementary 3-4 (U11)') }}</option>
                     <option value="E3" data-has-category="false">{{ i18n.common.rankings.elementary_5_6|default('Elementary 5-6 (U13)') }}</option>
@@ -1333,7 +1362,7 @@
             </div>
             <div class="filter-group">
                 <label>{{ i18n.common.filters.season|default('Season') }}</label>
-                <select id="year-select">
+                <select id="year-select" aria-label="{{ i18n.common.filters.season|default('Season') }} {{ _t('필터') }}">
                     <option value="">{{ i18n.common.rankings.all_rolling|default('All (Rolling)') }}</option>
                 </select>
             </div>
@@ -1460,7 +1489,7 @@
             <div class="filter-grid">
                 <div class="filter-group">
                     <label>{{ i18n.common.filters.weapon|default('Weapon') }}</label>
-                    <select id="team-weapon-select">
+                    <select id="team-weapon-select" aria-label="{{ i18n.common.filters.weapon|default('Weapon') }} {{ _t('필터') }}">
                         <option value="">{{ _t('전체') }}</option>
                         <option value="foil">{{ i18n.common.weapons.foil|default('Foil') }}</option>
                         <option value="epee">{{ i18n.common.weapons.epee|default('Epee') }}</option>
@@ -1469,7 +1498,7 @@
                 </div>
                 <div class="filter-group">
                     <label>{{ i18n.common.filters.gender|default('Gender') }}</label>
-                    <select id="team-gender-select">
+                    <select id="team-gender-select" aria-label="{{ i18n.common.filters.gender|default('Gender') }} {{ _t('필터') }}">
                         <option value="">{{ _t('전체') }}</option>
                         <option value="남">{{ i18n.common.gender.male|default("Men's") }}</option>
                         <option value="여">{{ i18n.common.gender.female|default("Women's") }}</option>
@@ -1477,7 +1506,7 @@
                 </div>
                 <div class="filter-group">
                     <label>{{ i18n.common.filters.age_group|default('Age Group') }}</label>
-                    <select id="team-age-select">
+                    <select id="team-age-select" aria-label="{{ i18n.common.filters.age_group|default('Age Group') }} {{ _t('필터') }}">
                         <option value="">{{ _t('전체') }}</option>
                         <option value="E1">{{ i18n.common.rankings.elementary_1_2|default('Elementary 1-2') }}</option>
                         <option value="E2">{{ i18n.common.rankings.elementary_3_4|default('Elementary 3-4') }}</option>
@@ -1490,7 +1519,7 @@
                 </div>
                 <div class="filter-group">
                     <label>{{ i18n.common.filters.season|default('Season') }}</label>
-                    <select id="team-year-select">
+                    <select id="team-year-select" aria-label="{{ i18n.common.filters.season|default('Season') }} {{ _t('필터') }}">
                     </select>
                 </div>
             </div>
@@ -1543,7 +1572,7 @@
     <div class="bottom-sheet-content">
         <div class="bs-filter-group">
             <label>{{ i18n.common.filters.weapon|default('Weapon') }}</label>
-            <select id="bs-weapon-select">
+            <select id="bs-weapon-select" aria-label="{{ i18n.common.filters.weapon|default('Weapon') }} {{ _t('필터') }}">
                 <option value="foil">{{ i18n.common.weapons.foil|default('Foil') }}</option>
                 <option value="epee">{{ i18n.common.weapons.epee|default('Epee') }}</option>
                 <option value="sabre">{{ i18n.common.weapons.sabre|default('Sabre') }}</option>
@@ -1551,14 +1580,14 @@
         </div>
         <div class="bs-filter-group">
             <label>{{ i18n.common.filters.gender|default('Gender') }}</label>
-            <select id="bs-gender-select">
+            <select id="bs-gender-select" aria-label="{{ i18n.common.filters.gender|default('Gender') }} {{ _t('필터') }}">
                 <option value="남">{{ i18n.common.gender.male|default("Men's") }}</option>
                 <option value="여">{{ i18n.common.gender.female|default("Women's") }}</option>
             </select>
         </div>
         <div class="bs-filter-group">
             <label>{{ i18n.common.filters.age_group|default('Age Group') }}</label>
-            <select id="bs-age-select">
+            <select id="bs-age-select" aria-label="{{ i18n.common.filters.age_group|default('Age Group') }} {{ _t('필터') }}">
                 <option value="E1">{{ i18n.common.rankings.elementary_1_2|default('Elementary 1-2 (U9)') }}</option>
                 <option value="E2">{{ i18n.common.rankings.elementary_3_4|default('Elementary 3-4 (U11)') }}</option>
                 <option value="E3">{{ i18n.common.rankings.elementary_5_6|default('Elementary 5-6 (U13)') }}</option>
@@ -1571,7 +1600,7 @@
         </div>
         <div class="bs-filter-group">
             <label>{{ i18n.common.filters.season|default('Season') }}</label>
-            <select id="bs-year-select">
+            <select id="bs-year-select" aria-label="{{ i18n.common.filters.season|default('Season') }} {{ _t('필터') }}">
                 <option value="">{{ i18n.common.rankings.all_rolling|default('All (Rolling)') }}</option>
             </select>
         </div>
@@ -1614,6 +1643,20 @@ document.addEventListener('DOMContentLoaded', function() {
             'foil': '{{ i18n.common.weapons.foil|default("Foil")|safe }}',
             'epee': '{{ i18n.common.weapons.epee|default("Epee")|safe }}',
             'sabre': '{{ i18n.common.weapons.sabre|default("Sabre")|safe }}'
+        },
+        // Keyed by the legacy codes this page sends as age_group. The API's
+        // age_group_name is keyed by FIE codes (Y8/Y14/Cadet/…), so it misses
+        // on these and echoes the raw code back; the section title resolves the
+        // label here instead, from the same keys as the filter dropdown.
+        age_groups: {
+            'E1': '{{ i18n.common.rankings.elementary_1_2|default("Elementary 1-2 (U9)")|safe }}',
+            'E2': '{{ i18n.common.rankings.elementary_3_4|default("Elementary 3-4 (U11)")|safe }}',
+            'E3': '{{ i18n.common.rankings.elementary_5_6|default("Elementary 5-6 (U13)")|safe }}',
+            'MS': '{{ i18n.common.rankings.middle_school|default("Middle School")|safe }}',
+            'HS': '{{ i18n.common.rankings.high_school|default("High School")|safe }}',
+            'UNI': '{{ i18n.common.rankings.university|default("University")|safe }}',
+            'SR': '{{ i18n.common.rankings.senior|default("Senior")|safe }}',
+            'NT': '{{ i18n.common.rankings.national_team|default("National Team")|safe }}'
         },
         gate: {
             login_cta: {{ (i18n.common.gate.login_cta or "로그인하여 전체 보기")|tojson }},
@@ -1813,7 +1856,8 @@ document.addEventListener('DOMContentLoaded', function() {
     function updateTitle(data) {
         const genderText = data.gender === '남' ? i18n.gender.male : i18n.gender.female;
         const weaponText = i18n.weapons[data.weapon] || data.weapon;
-        let title = `${weaponText} ${genderText} ${data.age_group_name}`;
+        const ageText = i18n.age_groups[data.age_group] || data.age_group_name;
+        let title = `${weaponText} ${genderText} ${ageText}`;
         if (data.category_name) {
             title += ` (${data.category_name})`;
         }
@@ -2119,7 +2163,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const aceInline = aces.length > 0 ? '<div class="team-ace-inline">' + aces.map(p => p.player + '(' + p.rank + '{{ _t("위") }})').join(', ') + '</div>' : '';
             html += '<td class="col-rank">' + r._displayRank + '</td>';
             html += '<td>' + r.team + aceInline + '</td>';
-            html += '<td class="col-members">' + r.member_count + '{{ _t("명") }}</td>';
+            html += '<td class="col-members"><span class="fm-num fm-num--semi">' + r.member_count + '</span>{{ _t("명") }}</td>';
             html += '<td class="col-pts ' + (teamCurrentSort === 'total_points' ? 'sort-active' : '') + '">' + r.total_points.toFixed(1) + '</td>';
             html += '<td class="col-pts hide-mobile ' + (teamCurrentSort === 'top3_points' ? 'sort-active' : '') + '">' + r.top3_points.toFixed(1) + '</td>';
             html += '<td class="col-pts hide-mobile ' + (teamCurrentSort === 'avg_points' ? 'sort-active' : '') + '">' + r.avg_points.toFixed(1) + '</td>';

@@ -4528,6 +4528,13 @@ async def api_rankings(
             "Cadet": "Cadet (고등)",
             "Junior": "Junior (대학)",
             "Veteran": "Veteran (일반)",
+            "E1": "초등 1-2",
+            "E2": "초등 3-4",
+            "E3": "초등 5-6",
+            "MS": "중등",
+            "HS": "고등",
+            "UNI": "대학",
+            "SR": "일반",
         },
         "en": {
             "NT": "National Team",
@@ -4538,6 +4545,13 @@ async def api_rankings(
             "Cadet": "Cadet (Under 17)",
             "Junior": "Junior (Under 20)",
             "Veteran": "Veteran (Senior)",
+            "E1": "Elementary 1-2",
+            "E2": "Elementary 3-4",
+            "E3": "Elementary 5-6",
+            "MS": "Middle School",
+            "HS": "High School",
+            "UNI": "University",
+            "SR": "Senior",
         }
     }
 
@@ -7182,34 +7196,56 @@ async def fencinglab_player_analytics(
 
 @app.get("/api/fencinglab/demo")
 async def fencinglab_demo():
-    """FencingLab 데모 데이터 (랜딩페이지용) - 실제 데이터 기반 v3"""
-    analyzer = get_fencinglab_analyzer()
+    """FencingLab 데모 데이터 (랜딩페이지용) - 실제 데이터 기반 v3
 
+    랜딩페이지 홈에 임베드되므로 어떤 경우에도 500을 던지지 않는다.
+    분석기/데이터 이상 시 빈(그러나 유효한) 페이로드로 degrade하여
+    프론트가 데모 섹션을 조용히 숨길 수 있게 한다.
+    """
     # 데모용 선수 목록 (최병철펜싱클럽 대표 선수)
     demo_players = ["박소윤", "오주원", "구지효"]
     demo_team = "최병철펜싱클럽"
     demo_data = []
+    total_club_players = 0
 
-    for name in demo_players:
-        analytics = analyzer.analyze_player(name, demo_team)
-        if analytics:
-            demo_data.append({
-                "name": analytics.player_name,
-                "team": analytics.team,
-                "win_rate": analytics.win_rate,
-                "total_matches": analytics.total_matches,
-                "total_wins": analytics.total_wins,
-                "total_losses": analytics.total_losses,
-                "pool_win_rate": analytics.pool_win_rate,
-                "de_win_rate": analytics.de_win_rate,
-                "clutch_grade": analytics.clutch_grade,
-                "clutch_rate": analytics.clutch_rate
-            })
+    try:
+        analyzer = get_fencinglab_analyzer()
+
+        for name in demo_players:
+            try:
+                analytics = analyzer.analyze_player(name, demo_team)
+            except Exception as e:
+                # 한 선수의 데이터 이상이 전체 데모를 죽이지 않도록 격리
+                logger.warning(f"FencingLab demo: analyze_player 실패 ({name}): {e}")
+                continue
+            if analytics:
+                demo_data.append({
+                    "name": analytics.player_name,
+                    "team": analytics.team,
+                    "win_rate": analytics.win_rate,
+                    "total_matches": analytics.total_matches,
+                    "total_wins": analytics.total_wins,
+                    "total_losses": analytics.total_losses,
+                    "pool_win_rate": analytics.pool_win_rate,
+                    "de_win_rate": analytics.de_win_rate,
+                    "clutch_grade": analytics.clutch_grade,
+                    "clutch_rate": analytics.clutch_rate
+                })
+
+        try:
+            total_club_players = len(analyzer.get_club_players(demo_team))
+        except Exception as e:
+            logger.warning(f"FencingLab demo: get_club_players 실패: {e}")
+            total_club_players = len(demo_data)
+    except Exception as e:
+        # 분석기 초기화/데이터 로드 실패 등 — 홈이 깨지지 않도록 200으로 graceful degrade
+        logger.error(f"FencingLab demo 엔드포인트 실패, 빈 페이로드 반환: {e}")
+        return {"demo_players": [], "club": demo_team, "total_club_players": 0}
 
     return {
         "demo_players": demo_data,
-        "club": "최병철펜싱클럽",
-        "total_club_players": len(analyzer.get_club_players("최병철펜싱클럽"))
+        "club": demo_team,
+        "total_club_players": total_club_players
     }
 
 

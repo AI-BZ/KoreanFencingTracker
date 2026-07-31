@@ -2669,6 +2669,69 @@ TRANSLATIONS = {
         "zh": "小组赛晋级淘汰赛比例",
         "tr": "Havuzdan elemeye geçiş oranı",
     },
+    # --- Rankings + selection pages (2026-07-30: 미번역 한국어 누수 수정) ---
+    "개인 랭킹": {"en": "Individual Rankings", "fr": "Classement individuel", "it": "Classifica individuale", "ja": "個人ランキング", "zh": "个人排名", "tr": "Bireysel sıralama"},
+    "팀 랭킹": {"en": "Team Rankings", "fr": "Classement par équipe", "it": "Classifica a squadre", "ja": "チームランキング", "zh": "团队排名", "tr": "Takım sıralaması"},
+    "팀 랭킹 로딩 중...": {"en": "Loading team rankings...", "fr": "Chargement du classement par équipe...", "it": "Caricamento classifica a squadre...", "ja": "チームランキング読み込み中...", "zh": "团队排名加载中...", "tr": "Takım sıralaması yükleniyor..."},
+    "해당 조건의 팀 랭킹 데이터가 없습니다.": {"en": "No team ranking data for the selected filters.", "fr": "Aucune donnée de classement par équipe pour ces filtres.", "it": "Nessun dato di classifica a squadre per i filtri selezionati.", "ja": "この条件のチームランキングデータはありません。", "zh": "所选条件下暂无团队排名数据。", "tr": "Seçilen filtreler için takım sıralaması verisi yok."},
+    "필터": {"en": "Filters", "fr": "Filtres", "it": "Filtri", "ja": "フィルター", "zh": "筛选", "tr": "Filtreler"},
+    "필터 변경": {"en": "Change filters", "fr": "Modifier les filtres", "it": "Modifica filtri", "ja": "フィルター変更", "zh": "更改筛选", "tr": "Filtreleri değiştir"},
+    "적용하기": {"en": "Apply", "fr": "Appliquer", "it": "Applica", "ja": "適用", "zh": "应用", "tr": "Uygula"},
+    "정렬": {"en": "Sort", "fr": "Trier", "it": "Ordina", "ja": "並び替え", "zh": "排序", "tr": "Sırala"},
+    "팀 유형": {"en": "Team Type", "fr": "Type d'équipe", "it": "Tipo di squadra", "ja": "チーム種別", "zh": "团队类型", "tr": "Takım türü"},
+    "팀": {"en": "Team", "fr": "Équipe", "it": "Squadra", "ja": "チーム", "zh": "团队", "tr": "Takım"},
+    "대학": {"en": "University", "fr": "Université", "it": "Università", "ja": "大学", "zh": "大学", "tr": "Üniversite"},
+    "등록 팀": {"en": "Registered Teams", "fr": "Équipes inscrites", "it": "Squadre registrate", "ja": "登録チーム", "zh": "注册团队", "tr": "Kayıtlı takımlar"},
+    "종합 전력": {"en": "Overall Strength", "fr": "Force globale", "it": "Forza complessiva", "ja": "総合戦力", "zh": "综合实力", "tr": "Genel güç"},
+    "최고 선수력": {"en": "Top Player Strength", "fr": "Force du meilleur tireur", "it": "Forza del miglior atleta", "ja": "最高選手力", "zh": "顶尖选手实力", "tr": "En iyi sporcu gücü"},
+    "에이스": {"en": "Ace", "fr": "As", "it": "Asso", "ja": "エース", "zh": "王牌", "tr": "As"},
+    "선수당 평균": {"en": "Average per player", "fr": "Moyenne par tireur", "it": "Media per atleta", "ja": "1人あたり平均", "zh": "人均", "tr": "Sporcu başına ortalama"},
+    "1인당 평균 포인트": {"en": "Avg points per player", "fr": "Points moyens par tireur", "it": "Punti medi per atleta", "ja": "1人あたり平均ポイント", "zh": "人均积分", "tr": "Sporcu başına ortalama puan"},
+    "상위 3명 포인트": {"en": "Top 3 Players' Points", "fr": "Points des 3 meilleurs", "it": "Punti dei primi 3", "ja": "上位3名のポイント", "zh": "前3名积分", "tr": "İlk 3 sporcu puanı"},
+    "전 선수 포인트 합산": {"en": "Sum of all players' points", "fr": "Somme des points de tous les tireurs", "it": "Somma dei punti di tutti gli atleti", "ja": "全選手のポイント合計", "zh": "全部选手积分合计", "tr": "Tüm sporcuların puan toplamı"},
+    "소속 전 선수의 랭킹 포인트를 합산한 총점": {"en": "Total ranking points of all players on the team", "fr": "Total des points de classement de tous les tireurs de l'équipe", "it": "Punti classifica totali di tutti gli atleti della squadra", "ja": "所属全選手のランキングポイント合計", "zh": "队内所有选手排名积分总和", "tr": "Takımdaki tüm sporcuların sıralama puanı toplamı"},
+    "팀 내 상위 3명의 포인트 합계 — 에이스 전력 비교": {"en": "Sum of the team's top 3 players' points — compares ace strength", "fr": "Somme des points des 3 meilleurs de l'équipe — compare la force des as", "it": "Somma dei punti dei primi 3 della squadra — confronta la forza degli assi", "ja": "チーム内上位3名のポイント合計 — エース戦力を比較", "zh": "队内前3名积分合计 — 比较王牌实力", "tr": "Takımın ilk 3 sporcusunun puan toplamı — as gücünü karşılaştırır"},
+    "총점을 선수 수로 나눈 1인당 평균 — 팀 밀도 비교": {"en": "Per-player average (total ÷ players) — compares team depth", "fr": "Moyenne par tireur (total ÷ tireurs) — compare la densité de l'équipe", "it": "Media per atleta (totale ÷ atleti) — confronta la densità della squadra", "ja": "総得点を選手数で割った1人あたり平均 — チーム層の厚さを比較", "zh": "总分除以人数的人均值 — 比较团队厚度", "tr": "Sporcu başına ortalama (toplam ÷ sporcu) — takım derinliğini karşılaştırır"},
+    "6종목 × 2성별 실시간 순위": {"en": "Live rankings across 6 events × 2 genders", "fr": "Classements en direct : 6 épreuves × 2 genres", "it": "Classifiche live: 6 gare × 2 generi", "ja": "6種目×2性別のリアルタイム順位", "zh": "6个项目×2个性别实时排名", "tr": "6 branş × 2 cinsiyet canlı sıralama"},
+    "상위 랭킹 선수를 확인하세요": {"en": "See the top-ranked fencers", "fr": "Découvrez les tireurs les mieux classés", "it": "Scopri i tiratori più in alto in classifica", "ja": "上位ランキングの選手をチェック", "zh": "查看排名靠前的选手", "tr": "En üst sıradaki eskrimcileri görün"},
+    "초1-2": {"en": "Elementary 1-2", "fr": "Primaire 1-2", "it": "Elementari 1-2", "ja": "小1-2", "zh": "小学1-2", "tr": "İlkokul 1-2"},
+    "초3-4": {"en": "Elementary 3-4", "fr": "Primaire 3-4", "it": "Elementari 3-4", "ja": "小3-4", "zh": "小学3-4", "tr": "İlkokul 3-4"},
+    "초5-6": {"en": "Elementary 5-6", "fr": "Primaire 5-6", "it": "Elementari 5-6", "ja": "小5-6", "zh": "小学5-6", "tr": "İlkokul 5-6"},
+    "꿈나무 선발": {"en": "Kkumnamu (Youth) Selection", "fr": "Sélection Kkumnamu (jeunes)", "it": "Selezione Kkumnamu (giovani)", "ja": "夢の木（ユース）選抜", "zh": "青苗（青少年）选拔", "tr": "Kkumnamu (Genç) Seçmesi"},
+    "꿈나무·청소년 대표 선발 포인트 순위": {"en": "Kkumnamu & Youth National Team Selection Point Rankings", "fr": "Classement des points de sélection Kkumnamu et équipe nationale jeunes", "it": "Classifica punti di selezione Kkumnamu e nazionale giovanile", "ja": "夢の木・ユース代表選抜ポイント順位", "zh": "青苗·青少年国家队选拔积分排名", "tr": "Kkumnamu ve Genç Milli Takım seçme puanı sıralaması"},
+    "로그인하여 선발 포인트 보기": {"en": "Log in to view selection points", "fr": "Connectez-vous pour voir les points de sélection", "it": "Accedi per vedere i punti di selezione", "ja": "ログインして選抜ポイントを見る", "zh": "登录查看选拔积分", "tr": "Seçme puanlarını görmek için giriş yapın"},
+    "선발전 제외": {"en": "Selection events excluded", "fr": "Épreuves de sélection exclues", "it": "Gare di selezione escluse", "ja": "選抜大会を除外", "zh": "不含选拔赛", "tr": "Seçme müsabakaları hariç"},
+    "전국체전·소년체전 제외": {"en": "National & Youth Sports Festivals excluded", "fr": "Hors Festivals nationaux et juniors des sports", "it": "Esclusi i Festival sportivi nazionale e giovanile", "ja": "全国体育大会・少年体育大会を除外", "zh": "不含全国体育大会·少年体育大会", "tr": "Ulusal ve Gençler Spor Festivalleri hariç"},
+    "제외": {"en": "Excluded", "fr": "Exclu", "it": "Escluso", "ja": "除外", "zh": "排除", "tr": "Hariç"},
+
+    # --- 랭킹 카드 리그/카테고리 라벨 (2026-07-31) ---
+    "전문": {"en": "Professional", "fr": "Professionnel", "it": "Professionista", "ja": "専門", "zh": "专业", "tr": "Profesyonel"},
+    "동호인": {"en": "Club", "fr": "Club", "it": "Club", "ja": "同好会", "zh": "俱乐部", "tr": "Kulüp"},
+
+    # --- 범례/툴팁 (2026-07-31) ---
+    # 레이팅 배지 (A26)
+    "레이팅 설명 보기": {"en": "Show rating explanation", "fr": "Afficher l'explication du rating", "it": "Mostra la spiegazione del rating", "ja": "レーティングの説明を表示", "zh": "显示评级说明", "tr": "Rating açıklamasını göster"},
+    "레이팅이란?": {"en": "What is a rating?", "fr": "Qu'est-ce que le rating ?", "it": "Che cos'è il rating?", "ja": "レーティングとは？", "zh": "什么是评级？", "tr": "Rating nedir?"},
+    "최근 시즌 최고 성적 등급과 시즌 연도를 조합한 표기입니다": {"en": "A grade for the best result of the most recent season, combined with the season year.", "fr": "Note du meilleur résultat de la saison la plus récente, associée à l'année de la saison.", "it": "Voto del miglior risultato della stagione più recente, unito all'anno della stagione.", "ja": "直近シーズンの最高成績の等級とシーズン年を組み合わせた表記です。", "zh": "由最近赛季最佳成绩的等级与赛季年份组合而成。", "tr": "En son sezondaki en iyi derecenin notu ile sezon yılının birleşimidir."},
+    "A: 우승 · B: 준우승 · C: 4강 · D: 8강 · E: 16강 · U: 해당 없음": {"en": "A: Champion · B: Runner-up · C: Semi-final · D: Quarter-final · E: Round of 16 · U: Unrated", "fr": "A : vainqueur · B : finaliste · C : demi-finale · D : quart de finale · E : huitièmes de finale · U : non classé", "it": "A: vincitore · B: finalista · C: semifinale · D: quarti di finale · E: ottavi di finale · U: non classificato", "ja": "A: 優勝 · B: 準優勝 · C: ベスト4 · D: ベスト8 · E: ベスト16 · U: 該当なし", "zh": "A：冠军 · B：亚军 · C：四强 · D：八强 · E：十六强 · U：无", "tr": "A: Şampiyon · B: İkinci · C: Yarı final · D: Çeyrek final · E: Son 16 · U: Derecesiz"},
+    "예: A26 = 2026 시즌 우승": {"en": "Example: A26 = champion in the 2026 season", "fr": "Exemple : A26 = vainqueur lors de la saison 2026", "it": "Esempio: A26 = vincitore nella stagione 2026", "ja": "例: A26 = 2026シーズン優勝", "zh": "例：A26 = 2026赛季冠军", "tr": "Örnek: A26 = 2026 sezonu şampiyonu"},
+
+    # 순위 표기 (8/57, P3)
+    "순위 표기 설명 보기": {"en": "Show how places are written", "fr": "Afficher l'explication des places", "it": "Mostra come si leggono i piazzamenti", "ja": "順位表記の説明を表示", "zh": "显示名次标注说明", "tr": "Sıralama gösterimi açıklamasını göster"},
+    "순위 표기 안내": {"en": "How places are written", "fr": "Lecture des places", "it": "Come leggere i piazzamenti", "ja": "順位表記の見方", "zh": "名次标注说明", "tr": "Sıralama gösterimi"},
+    "8/57 = 최종 순위 / 총 참가 인원": {"en": "8/57 = final place / total entries", "fr": "8/57 = place finale / nombre total d'inscrits", "it": "8/57 = piazzamento finale / totale iscritti", "ja": "8/57 = 最終順位 / 総参加人数", "zh": "8/57 = 最终名次 / 参赛总人数", "tr": "8/57 = nihai sıra / toplam katılımcı"},
+    "P3 = 예선 풀에서 탈락 (풀 내 순위)": {"en": "P3 = eliminated in the pool round (place within the pool)", "fr": "P3 = éliminé en poule (place dans la poule)", "it": "P3 = eliminato nel girone (piazzamento nel girone)", "ja": "P3 = 予選プールで敗退（プール内順位）", "zh": "P3 = 小组赛淘汰（组内名次）", "tr": "P3 = poul turunda elendi (poul içi sıra)"},
+    "🥇🥈🥉 = 1·2·3위": {"en": "🥇🥈🥉 = 1st · 2nd · 3rd place", "fr": "🥇🥈🥉 = 1re · 2e · 3e place", "it": "🥇🥈🥉 = 1º · 2º · 3º posto", "ja": "🥇🥈🥉 = 1・2・3位", "zh": "🥇🥈🥉 = 第1·2·3名", "tr": "🥇🥈🥉 = 1. · 2. · 3. sıra"},
+
+    # Pool / Direct Elimination 용어
+    "예선 풀 설명 보기": {"en": "Show pool explanation", "fr": "Afficher l'explication des poules", "it": "Mostra la spiegazione dei gironi", "ja": "予選プールの説明を表示", "zh": "显示小组赛说明", "tr": "Poul açıklamasını göster"},
+    "예선 풀이란?": {"en": "What is a pool?", "fr": "Qu'est-ce qu'une poule ?", "it": "Che cos'è il girone?", "ja": "予選プールとは？", "zh": "什么是小组赛？", "tr": "Poul nedir?"},
+    "조별 리그전입니다. 5점 선취, 3분 1회전으로 진행합니다.": {"en": "A round-robin group stage. Bouts are to 5 touches over one 3-minute period.", "fr": "Un tour de poules toutes rondes. Les assauts se disputent en 5 touches, une reprise de 3 minutes.", "it": "Una fase a gironi all'italiana. Gli assalti sono a 5 stoccate in una ripresa da 3 minuti.", "ja": "総当たりのグループ戦です。5点先取、3分1ピリオドで行います。", "zh": "小组循环赛。每场5剑，1回合3分钟。", "tr": "Herkesin herkesle karşılaştığı grup turu. Maçlar 3 dakikalık tek devrede 5 dokunuşa oynanır."},
+    "풀 성적으로 본선(DE) 시드가 결정됩니다.": {"en": "Pool results determine the seeding for the direct elimination table.", "fr": "Les résultats de poule déterminent le classement du tableau d'élimination directe.", "it": "I risultati dei gironi determinano le teste di serie del tabellone a eliminazione diretta.", "ja": "プールの成績で本戦（DE）のシードが決まります。", "zh": "小组成绩决定淘汰赛（DE）的种子排位。", "tr": "Poul sonuçları direkt eleme tablosundaki seri başılığı belirler."},
+    "본선 토너먼트 설명 보기": {"en": "Show direct elimination explanation", "fr": "Afficher l'explication de l'élimination directe", "it": "Mostra la spiegazione dell'eliminazione diretta", "ja": "本戦トーナメントの説明を表示", "zh": "显示淘汰赛说明", "tr": "Direkt eleme açıklamasını göster"},
+    "본선 토너먼트란?": {"en": "What is direct elimination?", "fr": "Qu'est-ce que l'élimination directe ?", "it": "Che cos'è l'eliminazione diretta?", "ja": "本戦トーナメントとは？", "zh": "什么是淘汰赛？", "tr": "Direkt eleme nedir?"},
+    "15점 선취, 3분 3회전으로 진행합니다.": {"en": "Bouts are to 15 touches over three 3-minute periods.", "fr": "Les assauts se disputent en 15 touches, trois reprises de 3 minutes.", "it": "Gli assalti sono a 15 stoccate in tre riprese da 3 minuti.", "ja": "15点先取、3分3ピリオドで行います。", "zh": "每场15剑，3回合各3分钟。", "tr": "Maçlar 3 dakikalık üç devrede 15 dokunuşa oynanır."},
+    "패배하면 즉시 탈락합니다.": {"en": "The loser is eliminated immediately.", "fr": "Le perdant est immédiatement éliminé.", "it": "Chi perde viene eliminato immediatamente.", "ja": "敗れた選手はその場で敗退します。", "zh": "输者立即淘汰。", "tr": "Kaybeden anında elenir."},
 }
 
 

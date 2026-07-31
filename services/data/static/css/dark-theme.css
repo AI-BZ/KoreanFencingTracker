@@ -38,6 +38,15 @@
     --warning-color: #f59e0b;
     --danger-color: #ef4444;
     --info-color: #3b82f6;
+
+    /* Legacy aliases (style.css is no longer linked, so these would otherwise
+       resolve to nothing in dark theme). Mapped onto the taegeuk palette. */
+    --primary-color: var(--accent-primary);
+    --secondary-color: var(--text-secondary);
+    --accent-color: var(--accent-primary);
+    --text-color: var(--text-primary);
+    --text-light: var(--text-muted);
+    --background: var(--bg-primary);
 }
 
 /* Reset & Base */
@@ -52,7 +61,7 @@ html {
 }
 
 body {
-    font-family: 'Pretendard Variable', 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    font-family: var(--fm-font-primary, 'Pretendard Variable', 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif);
     background: var(--bg-primary);
     color: var(--text-primary);
     line-height: 1.6;
@@ -139,10 +148,8 @@ body {
 }
 
 .logo-text {
-    background: linear-gradient(135deg, var(--text-primary), var(--accent-gold));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    color: var(--text-primary);
+    font-weight: 800;
 }
 
 /* Logo Image - Responsive */
@@ -199,7 +206,7 @@ body {
     outline: none;
     border-color: var(--accent-primary);
     background: rgba(255, 255, 255, 0.08);
-    box-shadow: 0 0 20px var(--glow-primary);
+    box-shadow: 0 0 0 3px var(--glow-primary);
 }
 
 /* Auth Navigation */
@@ -220,7 +227,7 @@ body {
 }
 
 .login-btn {
-    background: linear-gradient(135deg, var(--accent-primary), #a02320);
+    background: var(--accent-primary);
     color: white;
     border: none;
     box-shadow: 0 4px 15px var(--glow-primary);
@@ -422,10 +429,7 @@ body {
     font-size: 2.8rem;
     font-weight: 800;
     margin-bottom: 15px;
-    background: linear-gradient(135deg, var(--text-primary), var(--accent-gold));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    color: var(--text-primary);
     letter-spacing: -0.03em;
 }
 
@@ -464,7 +468,7 @@ body {
     font-size: 2.2rem;
     font-weight: 800;
     color: var(--accent-gold);
-    font-family: 'Inter', sans-serif;
+    font-family: var(--fm-font-primary, 'Pretendard Variable', 'Pretendard', -apple-system, sans-serif);
 }
 
 .stat-label {
@@ -522,7 +526,7 @@ body {
 .filter-group input:focus {
     outline: none;
     border-color: var(--accent-primary);
-    box-shadow: 0 0 15px var(--glow-primary);
+    box-shadow: 0 0 0 3px var(--glow-primary);
 }
 
 .filter-group select option {
@@ -841,7 +845,7 @@ body {
 }
 
 .pool-header {
-    background: linear-gradient(135deg, var(--accent-primary), #a02320);
+    background: var(--accent-primary);
     color: white;
     padding: 12px 18px;
     border-radius: 10px 10px 0 0;
@@ -880,7 +884,7 @@ body {
 .result-table .rank {
     font-weight: 800;
     color: var(--accent-gold);
-    font-family: 'Inter', sans-serif;
+    font-family: var(--fm-font-primary, 'Pretendard Variable', 'Pretendard', -apple-system, sans-serif);
 }
 
 /* =====================================================
@@ -924,7 +928,7 @@ body {
 .search-form input:focus {
     border-color: var(--accent-primary);
     outline: none;
-    box-shadow: 0 0 25px var(--glow-primary);
+    box-shadow: 0 0 0 3px var(--glow-primary);
 }
 
 .btn {
@@ -939,7 +943,7 @@ body {
 }
 
 .btn-primary {
-    background: linear-gradient(135deg, var(--accent-primary), #a02320);
+    background: var(--accent-primary);
     color: white;
     box-shadow: 0 4px 20px var(--glow-primary);
 }
@@ -1602,20 +1606,20 @@ body {
     color: var(--text-primary);
 }
 
-/* Gold/Silver/Bronze podium boxes keep their gradients */
+/* Podium boxes take the medal tokens flat; dark text clears 4.5:1 on all three */
 [data-theme="dark"] .podium-place.first .podium-box {
-    background: linear-gradient(135deg, rgba(255, 215, 0, 0.8), rgba(255, 165, 0, 0.8)) !important;
-    color: #1a1a25;
+    background: var(--fm-medal-gold, #d4a574) !important;
+    color: #241a0e;
 }
 
 [data-theme="dark"] .podium-place.second .podium-box {
-    background: linear-gradient(135deg, rgba(192, 192, 192, 0.8), rgba(160, 160, 160, 0.8)) !important;
-    color: #1a1a25;
+    background: var(--fm-medal-silver, #9ca3af) !important;
+    color: #16181c;
 }
 
 [data-theme="dark"] .podium-place.third .podium-box {
-    background: linear-gradient(135deg, rgba(205, 127, 50, 0.8), rgba(139, 69, 19, 0.8)) !important;
-    color: white;
+    background: var(--fm-medal-bronze, #cd7f32) !important;
+    color: #241a0e;
 }
 
 [data-theme="dark"] .final-table {
@@ -1936,7 +1940,7 @@ body {
 [data-theme="dark"] .btn-accent,
 [data-theme="dark"] button.primary,
 [data-theme="dark"] button[type="submit"] {
-    background: linear-gradient(135deg, var(--accent-primary) 0%, #a02622 100%) !important;
+    background: var(--accent-primary) !important;
     color: white !important;
     border: none !important;
 }
@@ -2096,19 +2100,19 @@ body {
 }
 
 .stage-bar.rate-high {
-    background: linear-gradient(90deg, #28a745, #20c997);  /* Green for 70%+ */
+    background: #1e9e4a;  /* Green for 70%+ */
 }
 
 .stage-bar.rate-mid {
-    background: linear-gradient(90deg, #ffc107, #fd7e14);  /* Yellow/Orange for 40-70% */
+    background: #e0930b;  /* Amber for 40-70% */
 }
 
 .stage-bar.rate-low {
-    background: linear-gradient(90deg, #dc3545, #e83e8c);  /* Red for <40% */
+    background: #c9302c;  /* Red for <40% */
 }
 
 .stage-bar.final-bar {
-    background: linear-gradient(90deg, var(--accent-gold, #d4a574), #b8860b);
+    background: var(--fm-medal-gold, #d4a574);
 }
 
 .stage-count {
@@ -2192,6 +2196,15 @@ body {
     --background: #f5f5f7;
 }
 
+/* Light theme zeroes out --glow-primary, so focus rings need their own colour
+   here or the only focus cue left is the 1px border. */
+[data-theme="light"] .search-box input:focus,
+[data-theme="light"] .search-form input:focus,
+[data-theme="light"] .filter-group select:focus,
+[data-theme="light"] .filter-group input:focus {
+    box-shadow: 0 0 0 3px rgba(201, 48, 44, 0.28);
+}
+
 /* --- Body & Background --- */
 [data-theme="light"] body {
     background: #ffffff;
@@ -2215,9 +2228,7 @@ body {
 }
 
 [data-theme="light"] .logo-text {
-    background: linear-gradient(135deg, #191f28, #c9302c) !important;
-    -webkit-background-clip: text !important;
-    -webkit-text-fill-color: transparent !important;
+    color: #191f28 !important;
 }
 
 [data-theme="light"] .logo-icon {
@@ -2316,10 +2327,7 @@ body {
 }
 
 [data-theme="light"] .hero h1 {
-    background: linear-gradient(135deg, #191f28, #c9302c) !important;
-    -webkit-background-clip: text !important;
-    -webkit-text-fill-color: transparent !important;
-    background-clip: text !important;
+    color: #191f28 !important;
 }
 
 [data-theme="light"] .hero p {
@@ -2459,7 +2467,7 @@ body {
 }
 
 [data-theme="light"] .pool-header {
-    background: linear-gradient(135deg, #c9302c, #a02320);
+    background: #c9302c;
 }
 
 /* --- Competition Header --- */

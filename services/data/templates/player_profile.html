@@ -5,10 +5,128 @@
 {% if weapon == 'foil' %}{{ i18n.common.weapons.foil|default('Foil') }}{% elif weapon == 'epee' %}{{ i18n.common.weapons.epee|default('Epee') }}{% elif weapon == 'sabre' %}{{ i18n.common.weapons.sabre|default('Sabre') }}{% else %}{{ weapon }}{% endif %}
 {%- endmacro %}
 
+{# Legend for the .result-place notation (8/57, P3, medals) #}
+{% macro place_legend() -%}
+<span class="fm-help-wrap">
+    <button type="button" class="fm-help" aria-expanded="false"
+            aria-label="{{ _t('순위 표기 설명 보기') }}"
+            onclick="fmToggleHelp(this, event)">?</button>
+    <div class="fm-help-popup" role="tooltip">
+        <strong>{{ _t("순위 표기 안내") }}</strong>
+        <p>{{ _t("8/57 = 최종 순위 / 총 참가 인원") }}</p>
+        <p>{{ _t("P3 = 예선 풀에서 탈락 (풀 내 순위)") }}</p>
+        <p>{{ _t("🥇🥈🥉 = 1·2·3위") }}</p>
+    </div>
+</span>
+{%- endmacro %}
+
 {% block title %}{{ tr_player(player.name) }} - Korean Fencing Tracker{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="/static/css/fencinglab.css?v=20260603">
+<style>
+    /* Selection-points gate CTA: distinct secondary (blue) treatment so the
+       guest summary doesn't end on two identical red login walls. Solid fill
+       keeps white-on-blue contrast ~8.6:1. Two-class + theme selectors and
+       !important are required to override components.css .gate-cta-btn
+       (red, !important in light theme). */
+    .gate-cta-btn.gate-cta-btn--soft {
+        background: var(--fm-accent-secondary, #1e3a8a) !important;
+        color: #ffffff !important;
+        box-shadow: 0 2px 12px rgba(30, 58, 138, 0.22) !important;
+    }
+    [data-theme="light"] .gate-cta-btn.gate-cta-btn--soft {
+        background: var(--fm-accent-secondary, #1e3a8a) !important;
+        box-shadow: 0 2px 12px rgba(30, 58, 138, 0.16) !important;
+    }
+    .gate-cta-btn.gate-cta-btn--soft:hover,
+    [data-theme="light"] .gate-cta-btn.gate-cta-btn--soft:hover {
+        background: var(--fm-accent-secondary-hover, #172e6e) !important;
+    }
+    /* Rating legend row: the "?" trigger sits on the as-of line but outside
+       .rating-date, whose opacity:0.7 would otherwise wash out the popup. */
+    .rating-date-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 10px;
+    }
+    .rating-date-row .rating-date {
+        margin-top: 0;
+    }
+    /* .player-header is a saturated gradient with white text in both themes,
+       so the token-based .fm-help colors would be too low-contrast here. */
+    .player-header .fm-help,
+    [data-theme="light"] .player-header .fm-help {
+        background: rgba(255, 255, 255, 0.22);
+        color: #ffffff;
+    }
+    .player-header .fm-help:hover,
+    .player-header .fm-help[aria-expanded="true"],
+    [data-theme="light"] .player-header .fm-help:hover,
+    [data-theme="light"] .player-header .fm-help[aria-expanded="true"] {
+        background: rgba(255, 255, 255, 0.4);
+        color: #ffffff;
+    }
+    .player-header .fm-help:focus-visible {
+        outline-color: #ffffff;
+    }
+    /* Section headings that carry a legend trigger */
+    .heading-with-help {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    /* ===== Scoreboard numerals =====
+       The condensed display face is latin-only, so it is applied by selector
+       to elements whose content is guaranteed numeric/latin (rank, points,
+       rating grade, hero stats). Mixed-script elements get a .fm-num span
+       around the figure instead. Condensed reads narrow, so sizes step up
+       slightly; tracking stays positive (never the -0.02em body tracking). */
+    .rank-number,
+    .points-value,
+    .rating-value,
+    .hero-stat-value {
+        font-family: var(--fm-font-display);
+        letter-spacing: 0.01em;
+        font-variant-numeric: lining-nums;
+    }
+    .points-value,
+    .rating-value {
+        font-weight: 700;
+    }
+    /* .result-place also carries the "진행 중" Korean label, which must stay
+       in the body face; the numeric/medal variants take the display face. */
+    .result-place:not(.in-progress) {
+        font-family: var(--fm-font-display);
+        letter-spacing: 0.01em;
+        font-variant-numeric: lining-nums;
+    }
+    /* Size bumps compensate for the condensed face and are desktop-only:
+       components.css and mobile-ux.css shrink these below 768px, and those
+       rules have equal specificity but load earlier, so an unscoped bump here
+       would override the responsive sizes. */
+    @media (min-width: 769px) {
+        .rank-number { font-size: 1.5rem; }
+        .points-value { font-size: 1.3rem; }
+        .rating-value { font-size: 1.7rem; }
+        .hero-stat-value { font-size: 2rem; }
+        .result-place:not(.in-progress) { font-size: 1.25rem; }
+        .result-place.pool-eliminated { font-size: 0.9rem; }
+    }
+    /* "/ 118명": only the count is wrapped in .fm-num, the counter word stays
+       in the body face. */
+    .rank-total .fm-num {
+        font-size: 1.05em;
+    }
+    /* Unit label next to the points figure */
+    .points-label {
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        font-weight: 600;
+    }
+</style>
 {% endblock %}
 
 {% block content %}
@@ -122,7 +240,39 @@
             </div>
             {% endfor %}
         </div>
-        <div class="rating-date">as of {{ today }}</div>
+        <div class="rating-date-row">
+            <span class="rating-date" id="ratingAsOf" data-asof-date="{{ today }}">{{ today }}</span>
+            <span class="fm-help-wrap">
+                <button type="button" class="fm-help" aria-expanded="false"
+                        aria-label="{{ _t('레이팅 설명 보기') }}"
+                        onclick="fmToggleHelp(this, event)">?</button>
+                <div class="fm-help-popup" role="tooltip">
+                    <strong>{{ _t("레이팅이란?") }}</strong>
+                    <p>{{ _t("최근 시즌 최고 성적 등급과 시즌 연도를 조합한 표기입니다") }}</p>
+                    <p>{{ _t("A: 우승 · B: 준우승 · C: 4강 · D: 8강 · E: 16강 · U: 해당 없음") }}</p>
+                    <p>{{ _t("예: A26 = 2026 시즌 우승") }}</p>
+                </div>
+            </span>
+        </div>
+        <script>
+        (function() {
+            var el = document.getElementById('ratingAsOf');
+            if (!el) return;
+            var raw = el.getAttribute('data-asof-date');
+            var d = new Date(raw);
+            if (isNaN(d.getTime())) { el.textContent = 'as of ' + raw; return; }
+            var lang = '{{ lang|default("ko") }}';
+            var localeMap = { ko: 'ko-KR', en: 'en-US', ja: 'ja-JP', fr: 'fr-FR', it: 'it-IT', zh: 'zh-CN', tr: 'tr-TR' };
+            var locale = localeMap[lang] || 'ko-KR';
+            var ds = new Intl.DateTimeFormat(locale, { year: 'numeric', month: 'long', day: 'numeric' }).format(d);
+            var out;
+            if (lang === 'ko') out = ds + ' 기준';
+            else if (lang === 'ja') out = ds + ' 現在';
+            else if (lang === 'zh') out = '截至 ' + ds;
+            else out = 'as of ' + ds;
+            el.textContent = out;
+        })();
+        </script>
 
         <!-- FencingLab Ranking Info -->
         {% if player.rankings_info %}
@@ -133,15 +283,17 @@
                     <div class="ranking-card-summary">
                         <div class="ranking-position">
                             <span class="rank-number">#{{ rk.rank }}</span>
-                            <span class="rank-total">/ {{ rk.total }}{{ _t("명") }}</span>
+                            <span class="rank-total">/ <span class="fm-num fm-num--semi">{{ rk.total }}</span>{{ _t("명") }}</span>
                         </div>
                         <div class="ranking-category">
                             <span class="ranking-year">{{ rk.year }}</span>
                             {% if rk.is_nt %}{{ _t("국가대표 선발전") }} {% endif %}
                             {% if rk.gender == '여' %}{{ _t("여자") }}{% elif rk.gender == '남' %}{{ _t("남자") }}{% endif %}
                             {{ translate_weapon(rk.weapon) }}
-                            {% if not rk.is_nt %}{{ rk.age_group_name }}{% endif %}
-                            {% if rk.category_name and not rk.is_nt %}({{ rk.category_name }}){% endif %}
+                            {% set _age_labels = {'E1': _t('초1-2'), 'E2': _t('초3-4'), 'E3': _t('초5-6'), 'MS': _t('중등'), 'HS': _t('고등'), 'UNI': _t('대학'), 'SR': _t('일반')} %}
+                            {% set _cat_labels = {'Pro': _t('전문'), 'Club': _t('동호인')} %}
+                            {% if not rk.is_nt %}{{ _age_labels.get(rk.age_group, rk.age_group_name) }}{% endif %}
+                            {% if rk.category_name and not rk.is_nt %}({{ _cat_labels.get(rk.category_name, rk.category_name) }}){% endif %}
                         </div>
                         <div class="ranking-points">
                             <span class="points-value">{{ "%.1f"|format(rk.points) }}</span>
@@ -210,7 +362,7 @@
                 {{ _t("진행 중인 대회") }} {{ in_progress_records|length }}{{ _t("건의 결과가 포함되어 있습니다. 대회 종료 후 최종 데이터가 업데이트됩니다.") }}
             </div>
             {% endif %}
-            <h4>{{ _t("최근 대회 성적") }}</h4>
+            <h4 class="heading-with-help">{{ _t("최근 대회 성적") }} {{ place_legend() }}</h4>
             {% for record in player.records[:3] %}
             <div class="result-card" style="pointer-events: auto;">
                 <div class="result-card-header">
@@ -249,7 +401,7 @@
             </div>
             <div class="gate-overlay">
                 <p class="gate-preview-text">{{ _t("로그인하면 전체 통계, 메달 분석, 무기별 성적을 확인할 수 있습니다.") }}</p>
-                <a href="{{ login_url }}" class="gate-cta-btn" onclick="localStorage.setItem('fencingmind_login_redirect', window.location.href)">{{ _t("로그인하여 전체 보기") }}</a>
+                <a href="{{ login_url }}" class="gate-cta-btn" onclick="localStorage.setItem('fencingmind_login_redirect', window.location.href)">{{ _t("로그인하고 전체 통계 보기") }}</a>
             </div>
         </div>
         {% else %}
@@ -556,7 +708,7 @@
                 </div>
                 <div class="gate-overlay">
                     <p>{{ _t("선발 포인트 순위와 상세 내역을 확인하려면 로그인하세요.") }}</p>
-                    <a href="{{ login_url }}" class="gate-cta-btn" onclick="localStorage.setItem('fencingmind_login_redirect', window.location.href)">{{ _t("로그인하여 전체 보기") }}</a>
+                    <a href="{{ login_url }}" class="gate-cta-btn gate-cta-btn--soft" onclick="localStorage.setItem('fencingmind_login_redirect', window.location.href)">{{ _t("로그인하고 선발 포인트 보기") }}</a>
                 </div>
             </div>
             {% else %}
@@ -675,7 +827,7 @@
 
         <!-- Results List -->
         <div class="history-section">
-            <h4>{{ i18n.common.player.match_results|default('Match Results') }}</h4>
+            <h4 class="heading-with-help">{{ i18n.common.player.match_results|default('Match Results') }} {{ place_legend() }}</h4>
 
             {% for record in player.records %}
             <div class="result-card" data-year="{{ record.year }}" data-weapon="{{ record.weapon }}" data-rank="{{ record.rank }}">
