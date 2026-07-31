@@ -2217,16 +2217,17 @@ body {
    (it propagates to the canvas), so the image shows through the page gutters
    while every content surface below stays opaque. */
 [data-theme="light"] .parallax-bg {
-    filter: grayscale(0.55);
+    filter: grayscale(0.25);
 }
 
+/* 다크 테마(0.75→0.98)와 같은 커브로 이미지가 뚜렷하게 보이도록 */
 [data-theme="light"] .parallax-overlay {
     background: linear-gradient(
         180deg,
-        rgba(250, 251, 252, 0.90) 0%,
-        rgba(250, 251, 252, 0.94) 30%,
-        rgba(250, 251, 252, 0.97) 60%,
-        rgba(250, 251, 252, 0.99) 100%
+        rgba(250, 251, 252, 0.72) 0%,
+        rgba(250, 251, 252, 0.82) 30%,
+        rgba(250, 251, 252, 0.92) 60%,
+        rgba(250, 251, 252, 0.97) 100%
     );
 }
 
