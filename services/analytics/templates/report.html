@@ -230,7 +230,11 @@
                         <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">시간</th>
                         <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">득점자</th>
                         <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">스코어</th>
-                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">동작</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">공격 결과</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">
+                            동작
+                            <span class="ml-1 normal-case font-normal text-[10px] text-gray-600" title="액션 유형(파라드/리포스트 등)은 오탐이 있어 확정 판정이 아닙니다">추정</span>
+                        </th>
                         <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">
                             <span class="group relative cursor-help">거리 (BH)
                                 <span class="invisible group-hover:visible absolute z-50 bottom-full left-0 mb-2 w-64 p-3 bg-gray-900 border border-white/10 rounded-xl text-xs text-gray-300 font-normal normal-case shadow-xl">
@@ -263,9 +267,19 @@
                             {% endif %}
                         </td>
                         <td class="px-4 py-3 text-sm font-mono font-semibold text-white">{{ touch.score_after }}</td>
+                        <td class="px-4 py-3">
+                            {% if touch.attack_outcome == 'attack_success' %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">공격 성공</span>
+                            {% elif touch.attack_outcome == 'attack_failed' %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-orange-500/15 text-orange-400 border border-orange-500/20">공격 실패</span>
+                            {% else %}
+                            <span class="text-xs text-gray-600">판별 불가</span>
+                            {% endif %}
+                        </td>
                         <td class="px-4 py-3 text-sm text-gray-300">
                             {% if touch.action_scorer and touch.action_scorer != 'unknown' %}
                                 {{ action_ko.get(touch.action_scorer, touch.action_scorer) }}
+                                <span class="text-[10px] text-gray-600">(추정)</span>
                             {% elif touch.action_scorer == 'unknown' %}
                                 <span class="text-gray-500 italic text-xs">OCR 모드</span>
                             {% else %}
@@ -685,16 +699,21 @@
                             {% if touch.scorer == 'left' %}{{ right_name }}{% else %}{{ left_name }}{% endif %}
                         </span>
                     </div>
-                    {% if touch.pose_analysis is defined and touch.pose_analysis %}
                     <div class="flex gap-1 flex-shrink-0 text-[10px]">
+                        {% if touch.attack_outcome == 'attack_success' %}
+                        <span class="px-1.5 py-0.5 bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 rounded font-semibold">공격 성공</span>
+                        {% elif touch.attack_outcome == 'attack_failed' %}
+                        <span class="px-1.5 py-0.5 bg-orange-500/15 text-orange-400 border border-orange-500/20 rounded font-semibold">공격 실패</span>
+                        {% endif %}
+                        {% if touch.pose_analysis is defined and touch.pose_analysis %}
                         {% if touch.pose_analysis.footwork_scorer %}
                         <span class="px-1.5 py-0.5 bg-white/10 text-gray-400 rounded">{{ touch.pose_analysis.footwork_scorer }}</span>
                         {% endif %}
                         {% if touch.pose_analysis.parry_detected %}
-                        <span class="px-1.5 py-0.5 bg-purple-500/10 text-purple-400 rounded">🛡빠라드</span>
+                        <span class="px-1.5 py-0.5 bg-purple-500/10 text-purple-400 rounded" title="액션 유형은 추정값입니다">🛡빠라드 <span class="opacity-60">추정</span></span>
+                        {% endif %}
                         {% endif %}
                     </div>
-                    {% endif %}
                     {% if report_id is defined and report_id and touch.frame is defined %}
                     <button class="clip-play-btn flex-shrink-0 w-7 h-7 rounded-full bg-white/10 hover:bg-brand-500/20 flex items-center justify-center transition-colors"
                             data-report="{{ report_id }}" data-type="touch" data-number="{{ touch.touch_number }}"

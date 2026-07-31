@@ -22,6 +22,12 @@ except ImportError:
     print("ERROR: opencv-python required.")
     sys.exit(1)
 
+from analyzer.touch_matching import (
+    annotate_touch_outcomes,
+    classify_exchange_sides,
+    summarize_attack_outcomes,
+)
+
 
 def format_timestamp(frame: int, fps: float) -> str:
     """Convert frame number to MM:SS string."""
@@ -29,6 +35,79 @@ def format_timestamp(frame: int, fps: float) -> str:
     m = int(seconds // 60)
     s = int(seconds % 60)
     return f"{m}:{s:02d}"
+
+
+# Capture-pipeline prefixes that the OCR report filename never carries.
+_VIDEO_STEM_PREFIXES = ("usaf_", "usa_fencing_sample_")
+_YOUTUBE_ID_LEN = 11
+# Below this length a bare substring match is too loose to trust.
+_MIN_SUBSTRING_BASE_LEN = 8
+
+
+def find_ocr_report(video_stem: str, output_dir) -> "Path | None":
+    """Locate the OCR report JSON that belongs to ``video_stem``.
+
+    Video files are often named ``<description>_<youtubeID>.mp4`` while their OCR
+    report is just ``<youtubeID>_report.json``. Stripping known prefixes is not
+    enough for those — the whole stem is not a substring of the candidate — so
+    matching runs in tiers, strictest first, and an exact hit always beats a
+    substring hit regardless of directory order:
+
+    1. exact: candidate base equals the stem, the prefix-stripped stem, or the
+       trailing 11-char YouTube ID
+    2. boundary: the stem starts or ends with the candidate base at an
+       underscore boundary
+    3. substring (legacy behaviour), only for bases long enough to be specific
+
+    Returns the matching path, or None — callers must warn rather than silently
+    produce a report with no touches.
+    """
+    candidates = sorted(
+        p for p in Path(output_dir).glob("*_report.json")
+        if "_continuous_report" not in p.stem
+    )
+    if not candidates:
+        return None
+
+    stripped = video_stem
+    for prefix in _VIDEO_STEM_PREFIXES:
+        if stripped.startswith(prefix):
+            stripped = stripped[len(prefix):]
+            break
+
+    tail = video_stem.rsplit("_", 1)[-1]
+    youtube_id = tail if len(tail) == _YOUTUBE_ID_LEN else None
+
+    def _base(path) -> str:
+        return path.stem[: -len("_report")] if path.stem.endswith("_report") else path.stem
+
+    exact = {video_stem, stripped}
+    if youtube_id:
+        exact.add(youtube_id)
+
+    for candidate in candidates:
+        if _base(candidate) in exact:
+            return candidate
+
+    for candidate in candidates:
+        base = _base(candidate)
+        if not base:
+            continue
+        if (
+            video_stem.endswith(f"_{base}")
+            or stripped.endswith(f"_{base}")
+            or video_stem.startswith(f"{base}_")
+        ):
+            return candidate
+
+    for candidate in candidates:
+        base = _base(candidate)
+        if len(base) < _MIN_SUBSTRING_BASE_LEN:
+            continue
+        if stripped in base or base in stripped:
+            return candidate
+
+    return None
 
 
 def _distance_zone(bh: float) -> str:
@@ -138,15 +217,16 @@ def main():
     ocr_report = None
     ocr_path = args.merge_ocr
     if ocr_path is None:
-        video_id = video_path.stem
-        for prefix in ("usaf_", "usa_fencing_sample_"):
-            if video_id.startswith(prefix):
-                video_id = video_id[len(prefix):]
-                break
-        for candidate in output_dir.glob("*_report.json"):
-            if video_id in candidate.stem and "_continuous_report" not in candidate.stem:
-                ocr_path = str(candidate)
-                break
+        auto_detected = find_ocr_report(video_path.stem, output_dir)
+        if auto_detected is not None:
+            ocr_path = str(auto_detected)
+            print(f"  Auto-detected OCR report: {auto_detected.name}")
+        else:
+            print(
+                f"\n  WARNING: no OCR report auto-detected for '{video_path.stem}' "
+                f"in {output_dir}; touches will be empty."
+            )
+            print("           Pass --merge-ocr <path> to supply it explicitly.\n")
 
     scoring_frames_sampled: set = set()
     if ocr_path and Path(ocr_path).exists():
@@ -243,23 +323,11 @@ def main():
         if ex.parry_right is not None and ex.parry_right.parry_detected:
             ex_dict["parry_right"] = True
 
-        # Determine attacker/defender based on footwork
-        aggressive = {"lunge", "fleche", "advance"}
-        left_attacking = fw_left_val in aggressive
-        right_attacking = fw_right_val in aggressive
-
-        if left_attacking and not right_attacking:
-            ex_dict["attacker"] = "left"
-            ex_dict["defender"] = "right"
-        elif right_attacking and not left_attacking:
-            ex_dict["attacker"] = "right"
-            ex_dict["defender"] = "left"
-        elif left_attacking and right_attacking:
-            ex_dict["attacker"] = "both"
-            ex_dict["defender"] = "both"
-        else:
-            ex_dict["attacker"] = "unknown"
-            ex_dict["defender"] = "unknown"
+        # Determine attacker/defender based on footwork (shared rule — the same
+        # one that decides each touch's attack_outcome).
+        ex_dict["attacker"], ex_dict["defender"] = classify_exchange_sides(
+            fw_left_val, fw_right_val,
+        )
 
         exchanges_list.append(ex_dict)
 
@@ -439,6 +507,25 @@ def main():
 
                 prev_scorer = scorer
                 prev_frame = touch_frame
+
+            # Part B — attack success/failure. Uses the touch→exchange match that
+            # also drives the clip window (analyzer.touch_matching), which is
+            # stricter than the nearest-midpoint heuristic used for
+            # `pose_analysis` above: only the *preceding* exchange within the
+            # measured OCR delay counts, so an unmatched touch stays "unclear"
+            # rather than borrowing footwork from an unrelated exchange.
+            annotate_touch_outcomes(ocr_touches, exchanges_list, fps)
+            attack_outcomes = summarize_attack_outcomes(ocr_touches)
+            report_dict["continuous_summary"]["attack_outcomes"] = attack_outcomes
+            for side in ("left", "right"):
+                report_dict[f"{side}_fencer"]["attack_outcomes"] = attack_outcomes[side]
+            print(
+                f"  Attack outcomes: left {attack_outcomes['left']['attack_success']}/"
+                f"{attack_outcomes['left']['attack_attempts']}, "
+                f"right {attack_outcomes['right']['attack_success']}/"
+                f"{attack_outcomes['right']['attack_attempts']}, "
+                f"unclear {attack_outcomes['unclear_touches']}/{attack_outcomes['total_touches']}"
+            )
 
             report_dict["touches"] = ocr_touches
             report_dict["summary"]["total_touches"] = len(ocr_touches)

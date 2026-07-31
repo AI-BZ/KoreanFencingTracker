@@ -731,87 +731,18 @@ def _compute_touch_clip_bounds(
 ) -> tuple:
     """Compute clip start/end anchored on the REAL touch, not the OCR score change.
 
-    The OCR score-change frame (``touch_frame``) lags the actual blade contact by a
-    measured median of ~2.8s (range 0.6-4.6s, 22/22 touches, never negative). So we
-    match the touch back to the *preceding* pose exchange and end the clip on that
-    exchange's real-touch anchor (``min_distance_frame``) rather than on the delayed
-    score frame — otherwise the window lands on the post-touch reset/recovery.
-
-    Priority:
-    1. Preceding exchange whose end is within EXCHANGE_MATCH_DELAY_SEC before the
-       touch (end closest to the touch wins) →
-       [exchange start .. min_distance_frame + 0.3s]. Start is clamped to at most
-       PHRASE_MAX_LEAD_SEC before the end (guards degenerate ~36s exchanges); a
-       recent allez clock event, if present, is preferred as the start.
-    2. Fallback (no matching exchange): [touch - median delay .. touch] — low
-       confidence, real-touch position unknown.
-
-    Returns (start_frame, end_frame).
+    Thin wrapper over :func:`analyzer.touch_matching.compute_touch_clip_bounds` so
+    the clip window and the report's attack success/failure verdict are derived
+    from the same touch→exchange match.
     """
-    from analyzer.config import (
-        EXCHANGE_MATCH_DELAY_SEC,
-        PHRASE_MAX_LEAD_SEC,
-        OCR_TOUCH_DELAY_MEDIAN_SEC,
+    from analyzer.touch_matching import compute_touch_clip_bounds
+
+    return compute_touch_clip_bounds(
+        touch_frame=touch_frame,
+        exchanges=exchanges,
+        clock_events=clock_events,
+        fps=fps,
     )
-
-    DELAY_FRAMES = int(EXCHANGE_MATCH_DELAY_SEC * fps)
-    # Pose exchange end can land a few frames after the OCR touch (pose is
-    # non-deterministic); allow a small forward tolerance so we don't drop the
-    # exchange that actually produced the touch.
-    FORWARD_TOL = int(0.5 * fps)
-    POST_TOUCH_BUFFER = int(0.3 * fps)
-    MAX_LEAD_FRAMES = int(PHRASE_MAX_LEAD_SEC * fps)
-    FALLBACK_LEAD = int(OCR_TOUCH_DELAY_MEDIAN_SEC * fps)
-    MIN_CLIP_FRAMES = int(1.5 * fps)
-
-    # 1) Match the touch to the preceding exchange: its end sits at/just before the
-    #    touch within the OCR delay window. Pick the exchange whose end is closest
-    #    to the touch (smallest |gap|).
-    best_exchange = None
-    best_gap = None
-    for ex in exchanges:
-        ef = ex.get("end_frame", 0)
-        gap = touch_frame - ef
-        if -FORWARD_TOL <= gap <= DELAY_FRAMES:
-            if best_gap is None or abs(gap) < abs(best_gap):
-                best_gap = gap
-                best_exchange = ex
-
-    if best_exchange is not None:
-        # Anchor the clip END on the real touch (min-distance frame) + a small
-        # buffer. Fall back to the exchange end if the anchor is unavailable.
-        anchor = best_exchange.get("min_distance_frame")
-        if anchor is None:
-            clip_end = int(best_exchange.get("end_frame", touch_frame))
-        else:
-            clip_end = int(anchor) + POST_TOUCH_BUFFER
-
-        # Clip START: exchange start, or a recent allez clock event if one exists.
-        clip_start = int(best_exchange.get("start_frame", clip_end))
-        if clock_events:
-            recent_allez = None
-            for ce in clock_events:
-                if ce.get("event") == "allez" and ce.get("frame", 0) < clip_end:
-                    if recent_allez is None or ce["frame"] > recent_allez["frame"]:
-                        recent_allez = ce
-            if recent_allez is not None:
-                clip_start = int(recent_allez["frame"])
-
-        # Lead-in cap: guard against degenerate long exchanges.
-        if clip_end - clip_start > MAX_LEAD_FRAMES:
-            clip_start = clip_end - MAX_LEAD_FRAMES
-        # Minimum clip length.
-        if clip_end - clip_start < MIN_CLIP_FRAMES:
-            clip_start = clip_end - MIN_CLIP_FRAMES
-        return (max(0, clip_start), max(0, clip_end))
-
-    # 2) Fallback: no preceding exchange matched. Anchor on the OCR touch with the
-    #    measured median delay as lead-in (low confidence — real touch unknown).
-    clip_end = touch_frame
-    clip_start = touch_frame - FALLBACK_LEAD
-    if clip_end - clip_start < MIN_CLIP_FRAMES:
-        clip_start = clip_end - MIN_CLIP_FRAMES
-    return (max(0, clip_start), max(0, clip_end))
 
 
 @app.get("/api/analytics/clips/{report_id}/{event_type}/{event_number}")

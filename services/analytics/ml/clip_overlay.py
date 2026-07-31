@@ -205,7 +205,7 @@ class ClipOverlayGenerator:
                 )
                 pb = self.pad_before if self.pad_before is not None else self.pad_seconds
                 pa = self.pad_after if self.pad_after is not None else self.pad_seconds
-                duration = (int(pb * fps) + int(pa * fps) + 1) / fps
+                duration = (ef - sf + int(pb * fps) + int(pa * fps) + 1) / fps
                 results.append({
                     "event_type": "touch",
                     "event_number": touch_num,
