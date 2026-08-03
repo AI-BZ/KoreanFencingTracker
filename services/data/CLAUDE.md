@@ -527,44 +527,61 @@ Second DE: 64강 (일부) → 32강 → 16강 → 8강 → 준결승 → 결승
 
 ---
 
-## 🔄 현재 작업 상태 (2026-07-09)
+## 🎨 디자인 시스템 방향 (2026-07-31 확정 — 스포츠 데이터 브랜드)
 
-### ✅ 최근 완료 (이전 세션)
+**사용자가 확정한 방향. 이후 모든 UI 작업은 이 규칙을 따를 것.**
 
-#### Pool 선수 리그 랭킹 표시 + 정렬
-- **구현**: pool standings에 리그 순위(league_rank) / 올해 최고순위(league_best) 컬럼 추가
-- **정렬 조건**: 경기 결과 없으면 → 리그 랭킹순, 경기 결과 있으면 → 풀 결과순
-- **대진표(matrix)**: 풀 결과 rank순 정렬 + scores 배열 재배열(score remapping)
-- **FIE 코드 변환**: `get_matching_legacy_codes(ev_age_fie)` → Y14→MS 변환 후 `calculate_rankings()` 호출
-- **PlayerRanking 객체**: attribute 접근(`.player_name`, `.current_rank`) — dict 접근 아님
-- **코드 위치**: `server.py` ~line 7417 (pool_ranking_map 생성), `event_result.html` (standings/matrix UI)
+- **디스플레이 서체**: Barlow Condensed 600/700 (`static/fonts/` 셀프호스팅, latin 서브셋 30KB)
+  - 토큰 `--fm-font-display`, 클래스 `.fm-num`/`.fm-num--semi` — 랭크·포인트·스코어·D-day 등 데이터 숫자 전용
+  - ⚠️ latin만 로드됨 — 한글 혼합 텍스트에 `.fm-num` 부여 금지
+- **본문/헤드라인**: Pretendard 웨이트 계층(400~900). **Inter는 제거됨 — 재도입 금지**
+- **액센트**: 태극 레드 `#c9302c` / 태극 블루 `#1e3a8a` **만**. 보라(#667eea/#764ba2/#6c5ce7)는 AI 슬롭으로 전면 제거됨 — 재도입 금지
+- **UPCOMING 스트립**: 홈/대회목록 공통 태극 네이비 밴드(`#1e3a8a→#16306e`) + 콘덴스드 레드 D-day 1.35rem. 두 페이지 값을 항상 함께 유지
+- **라이트 테마 배경**: 다크와 동일한 선수 parallax 이미지 + 흰색 오버레이(0.72→0.97), grayscale 0.25. 콘텐츠 표면은 불투명 유지
+- **금지 패턴** (Impeccable 디텍터 기준): gradient-text, 카드 3px+ 컬러 border-left, width/max-height/padding transition, 오프셋 0 halo 그림자, 다색 그라데이션 CTA
+- **검증**: `node ~/.claude/skills/impeccable/scripts/detect.mjs --json <파일>` (2026-07-31 기준 24→1건, 잔여 1건은 동명이인 아코디언 max-height 의도적 유지)
+- **크리틱 원본**: `.impeccable/critique/2026-07-30T04-12-33Z__services-data-core-pages.md` (26/40)
 
-#### FIE 풀 예상 경기순서
-- `FIE_BOUT_ORDER` 상수 (3~8인 풀), `renderBoutOrder()` JS 함수
-- 접이식 토글 (`toggleBoutOrder()`)
-- `event_result.html` 내 `<script>` 블록
+---
 
-#### 팀 랭킹 모바일 정렬
-- 활성 정렬 컬럼을 첫 번째로 동적 재배치
-- `.tr-sub` 모바일 숨김
+## 🔄 현재 작업 상태 (2026-08-03)
 
-### ⏳ 대기 중 (Pending Plan)
+### ✅ 최근 완료 (2026-07-31 ~ 08-01, 커밋 24dc3f8 · 516d46f · b9e9664, 프로덕션 배포됨)
 
-#### 2카드 랭킹 시스템 (piped-cooking-pancake.md)
-- **플랜 파일**: `~/.claude/plans/piped-cooking-pancake.md` (6단계 상세 계획)
-- **핵심**: NT 선발전 출전 선수 프로필에 2개 랭킹 카드 표시
-  - 카드1: 나이리그 랭킹 (일반 대회 + NT 서브랭킹 합산)
-  - 카드2: NT 전체 랭킹 (국가대표 선발전 전체 순위)
-- **수정 파일**: `calculator.py` (팀 기반 나이추론), `server.py` (primary_age 선택), `player_profile.html` (NT 라벨)
-- **핵심 버그**: 박소윤(최병철FC) 프로필이 SR 랭킹(#186/19.4pts)을 표시 — 실제는 MS(#28/74.2pts)
-- **근본 원인**: `_infer_player_age_group()`에서 동명이인 3명의 결과 혼합 → SR 기본값 반환
+#### 디자인 패스 1 — 크리틱 지적 수정 + 범례/툴팁
+- 논블로킹 온보딩 카드(전면 모달 제거), 홈 에러 "다시 시도" 버튼, FencingLab 데모 500 → 200 graceful degrade
+- i18n 누수 수정(~36키 × 6언어), WCAG muted 대비(#9a9aad/#6b7280), 필터 aria-label, 이중 페이월 CTA 차별화
+- 공용 `.fm-help` 툴팁 컴포넌트: A26 레이팅 기준, 8/57·P3 순위 표기, Pool/DE 용어 설명
+- 원시 코드 노출 제거: 프로필 랭킹 카드 "MS (Pro)" → "중등 (전문)", 랭킹 섹션 헤더 "SR" → "일반"/"Senior"
+  (server.py `age_group_display_map`에 E1~SR 코드 라벨 추가 + rankings.html JS ageMap 이중 수정)
 
-#### 메인 페이지 즐겨찾기 카드 복원
-- 이전 세션에서 언급, 미구현
+#### 디자인 패스 2 — 스포츠 데이터 브랜드 (위 디자인 시스템 방향 섹션 참조)
+- Barlow Condensed 도입, Inter 제거, AI 슬롭 제거(디텍터 24→1)
 
-### 🔧 Fable 5 오케스트레이션 (2026-07-12까지)
-- **상태**: ON (`fable status`로 확인)
-- **구성**: `~/.claude/fable/` (fable.md, agents/, hooks/, env.sh)
-- **3티어**: Fable 5 오케스트레이터 → deep-reasoner(Opus 4.8, max) → runner(Haiku 4.5)
-- **게이트**: PreToolUse 훅 — 메인 에이전트 턴당 코드 파일 2개 직접 수정 제한, 초과 시 서브에이전트 위임
-- **종료**: 7/12 이후 `fable off` 실행
+#### 라이트 테마 + 선호 리그 변경 (2026-08-01)
+- 라이트 테마에 선수 parallax 배경 표시 (이후 사용자 피드백으로 다크 수준 가시성으로 강화)
+- **선호 리그 변경 진입점 신설**: 랭킹 미리보기 카드 헤더 버튼 + 나이그룹 미선택자용 폴백 스트립
+  - `window.fmOpenSportSelector()` (mobile-ux.js) — 온보딩 시트 재오픈 + 저장값 프리필
+  - 수정 버그: click-outside 핸들러가 `.fm-prefs-edit` 클릭을 바깥으로 오인해 즉시 닫던 레이스
+- ⚠️ 선호 리그는 localStorage `fm_preferences`(v2)에만 저장 — weapon은 영문 코드('foil'/'epee'/'sabre'), gender는 '남'/'여', age_group은 온보딩 키('middle_school' 등)
+
+#### 2카드 랭킹 시스템 — 렌더링 확인 완료
+- 박소윤 프로필이 MS #30/118 (148.8pts) + NT #84/163 정상 표시 (기존 pending 플랜 해소)
+
+### ⏳ 다음 후보 (우선순위 미정 — 사용자 지시 대기)
+
+1. **선호 리그 계정 동기화** — 현재 기기별 localStorage만. members 테이블 연동으로 로그인 시 기기 간 공유
+2. **이모지 아이콘 → SVG 아이콘 시스템** — 🥇📋🏆 등 이모지를 일관된 stroke SVG로 (범위 큼)
+3. **FencingLab 차트 페이지 디자인 패스** — 이번 5개 코어 페이지 범위에서 제외됐던 영역
+4. **키보드 단축키** — 크리틱 잔여 (Esc는 툴팁·온보딩에 적용됨)
+5. **메인 페이지 즐겨찾기 카드 복원** — 이전 세션 언급, 미구현
+
+### 📌 스택 결정 (2026-08-03)
+- **Next.js/React 도입 안 함** — FastAPI + Jinja2 + 바닐라 JS 유지 (package.json 없음)
+- 동적 UI 강화가 필요해지면 **htmx/Alpine.js** 부분 도입 검토 (Jinja2 공존, 재작성 불필요)
+- React류는 app.fencingmind.ai 신규 개발 시에만 별도 검토 (data 서비스는 유지)
+- 디자인 스킬 스택 질문에는 "순수 HTML" 또는 자유입력으로 "FastAPI + Jinja2 + vanilla JS/CSS" 답변
+
+### 🔧 Fable 5 오케스트레이션
+- **상태**: 게이트 훅 여전히 활성 (턴당 코드 파일 2개 직접 수정 제한 — 초과분은 서브에이전트 위임)
+- **구성**: `~/.claude/fable/` (fable.md, agents/, hooks/, env.sh) · 종료는 `fable off`

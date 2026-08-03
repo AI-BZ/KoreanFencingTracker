@@ -437,6 +437,8 @@ mcp__supabase__execute_sql("SELECT * FROM players WHERE team_name LIKE '%최병�
 | PWA 제거 (data 서비스) | ✅ | 2026-06 |
 | Dual DE 대진표 + Pool 기권 처리 | ✅ | 2026-06 |
 | NT 서브랭킹 포인트 버그 수정 | ✅ | 2026-06-22 |
+| 스포츠 데이터 브랜드 디자인 (AI슬롭 제거, Barlow Condensed 숫자, 범례 툴팁) | ✅ | 2026-07-31 |
+| 라이트 테마 선수 배경 + 선호 리그 변경 UI | ✅ | 2026-08-01 |
 
 ## Supabase MCP 사용 가이드
 
