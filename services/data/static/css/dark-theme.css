@@ -78,7 +78,15 @@ body {
     width: 100%;
     height: 100%;
     z-index: -2;
+    /* PNG fallback first, then image-set so WebP-capable browsers pick the
+       55KB version instead of the 1.4MB PNG. Order matters: a browser that
+       does not understand image-set keeps the preceding declaration. */
     background-image: url('/static/images/fencer-bg.png');
+    background-image: -webkit-image-set(url('/static/images/fencer-bg.webp') 1x);
+    background-image: image-set(
+        url('/static/images/fencer-bg.webp') type('image/webp'),
+        url('/static/images/fencer-bg.png') type('image/png')
+    );
     background-size: cover;
     background-position: center top;
     background-repeat: no-repeat;
@@ -153,6 +161,13 @@ body {
 }
 
 /* Logo Image - Responsive */
+/* <picture> is inline by default; as a flex item it would add a baseline gap. */
+.logo picture,
+.mobile-menu-header picture {
+    display: flex;
+    align-items: center;
+}
+
 .logo-img {
     height: 36px;
     width: auto;
@@ -164,18 +179,26 @@ body {
     filter: drop-shadow(0 0 8px var(--glow-primary));
 }
 
+/* nav-links absorbs the free space, so the bar reads as two groups:
+   [logo · nav-links] ......... [search · login · language]
+   Auto margins are consumed before justify-content, so space-between above has
+   nothing left to scatter. */
 .nav-links {
     display: flex;
-    gap: 8px;
+    gap: 4px;
+    margin-right: auto;
 }
 
 .nav-links a {
     color: var(--text-secondary);
     text-decoration: none;
-    padding: 8px 16px;
-    border-radius: 8px;
+    padding: 8px 12px;
+    border-radius: var(--fm-radius-sm);
     font-size: 0.9rem;
     font-weight: 500;
+    /* A nav label must never break mid-phrase — "Points de sélection" used to
+       wrap onto two lines and stretch the whole bar to 62px. */
+    white-space: nowrap;
     transition: all 0.3s ease;
     border: 1px solid transparent;
 }
@@ -186,11 +209,14 @@ body {
     border-color: var(--border-light);
 }
 
+/* Right-cluster controls share one height (36px) so the bar has a single
+   baseline instead of three: search input, login button, language switcher. */
 .search-box input {
-    padding: 10px 18px;
+    height: 36px;
+    padding: 0 16px;
     border: 1px solid var(--border-color);
-    border-radius: 25px;
-    width: 220px;
+    border-radius: var(--fm-radius-sm);
+    width: 200px;
     font-size: 0.9rem;
     background: rgba(255, 255, 255, 0.05);
     color: var(--text-primary);
@@ -209,33 +235,38 @@ body {
     box-shadow: 0 0 0 3px var(--glow-primary);
 }
 
-/* Auth Navigation */
+/* Auth Navigation — sits in the right cluster by DOM order (base.html),
+   between the search box and the language switcher. No auto margin: one used
+   to live here and shoved the CTA into the middle of the navigation. */
 .auth-nav {
-    margin-left: auto;
+    display: flex;
+    align-items: center;
 }
 
 .auth-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 10px 20px;
-    border-radius: 25px;
+    height: 36px;
+    padding: 0 18px;
+    border-radius: var(--fm-radius-sm);
     text-decoration: none;
     font-size: 0.9rem;
     font-weight: 600;
-    transition: all 0.3s ease;
+    line-height: 1;
+    white-space: nowrap;
+    transition: background 0.2s ease, box-shadow 0.2s ease;
 }
 
 .login-btn {
     background: var(--accent-primary);
     color: white;
     border: none;
-    box-shadow: 0 4px 15px var(--glow-primary);
 }
 
 .login-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 25px var(--glow-primary);
+    background: var(--fm-accent-primary-hover);
+    box-shadow: 0 2px 10px var(--glow-primary);
 }
 
 .profile-btn {
@@ -244,15 +275,15 @@ body {
     justify-content: center;
     background: var(--accent-secondary, #1e3a8a);
     color: #fff;
-    width: 34px;
-    height: 34px;
-    min-width: 34px;
-    max-width: 34px;
-    min-height: 34px;
-    max-height: 34px;
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    max-width: 36px;
+    min-height: 36px;
+    max-height: 36px;
     flex-shrink: 0;
     padding: 0 !important;
-    border-radius: 50%;
+    border-radius: 50%;   /* avatar — intentionally circular, not on the radius scale */
     font-weight: 600;
     font-size: 0.85rem;
     letter-spacing: 0;
@@ -272,7 +303,7 @@ body {
     position: fixed;
     background: var(--bg-secondary, #1e1e2e);
     border: 1px solid var(--border-color, #333);
-    border-radius: 12px;
+    border-radius: var(--fm-radius-md);
     box-shadow: 0 8px 32px rgba(0,0,0,0.35);
     min-width: 260px;
     max-width: calc(100vw - 16px);
@@ -348,7 +379,7 @@ body {
     margin: 6px 12px;
     padding: 10px 12px;
     background: rgba(255,255,255,0.04);
-    border-radius: 8px;
+    border-radius: var(--fm-radius-sm);
     border: 1px solid rgba(255,255,255,0.06);
     display: flex;
     flex-direction: column;
@@ -421,7 +452,7 @@ body {
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     border: 1px solid var(--border-color);
-    border-radius: 20px;
+    border-radius: var(--fm-radius-md);
     margin-bottom: 30px;
 }
 
@@ -452,7 +483,7 @@ body {
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     padding: 28px;
-    border-radius: 16px;
+    border-radius: var(--fm-radius-md);
     text-align: center;
     border: 1px solid var(--border-color);
     transition: all 0.3s ease;
@@ -490,7 +521,7 @@ body {
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     padding: 24px;
-    border-radius: 16px;
+    border-radius: var(--fm-radius-md);
     border: 1px solid var(--border-color);
 }
 
@@ -512,7 +543,7 @@ body {
 .filter-group input {
     padding: 12px 16px;
     border: 1px solid var(--border-color);
-    border-radius: 10px;
+    border-radius: var(--fm-radius-sm);
     font-size: 0.95rem;
     min-width: 150px;
     background: var(--bg-secondary);
@@ -546,7 +577,7 @@ body {
     background: var(--bg-card);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
-    border-radius: 16px;
+    border-radius: var(--fm-radius-md);
     overflow: hidden;
     border: 1px solid var(--border-color);
     border-collapse: separate;
@@ -607,13 +638,19 @@ body {
 
 /* Status Badge */
 .status-badge {
-    display: inline-block;
-    padding: 5px 14px;
-    border-radius: 20px;
-    font-size: 0.78rem;
+    display: inline-flex;
+    padding: var(--fm-badge-pad-md);
+    border-radius: var(--fm-radius-pill);
+    font-size: var(--fm-badge-fs-md);
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.03em;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    white-space: nowrap;
+    box-sizing: border-box;
+    height: var(--fm-badge-height);
 }
 
 .status-finished {
@@ -655,7 +692,7 @@ body {
     border: 1px solid var(--border-color);
     background: var(--bg-card);
     color: var(--text-secondary);
-    border-radius: 10px;
+    border-radius: var(--fm-radius-sm);
     cursor: pointer;
     font-family: inherit;
     font-weight: 500;
@@ -703,7 +740,7 @@ body {
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     padding: 35px;
-    border-radius: 20px;
+    border-radius: var(--fm-radius-md);
     margin-bottom: 30px;
     border: 1px solid var(--border-color);
 }
@@ -756,7 +793,7 @@ body {
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     padding: 22px;
-    border-radius: 14px;
+    border-radius: var(--fm-radius-md);
     cursor: pointer;
     transition: all 0.3s ease;
     border: 1px solid var(--border-color);
@@ -780,29 +817,41 @@ body {
     flex-wrap: wrap;
 }
 
+/* Event tags share one geometry; only colour distinguishes them. They sit in a
+   row of three, so any difference in height or padding reads as a mistake. */
 .weapon-tag, .gender-tag, .type-tag {
-    padding: 4px 12px;
-    border-radius: 20px;
-    font-size: 0.78rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    height: var(--fm-badge-height);
+    padding: var(--fm-badge-pad-md);
+    border-radius: var(--fm-radius-pill);
+    font-size: var(--fm-badge-fs-md);
     font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
 }
 
+/* Taegeuk palette only — these were blue/pink/violet, and the violet in
+   particular is on the banned list in CLAUDE.md. Blue / red / neutral keeps
+   the three distinguishable without inventing brand colours. */
 .weapon-tag {
-    background: rgba(30, 58, 138, 0.2);
-    color: #60a5fa;
-    border: 1px solid rgba(30, 58, 138, 0.4);
+    background: rgba(96, 133, 235, 0.18);
+    color: #a8c0f5;
+    border: 1px solid rgba(96, 133, 235, 0.3);
 }
 
 .gender-tag {
-    background: rgba(219, 39, 119, 0.15);
-    color: #f472b6;
-    border: 1px solid rgba(219, 39, 119, 0.3);
+    background: rgba(201, 48, 44, 0.18);
+    color: #f0a6a3;
+    border: 1px solid rgba(201, 48, 44, 0.3);
 }
 
 .type-tag {
-    background: rgba(139, 92, 246, 0.15);
-    color: #a78bfa;
-    border: 1px solid rgba(139, 92, 246, 0.3);
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-light);
 }
 
 /* =====================================================
@@ -820,7 +869,7 @@ body {
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     padding: 28px;
-    border-radius: 16px;
+    border-radius: var(--fm-radius-md);
     margin-bottom: 25px;
     border: 1px solid var(--border-color);
 }
@@ -848,7 +897,7 @@ body {
     background: var(--accent-primary);
     color: white;
     padding: 12px 18px;
-    border-radius: 10px 10px 0 0;
+    border-radius: var(--fm-radius-md) var(--fm-radius-md) 0 0;
     font-weight: 600;
 }
 
@@ -913,7 +962,7 @@ body {
     flex: 1;
     padding: 16px 24px;
     border: 2px solid var(--border-color);
-    border-radius: 14px;
+    border-radius: var(--fm-radius-sm);
     font-size: 1rem;
     background: var(--bg-card);
     color: var(--text-primary);
@@ -934,7 +983,7 @@ body {
 .btn {
     padding: 16px 32px;
     border: none;
-    border-radius: 14px;
+    border-radius: var(--fm-radius-sm);
     font-size: 1rem;
     font-family: inherit;
     font-weight: 600;
@@ -958,7 +1007,7 @@ body {
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     padding: 28px;
-    border-radius: 16px;
+    border-radius: var(--fm-radius-md);
     border: 1px solid var(--border-color);
 }
 
@@ -1035,10 +1084,41 @@ body {
    RESPONSIVE - Mobile First Approach
    ===================================================== */
 
+/* Mid desktop. The five nav labels run noticeably longer in en/fr/it/tr than in
+   ko, so the bar needs tightening before it reaches the laptop breakpoint.
+   (769-1024px is handled by the existing block further down, which would
+   otherwise override anything set here.) */
+@media (min-width: 1025px) and (max-width: 1200px) {
+    .navbar .container {
+        gap: 10px;
+        flex-wrap: nowrap;
+    }
+
+    .nav-links a {
+        padding: 8px 8px;
+        font-size: 0.85rem;
+    }
+
+    .search-box input {
+        width: 150px;
+    }
+
+    .auth-btn {
+        padding: 0 14px;
+    }
+}
+
 /* Extra Small Devices (phones, 375px and up) */
 @media (max-width: 480px) {
     .parallax-bg {
         background-attachment: scroll;
+        /* 416x640 crop — 14.5KB instead of 55KB on the connection that needs it most */
+        background-image: url('/static/images/fencer-bg.png');
+        background-image: -webkit-image-set(url('/static/images/fencer-bg-mobile.webp') 1x);
+        background-image: image-set(
+            url('/static/images/fencer-bg-mobile.webp') type('image/webp'),
+            url('/static/images/fencer-bg.png') type('image/png')
+        );
     }
 
     /* Mobile navbar */
@@ -1140,7 +1220,7 @@ body {
     /* Hero section */
     .hero {
         padding: 25px 15px;
-        border-radius: 12px;
+        border-radius: var(--fm-radius-md);
         margin-bottom: 15px;
     }
 
@@ -1221,7 +1301,7 @@ body {
     /* Competition Header */
     .competition-header {
         padding: 15px;
-        border-radius: 12px;
+        border-radius: var(--fm-radius-md);
         margin-bottom: 15px;
     }
 
@@ -1247,7 +1327,7 @@ body {
 
     .event-card {
         padding: 15px;
-        border-radius: 10px;
+        border-radius: var(--fm-radius-md);
     }
 
     .event-name {
@@ -1259,8 +1339,9 @@ body {
     }
 
     .weapon-tag, .gender-tag, .type-tag {
-        padding: 3px 8px;
-        font-size: 0.7rem;
+        height: auto;
+        padding: var(--fm-badge-pad-sm);
+        font-size: var(--fm-badge-fs-sm);
     }
 
     /* Search Form */
@@ -1322,6 +1403,12 @@ body {
 @media (min-width: 481px) and (max-width: 768px) {
     .parallax-bg {
         background-attachment: scroll;
+        background-image: url('/static/images/fencer-bg.png');
+        background-image: -webkit-image-set(url('/static/images/fencer-bg-mobile.webp') 1x);
+        background-image: image-set(
+            url('/static/images/fencer-bg-mobile.webp') type('image/webp'),
+            url('/static/images/fencer-bg.png') type('image/png')
+        );
     }
 
     .navbar {
@@ -1458,8 +1545,12 @@ body {
 
 /* Medium Devices (tablets, 769px to 1024px) */
 @media (min-width: 769px) and (max-width: 1024px) {
+    /* Tightest desktop row. Verified to stay on one line in all 7 languages —
+       fr ("Classements"/"Points de sélection") is the widest and still clears
+       the container. Keep these values in step with the 1025-1200px block. */
     .navbar .container {
-        gap: 12px;
+        gap: 8px;
+        flex-wrap: nowrap;
     }
 
     .logo-text {
@@ -1467,16 +1558,21 @@ body {
     }
 
     .nav-links {
-        gap: 6px;
+        gap: 2px;
     }
 
     .nav-links a {
-        padding: 8px 14px;
-        font-size: 0.9rem;
+        padding: 8px 6px;
+        font-size: 0.8rem;
     }
 
     .search-box input {
-        width: 180px;
+        width: 130px;
+    }
+
+    .auth-btn {
+        padding: 0 12px;
+        font-size: 0.85rem;
     }
 
     .main-content {
@@ -2508,15 +2604,15 @@ body {
 }
 
 [data-theme="light"] .gender-tag {
-    background: rgba(219, 39, 119, 0.08);
-    color: #be185d;
-    border-color: rgba(219, 39, 119, 0.15);
+    background: rgba(201, 48, 44, 0.08);
+    color: #a82824;
+    border-color: rgba(201, 48, 44, 0.15);
 }
 
 [data-theme="light"] .type-tag {
-    background: rgba(139, 92, 246, 0.08);
-    color: #7c3aed;
-    border-color: rgba(139, 92, 246, 0.15);
+    background: rgba(0, 0, 0, 0.05);
+    color: #4e5968;
+    border-color: rgba(0, 0, 0, 0.1);
 }
 
 /* --- Pagination --- */

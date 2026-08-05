@@ -121,13 +121,34 @@
     --fm-space-12: 3rem;        /* 48px */
     --fm-space-16: 4rem;        /* 64px */
 
-    /* ==================== BORDERS ==================== */
-    --fm-radius-sm: 4px;
-    --fm-radius-md: 8px;
-    --fm-radius-lg: 12px;
-    --fm-radius-xl: 16px;
-    --fm-radius-2xl: 20px;
-    --fm-radius-full: 9999px;
+    /* ==================== BORDERS ====================
+       Shape scale — three steps, no in-between values. Every border-radius in
+       the shared shell resolves to one of these:
+         sm   버튼, 인풋, 탭, 배지, 카드 *내부* 요소
+         md   카드, 패널, 컨테이너, 섹션, 테이블, 팝오버
+         pill 칩 / 상태 배지 등 알약형 전용 (한 줄 텍스트 + 좌우 여백)
+       Exceptions that intentionally stay literal: 50% (아바타·원형 뱃지·스피너),
+       대진표(bracket.css)·차트 막대처럼 형태 자체가 기능인 요소. */
+    --fm-radius-sm: 8px;
+    --fm-radius-md: 12px;
+    --fm-radius-pill: 999px;
+    --fm-radius-full: var(--fm-radius-pill);  /* alias */
+
+    /* ==================== BADGE / CHIP SCALE ====================
+       Every inline label uses one of three tiers. Pick by role, not by looks:
+         micro     카드 내부 상태 라벨 — 흐름을 끊지 않는 크기
+         standard  기본 배지 — 고정 높이라 나란히 놓이면 라인이 맞는다
+         chip      독립 칩 (클릭 가능) — 터치 타깃 확보
+       A badge must be inline-flex with line-height 1: padding alone leaves the
+       height at the mercy of font metrics, which is why these used to sit off
+       the baseline next to each other. */
+    --fm-badge-pad-sm: 2px 8px;      /* micro */
+    --fm-badge-pad-md: 4px 10px;     /* standard */
+    --fm-badge-pad-lg: 6px 14px;     /* chip */
+    --fm-badge-fs-sm: 0.7rem;
+    --fm-badge-fs-md: 0.75rem;
+    --fm-badge-height: 24px;         /* standard badge — fixed for line-up */
+    --fm-chip-height: 32px;          /* chip — clickable, needs a real target */
 
     /* ==================== SHADOWS ==================== */
     --fm-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);

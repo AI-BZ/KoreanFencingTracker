@@ -140,14 +140,19 @@ const FencingLab = {
         });
     },
 
+    SUPPORTED_LANGUAGES: ['ko', 'en', 'ja', 'fr', 'it', 'zh', 'tr'],
+
     /**
-     * Detect current language from URL path
+     * Detect current language: <html lang> (base.html) → URL path → ko
      */
     getCurrentLanguage() {
-        const path = window.location.pathname;
-        if (path.startsWith('/en/')) return 'en';
-        if (path.startsWith('/ko/')) return 'ko';
-        return 'ko'; // default
+        const htmlLang = (document.documentElement.lang || '').slice(0, 2).toLowerCase();
+        if (this.SUPPORTED_LANGUAGES.includes(htmlLang)) return htmlLang;
+
+        const pathLang = window.location.pathname.split('/')[1];
+        if (this.SUPPORTED_LANGUAGES.includes(pathLang)) return pathLang;
+
+        return 'ko';
     },
 
     /**
@@ -179,7 +184,7 @@ const FencingLab = {
      */
     async loadDemoData() {
         try {
-            const response = await fetch('/api/fencinglab/demo');
+            const response = await fetch(`/api/fencinglab/demo?lang=${encodeURIComponent(this.getCurrentLanguage())}`);
             if (!response.ok) throw new Error('Failed to load demo');
             return await response.json();
         } catch (error) {
@@ -463,7 +468,7 @@ const FencingLab = {
                         <span class="label">${fl.pool_rate || 'Pool'}</span>
                     </div>
                 </div>
-                <div class="fl-demo-badge ${player.clutch_grade.includes('강심장') ? 'strong' : ''}">
+                <div class="fl-demo-badge ${player.clutch_grade_key === 'strong' ? 'strong' : ''}">
                     ${player.clutch_grade}
                 </div>
             `;

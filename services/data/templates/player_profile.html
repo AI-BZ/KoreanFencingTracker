@@ -126,6 +126,210 @@
         letter-spacing: 0.07em;
         font-weight: 600;
     }
+
+    /* ===== Phosphor inline icons =====
+       Matches the markup convention already used on index.html (Phosphor
+       regular, filled paths, viewBox 0 0 256 256). Declared here as a local
+       fallback because no shared .fm-icon rule exists yet; the values are the
+       intended shared ones, so a later global rule is a no-op. */
+    .fm-icon {
+        width: 1em;
+        height: 1em;
+        flex-shrink: 0;
+        fill: currentColor;
+        vertical-align: -0.125em;
+    }
+    /* Toggles: the existing accordion CSS rotates the wrapping span by 180deg
+       on .expanded, which now turns the caret instead of a text glyph. */
+    .disambiguation-toggle,
+    .result-expand-icon,
+    .pool-bouts-toggle-icon {
+        display: inline-flex;
+        align-items: center;
+    }
+    /* components.css hard-codes the toggle to rgba(255,255,255,0.6), which is
+       ~1.1:1 on the light theme's #f5f5f7 accordion — the caret was invisible
+       there. Inheriting the header colour tracks both themes (~6.8:1 light). */
+    .disambiguation-toggle {
+        color: inherit;
+        opacity: 1;
+    }
+    /* The verified tick is white on #4caf50 (2.6:1 measured) — below the 3:1
+       floor for a graphical object. Darkening the disc to #2e7d32 takes it to
+       ~5:1 while keeping the same semantic green. */
+    .verified-badge {
+        background: #2e7d32;
+    }
+
+    /* ===== Radius scale =====
+       Three steps only: sm for controls and in-card surfaces, md for cards and
+       panels, pill for chips. Several of these are 10px/15px/20px in
+       components.css, which reads as an unintentional mix at small sizes. */
+    .player-header,
+    .access-gate,
+    .access-gate .gate-overlay,
+    .ranking-card {
+        border-radius: var(--fm-radius-md, 12px);
+    }
+    .rating-badge,
+    .team-history-section,
+    .disambiguation-section,
+    .access-gate .gate-cta-btn {
+        border-radius: var(--fm-radius-sm, 8px);
+    }
+    .player-header .disambiguation-badge,
+    .team-history-item,
+    .disambiguation-count,
+    .other-profile-link,
+    .result-place {
+        border-radius: var(--fm-radius-pill, 999px);
+    }
+    .tabs {
+        border-radius: var(--fm-radius-md, 12px) var(--fm-radius-md, 12px) 0 0;
+    }
+    /* .tabs sets overflow-x:auto below 768px, which cancels the overflow:hidden
+       clipping that rounds the active tab on desktop. Round the end tabs
+       directly so the strip keeps the container's corners on mobile. */
+    .tabs .tab-btn:first-child {
+        border-top-left-radius: var(--fm-radius-md, 12px);
+    }
+    .tabs .tab-btn:last-child {
+        border-top-right-radius: var(--fm-radius-md, 12px);
+    }
+
+    /* ===== Player header alignment =====
+       The name line mixes a 2rem heading, a small romanised name chip, a 40px
+       round follow button and a badge. Without a flex context they align on
+       the text baseline and the button hangs low. */
+    .player-header .player-name {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px 10px;
+    }
+    .player-header .player-name .name-en,
+    .player-header .player-name .follow-btn,
+    .player-header .disambiguation-badge {
+        margin-left: 0;
+    }
+    /* Equal rhythm between the header's stacked blocks */
+    .player-header .international-links,
+    .player-header .team-history-section,
+    .player-header .disambiguation-section,
+    .player-header .rating-display,
+    .player-header .player-ranking-section {
+        margin-top: 16px;
+    }
+    .player-header .player-team {
+        margin-bottom: 0;
+    }
+    /* Club name (0.85rem) and its date range (0.75rem) share a baseline
+       instead of being centred against each other. */
+    .team-history-item {
+        align-items: baseline;
+    }
+
+    /* ===== Ranking card =====
+       "#30 / 118명" and "148.8 pts" each pair a large figure with a small
+       label; baseline alignment keeps the small text sitting on the figure's
+       baseline rather than floating at its optical centre. */
+    .ranking-card-summary {
+        column-gap: 14px;
+    }
+    .ranking-position,
+    .ranking-points {
+        display: flex;
+        align-items: baseline;
+        gap: 4px;
+    }
+    .ranking-points {
+        justify-content: flex-end;
+    }
+
+    /* ===== Rating badge =====
+       components.css turns .rating-display into a column below 768px, and
+       because the flex default is align-items:stretch each badge grew to the
+       full 326px viewport width. Keep the desktop square proportion, one step
+       smaller, and let the badges sit side by side. */
+    .rating-display {
+        align-items: flex-start;
+    }
+    @media (max-width: 768px) {
+        .player-header .rating-display {
+            flex-direction: row;
+            flex-wrap: wrap;
+            align-items: flex-start;
+            gap: 10px;
+        }
+        .player-header .rating-display .rating-badge {
+            flex: 0 0 auto;
+            width: 96px;
+            min-height: 96px;
+            padding: 12px 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+        }
+        .player-header .rating-display .rating-weapon {
+            line-height: 1.2;
+        }
+    }
+
+    /* ===== Access gate =====
+       .gate-overlay was absolutely positioned inside an overflow:hidden
+       .access-gate sized by .blurred-content, so any overlay taller than the
+       preview (heading + three checklist rows + CTA on a narrow screen) had
+       its top and bottom clipped. Stacking both children in one grid cell
+       makes the taller of the two set the height, so nothing is cut. */
+    .access-gate {
+        display: grid;
+        align-items: stretch;
+    }
+    .access-gate > .blurred-content,
+    .access-gate > .gate-overlay {
+        grid-area: 1 / 1;
+        min-width: 0;
+    }
+    .access-gate > .gate-overlay {
+        position: relative;
+        inset: auto;
+        background: rgba(10, 10, 16, 0.72);
+    }
+    .access-gate .gate-cta-btn {
+        white-space: nowrap;
+    }
+    /* The light-theme gradient starts fully transparent, which left the
+       overlay heading unreadable over the blurred preview once the overlay was
+       no longer taller than its text. Start opaque enough for 4.5:1 at the
+       top edge (#191f28 on ~white). */
+    [data-theme="light"] .access-gate .gate-overlay {
+        background: linear-gradient(to bottom,
+            rgba(255, 255, 255, 0.92) 0%,
+            rgba(255, 255, 255, 0.99) 40%) !important;
+    }
+    [data-theme="light"] .access-gate .gate-feature-list p {
+        color: #191f28;
+    }
+    [data-theme="light"] .access-gate .gate-feature-list ul li {
+        color: #4e5968;
+    }
+    @media (max-width: 480px) {
+        .access-gate .gate-overlay {
+            padding: 1.25rem 1rem;
+            gap: 10px;
+        }
+        /* The overlay's own gap already separates the list from the CTA */
+        .access-gate .gate-feature-list {
+            max-width: 100%;
+            margin-bottom: 0;
+        }
+        .access-gate .gate-cta-btn {
+            padding: 12px 18px;
+            font-size: 0.9rem;
+        }
+    }
 </style>
 {% endblock %}
 
@@ -166,14 +370,14 @@
         <div class="international-links">
             {% if player.fie_id %}
             <a href="https://fie.org/athletes/{{ player.fie_id }}" target="_blank" class="external-link fie-link">
-                <span class="link-icon">🌍</span> FIE Profile
-                {% if player.name_en_verified %}<span class="verified-badge">✓</span>{% endif %}
+                <span class="link-icon"><svg class="fm-icon" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M128,24h0A104,104,0,1,0,232,128,104.12,104.12,0,0,0,128,24Zm88,104a87.61,87.61,0,0,1-3.33,24H174.16a157.44,157.44,0,0,0,0-48h38.51A87.61,87.61,0,0,1,216,128ZM102,168H154a115.11,115.11,0,0,1-26,45A115.27,115.27,0,0,1,102,168Zm-3.9-16a140.84,140.84,0,0,1,0-48h59.88a140.84,140.84,0,0,1,0,48ZM40,128a87.61,87.61,0,0,1,3.33-24H81.84a157.44,157.44,0,0,0,0,48H43.33A87.61,87.61,0,0,1,40,128ZM154,88H102a115.11,115.11,0,0,1,26-45A115.27,115.27,0,0,1,154,88Zm52.33,0H170.71a135.28,135.28,0,0,0-22.3-45.6A88.29,88.29,0,0,1,206.37,88ZM107.59,42.4A135.28,135.28,0,0,0,85.29,88H49.63A88.29,88.29,0,0,1,107.59,42.4ZM49.63,168H85.29a135.28,135.28,0,0,0,22.3,45.6A88.29,88.29,0,0,1,49.63,168Zm98.78,45.6a135.28,135.28,0,0,0,22.3-45.6h35.66A88.29,88.29,0,0,1,148.41,213.6Z"/></svg></span> FIE Profile
+                {% if player.name_en_verified %}<span class="verified-badge"><svg class="fm-icon" viewBox="0 0 256 256" role="img" aria-label="{{ _t('영문명 확인됨') }}"><path d="M232.49,80.49l-128,128a12,12,0,0,1-17,0l-56-56a12,12,0,1,1,17-17L96,183,215.51,63.51a12,12,0,0,1,17,17Z"/></svg></span>{% endif %}
             </a>
             {% endif %}
             {% if player.fencingtracker_id %}
             <a href="https://fencingtracker.com/p/{{ player.fencingtracker_id }}" target="_blank" class="external-link ft-link">
-                <span class="link-icon">📊</span> FencingTracker
-                {% if player.name_en_verified %}<span class="verified-badge">✓</span>{% endif %}
+                <span class="link-icon"><svg class="fm-icon" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M224,200h-8V40a8,8,0,0,0-8-8H152a8,8,0,0,0-8,8V80H96a8,8,0,0,0-8,8v40H48a8,8,0,0,0-8,8v64H32a8,8,0,0,0,0,16H224a8,8,0,0,0,0-16ZM160,48h40V200H160ZM104,96h40V200H104ZM56,144H88v56H56Z"/></svg></span> FencingTracker
+                {% if player.name_en_verified %}<span class="verified-badge"><svg class="fm-icon" viewBox="0 0 256 256" role="img" aria-label="{{ _t('영문명 확인됨') }}"><path d="M232.49,80.49l-128,128a12,12,0,0,1-17,0l-56-56a12,12,0,1,1,17-17L96,183,215.51,63.51a12,12,0,0,1,17,17Z"/></svg></span>{% endif %}
             </a>
             {% endif %}
         </div>
@@ -207,11 +411,11 @@
         <div class="disambiguation-section accordion">
             <div class="disambiguation-header" onclick="toggleDisambiguation(this)">
                 <div class="disambiguation-title">
-                    <span class="disambiguation-icon">👥</span>
+                    <span class="disambiguation-icon"><svg class="fm-icon" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M117.25,157.92a60,60,0,1,0-66.5,0A95.83,95.83,0,0,0,3.53,195.63a8,8,0,1,0,13.4,8.74,80,80,0,0,1,134.14,0,8,8,0,0,0,13.4-8.74A95.83,95.83,0,0,0,117.25,157.92ZM40,108a44,44,0,1,1,44,44A44.05,44.05,0,0,1,40,108Zm210.14,98.7a8,8,0,0,1-11.07-2.33A79.83,79.83,0,0,0,172,168a8,8,0,0,1,0-16,44,44,0,1,0-16.34-84.87,8,8,0,1,1-5.94-14.85,60,60,0,0,1,55.53,105.64,95.83,95.83,0,0,1,47.22,37.71A8,8,0,0,1,250.14,206.7Z"/></svg></span>
                     {{ i18n.common.player.other_profiles|default('Other Athletes with Same Name') }}
                     <span class="disambiguation-count">({{ player.other_profiles|length }})</span>
                 </div>
-                <span class="disambiguation-toggle">▼</span>
+                <span class="disambiguation-toggle"><svg class="fm-icon" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg></span>
             </div>
             <div class="disambiguation-content">
                 <div class="other-profiles-list">
@@ -821,7 +1025,7 @@
             </select>
             <button class="btn btn-primary" onclick="filterHistory()">{{ i18n.common.search.button|default('Search') }}</button>
             <button class="btn btn-secondary print-btn" onclick="printCertificate()">
-                <span class="print-icon">🖨️</span> Print Certificate
+                <span class="print-icon"><svg class="fm-icon" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M214.67,72H200V40a8,8,0,0,0-8-8H64a8,8,0,0,0-8,8V72H41.33C27.36,72,16,82.77,16,96v80a8,8,0,0,0,8,8H56v32a8,8,0,0,0,8,8H192a8,8,0,0,0,8-8V184h32a8,8,0,0,0,8-8V96C240,82.77,228.64,72,214.67,72ZM72,48H184V72H72ZM184,208H72V160H184Zm40-40H200V152a8,8,0,0,0-8-8H64a8,8,0,0,0-8,8v16H32V96c0-4.41,4.19-8,9.33-8H214.67c5.14,0,9.33,3.59,9.33,8Zm-24-52a12,12,0,1,1-12-12A12,12,0,0,1,200,116Z"/></svg></span> Print Certificate
             </button>
         </div>
 
@@ -845,14 +1049,14 @@
                         {% if record.rating_earned %}
                         <div class="result-rating">{{ record.rating_earned }}</div>
                         {% endif %}
-                        <span class="result-expand-icon">▼</span>
+                        <span class="result-expand-icon"><svg class="fm-icon" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg></span>
                     </div>
                 </div>
                 <div class="result-card-detail">
                     <!-- Pool Results -->
                     {% if record.pool_results %}
                     <div class="detail-section pool-section">
-                        <h5><span class="section-icon">📊</span> Pool {{ i18n.common.player.results|default('Results') }}</h5>
+                        <h5><span class="section-icon"><svg class="fm-icon" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M224,200h-8V40a8,8,0,0,0-8-8H152a8,8,0,0,0-8,8V80H96a8,8,0,0,0-8,8v40H48a8,8,0,0,0-8,8v64H32a8,8,0,0,0,0,16H224a8,8,0,0,0,0-16ZM160,48h40V200H160ZM104,96h40V200H104ZM56,144H88v56H56Z"/></svg></span> Pool {{ i18n.common.player.results|default('Results') }}</h5>
                         <div class="pool-stats-grid">
                             <div class="pool-stat-card">
                                 <div class="pool-stat-value">
@@ -891,7 +1095,7 @@
                         {% if record.pool_bouts %}
                         <div class="pool-bouts-accordion">
                             <div class="pool-bouts-header" onclick="togglePoolBouts(this)">
-                                <span class="pool-bouts-toggle-icon">▼</span>
+                                <span class="pool-bouts-toggle-icon"><svg class="fm-icon" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg></span>
                                 <span>{{ i18n.common.player.view_bouts|default('View Individual Bouts') }} ({{ record.pool_bouts|length }})</span>
                             </div>
                             <div class="pool-bouts-content">
@@ -904,7 +1108,7 @@
                                         </div>
                                         <div class="bout-detail-score">{{ bout.my_score }} - {{ bout.opponent_score }}</div>
                                         <div class="bout-detail-result {% if bout.result == 'V' %}v{% else %}d{% endif %}">
-                                            {% if bout.result == 'V' %}✅ V{% else %}❌ D{% endif %}
+                                            {% if bout.result == 'V' %}<svg class="fm-icon" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M173.66,98.34a8,8,0,0,1,0,11.32l-56,56a8,8,0,0,1-11.32,0l-24-24a8,8,0,0,1,11.32-11.32L112,148.69l50.34-50.35A8,8,0,0,1,173.66,98.34ZM232,128A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128Z"/></svg> V{% else %}<svg class="fm-icon" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M165.66,101.66,139.31,128l26.35,26.34a8,8,0,0,1-11.32,11.32L128,139.31l-26.34,26.35a8,8,0,0,1-11.32-11.32L116.69,128,90.34,101.66a8,8,0,0,1,11.32-11.32L128,116.69l26.34-26.35a8,8,0,0,1,11.32,11.32ZM232,128A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128Z"/></svg> D{% endif %}
                                         </div>
                                     </div>
                                     {% endfor %}
@@ -918,7 +1122,7 @@
                     <!-- Tournament Results -->
                     {% if record.tournament_results %}
                     <div class="detail-section">
-                        <h5><span class="section-icon">🏆</span> Direct Elimination</h5>
+                        <h5><span class="section-icon"><svg class="fm-icon" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M232,64H208V48a8,8,0,0,0-8-8H56a8,8,0,0,0-8,8V64H24A16,16,0,0,0,8,80V96a40,40,0,0,0,40,40h3.65A80.13,80.13,0,0,0,120,191.61V216H96a8,8,0,0,0,0,16h64a8,8,0,0,0,0-16H136V191.58c31.94-3.23,58.44-25.64,68.08-55.58H208a40,40,0,0,0,40-40V80A16,16,0,0,0,232,64ZM48,120A24,24,0,0,1,24,96V80H48v32q0,4,.39,8Zm144-8.9c0,35.52-29,64.64-64,64.9a64,64,0,0,1-64-64V56H192ZM232,96a24,24,0,0,1-24,24h-.5a81.81,81.81,0,0,0,.5-8.9V80h24Z"/></svg></span> Direct Elimination</h5>
                         <div class="tournament-progress">
                             {% for round in record.tournament_path %}
                             <span class="progress-step {% if round.completed %}completed{% endif %} {% if round.current %}current{% endif %} {% if round.is_bye %}bye{% endif %}">
@@ -937,11 +1141,11 @@
                                 </div>
                                 {% if bout.is_bye %}
                                 <div class="bout-detail-score">-</div>
-                                <div class="bout-detail-result bye">🎫 BYE</div>
+                                <div class="bout-detail-result bye"><svg class="fm-icon" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M232,104a8,8,0,0,0,8-8V64a16,16,0,0,0-16-16H32A16,16,0,0,0,16,64V96a8,8,0,0,0,8,8,24,24,0,0,1,0,48,8,8,0,0,0-8,8v32a16,16,0,0,0,16,16H224a16,16,0,0,0,16-16V160a8,8,0,0,0-8-8,24,24,0,0,1,0-48ZM32,167.2a40,40,0,0,0,0-78.4V64H88V192H32Zm192,0V192H104V64H224V88.8a40,40,0,0,0,0,78.4Z"/></svg> BYE</div>
                                 {% else %}
                                 <div class="bout-detail-score">{{ bout.my_score }} - {{ bout.opponent_score }}</div>
                                 <div class="bout-detail-result {% if bout.result == 'V' %}v{% else %}d{% endif %}">
-                                    {% if bout.result == 'V' %}✅ V{% else %}❌ D{% endif %}
+                                    {% if bout.result == 'V' %}<svg class="fm-icon" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M173.66,98.34a8,8,0,0,1,0,11.32l-56,56a8,8,0,0,1-11.32,0l-24-24a8,8,0,0,1,11.32-11.32L112,148.69l50.34-50.35A8,8,0,0,1,173.66,98.34ZM232,128A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128Z"/></svg> V{% else %}<svg class="fm-icon" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M165.66,101.66,139.31,128l26.35,26.34a8,8,0,0,1-11.32,11.32L128,139.31l-26.34,26.35a8,8,0,0,1-11.32-11.32L116.69,128,90.34,101.66a8,8,0,0,1,11.32-11.32L128,116.69l26.34-26.35a8,8,0,0,1,11.32,11.32ZM232,128A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128Z"/></svg> D{% endif %}
                                 </div>
                                 {% endif %}
                             </div>
@@ -1182,9 +1386,9 @@
                         </td>
                         <td>
                             {% if opponent.last_result == 'V' %}
-                            <span style="color: var(--success-color)">✅ {{ opponent.last_score }}</span>
+                            <span style="color: var(--success-color)"><svg class="fm-icon" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M173.66,98.34a8,8,0,0,1,0,11.32l-56,56a8,8,0,0,1-11.32,0l-24-24a8,8,0,0,1,11.32-11.32L112,148.69l50.34-50.35A8,8,0,0,1,173.66,98.34ZM232,128A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128Z"/></svg> {{ opponent.last_score }}</span>
                             {% else %}
-                            <span style="color: var(--danger-color)">❌ {{ opponent.last_score }}</span>
+                            <span style="color: var(--danger-color)"><svg class="fm-icon" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M165.66,101.66,139.31,128l26.35,26.34a8,8,0,0,1-11.32,11.32L128,139.31l-26.34,26.35a8,8,0,0,1-11.32-11.32L116.69,128,90.34,101.66a8,8,0,0,1,11.32-11.32L128,116.69l26.34-26.35a8,8,0,0,1,11.32,11.32ZM232,128A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128Z"/></svg> {{ opponent.last_score }}</span>
                             {% endif %}
                         </td>
                     </tr>
@@ -1198,7 +1402,7 @@
                                     <span style="flex: 1">{{ match.tournament }}</span>
                                     <span style="min-width: 60px; font-weight: bold">{{ match.score }}</span>
                                     <span style="min-width: 40px">
-                                        {% if match.result == 'V' %}✅{% else %}❌{% endif %}
+                                        {% if match.result == 'V' %}<span style="color: var(--success-color)"><svg class="fm-icon" viewBox="0 0 256 256" role="img" aria-label="V"><path d="M173.66,98.34a8,8,0,0,1,0,11.32l-56,56a8,8,0,0,1-11.32,0l-24-24a8,8,0,0,1,11.32-11.32L112,148.69l50.34-50.35A8,8,0,0,1,173.66,98.34ZM232,128A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128Z"/></svg></span>{% else %}<span style="color: var(--danger-color)"><svg class="fm-icon" viewBox="0 0 256 256" role="img" aria-label="D"><path d="M165.66,101.66,139.31,128l26.35,26.34a8,8,0,0,1-11.32,11.32L128,139.31l-26.34,26.35a8,8,0,0,1-11.32-11.32L116.69,128,90.34,101.66a8,8,0,0,1,11.32-11.32L128,116.69l26.34-26.35a8,8,0,0,1,11.32,11.32ZM232,128A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128Z"/></svg></span>{% endif %}
                                     </span>
                                 </div>
                                 {% endfor %}

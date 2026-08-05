@@ -1165,7 +1165,9 @@
         left: auto;
         top: auto;
         z-index: 2400;
-        background: transparent;
+        /* !important beats the light-theme scrim in mobile-ux.css — this sheet
+           is non-blocking, so any container background paints as a stray slab. */
+        background: transparent !important;
         padding: 0;
         display: block;
         visibility: hidden;
@@ -1180,14 +1182,22 @@
     /* The card is the only interactive surface */
     .onboarding-overlay .onboarding-card {
         pointer-events: auto;
-        width: 360px;
+        width: 372px;
         max-width: calc(100vw - 48px);
         margin: 0;
-        padding: 28px 24px 24px;
+        padding: 22px 22px 18px;
+        text-align: left;
+        border-radius: var(--fm-radius-md);
+        background: var(--fm-bg-secondary) !important;
+        border: 1px solid var(--fm-border-light) !important;
+        color: var(--fm-text-primary);
         transform: translateY(14px) scale(0.985);
         opacity: 0;
         transition: transform 0.34s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.28s ease;
-        box-shadow: 0 18px 50px rgba(0, 0, 0, 0.38);
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.34), 0 2px 6px rgba(0, 0, 0, 0.22) !important;
+    }
+    [data-theme="light"] .onboarding-overlay .onboarding-card {
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.06) !important;
     }
     .onboarding-overlay.visible .onboarding-card {
         transform: translateY(0) scale(1);
@@ -1210,7 +1220,7 @@
         opacity: 0.55;
         font-size: 1.6rem;
         line-height: 1;
-        border-radius: 10px;
+        border-radius: var(--fm-radius-sm);
         cursor: pointer;
         transition: opacity 0.15s ease, background 0.15s ease;
         -webkit-tap-highlight-color: transparent;
@@ -1236,11 +1246,15 @@
         .onboarding-overlay .onboarding-card {
             width: 100%;
             max-width: 100%;
-            border-radius: 20px 20px 0 0;
+            border-radius: var(--fm-radius-md) var(--fm-radius-md) 0 0;
+            border-bottom: 0 !important;
             /* clear the fixed bottom nav so the card's own controls stay tappable */
-            padding: 22px 20px calc(72px + env(safe-area-inset-bottom));
+            padding: 18px 20px calc(72px + env(safe-area-inset-bottom));
             transform: translateY(100%);
-            box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.34);
+            box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.34) !important;
+        }
+        [data-theme="light"] .onboarding-overlay .onboarding-card {
+            box-shadow: 0 -8px 26px rgba(0, 0, 0, 0.14) !important;
         }
         .onboarding-overlay.visible .onboarding-card {
             transform: translateY(0) scale(1);
@@ -1258,6 +1272,163 @@
     @media (prefers-reduced-motion: reduce) {
         .onboarding-overlay .onboarding-card { transition: opacity 0.2s ease; transform: none; }
         .onboarding-overlay.visible .onboarding-card { transform: none; }
+    }
+
+    /* ============================================================
+       Sport selector — interior visual language
+       Same tokens as the rest of the page (radius sm for controls,
+       md for the panel, brand red for the selected state). Scoped to
+       #onboarding-overlay so it outranks the legacy !important light
+       overrides in mobile-ux.css / components.css.
+       All class names and IDs are load-bearing for mobile-ux.js.
+       ============================================================ */
+
+    /* Heading block — left-aligned, hero-adjacent hierarchy */
+    #onboarding-overlay .onboarding-title {
+        margin: 0 44px 4px 0;   /* keeps clear of the close button */
+        font-size: 1.125rem;
+        font-weight: 800;
+        line-height: 1.3;
+        letter-spacing: -0.02em;
+        color: var(--fm-text-primary) !important;
+    }
+    #onboarding-overlay .onboarding-subtitle {
+        margin: 0 0 16px;
+        font-size: 0.8125rem;
+        line-height: 1.45;
+        font-weight: 500;
+        color: var(--fm-text-secondary) !important;
+    }
+
+    /* Choice grids */
+    #onboarding-overlay .weapon-gender-grid,
+    #onboarding-overlay .age-group-grid {
+        gap: 8px;
+        margin-bottom: 14px;
+    }
+    #onboarding-overlay .weapon-gender-card,
+    #onboarding-overlay .age-group-choice {
+        display: inline-flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        min-height: 58px;
+        padding: 10px 6px;
+        border: 1px solid var(--fm-border-light) !important;
+        border-radius: var(--fm-radius-sm);
+        background: var(--fm-bg-input) !important;
+        color: var(--fm-text-secondary) !important;
+        box-shadow: none;
+        transform: none;
+        transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    }
+    #onboarding-overlay .age-group-choice {
+        min-height: 48px;
+        font-size: 0.875rem;
+        font-weight: 600;
+    }
+    /* Gender reads as an eyebrow above the weapon name; the 3×2 grid
+       already encodes weapon (column) × gender (row). */
+    #onboarding-overlay .weapon-gender-card .gender-label {
+        font-size: 0.625rem;
+        font-weight: 600;
+        letter-spacing: 0.09em;
+        text-transform: uppercase;
+        opacity: 1;
+        color: var(--fm-text-muted);
+    }
+    #onboarding-overlay .weapon-gender-card .weapon-name {
+        font-size: 0.875rem;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        line-height: 1.2;
+        color: var(--fm-text-primary);
+    }
+
+    #onboarding-overlay .weapon-gender-card:hover,
+    #onboarding-overlay .age-group-choice:hover {
+        border-color: var(--fm-accent-primary) !important;
+        background: rgba(201, 48, 44, 0.08) !important;
+        color: var(--fm-text-primary) !important;
+    }
+    #onboarding-overlay .weapon-gender-card.selected,
+    #onboarding-overlay .age-group-choice.selected {
+        background: var(--fm-accent-primary) !important;
+        border-color: var(--fm-accent-primary) !important;
+        color: #ffffff !important;
+        transform: none;   /* no scale: it clipped inside the tight grid */
+        box-shadow: 0 2px 8px rgba(201, 48, 44, 0.28);
+    }
+    #onboarding-overlay .weapon-gender-card.selected .weapon-name { color: #ffffff; }
+    #onboarding-overlay .weapon-gender-card.selected .gender-label { color: rgba(255, 255, 255, 0.92); }
+    /* Focus ring uses the secondary accent so it never reads as "selected"
+       (selected = solid red fill). Two states, two signals. */
+    #onboarding-overlay .weapon-gender-card:focus-visible,
+    #onboarding-overlay .age-group-choice:focus-visible,
+    #onboarding-overlay .onboarding-cta:focus-visible,
+    #onboarding-overlay .onboarding-skip:focus-visible {
+        outline: 2px solid var(--fm-accent-secondary, #1e3a8a);
+        outline-offset: 2px;
+    }
+
+    /* Step 2 context chip — carries the step-1 pick forward.
+       font-size:0 on the wrapper drops the decorative em-dashes that
+       mobile-ux.js injects around the span. */
+    #onboarding-overlay .onboarding-step2-header {
+        font-size: 0;
+        margin: 0 0 14px;
+        min-height: 24px;
+    }
+    #onboarding-overlay .onboarding-step2-selected {
+        display: inline-flex;
+        align-items: center;
+        height: 24px;
+        padding: 0 10px;
+        border: 1px solid rgba(201, 48, 44, 0.35);
+        border-radius: var(--fm-radius-pill);
+        background: rgba(201, 48, 44, 0.16);
+        color: var(--fm-text-primary) !important;
+        font-size: 0.75rem;
+        font-weight: 700;
+        line-height: 1;
+        white-space: nowrap;
+    }
+
+    /* Primary action + skip */
+    #onboarding-overlay .onboarding-cta {
+        padding: 12px;
+        min-height: 46px;
+        margin-bottom: 4px;
+        border-radius: var(--fm-radius-sm);
+        background: var(--fm-accent-primary);
+        font-size: 0.9375rem;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        transition: background 0.15s ease, opacity 0.15s ease;
+    }
+    #onboarding-overlay .onboarding-cta:not(:disabled):hover {
+        background: var(--fm-accent-primary-hover);
+        opacity: 1;
+    }
+    #onboarding-overlay .onboarding-skip {
+        display: block;
+        margin: 0;
+        padding: 8px 0;
+        min-height: 40px;
+        font-size: 0.8125rem;
+        font-weight: 500;
+        text-align: left;
+        color: var(--fm-text-muted) !important;
+    }
+    #onboarding-overlay .onboarding-skip:hover {
+        color: var(--fm-text-secondary) !important;
+        text-decoration: underline;
+    }
+
+    /* Narrow phones: 3×2 → 2×3, matching mobile-ux.css's breakpoint */
+    @media (max-width: 320px) {
+        #onboarding-overlay .weapon-gender-grid { grid-template-columns: 1fr 1fr; }
     }
 
     /* Persistent opener chip near the search/filter area */
@@ -1561,56 +1732,56 @@
         <button type="button" class="fm-sheet-close" aria-label="{{ i18n.common.common.close|default('닫기') }}" onclick="dismissSportSheet()">&times;</button>
         <!-- Step 1: Weapon + Gender (3×2 grid) -->
         <div class="onboarding-step active" id="onboarding-step1">
-            <img src="/static/images/logo/FencingMind_logo_long_Tracker.png" alt="FencingMind" class="onboarding-logo">
-            <div class="onboarding-title">{{ i18n.common.mobile.welcome_title|default('FencingMind에 오신 걸 환영합니다!') }}</div>
-            <div class="onboarding-subtitle">{{ i18n.common.mobile.select_category|default('나의 종목을 선택하세요') }}</div>
+            <h2 class="onboarding-title" id="onboarding-title"
+                data-copy-fresh="{{ i18n.common.mobile.welcome_title|default('FencingMind에 오신 걸 환영합니다!') }}"
+                data-copy-return="{{ _t('선호 리그 변경') }}">{{ i18n.common.mobile.welcome_title|default('FencingMind에 오신 걸 환영합니다!') }}</h2>
+            <p class="onboarding-subtitle" id="onboarding-subtitle"
+               data-copy-fresh="{{ i18n.common.mobile.select_category|default('나의 종목을 선택하세요') }}"
+               data-copy-return="{{ _t('언제든 다시 바꿀 수 있습니다') }}">{{ i18n.common.mobile.select_category|default('나의 종목을 선택하세요') }}</p>
             <div class="weapon-gender-grid">
-                <button class="weapon-gender-card" onclick="selectWeaponGender(this,'foil','남')">
-                    <span class="weapon-icon">&#9876;</span>
+                <button type="button" class="weapon-gender-card" onclick="selectWeaponGender(this,'foil','남')">
+                    <span class="gender-label">{{ i18n.common.gender.male|default('Men') }}</span>
                     <span class="weapon-name">{{ i18n.common.weapons.foil|default('Foil') }}</span>
-                    <span class="gender-label">{{ i18n.common.gender.male|default('Men') }}</span>
                 </button>
-                <button class="weapon-gender-card" onclick="selectWeaponGender(this,'epee','남')">
-                    <span class="weapon-icon">&#9876;</span>
+                <button type="button" class="weapon-gender-card" onclick="selectWeaponGender(this,'epee','남')">
+                    <span class="gender-label">{{ i18n.common.gender.male|default('Men') }}</span>
                     <span class="weapon-name">{{ i18n.common.weapons.epee|default('Epee') }}</span>
-                    <span class="gender-label">{{ i18n.common.gender.male|default('Men') }}</span>
                 </button>
-                <button class="weapon-gender-card" onclick="selectWeaponGender(this,'sabre','남')">
-                    <span class="weapon-icon">&#9876;</span>
+                <button type="button" class="weapon-gender-card" onclick="selectWeaponGender(this,'sabre','남')">
+                    <span class="gender-label">{{ i18n.common.gender.male|default('Men') }}</span>
                     <span class="weapon-name">{{ i18n.common.weapons.sabre|default('Sabre') }}</span>
-                    <span class="gender-label">{{ i18n.common.gender.male|default('Men') }}</span>
                 </button>
-                <button class="weapon-gender-card" onclick="selectWeaponGender(this,'foil','여')">
-                    <span class="weapon-icon">&#9876;</span>
+                <button type="button" class="weapon-gender-card" onclick="selectWeaponGender(this,'foil','여')">
+                    <span class="gender-label">{{ i18n.common.gender.female|default('Women') }}</span>
                     <span class="weapon-name">{{ i18n.common.weapons.foil|default('Foil') }}</span>
-                    <span class="gender-label">{{ i18n.common.gender.female|default('Women') }}</span>
                 </button>
-                <button class="weapon-gender-card" onclick="selectWeaponGender(this,'epee','여')">
-                    <span class="weapon-icon">&#9876;</span>
+                <button type="button" class="weapon-gender-card" onclick="selectWeaponGender(this,'epee','여')">
+                    <span class="gender-label">{{ i18n.common.gender.female|default('Women') }}</span>
                     <span class="weapon-name">{{ i18n.common.weapons.epee|default('Epee') }}</span>
-                    <span class="gender-label">{{ i18n.common.gender.female|default('Women') }}</span>
                 </button>
-                <button class="weapon-gender-card" onclick="selectWeaponGender(this,'sabre','여')">
-                    <span class="weapon-icon">&#9876;</span>
-                    <span class="weapon-name">{{ i18n.common.weapons.sabre|default('Sabre') }}</span>
+                <button type="button" class="weapon-gender-card" onclick="selectWeaponGender(this,'sabre','여')">
                     <span class="gender-label">{{ i18n.common.gender.female|default('Women') }}</span>
+                    <span class="weapon-name">{{ i18n.common.weapons.sabre|default('Sabre') }}</span>
                 </button>
             </div>
-            <button class="onboarding-skip" onclick="skipOnboarding()">{{ i18n.common.mobile.skip|default('건너뛰기') }}</button>
+            <button type="button" class="onboarding-skip" onclick="skipOnboarding()">{{ i18n.common.mobile.skip|default('건너뛰기') }}</button>
         </div>
 
         <!-- Step 2: Age Group (2×2 grid) -->
         <div class="onboarding-step" id="onboarding-step2">
-            <div class="onboarding-title">{{ i18n.common.mobile.select_league|default('리그를 선택하세요') }}</div>
+            <h2 class="onboarding-title">{{ i18n.common.mobile.select_league|default('리그를 선택하세요') }}</h2>
+            <!-- Progress context: shows the weapon/gender picked in step 1.
+                 mobile-ux.js fills this with "&mdash; <span class=onboarding-step2-selected>…</span> &mdash;";
+                 the decorative dashes are suppressed via font-size:0 on the wrapper. -->
             <div class="onboarding-step2-header" id="onboarding-step2-label"></div>
             <div class="age-group-grid">
-                <button class="age-group-choice" onclick="selectAgeGroup(this,'elementary')">{{ i18n.common.mobile.league_elementary|default('초등부') }}</button>
-                <button class="age-group-choice" onclick="selectAgeGroup(this,'middle_school')">{{ i18n.common.mobile.league_middle|default('중등부') }}</button>
-                <button class="age-group-choice" onclick="selectAgeGroup(this,'high_school')">{{ i18n.common.mobile.league_high|default('고등부') }}</button>
-                <button class="age-group-choice" onclick="selectAgeGroup(this,'senior')">{{ i18n.common.mobile.league_senior|default('일반부') }}</button>
+                <button type="button" class="age-group-choice" onclick="selectAgeGroup(this,'elementary')">{{ i18n.common.mobile.league_elementary|default('초등부') }}</button>
+                <button type="button" class="age-group-choice" onclick="selectAgeGroup(this,'middle_school')">{{ i18n.common.mobile.league_middle|default('중등부') }}</button>
+                <button type="button" class="age-group-choice" onclick="selectAgeGroup(this,'high_school')">{{ i18n.common.mobile.league_high|default('고등부') }}</button>
+                <button type="button" class="age-group-choice" onclick="selectAgeGroup(this,'senior')">{{ i18n.common.mobile.league_senior|default('일반부') }}</button>
             </div>
-            <button class="onboarding-cta" id="onboarding-cta" onclick="completeOnboarding()" disabled>{{ i18n.common.mobile.start|default('시작하기') }} &rarr;</button>
-            <button class="onboarding-skip" onclick="skipOnboarding()">{{ i18n.common.mobile.skip_age|default('건너뛰기 - 전체 보기') }}</button>
+            <button type="button" class="onboarding-cta" id="onboarding-cta" onclick="completeOnboarding()" disabled>{{ i18n.common.mobile.start|default('시작하기') }} &rarr;</button>
+            <button type="button" class="onboarding-skip" onclick="skipOnboarding()">{{ i18n.common.mobile.skip_age|default('건너뛰기 - 전체 보기') }}</button>
         </div>
     </div>
 </div>
@@ -3050,6 +3221,18 @@ function resetSportSteps() {
     if (cta) cta.disabled = true;
 }
 
+// Step-1 copy depends on why the sheet opened: a first-time visitor is being
+// welcomed, a returning one is editing a choice they already made.
+function fmApplySelectorCopy() {
+    var returning = fmIsOnboarded();
+    ['onboarding-title', 'onboarding-subtitle'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        var next = el.getAttribute(returning ? 'data-copy-return' : 'data-copy-fresh');
+        if (next) el.textContent = next;
+    });
+}
+
 // Holds the one-time scroll auto-reveal listener so we can tear it down
 var _fmRevealHandler = null;
 function fmCancelReveal() {
@@ -3064,11 +3247,15 @@ function openSportSelector() {
     if (!sheet) return;
     fmCancelReveal();   // any open (manual or auto) retires the auto-reveal
     resetSportSteps();
+    fmApplySelectorCopy();
     sheet.classList.add('visible');
-    // Move focus into the sheet for keyboard users
+    // Move focus into the sheet for keyboard users. Prefer the card that is
+    // already selected: focusing the first card instead makes the focus ring
+    // read as a second selection.
     setTimeout(function () {
-        var first = sheet.querySelector('.weapon-gender-card');
-        if (first) first.focus();
+        var target = sheet.querySelector('.weapon-gender-card.selected')
+                  || sheet.querySelector('.weapon-gender-card');
+        if (target) target.focus();
     }, 60);
 }
 window.openSportSelector = openSportSelector;
@@ -3143,7 +3330,7 @@ document.addEventListener('DOMContentLoaded', function() {
     script1.onload = function() {
         // Then load FencingLab
         const script2 = document.createElement('script');
-        script2.src = '/static/js/fencinglab.js?v=20260603';
+        script2.src = '/static/js/fencinglab.js?v=20260806a';
         script2.onload = function() {
             // Render demo section; hide cleanly if there is nothing to show
             if (!window.FencingLab) return;

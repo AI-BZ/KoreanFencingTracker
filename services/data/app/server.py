@@ -7092,6 +7092,20 @@ def get_fencinglab_analyzer():
     return _fencinglab_analyzer
 
 
+def _analytics_lang(lang: str) -> str:
+    """분석 문구(ANALYTICS_TRANSLATIONS) 번역이 없는 언어는 en으로 폴백.
+
+    현재 ko/en만 존재하므로 ja/fr/it/zh/tr은 en을 쓴다 (ko로 새면 UI가 섞임).
+    """
+    try:
+        from app.player_analytics import ANALYTICS_TRANSLATIONS
+        if lang in ANALYTICS_TRANSLATIONS:
+            return lang
+    except Exception:
+        pass
+    return "ko" if lang == "ko" else "en"
+
+
 @app.get("/api/fencinglab/clubs/{club_name}/players")
 async def fencinglab_club_players(club_name: str):
     """클럽별 선수 목록 (FencingLab 분석 대상)"""
@@ -7187,7 +7201,7 @@ async def fencinglab_player_analytics(
             detail="현재 최병철펜싱클럽 소속 선수만 분석 서비스를 이용할 수 없습니다."
         )
 
-    analytics = analyzer.analyze_player(player_name, team, lang)
+    analytics = analyzer.analyze_player(player_name, team, _analytics_lang(lang))
     if not analytics:
         raise HTTPException(status_code=404, detail="선수 데이터를 찾을 수 없습니다.")
 
@@ -7195,33 +7209,52 @@ async def fencinglab_player_analytics(
 
 
 @app.get("/api/fencinglab/demo")
-async def fencinglab_demo():
+async def fencinglab_demo(lang: str = Query("ko", description="언어 코드 (ko/en/ja/fr/it/zh/tr)")):
     """FencingLab 데모 데이터 (랜딩페이지용) - 실제 데이터 기반 v3
 
     랜딩페이지 홈에 임베드되므로 어떤 경우에도 500을 던지지 않는다.
     분석기/데이터 이상 시 빈(그러나 유효한) 페이로드로 degrade하여
     프론트가 데모 섹션을 조용히 숨길 수 있게 한다.
     """
+    if lang not in SUPPORTED_LANGUAGES:
+        lang = DEFAULT_LANGUAGE
+    analytics_lang = _analytics_lang(lang)
+
     # 데모용 선수 목록 (최병철펜싱클럽 대표 선수)
     demo_players = ["박소윤", "오주원", "구지효"]
     demo_team = "최병철펜싱클럽"
     demo_data = []
     total_club_players = 0
 
+    def _localize(fn, value):
+        """번역 실패가 데모 전체를 죽이지 않도록 원문 fallback."""
+        try:
+            return fn(value, lang) or value
+        except Exception as e:
+            logger.debug(f"FencingLab demo 번역 실패 ({value}): {e}")
+            return value
+
     try:
+        from app.player_analytics import get_analytics_text
         analyzer = get_fencinglab_analyzer()
+
+        # 언어별 clutch 등급 문자열 → 언어 중립 키 (프론트 배지 스타일용)
+        grade_key_map = {
+            get_analytics_text(k, analytics_lang): k.replace("grade_", "")
+            for k in ("grade_strong", "grade_average", "grade_weak", "grade_insufficient")
+        }
 
         for name in demo_players:
             try:
-                analytics = analyzer.analyze_player(name, demo_team)
+                analytics = analyzer.analyze_player(name, demo_team, analytics_lang)
             except Exception as e:
                 # 한 선수의 데이터 이상이 전체 데모를 죽이지 않도록 격리
                 logger.warning(f"FencingLab demo: analyze_player 실패 ({name}): {e}")
                 continue
             if analytics:
                 demo_data.append({
-                    "name": analytics.player_name,
-                    "team": analytics.team,
+                    "name": _localize(get_localized_player_name_sync, analytics.player_name),
+                    "team": _localize(get_localized_org_name_sync, analytics.team),
                     "win_rate": analytics.win_rate,
                     "total_matches": analytics.total_matches,
                     "total_wins": analytics.total_wins,
@@ -7229,6 +7262,7 @@ async def fencinglab_demo():
                     "pool_win_rate": analytics.pool_win_rate,
                     "de_win_rate": analytics.de_win_rate,
                     "clutch_grade": analytics.clutch_grade,
+                    "clutch_grade_key": grade_key_map.get(analytics.clutch_grade, ""),
                     "clutch_rate": analytics.clutch_rate
                 })
 
@@ -7240,11 +7274,11 @@ async def fencinglab_demo():
     except Exception as e:
         # 분석기 초기화/데이터 로드 실패 등 — 홈이 깨지지 않도록 200으로 graceful degrade
         logger.error(f"FencingLab demo 엔드포인트 실패, 빈 페이로드 반환: {e}")
-        return {"demo_players": [], "club": demo_team, "total_club_players": 0}
+        return {"demo_players": [], "club": _localize(get_localized_org_name_sync, demo_team), "total_club_players": 0}
 
     return {
         "demo_players": demo_data,
-        "club": demo_team,
+        "club": _localize(get_localized_org_name_sync, demo_team),
         "total_club_players": total_club_players
     }
 

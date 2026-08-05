@@ -2740,6 +2740,7 @@ TRANSLATIONS = {
 
     # --- 선호 리그 변경 진입점 (2026-08-01) ---
     "선호 리그 변경": {"en": "Change preferred league", "fr": "Modifier la ligue préférée", "it": "Cambia lega preferita", "ja": "お気に入りリーグを変更", "zh": "更改偏好联赛", "tr": "Tercih edilen ligi değiştir"},
+    "언제든 다시 바꿀 수 있습니다": {"en": "You can change this anytime", "fr": "Vous pouvez le modifier à tout moment", "it": "Puoi cambiarlo in qualsiasi momento", "ja": "いつでも変更できます", "zh": "随时可以更改", "tr": "İstediğiniz zaman değiştirebilirsiniz"},
 
     # --- 랭킹 카드 리그/카테고리 라벨 (2026-07-31) ---
     "전문": {"en": "Professional", "fr": "Professionnel", "it": "Professionista", "ja": "専門", "zh": "专业", "tr": "Profesyonel"},

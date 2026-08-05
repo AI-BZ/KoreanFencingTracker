@@ -29,15 +29,16 @@
     <meta name="theme-color" content="{% if theme == 'light' %}#ffffff{% else %}#0a0a0f{% endif %}">
 
     <!-- shared-ui 디자인 토큰 (light/dark 테마 변수 포함) -->
-    <link rel="stylesheet" href="/static/css/variables.css?v=20260731b">
-    <link rel="stylesheet" href="/static/css/dark-theme.css?v=20260801b">
-    <link rel="stylesheet" href="/static/css/components.css?v=20260731b">
+    <link rel="stylesheet" href="/static/css/variables.css?v=20260806a">
+    <link rel="stylesheet" href="/static/css/dark-theme.css?v=20260806a">
+    <link rel="stylesheet" href="/static/css/components.css?v=20260806a">
     <link rel="stylesheet" href="/static/css/mobile-ux.css?v=20260731b">
     {% block extra_css %}{% endblock %}
     <style>
-    .lang-switcher { position: relative; }
-    .lang-current { background: transparent; border: 1px solid var(--fm-border-light, rgba(255,255,255,0.3)); color: var(--fm-text-primary, white); padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; }
-    .lang-dropdown { display: none; position: absolute; right: 0; top: 100%; margin-top: 4px; background: var(--fm-bg-secondary, #1a1a2e); border: 1px solid var(--fm-border, rgba(255,255,255,0.15)); border-radius: 8px; min-width: 140px; z-index: 1000; overflow: hidden; }
+    .lang-switcher { position: relative; display: flex; align-items: center; }
+    /* 36px matches the search input and login button — one baseline across the right cluster */
+    .lang-current { display: inline-flex; align-items: center; height: 36px; background: transparent; border: 1px solid var(--fm-border-light, rgba(255,255,255,0.3)); color: var(--fm-text-primary, white); padding: 0 12px; border-radius: var(--fm-radius-sm); cursor: pointer; font-size: 13px; font-weight: 600; line-height: 1; }
+    .lang-dropdown { display: none; position: absolute; right: 0; top: 100%; margin-top: 4px; background: var(--fm-bg-secondary, #1a1a2e); border: 1px solid var(--fm-border, rgba(255,255,255,0.15)); border-radius: var(--fm-radius-md); min-width: 140px; z-index: 1000; overflow: hidden; }
     .lang-dropdown.show { display: block; }
     .lang-option { display: block; padding: 8px 16px; color: var(--fm-text-secondary, #ccc); text-decoration: none; font-size: 13px; transition: background 0.2s; }
     .lang-option:hover { background: var(--fm-bg-card-hover, rgba(255,255,255,0.1)); color: var(--fm-text-primary, white); }
@@ -96,13 +97,17 @@
     <nav class="navbar">
         <div class="container">
             <a href="/{{ lang|default('ko') }}/" class="logo">
-                <img src="/static/images/logo/FencingMind_logo_long_Tracker{% if theme == 'dark' %}_white{% endif %}.png"
-                     alt="FencingMind Tracker"
-                     class="logo-img">
+                {% set logo_variant = '_white' if theme == 'dark' else '' %}
+                <picture>
+                    <source srcset="/static/images/logo/FencingMind_logo_long_Tracker{{ logo_variant }}.webp" type="image/webp">
+                    <img src="/static/images/logo/FencingMind_logo_long_Tracker{{ logo_variant }}.png"
+                         alt="FencingMind Tracker"
+                         class="logo-img"
+                         width="120" height="36"
+                         fetchpriority="high"
+                         decoding="async">
+                </picture>
             </a>
-            <div class="auth-nav" id="authNav">
-                <a href="https://account.fencingmind.ai/auth/login?redirect_url={{ request.url | urlencode }}" class="auth-btn login-btn" id="loginBtn" onclick="localStorage.setItem('fencingmind_login_redirect', window.location.href)">{{ _t('로그인') }}</a>
-            </div>
             <div class="nav-links">
                 <a href="/{{ lang|default('ko') }}/">{{ _t('검색') }}</a>
                 <a href="/{{ lang|default('ko') }}/competitions">{{ _t('대회 목록') }}</a>
@@ -112,6 +117,9 @@
             </div>
             <div class="search-box">
                 <input type="text" id="global-search" aria-label="{{ _t('선수 또는 팀 검색...') }}" placeholder="{{ _t('선수 또는 팀 검색...') }}">
+            </div>
+            <div class="auth-nav" id="authNav">
+                <a href="https://account.fencingmind.ai/auth/login?redirect_url={{ request.url | urlencode }}" class="auth-btn login-btn" id="loginBtn" onclick="localStorage.setItem('fencingmind_login_redirect', window.location.href)">{{ _t('로그인') }}</a>
             </div>
             <!-- Language Switcher (desktop) -->
             <div class="lang-switcher">
@@ -136,7 +144,10 @@
     <div class="mobile-menu-backdrop" id="mobileMenuBackdrop" onclick="closeMobileMenu()"></div>
     <div class="mobile-menu-overlay" id="mobileMenuOverlay">
         <div class="mobile-menu-header">
-            <img src="/static/images/logo/FencingMind_logo_long_Tracker{% if theme == 'dark' %}_white{% endif %}.png" alt="FencingMind" style="max-height:24px;">
+            <picture>
+                <source srcset="/static/images/logo/FencingMind_logo_long_Tracker{% if theme == 'dark' %}_white{% endif %}.webp" type="image/webp">
+                <img src="/static/images/logo/FencingMind_logo_long_Tracker{% if theme == 'dark' %}_white{% endif %}.png" alt="FencingMind" width="80" height="24" style="max-height:24px;width:auto;" decoding="async">
+            </picture>
             <button class="mobile-menu-close" onclick="closeMobileMenu()">&times;</button>
         </div>
         <div class="mobile-menu-links">
