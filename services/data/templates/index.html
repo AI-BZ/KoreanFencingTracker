@@ -55,7 +55,7 @@
         display: flex;
         flex-direction: column;
         border-top: 2px solid var(--fm-accent-primary, #c9302c);
-        animation: fmHeroRise 0.55s cubic-bezier(0.22, 1, 0.36, 1) 0.3s both;
+        position: relative;
     }
     .fm-hero-stat {
         display: flex;
@@ -76,28 +76,137 @@
         white-space: nowrap;
     }
 
-    /* 진입 연출 - 헤드라인 단어별 스태거. JS가 실패하면 텍스트는 그대로 보인다 */
-    .hero h1[data-ready="anim"] .hero-word {
+    /* ============================================================
+       MOTION — 진입 1회 연출 · 스크롤 리빌 · 마이크로 인터랙션
+
+       규칙: CSS 기본 상태 = 최종 상태. 인라인 스크립트가 파싱 시점에
+       :root[data-motion="on"]을 붙였을 때만 초기 상태로 되돌린 뒤 애니메이트한다.
+       스크립트가 죽거나 CDN이 막히거나 reduced-motion이면 속성이 없으므로
+       숨겨지는 것이 하나도 없다. opacity:0을 기본값으로 두지 않는 이유.
+       ============================================================ */
+    @keyframes fmWordIn {
+        from { opacity: 0; transform: translateY(0.42em); filter: blur(5px); }
+        to   { opacity: 1; transform: none; filter: blur(0); }
+    }
+    @keyframes fmWordInLite {
+        from { opacity: 0; transform: translateY(0.3em); }
+        to   { opacity: 1; transform: none; }
+    }
+    @keyframes fmRise {
+        from { opacity: 0; transform: translateY(14px); }
+        to   { opacity: 1; transform: none; }
+    }
+    @keyframes fmRuleDraw {
+        from { transform: scaleX(0); }
+        to   { transform: scaleX(1); }
+    }
+    @keyframes fmBgSettle {
+        from { transform: scale(1.055); }
+        to   { transform: scale(1); }
+    }
+    @keyframes fmDdayPop {
+        from { transform: scale(1.07); }
+        to   { transform: scale(1); }
+    }
+
+    /* 배경이 함께 안착한다 — 진입의 무게중심. 요소 하나짜리 GPU transform */
+    :root[data-motion="on"] .parallax-bg {
+        animation: fmBgSettle 1.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+
+    /* 1) 헤드라인 단어 스태거. 지연은 JS가 --fm-d로 주입하며 누적 상한 0.6s.
+          공백이 없는 ja/zh는 단어가 1개라 통짜 블록으로 자연 동작한다 */
+    :root[data-motion="on"] .hero h1[data-ready="anim"] .hero-word {
         display: inline-block;
+        animation: fmWordIn 0.62s cubic-bezier(0.16, 1, 0.3, 1) var(--fm-d, 0s) both;
+    }
+    /* 2) 서브텍스트 → 검색창 → 스탯 순 케스케이드 */
+    :root[data-motion="on"] .hero p {
+        animation: fmRise 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.30s both;
+    }
+    :root[data-motion="on"] .hero .player-search {
+        animation: fmRise 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.38s both;
+    }
+    :root[data-motion="on"] .fm-hero-stat {
+        animation: fmRise 0.55s cubic-bezier(0.16, 1, 0.3, 1) 0.52s both;
+    }
+    :root[data-motion="on"] .fm-hero-stat:nth-child(2) { animation-delay: 0.60s; }
+    :root[data-motion="on"] .fm-hero-stat:nth-child(3) { animation-delay: 0.68s; }
+
+    /* 3) 스탯 상단 레드 룰이 좌→우로 그려진다. 2px border는 자리를 그대로 지키고
+          색만 오버레이에 넘기므로 레이아웃은 변하지 않는다 (CLS 0) */
+    :root[data-motion="on"] .fm-hero-stats { border-top-color: transparent; }
+    :root[data-motion="on"] .fm-hero-stats::before {
+        content: '';
+        position: absolute;
+        left: 0; right: 0; top: -2px;
+        height: 2px;
+        background: var(--fm-accent-primary, #c9302c);
+        transform-origin: left center;
+        animation: fmRuleDraw 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.44s both;
+    }
+
+    /* 4) 스크롤 리빌 — 요소당 1회. 스태거 지연은 JS가 인라인 transition-delay로 준다 */
+    :root[data-motion="on"] .fm-reveal {
         opacity: 0;
-        transform: translateY(0.35em);
-        animation: fmHeroWordIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        transform: translateY(18px);
+        transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1),
+                    transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
     }
-    @keyframes fmHeroWordIn {
-        to { opacity: 1; transform: translateY(0); }
+    :root[data-motion="on"] .fm-reveal.is-in {
+        opacity: 1;
+        transform: none;
     }
-    @keyframes fmHeroRise {
-        from { opacity: 0; transform: translateY(0.5rem); }
-        to { opacity: 1; transform: translateY(0); }
+    /* D-day 숫자는 카드가 들어온 직후 아주 짧게만 안착한다 */
+    :root[data-motion="on"] .fm-reveal.is-in .upcoming-card-status .status {
+        animation: fmDdayPop 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
     }
+
+    /* 5) 마이크로 인터랙션 */
+    .search-input {
+        transition: border-color 0.2s ease, box-shadow 0.2s ease,
+                    transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .search-input:focus {
+        transform: translateY(-1px);
+        box-shadow: 0 0 0 4px rgba(201, 48, 44, 0.16);
+    }
+    .event-card {
+        transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .event-card:hover { box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28); }
+
+    /* 모바일: blur를 빼고 이동 거리를 줄이며 배경 스케일은 생략한다 */
+    @media (max-width: 768px) {
+        :root[data-motion="on"] .hero h1[data-ready="anim"] .hero-word {
+            animation-name: fmWordInLite;
+            animation-duration: 0.5s;
+        }
+        :root[data-motion="on"] .parallax-bg { animation: none; }
+        :root[data-motion="on"] .fm-reveal { transform: translateY(12px); }
+    }
+
+    /* reduced-motion에서는 인라인 스크립트가 data-motion을 아예 붙이지 않는다.
+       아래는 로드 후 설정이 바뀌는 경우까지 막는 방어선 — 느린 버전이 아니라 무모션 */
     @media (prefers-reduced-motion: reduce) {
-        .hero h1[data-ready="anim"] .hero-word,
-        .fm-hero-stats,
-        .hero .player-search {
+        :root[data-motion="on"] .parallax-bg,
+        :root[data-motion="on"] .hero h1[data-ready="anim"] .hero-word,
+        :root[data-motion="on"] .hero p,
+        :root[data-motion="on"] .hero .player-search,
+        :root[data-motion="on"] .fm-hero-stat,
+        :root[data-motion="on"] .fm-reveal,
+        :root[data-motion="on"] .fm-reveal.is-in .upcoming-card-status .status {
             animation: none !important;
+            transition: none !important;
             opacity: 1 !important;
             transform: none !important;
+            filter: none !important;
         }
+        :root[data-motion="on"] .fm-hero-stats {
+            border-top-color: var(--fm-accent-primary, #c9302c) !important;
+        }
+        :root[data-motion="on"] .fm-hero-stats::before { display: none !important; }
+        .search-input:focus { transform: none; }
     }
 
     /* ============================================================
@@ -360,7 +469,6 @@
         margin: 0;
         position: relative;
         z-index: 1000;
-        animation: fmHeroRise 0.55s cubic-bezier(0.22, 1, 0.36, 1) 0.22s both;
     }
     .search-input-wrapper {
         position: relative;
@@ -1824,9 +1932,17 @@
 </div>
 <script>
 (function () {
-    // 헤드라인 단어별 스태거. 공백이 없는 로케일(ja/zh)은 자연히 1블록 페이드업이 된다.
+    var root = document.documentElement;
+    var reduce = false;
+    try { reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+    // 이 한 줄이 모든 모션 CSS의 스위치다. 붙지 않으면 페이지는 정적인 최종 상태 그대로.
+    var motion = !reduce;
+    if (motion) root.setAttribute('data-motion', 'on');
+
+    /* ---------- 헤드라인 단어 스태거 ----------
+       공백이 없는 로케일(ja/zh)은 단어가 1개라 통짜 블록 페이드업이 된다. */
     var h = document.getElementById('hero-headline');
-    if (h) {
+    if (motion && h) {
         var text = (h.textContent || '').trim();
         var words = text ? text.split(/\s+/) : [];
         if (words.length) {
@@ -1835,7 +1951,8 @@
                 var span = document.createElement('span');
                 span.className = 'hero-word';
                 span.textContent = words[i];
-                span.style.animationDelay = Math.min(i * 0.06, 0.6) + 's';
+                // 누적 상한 0.6s — 헤드라인이 긴 로케일에서도 진입이 늘어지지 않는다
+                span.style.setProperty('--fm-d', Math.min(i * 0.04, 0.6) + 's');
                 frag.appendChild(span);
                 if (i < words.length - 1) frag.appendChild(document.createTextNode(' '));
             }
@@ -1845,18 +1962,211 @@
         }
     }
 
-    // 스탯 실데이터
-    var ids = { competitions: 'hero-stat-competitions', events: 'hero-stat-events', players: 'hero-stat-players' };
+    /* ---------- 스탯 카운트업 ----------
+       마크업의 폴백값이 1차 목표, /api/status 응답이 오면 현재값에서 이어서 센다. */
+    var STAT_IDS = { competitions: 'hero-stat-competitions', events: 'hero-stat-events', players: 'hero-stat-players' };
+    var current = {};
+    var tokens = {};
+
+    // 최종값이 차지할 폭을 먼저 확보해 카운트 도중 자리가 흔들리지 않게 한다
+    function reserveWidth(el, target) {
+        var prev = el.textContent;
+        el.textContent = target.toLocaleString();
+        var w = el.getBoundingClientRect().width;
+        el.textContent = prev;
+        if (w) {
+            var now = parseFloat(el.style.minWidth) || 0;
+            if (w > now) el.style.minWidth = Math.ceil(w) + 'px';
+        }
+    }
+
+    function countTo(el, target) {
+        if (!el || !isFinite(target) || target <= 0) return;
+        if (!motion) { current[el.id] = target; el.textContent = target.toLocaleString(); return; }
+        reserveWidth(el, target);
+        var from = current[el.id] != null ? current[el.id] : 0;
+        if (from === target) { el.textContent = target.toLocaleString(); return; }
+        var token = tokens[el.id] = (tokens[el.id] || 0) + 1;
+        var t0 = 0;
+        var DUR = 1100;
+        function step(ts) {
+            if (tokens[el.id] !== token) return;   // 더 최신 카운트가 시작됐으면 물러난다
+            if (!t0) t0 = ts;
+            var p = Math.min((ts - t0) / DUR, 1);
+            var eased = 1 - Math.pow(1 - p, 4);
+            var v = p < 1 ? Math.round(from + (target - from) * eased) : target;
+            current[el.id] = v;
+            el.textContent = v.toLocaleString();
+            if (p < 1) requestAnimationFrame(step);
+        }
+        requestAnimationFrame(step);
+    }
+
+    var fallbackTargets = {};
+    Object.keys(STAT_IDS).forEach(function (key) {
+        var el = document.getElementById(STAT_IDS[key]);
+        if (!el) return;
+        var n = Number((el.textContent || '').replace(/[^0-9]/g, ''));
+        if (isFinite(n) && n > 0) fallbackTargets[key] = n;
+    });
+
+    if (motion) {
+        // 폭을 먼저 잡아둔 뒤 0으로 되돌린다. 스탯 자체는 0.52s까지 아직 안 보인다.
+        Object.keys(fallbackTargets).forEach(function (key) {
+            var el = document.getElementById(STAT_IDS[key]);
+            reserveWidth(el, fallbackTargets[key]);
+            current[el.id] = 0;
+            el.textContent = '0';
+        });
+        setTimeout(function () {
+            Object.keys(fallbackTargets).forEach(function (key) {
+                countTo(document.getElementById(STAT_IDS[key]), fallbackTargets[key]);
+            });
+        }, 520);
+    }
+
     fetch('/api/status').then(function (res) {
         return res.ok ? res.json() : null;
     }).then(function (data) {
         if (!data) return;
-        Object.keys(ids).forEach(function (key) {
-            var el = document.getElementById(ids[key]);
+        Object.keys(STAT_IDS).forEach(function (key) {
+            var el = document.getElementById(STAT_IDS[key]);
             var n = Number(data[key]);
-            if (el && isFinite(n) && n > 0) el.textContent = n.toLocaleString();
+            if (el && isFinite(n) && n > 0) countTo(el, n);
         });
     }).catch(function () { /* 폴백값 유지 */ });
+
+    /* ---------- 스크롤 리빌 ----------
+       .fm-reveal          → 요소 자신이 1회 등장
+       [data-fm-stagger]   → 직계 자식들이 40ms 간격으로 순차 등장 (동적 카드 포함)
+       엔진은 motion.dev inView가 준비되면 그쪽, 아니면 네이티브 IntersectionObserver.
+       scroll 이벤트는 쓰지 않는다. */
+    var engine = null;
+    var pending = [];
+    var io = null;
+    var hasIO = typeof IntersectionObserver === 'function';
+
+    function markIn(el, delayMs) {
+        if (!el || el.classList.contains('is-in')) return;
+        if (delayMs) el.style.transitionDelay = delayMs + 'ms';
+        el.classList.add('is-in');
+    }
+
+    function ensureIO() {
+        if (io) return io;
+        io = new IntersectionObserver(function (entries) {
+            entries.forEach(function (e) {
+                if (e.isIntersecting) {
+                    io.unobserve(e.target);   // 재진입 시 반복하지 않는다
+                    markIn(e.target, Number(e.target.getAttribute('data-fm-delay')) || 0);
+                } else if (e.boundingClientRect.bottom < 0) {
+                    io.unobserve(e.target);
+                    settleNow(e.target);      // 이미 지나친 위치라면 연출 없이 확정
+                }
+            });
+        }, { rootMargin: '0px 0px -8% 0px', threshold: 0.04 });
+        return io;
+    }
+
+    // 사용자가 이미 스크롤로 지나친 뒤 도착한 콘텐츠는 숨긴 채 남으면 안 된다.
+    // 뒤늦게 페이드인시키지도 않는다 — 그 자리에 이미 있었던 것처럼 확정한다.
+    function settleNow(el) {
+        if (!el || el.classList.contains('is-in')) return;
+        el.style.transitionDelay = '0s';
+        el.style.transition = 'none';
+        el.classList.add('is-in');
+        requestAnimationFrame(function () { el.style.transition = ''; });
+    }
+
+    function observe(el) {
+        if (!hasIO) { markIn(el); return; }
+        if (el.getBoundingClientRect().bottom < 0) { settleNow(el); return; }
+        var lib = window.__fmMotionLib;
+        if (engine === 'lib' && lib && lib.inView) {
+            var done = false, stop = null;
+            stop = lib.inView(el, function () {
+                if (done) return;
+                done = true;
+                markIn(el, Number(el.getAttribute('data-fm-delay')) || 0);
+                setTimeout(function () { if (stop) stop(); }, 0);
+            }, { margin: '0px 0px -8% 0px' });
+            return;
+        }
+        ensureIO().observe(el);
+    }
+
+    function scan() {
+        if (!motion) return;
+        if (!engine) { pending.push(scan); return; }   // 엔진 결정 전이면 보류
+        var groups = document.querySelectorAll('[data-fm-stagger]');
+        for (var g = 0; g < groups.length; g++) {
+            var kids = groups[g].children;
+            var lib = (engine === 'lib') && window.__fmMotionLib;
+            var st = lib && lib.stagger ? lib.stagger(0.04) : null;
+            for (var k = 0; k < kids.length; k++) {
+                if (kids[k].classList.contains('fm-reveal')) continue;
+                var d = st ? Math.round(st(k, kids.length) * 1000) : k * 40;
+                kids[k].setAttribute('data-fm-delay', Math.min(d, 240));
+                kids[k].classList.add('fm-reveal');
+            }
+        }
+        var targets = document.querySelectorAll('.fm-reveal:not(.is-in):not([data-fm-seen])');
+        for (var i = 0; i < targets.length; i++) {
+            targets[i].setAttribute('data-fm-seen', '1');
+            observe(targets[i]);
+        }
+    }
+
+    function setEngine(name) {
+        if (engine) return;
+        engine = name;
+        var q = pending;
+        pending = [];
+        q.forEach(function (fn) { fn(); });
+        scan();
+    }
+
+    function ready(fn) {
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn);
+        else fn();
+    }
+
+    if (motion) {
+        // motion.dev가 700ms 안에 안 오면(차단·오프라인·구형 브라우저) 네이티브로 간다.
+        document.addEventListener('fm:motion-lib', function () { setEngine('lib'); });
+        setTimeout(function () { setEngine('io'); }, 700);
+
+        // 이 스크립트는 파싱 도중(히어로 직후)에 실행되므로 아래 카드 컨테이너들은
+        // 아직 존재하지 않는다. DOM이 끝난 뒤에 붙여야 감시가 실제로 걸린다.
+        ready(function () {
+            scan();
+            // 동적으로 채워지는 카드 컨테이너만 좁게 감시한다 (body 전체 관찰 금지)
+            if (typeof MutationObserver === 'function') {
+                var mo = new MutationObserver(function () {
+                    if (mo._q) return;
+                    mo._q = true;
+                    requestAnimationFrame(function () { mo._q = false; scan(); });
+                });
+                ['live-cards', 'upcoming-cards', 'event-cards'].forEach(function (id) {
+                    var n = document.getElementById(id);
+                    if (n) mo.observe(n, { childList: true });
+                });
+            }
+        });
+    }
+})();
+</script>
+<script type="module">
+// motion.dev — 스크롤 리빌의 1순위 엔진. 실패하면 위 인라인 스크립트가 700ms 뒤
+// 네이티브 IntersectionObserver로 넘어가므로 콘텐츠는 어떤 경우에도 보인다.
+// 히어로 진입 연출은 애초에 CSS 키프레임이라 이 모듈과 무관하게 동작한다.
+(async function () {
+    if (document.documentElement.getAttribute('data-motion') !== 'on') return;
+    try {
+        const { inView, stagger } = await import('https://cdn.jsdelivr.net/npm/motion@11/+esm');
+        window.__fmMotionLib = { inView, stagger };
+        document.dispatchEvent(new Event('fm:motion-lib'));
+    } catch (e) { /* 폴백이 이미 무장되어 있다 */ }
 })();
 </script>
 
@@ -1913,16 +2223,16 @@
      그대로 두고, 바깥 밴드만 fmShowScheduleBand()로 함께 노출한다. -->
 <section class="fm-schedule-band" id="fm-schedule-band" style="display: none;" aria-labelledby="fm-schedule-title">
     <div class="container">
-        <h2 class="fm-schedule-title" id="fm-schedule-title">{{ _t("경기 일정") }}</h2>
+        <h2 class="fm-schedule-title fm-reveal" id="fm-schedule-title">{{ _t("경기 일정") }}</h2>
 
         <div class="live-competitions" id="live-competitions" style="display: none;">
-            <div class="live-cards" id="live-cards">
+            <div class="live-cards" id="live-cards" data-fm-stagger>
                 <!-- 동적으로 로드됨 -->
             </div>
         </div>
 
         <div class="upcoming-competitions" id="upcoming-competitions" style="display: none;">
-            <div class="upcoming-cards" id="upcoming-cards">
+            <div class="upcoming-cards" id="upcoming-cards" data-fm-stagger>
                 <!-- 동적으로 로드됨 -->
             </div>
         </div>
@@ -1959,7 +2269,7 @@
 <div class="container">
 
     <!-- 선발 포인트 — 비대칭 스플릿. 꿈나무(레드)가 주, 청소년 대표(네이비)가 부 -->
-    <div class="selection-banners">
+    <div class="selection-banners" data-fm-stagger>
         <a class="selection-card selection-card--youth" href="/{{ lang|default('ko') }}/selection/kkumnamu/summary">
             <span class="selection-card-icon" aria-hidden="true"><svg class="fm-icon" viewBox="0 0 256 256" focusable="false"><path d="M247.63,47.89a8,8,0,0,0-7.52-7.52c-51.76-3-93.32,12.74-111.18,42.22-11.8,19.49-11.78,43.16-.16,65.74a71.34,71.34,0,0,0-14.17,27L98.33,159c7.82-16.33,7.52-33.35-1-47.49-13.2-21.79-43.67-33.47-81.5-31.25a8,8,0,0,0-7.52,7.52c-2.23,37.83,9.46,68.3,31.25,81.5A45.82,45.82,0,0,0,63.44,176,54.58,54.58,0,0,0,87,170.33l25,25V224a8,8,0,0,0,16,0V194.51a55.61,55.61,0,0,1,12.27-35,73.91,73.91,0,0,0,33.31,8.4,60.9,60.9,0,0,0,31.83-8.86C234.89,141.21,250.67,99.65,247.63,47.89ZM47.81,155.6C32.47,146.31,23.79,124.32,24,96c28.32-.24,50.31,8.47,59.6,23.81,4.85,8,5.64,17.33,2.46,26.94L61.65,122.34a8,8,0,0,0-11.31,11.31l24.41,24.41C65.14,161.24,55.82,160.45,47.81,155.6Zm149.31-10.22c-13.4,8.11-29.15,8.73-45.15,2l53.69-53.7a8,8,0,0,0-11.31-11.31L140.65,136c-6.76-16-6.15-31.76,2-45.15,13.94-23,47-35.82,89.33-34.83C232.94,98.34,220.14,131.44,197.12,145.38Z"/></svg></span>
             <h3>{{ _t("꿈나무 선발 포인트") }}</h3>
@@ -2041,14 +2351,14 @@
 
     <!-- Event Results -->
     <div class="results-section">
-        <div class="results-header">
+        <div class="results-header fm-reveal">
             <div>
                 <h3>{{ i18n.common.home.search_results|default('Search Results') }}</h3>
                 <div class="auto-loaded-desc" id="auto-loaded-desc" style="display:none;"></div>
             </div>
             <span class="results-count" id="results-count"></span>
         </div>
-        <div class="event-cards" id="event-cards">
+        <div class="event-cards" id="event-cards" data-fm-stagger>
             <div class="filter-prompt">
                 <div class="filter-prompt-icon" aria-hidden="true"><svg class="fm-icon" viewBox="0 0 256 256" focusable="false"><path d="M221.87,83.16A104.1,104.1,0,1,1,195.67,49l22.67-22.68a8,8,0,0,1,11.32,11.32l-96,96a8,8,0,0,1-11.32-11.32l27.72-27.72a40,40,0,1,0,17.87,31.09,8,8,0,1,1,16-.9,56,56,0,1,1-22.38-41.65L184.3,60.39a87.88,87.88,0,1,0,23.13,29.67,8,8,0,0,1,14.44-6.9Z"/></svg></div>
                 <h4>{{ i18n.common.home.select_event|default('Select an Event') }}</h4>

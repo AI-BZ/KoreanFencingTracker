@@ -710,3 +710,85 @@ def get_js_competition_names(lang: str, competition_names: list) -> dict:
         if translated != name:
             result[name] = translated
     return result
+
+
+# =============================================
+# Venue names
+# =============================================
+# Korean venue names follow "<proper noun><facility type>". No official English
+# name was published for the venues in this data set, so the proper noun is
+# romanized (Revised Romanization) and the facility type is translated, which is
+# the convention Korean venues use in English (Jamsil Gymnasium, Jangchung
+# Gymnasium). Add an entry to _VENUE_OFFICIAL when an official name does exist:
+# that always wins over the generated form.
+
+# The generated form cannot find word boundaries inside a compound proper noun
+# (양구 + 청춘 romanizes as one run), so venues present in the data are listed
+# here with the spacing spelled out. Replace an entry the moment an official
+# English name turns up.
+_VENUE_OFFICIAL: dict = {
+    "양구청춘체육관": {
+        "en": "Yanggu Cheongchun Gymnasium",
+        "fr": "Gymnase Yanggu Cheongchun",
+        "it": "Palazzetto Yanggu Cheongchun",
+        "tr": "Yanggu Cheongchun Spor Salonu",
+    },
+}
+
+# Longest suffix first: 문화체육관 must match before 체육관.
+_VENUE_FACILITY_SUFFIXES = [
+    ("국민체육센터", {"en": "Sports Center", "fr": "Centre sportif", "it": "Centro sportivo",
+                 "ja": "国民体育センター", "zh": "国民体育中心", "tr": "Spor Merkezi"}),
+    ("실내체육관", {"en": "Indoor Gymnasium", "fr": "Gymnase couvert", "it": "Palazzetto coperto",
+                "ja": "屋内体育館", "zh": "室内体育馆", "tr": "Kapalı Spor Salonu"}),
+    ("문화체육관", {"en": "Culture & Sports Center", "fr": "Centre culturel et sportif",
+                "it": "Centro culturale e sportivo", "ja": "文化体育館", "zh": "文化体育馆",
+                "tr": "Kültür ve Spor Merkezi"}),
+    ("체육공원", {"en": "Sports Park", "fr": "Parc sportif", "it": "Parco sportivo",
+               "ja": "体育公園", "zh": "体育公园", "tr": "Spor Parkı"}),
+    ("체육관", {"en": "Gymnasium", "fr": "Gymnase", "it": "Palazzetto dello sport",
+              "ja": "体育館", "zh": "体育馆", "tr": "Spor Salonu"}),
+    ("경기장", {"en": "Stadium", "fr": "Stade", "it": "Stadio",
+              "ja": "競技場", "zh": "体育场", "tr": "Stadyum"}),
+]
+
+
+def _romanize_korean(text: str) -> str:
+    """Revised Romanization, capitalized as a proper noun."""
+    try:
+        from app.international_data import romanize_syllable
+    except ImportError:
+        return text
+    out = "".join(romanize_syllable(c) if "가" <= c <= "힣" else c for c in text)
+    return out.capitalize() if out else text
+
+
+def translate_venue_name(venue_ko: str, lang: str) -> str:
+    """Localize a Korean venue name.
+
+    Order: official name, then romanized proper noun plus translated facility
+    type, then the Korean original. CJK locales keep the Korean text, which
+    their readers can parse.
+    """
+    if not venue_ko or lang == "ko":
+        return venue_ko
+
+    # Some records hold several venues separated by a slash.
+    if "/" in venue_ko:
+        return " / ".join(translate_venue_name(p.strip(), lang) for p in venue_ko.split("/") if p.strip())
+
+    official = _VENUE_OFFICIAL.get(venue_ko)
+    if official and lang in official:
+        return official[lang]
+
+    if lang in ("ja", "zh"):
+        return venue_ko
+
+    for suffix, labels in _VENUE_FACILITY_SUFFIXES:
+        if venue_ko.endswith(suffix):
+            stem = venue_ko[: -len(suffix)].strip()
+            facility = labels.get(lang, labels["en"])
+            return f"{_romanize_korean(stem)} {facility}".strip() if stem else facility
+
+    # No facility suffix: a bare place name such as 익산.
+    return _romanize_korean(venue_ko)

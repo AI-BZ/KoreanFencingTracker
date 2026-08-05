@@ -99,6 +99,7 @@ from app.i18n import (
     get_js_translations,
     translate_event_name,
     translate_competition_name,
+    translate_venue_name,
     get_js_competition_names,
 )
 
@@ -4604,9 +4605,9 @@ async def api_rankings(
             best_results=r.best_results
         ))
 
-    # guest: 1페이지의 상위 10명 이름·소속 블러 처리
-    if is_guest and start == 0:
-        blur_ranking_entries(ranking_entries, min(RANKINGS_HIDDEN_TOP_N, len(ranking_entries)))
+    # guest: 상위 N위 이름·소속 블러 처리 (페이지와 무관하게 실제 순위 기준)
+    if is_guest:
+        blur_ranking_entries(ranking_entries, RANKINGS_HIDDEN_TOP_N)
 
     return RankingResponse(
         weapon=weapon,
@@ -7427,7 +7428,7 @@ async def get_upcoming_competitions(
                     "name": comp_name,
                     "start_date": comp_info.get("start_date"),
                     "end_date": comp_info.get("end_date"),
-                    "venue": comp_info.get("venue"),
+                    "venue": translate_venue_name(comp_info.get("venue"), lang),
                     "status": comp_info.get("status"),
                     "days_until": days_until,
                     "event_count": len(comp.get("events", []))
@@ -7482,7 +7483,7 @@ async def get_ongoing_competitions():
                     "name": comp_info.get("name"),
                     "start_date": comp_info.get("start_date"),
                     "end_date": comp_info.get("end_date"),
-                    "venue": comp_info.get("venue"),
+                    "venue": translate_venue_name(comp_info.get("venue"), lang),
                     "day_number": day_number,
                     "total_days": total_days,
                     "event_count": len(comp.get("events", []))
@@ -7538,7 +7539,7 @@ async def get_live_competitions(lang: str = "ko"):
                 "name": comp_name,
                 "start_date": comp_info.get("start_date"),
                 "end_date": comp_info.get("end_date"),
-                "venue": comp_info.get("venue"),
+                "venue": translate_venue_name(comp_info.get("venue"), lang),
                 "event_count": len(comp.get("events", []))
             }
 

@@ -52,6 +52,22 @@ cd services/data
 PYTHONPATH=".:../../packages" python -m uvicorn app.server:app --host 0.0.0.0 --port 9071
 ```
 
+### 🔴 정적 파일(CSS/JS) 배포 시 캐시버스터 필수 (2026-08-06 사고)
+
+**정적 파일을 수정했으면 `templates/base.html`의 `?v=` 값을 반드시 함께 올릴 것.** 안 올리면 파일을 배포하고 서버를 재시작해도 **사용자 브라우저에는 옛날 파일이 그대로 간다.**
+
+- **경로**: Cloudflare Tunnel → nginx → FastAPI. Cloudflare가 `?v=` 를 포함한 URL 전체를 캐시 키로 쓰고 `max-age=14400`(4시간)으로 보관한다.
+- **증상**: 배포된 파일(`${BASE}/.../dark-theme.css`)에는 수정이 있는데 브라우저 렌더링은 그대로. `curl`로 확인해도 **캐시 우회 쿼리를 쓰면 새 파일이 오기 때문에** "배포는 됐다"고 착각하기 쉽다.
+- **실제 사고**: 다크 테마 와일드카드 셀렉터를 고쳐 배포했으나 `?v=20260806a`를 그대로 둠 → Cloudflare가 수정 전 버전을 계속 서빙(age 1659s) → 프로덕션에 반영 안 됨.
+- **진단 방법**: 같은 버전 URL과 랜덤 쿼리 URL의 내용을 비교하면 캐시 여부가 드러난다.
+  ```bash
+  curl -s "https://data.fencingmind.ai/static/css/dark-theme.css?v=20260806a" | grep -c '패턴'
+  curl -s "https://data.fencingmind.ai/static/css/dark-theme.css?nocache=$(date +%s%N)" | grep -c '패턴'
+  # 두 값이 다르면 CDN 캐시가 낡은 것
+  curl -sI "...?v=20260806a" | grep -i "cf-cache\|age"   # age가 크면 캐시 히트
+  ```
+- **검증 원칙**: 정적 파일 수정 후에는 파일 배포 확인만으로 끝내지 말고 **실제 브라우저 렌더링**(Playwright의 computed style 등)으로 확인할 것. 서브에이전트가 CSS만 고치고 캐시버스터를 안 올리는 경우가 잦으니, 위임할 때 bump를 지시하거나 배포 직전에 직접 확인할 것.
+
 ---
 
 ## DB 테이블 (소유)
