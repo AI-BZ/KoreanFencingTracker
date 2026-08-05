@@ -28,6 +28,23 @@ TRANSLATIONS = {
         "zh": "赛事",
         "tr": "Yarışma",
     },
+    # 홈의 진행 중 + 예정 대회를 한 밴드로 묶는 헤더
+    "경기 일정": {
+        "en": "Schedule",
+        "fr": "Calendrier",
+        "it": "Calendario",
+        "ja": "大会日程",
+        "zh": "赛程",
+        "tr": "Takvim",
+    },
+    "팔로우 선수": {
+        "en": "Followed players",
+        "fr": "Escrimeurs suivis",
+        "it": "Atleti seguiti",
+        "ja": "フォロー中の選手",
+        "zh": "关注的选手",
+        "tr": "Takip edilen sporcular",
+    },
     "검색": {
         "en": "Search",
         "fr": "Rechercher",
@@ -1281,6 +1298,23 @@ TRANSLATIONS = {
         "ja": "選抜ポイントを確認",
         "zh": "查看选拔积分",
         "tr": "Seçim Puanlarını Kontrol Et",
+    },
+    # 두 선발 트랙의 CTA는 문구를 구분한다 (홈에서 나란히 노출되므로)
+    "꿈나무 포인트 보기": {
+        "en": "View Kkumnamu points",
+        "fr": "Voir les points Kkumnamu",
+        "it": "Vedi punti Kkumnamu",
+        "ja": "夢の木ポイントを見る",
+        "zh": "查看青苗积分",
+        "tr": "Kkumnamu puanlarını gör",
+    },
+    "청소년 대표 포인트 보기": {
+        "en": "View youth national team points",
+        "fr": "Voir les points équipe nationale jeunes",
+        "it": "Vedi punti nazionale giovanile",
+        "ja": "ユース代表ポイントを見る",
+        "zh": "查看青少年国家队积分",
+        "tr": "Genç milli takım puanlarını gör",
     },
     "선발 포인트 확인하기 →": {
         "en": "Check Selection Points →",
@@ -2735,6 +2769,26 @@ TRANSLATIONS = {
     "본선 토너먼트란?": {"en": "What is direct elimination?", "fr": "Qu'est-ce que l'élimination directe ?", "it": "Che cos'è l'eliminazione diretta?", "ja": "本戦トーナメントとは？", "zh": "什么是淘汰赛？", "tr": "Direkt eleme nedir?"},
     "15점 선취, 3분 3회전으로 진행합니다.": {"en": "Bouts are to 15 touches over three 3-minute periods.", "fr": "Les assauts se disputent en 15 touches, trois reprises de 3 minutes.", "it": "Gli assalti sono a 15 stoccate in tre riprese da 3 minuti.", "ja": "15点先取、3分3ピリオドで行います。", "zh": "每场15剑，3回合各3分钟。", "tr": "Maçlar 3 dakikalık üç devrede 15 dokunuşa oynanır."},
     "패배하면 즉시 탈락합니다.": {"en": "The loser is eliminated immediately.", "fr": "Le perdant est immédiatement éliminé.", "it": "Chi perde viene eliminato immediatamente.", "ja": "敗れた選手はその場で敗退します。", "zh": "输者立即淘汰。", "tr": "Kaybeden anında elenir."},
+
+    # =========================================================================
+    # Home hero (헤드라인 / 서브텍스트)
+    # =========================================================================
+    "모든 펜싱 대회 기록을 한곳에서": {
+        "en": "Every Korean fencing result in one place",
+        "fr": "Tous les résultats d'escrime coréenne",
+        "it": "Tutti i risultati della scherma coreana",
+        "ja": "韓国フェンシングの全記録をひとつに",
+        "zh": "韩国击剑赛事记录尽在于此",
+        "tr": "Tüm Kore eskrim sonuçları tek yerde",
+    },
+    "선수 이름으로 검색하면 대회 결과, 랭킹, 상대 전적까지 바로 확인할 수 있습니다": {
+        "en": "Search a player to see results, rankings and head-to-head records instantly",
+        "fr": "Cherchez un tireur pour voir résultats, classements et face-à-face",
+        "it": "Cerca un atleta per vedere risultati, classifiche e confronti diretti",
+        "ja": "選手名で検索すると、大会結果・ランキング・対戦成績をすぐ確認できます",
+        "zh": "搜索选手姓名，即刻查看比赛成绩、排名与交手记录",
+        "tr": "Bir sporcu arayın; sonuçları, sıralamaları ve ikili karşılaşmaları anında görün",
+    },
 }
 
 
