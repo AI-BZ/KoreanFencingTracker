@@ -5,172 +5,158 @@
 {% block extra_css %}
 <link rel="stylesheet" href="/static/css/fencinglab.css?v=20260603">
 <style>
-    /* Hero - 투명 배경, 테두리 없음. 위계는 장식이 아니라 타입 대비로만 */
+    /* Hero - 좌정렬 스플릿: 카피 + 검색 CTA | 실데이터 스탯.
+       투명 배경, 테두리 없음. 위계는 장식이 아니라 타입 대비로만 */
     .hero {
-        background: transparent !important;
-        border: none !important;
+        --fm-hero-rule: rgba(255, 255, 255, 0.14);
+        background: transparent;
+        border: none;
+        border-radius: 0;
+        box-shadow: none;
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+        margin-bottom: 0;
         color: var(--fm-text-primary);
-        padding: 2rem 0 1.5rem;
-        text-align: center;
+        padding: clamp(1.75rem, 4.5vw, 3.25rem) 0 2rem;
+        text-align: left;
+    }
+    .hero-grid {
+        display: grid;
+        grid-template-columns: 1.2fr 0.8fr;
+        gap: clamp(1.75rem, 5vw, 4rem);
+        align-items: end;
     }
     .hero h1 {
-        font-size: clamp(2rem, 6vw, 3.25rem);
+        font-size: clamp(2rem, 5.4vw, 3.4rem);
         font-weight: 900;
         letter-spacing: -0.03em;
-        line-height: 1.04;
-        margin-bottom: 0.6rem;
+        line-height: 1.12;
+        text-wrap: balance;
+        margin: 0 0 0.7rem;
         color: var(--fm-text-primary);
+    }
+    .hero h1:lang(ko), .hero h1:lang(ja), .hero h1:lang(zh) {
+        line-height: 1.24;
+        letter-spacing: -0.015em;
+        word-break: keep-all;
     }
     .hero p {
         opacity: 1;
         color: var(--fm-text-muted);
         font-size: clamp(0.95rem, 2.2vw, 1.125rem);
-        line-height: 1.5;
+        line-height: 1.55;
         max-width: 46ch;
-        margin: 0 auto;
+        margin: 0 0 1.6rem;
+        word-break: keep-all;
     }
 
-    /* NOW 배너 - 진행 중인 대회 (브랜드 레드 = 라이브 상태) */
-    .live-competitions {
-        background: #c9302c;
-        padding: 1rem 0;
+    /* 히어로 스탯 패널 - 실데이터(대회/종목/선수). 컴포넌트 .hero-stat-*와 이름 충돌 방지 */
+    .fm-hero-stats {
+        display: flex;
+        flex-direction: column;
+        border-top: 2px solid var(--fm-accent-primary, #c9302c);
+        animation: fmHeroRise 0.55s cubic-bezier(0.22, 1, 0.36, 1) 0.3s both;
+    }
+    .fm-hero-stat {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 0.7rem 0;
+        border-bottom: 1px solid var(--fm-hero-rule);
+    }
+    .fm-hero-stat-value {
+        font-size: clamp(1.9rem, 3.6vw, 2.75rem);
+        line-height: 1;
+        color: var(--fm-text-primary);
+        font-variant-numeric: tabular-nums lining-nums;
+    }
+    .fm-hero-stat-label {
+        color: var(--fm-text-muted);
+        white-space: nowrap;
+    }
+
+    /* 진입 연출 - 헤드라인 단어별 스태거. JS가 실패하면 텍스트는 그대로 보인다 */
+    .hero h1[data-ready="anim"] .hero-word {
+        display: inline-block;
+        opacity: 0;
+        transform: translateY(0.35em);
+        animation: fmHeroWordIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+    @keyframes fmHeroWordIn {
+        to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fmHeroRise {
+        from { opacity: 0; transform: translateY(0.5rem); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .hero h1[data-ready="anim"] .hero-word,
+        .fm-hero-stats,
+        .hero .player-search {
+            animation: none !important;
+            opacity: 1 !important;
+            transform: none !important;
+        }
+    }
+
+    /* ============================================================
+       아이콘 시스템 — Phosphor regular 지오메트리, currentColor 단일 패밀리.
+       크기는 부모 font-size(1em)를 따르며, 필요한 곳에서만 개별 지정한다.
+       ============================================================ */
+    .fm-icon {
+        width: 1em;
+        height: 1em;
+        display: inline-block;
+        vertical-align: -0.14em;
+        flex-shrink: 0;
+        fill: currentColor;
+    }
+
+    /* ============================================================
+       경기 일정 밴드 — 진행 중(LIVE)과 예정 대회를 하나의 태극 네이비
+       풀블리드 밴드에 모은다. 두 상태는 카드 안의 상태 칩으로만 갈린다.
+       competitions.html의 UPCOMING 스트립과 같은 계열이므로 값을 옮길 때
+       양쪽을 함께 볼 것.
+       ============================================================ */
+    .fm-schedule-band {
+        background: linear-gradient(135deg, #1e3a8a 0%, #16306e 100%);
+        padding: 1.5rem 0 1.75rem;
         margin-bottom: 0;
     }
-    .live-header {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 0.5rem;
-        margin-bottom: 0.8rem;
-    }
-    .live-badge {
-        background: white;
-        color: #a82824;
-        padding: 0.3rem 0.8rem;
-        border-radius: 20px;
-        font-size: 0.75rem;
-        font-weight: 600;
-        letter-spacing: 0.07em;
+    .fm-schedule-title {
+        margin: 0 0 1rem;
+        font-size: 0.82rem;
+        font-weight: 700;
+        letter-spacing: 0.14em;
         text-transform: uppercase;
-        animation: pulse 2s infinite;
-        display: flex;
-        align-items: center;
-        gap: 0.4rem;
+        color: rgba(255, 255, 255, 0.78);
     }
-    .live-badge::before {
-        content: '';
-        width: 8px;
-        height: 8px;
-        background: #c9302c;
-        border-radius: 50%;
-        animation: blink 1s infinite;
+    .fm-schedule-band .live-competitions,
+    .fm-schedule-band .upcoming-competitions {
+        background: none;
+        padding: 0;
+        margin: 0;
     }
+    .fm-schedule-band .upcoming-competitions { margin-top: 1rem; }
+
     @keyframes pulse {
         0%, 100% { transform: scale(1); }
         50% { transform: scale(1.05); }
     }
     @keyframes blink {
         0%, 100% { opacity: 1; }
-        50% { opacity: 0.3; }
-    }
-    .live-title {
-        color: white;
-        font-size: 1.1rem;
-        font-weight: 600;
-    }
-    .live-cards {
-        display: flex;
-        gap: 1rem;
-        justify-content: center;
-        flex-wrap: wrap;
-    }
-    .live-card {
-        background: rgba(255,255,255,0.95);
-        border-radius: 12px;
-        padding: 1rem 1.5rem;
-        display: flex;
-        align-items: center;
-        gap: 1rem;
-        cursor: pointer;
-        transition: transform 0.2s, box-shadow 0.2s;
-        text-decoration: none;
-        color: inherit;
-        min-width: 280px;
-    }
-    .live-card:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 8px 25px rgba(0,0,0,0.2);
-    }
-    .live-card-icon {
-        font-size: 2rem;
-    }
-    .live-card-info h4 {
-        margin: 0 0 0.3rem 0;
-        font-size: 1rem;
-        color: #333;
-    }
-    .live-card-info p {
-        margin: 0;
-        font-size: 0.85rem;
-        color: #666;
-    }
-    .live-card-status {
-        margin-left: auto;
-        text-align: right;
-    }
-    .live-card-status .status {
-        font-size: 0.75rem;
-        padding: 0.2rem 0.5rem;
-        border-radius: 10px;
-        font-weight: 600;
-        letter-spacing: 0.07em;
-        text-transform: uppercase;
-    }
-    .status-live {
-        background: rgba(201, 48, 44, 0.12);
-        color: #a82824;
-    }
-    .status-upcoming {
-        background: rgba(30, 58, 138, 0.1);
-        color: #1e3a8a;
-    }
-    .live-card-status .date {
-        font-size: 0.8rem;
-        color: #6b7280;
-        margin-top: 0.2rem;
-    }
-    .live-hidden {
-        display: none;
+        50% { opacity: 0.25; }
     }
 
-    /* UPCOMING 배너 - 예정 대회. 태극 네이비 밴드 — competitions.html과 동일 표면.
-       두 페이지가 같은 스트립을 렌더링하므로 값을 바꿀 때는 양쪽을 함께 옮길 것. */
-    .upcoming-competitions {
-        background: linear-gradient(135deg, #1e3a8a 0%, #16306e 100%);
-        padding: 1rem 0;
-        margin-bottom: 0;
-    }
-    .upcoming-header {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 0.5rem;
-        margin-bottom: 0.8rem;
-    }
-    .upcoming-badge {
-        background: white;
-        color: #1e3a8a;
-        padding: 0.3rem 0.8rem;
-        border-radius: 20px;
-        font-weight: 700;
-        font-size: 0.85rem;
-    }
+    .live-cards,
     .upcoming-cards {
         display: flex;
         gap: 1rem;
         justify-content: center;
         flex-wrap: wrap;
     }
+    .live-card,
     .upcoming-card {
         background: rgba(18, 18, 26, 0.95);
         border-radius: 12px;
@@ -185,17 +171,21 @@
         max-width: 450px;
         overflow: hidden;
     }
+    .live-card:hover,
     .upcoming-card:hover {
         transform: translateY(-3px);
         box-shadow: 0 8px 25px rgba(0,0,0,0.4);
     }
+    .live-card-icon,
     .upcoming-card-icon {
         display: flex;
         align-items: center;
         justify-content: center;
         width: 56px;
-        background: rgba(96, 165, 250, 0.14);
         flex-shrink: 0;
+    }
+    .upcoming-card-icon {
+        background: rgba(96, 165, 250, 0.14);
     }
     .upcoming-card-icon svg {
         width: 24px;
@@ -204,11 +194,20 @@
         stroke-width: 1.5;
         fill: none;
     }
+    /* 진행 중 카드만 레드 틴트 — 표면에서도 상태가 읽히게 */
+    .live-card-icon {
+        background: rgba(201, 48, 44, 0.2);
+        color: #ff9a96;
+    }
+    .live-card-icon .fm-icon { width: 24px; height: 24px; }
+
+    .live-card-info,
     .upcoming-card-info {
         flex: 1;
         padding: 1rem 1.2rem;
         min-width: 0;
     }
+    .live-card-info h4,
     .upcoming-card-info h4 {
         margin: 0 0 0.3rem 0;
         font-size: 0.95rem;
@@ -218,14 +217,16 @@
         overflow: hidden;
         text-overflow: ellipsis;
     }
+    .live-card-info p,
     .upcoming-card-info p {
         margin: 0;
         font-size: 0.8rem;
-        color: rgba(255, 255, 255, 0.5);
+        color: rgba(255, 255, 255, 0.62);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
     }
+    .live-card-status,
     .upcoming-card-status {
         display: flex;
         flex-direction: column;
@@ -235,6 +236,28 @@
         background: rgba(255, 255, 255, 0.03);
         min-width: 80px;
         flex-shrink: 0;
+    }
+    /* LIVE 칩 — 실제 진행 상태이므로 이 페이지에서 유일하게 점멸 도트를 쓴다 */
+    .live-card-status .status-live {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.22rem 0.6rem;
+        border-radius: 999px;
+        background: rgba(201, 48, 44, 0.24);
+        color: #ff9a96;
+        font-size: 0.7rem;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+    }
+    .live-card-status .status-live::before {
+        content: '';
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #ff6b66;
+        animation: blink 1.4s infinite;
     }
     /* 스코어보드 숫자: D-day/날짜는 순수 latin이라 콘덴스드 페이스를 요소 전체에 적용.
        콘덴스드는 좁게 흐르므로 사이즈를 조금 올리고 자간은 양수만 준다. */
@@ -246,13 +269,14 @@
         letter-spacing: 0.04em;
         color: #ff8080;
     }
+    .live-card-status .date,
     .upcoming-card-status .date {
         font-family: var(--fm-font-display);
         font-weight: 600;
         letter-spacing: 0.01em;
         font-variant-numeric: lining-nums;
         font-size: 0.7rem;
-        color: rgba(255, 255, 255, 0.55);
+        color: rgba(255, 255, 255, 0.6);
         margin-top: 0.25rem;
     }
 
@@ -306,10 +330,14 @@
         flex-wrap: wrap;
     }
     .ml-medal {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
         font-size: 0.8rem;
         font-weight: 500;
         white-space: nowrap;
     }
+    .ml-medal .fm-icon { width: 0.95rem; height: 0.95rem; }
     .ml-medal.gold { color: #b8860b; }
     .ml-medal.silver { color: #6b7280; }
     .ml-medal.bronze { color: #a0522d; }
@@ -320,33 +348,32 @@
         flex-shrink: 0;
     }
 
-    /* 선수 검색 - 다크 반투명 */
+    /* 선수 검색 - 히어로의 주 CTA. 카드 크롬 없이 입력창 자체가 위계를 갖는다 */
     .player-search {
-        background: rgba(18, 18, 26, 0.85) !important;
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
-        padding: 2rem;
-        border-radius: 12px;
-        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: transparent;
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+        padding: 0;
+        border-radius: 0;
+        border: none;
         box-shadow: none;
-        margin: 2rem 0;
+        margin: 0;
         position: relative;
         z-index: 1000;
-    }
-    .player-search h2 {
-        color: white;
+        animation: fmHeroRise 0.55s cubic-bezier(0.22, 1, 0.36, 1) 0.22s both;
     }
     .search-input-wrapper {
         position: relative;
-        max-width: 500px;
-        margin: 0 auto;
+        max-width: 520px;
+        margin: 0;
     }
     .search-input {
         width: 100%;
-        padding: 1rem 1.5rem;
-        font-size: 1.1rem;
-        border: 1px solid rgba(255, 255, 255, 0.15);
-        border-radius: 30px;
+        height: 56px;
+        padding: 0 1.35rem;
+        font-size: 1.05rem;
+        border: 1px solid rgba(255, 255, 255, 0.22);
+        border-radius: 10px;
         outline: none;
         transition: border-color 0.2s;
         box-sizing: border-box;
@@ -354,11 +381,12 @@
         color: white;
     }
     .search-input::placeholder {
-        color: rgba(255, 255, 255, 0.5);
+        color: rgba(255, 255, 255, 0.62);
     }
     .search-input:focus {
         border-color: #c9302c;
-        box-shadow: 0 0 15px rgba(201, 48, 44, 0.3);
+        outline: 2px solid #c9302c;
+        outline-offset: 2px;
     }
     .search-suggestions {
         position: absolute;
@@ -843,51 +871,79 @@
         margin-top: 0.25rem;
     }
 
+    @media (min-width: 769px) {
+        /* 언어별 헤드라인 길이 차이로 아래 블록이 튀지 않도록 2줄 분량만 확보 (height 금지) */
+        .hero h1 { min-height: 2.24em; }
+        .hero h1:lang(ko), .hero h1:lang(ja), .hero h1:lang(zh) { min-height: 2.48em; }
+    }
+
     @media (max-width: 768px) {
-        .hero h1 { font-size: 1.8rem; }
+        .hero-grid { grid-template-columns: 1fr; gap: 1.5rem; align-items: start; }
+        .search-input-wrapper { max-width: none; }
+        .fm-hero-stats { flex-direction: row; }
+        .fm-hero-stat {
+            flex: 1;
+            flex-direction: column;
+            align-items: flex-start;
+            justify-content: flex-start;
+            gap: 0.2rem;
+            padding: 0.6rem 0.75rem 0.6rem 0;
+            border-bottom: none;
+        }
+        .fm-hero-stat + .fm-hero-stat {
+            border-left: 1px solid var(--fm-hero-rule);
+            padding-left: 0.75rem;
+        }
+        .fm-hero-stat-value { font-size: 1.65rem; }
         .event-card { flex-direction: column; align-items: flex-start; }
         .event-date { text-align: left; margin-top: 0.5rem; }
         .filter-grid { grid-template-columns: 1fr; }
     }
 
-    /* ==================== LIGHT THEME (Toss-style) ==================== */
+    /* ==================== LIGHT THEME (Toss-style) ====================
+       !important는 dark-theme.css의 [data-theme="light"] .hero/.player-search
+       규칙이 !important로 선언돼 있어 유지가 필요하다 */
     [data-theme="light"] .hero {
+        --fm-hero-rule: #e5e8eb;
         background: transparent !important;
         border: none !important;
         color: #191f28 !important;
         box-shadow: none !important;
+        backdrop-filter: none !important;
     }
     [data-theme="light"] .hero h1 {
-        color: #191f28;
-        background: none !important;
-        -webkit-text-fill-color: #191f28 !important;
+        color: #191f28 !important;
     }
     [data-theme="light"] .hero p {
         color: #4e5968 !important;
         opacity: 1 !important;
     }
+    [data-theme="light"] .fm-hero-stat-value {
+        color: #191f28;
+    }
+    [data-theme="light"] .fm-hero-stat-label {
+        color: #4e5968;
+    }
 
     /* Player Search */
     [data-theme="light"] .player-search {
-        background: #ffffff !important;
-        border: 1px solid #e5e8eb !important;
-        box-shadow: 0 2px 12px rgba(0,0,0,0.06) !important;
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
         backdrop-filter: none !important;
     }
-    [data-theme="light"] .player-search h2 {
-        color: #191f28 !important;
-    }
     [data-theme="light"] .search-input {
-        background: #f5f5f7 !important;
+        background: #ffffff !important;
         color: #191f28 !important;
-        border: 1px solid #e5e8eb !important;
+        border: 1px solid #d1d6db !important;
     }
     [data-theme="light"] .search-input::placeholder {
-        color: #8b95a1 !important;
+        color: #6b7280 !important;
     }
     [data-theme="light"] .search-input:focus {
         border-color: #c9302c !important;
-        box-shadow: 0 0 0 3px rgba(201,48,44,0.1) !important;
+        outline: 2px solid #c9302c;
+        outline-offset: 2px;
         background: #ffffff !important;
     }
 
@@ -1021,12 +1077,15 @@
         border-color: #c9302c !important;
     }
 
-    /* Upcoming cards - light (competitions.html과 동일) */
+    /* 경기 일정 카드 - light. 밴드는 두 테마 모두 네이비로 남고 카드만 뒤집힌다
+       (competitions.html의 UPCOMING 스트립과 동일 규칙) */
+    [data-theme="light"] .live-card,
     [data-theme="light"] .upcoming-card {
         background: #ffffff;
         border: 1px solid #e5e8eb;
         box-shadow: 0 2px 8px rgba(0,0,0,0.06);
     }
+    [data-theme="light"] .live-card:hover,
     [data-theme="light"] .upcoming-card:hover {
         box-shadow: 0 4px 16px rgba(0,0,0,0.1);
         border-color: #c9302c;
@@ -1037,18 +1096,33 @@
     [data-theme="light"] .upcoming-card-icon svg {
         stroke: #1e3a8a;
     }
+    [data-theme="light"] .live-card-icon {
+        background: rgba(201, 48, 44, 0.09);
+        color: #a82824;
+    }
+    [data-theme="light"] .live-card-info h4,
     [data-theme="light"] .upcoming-card-info h4 {
         color: #191f28;
     }
+    [data-theme="light"] .live-card-info p,
     [data-theme="light"] .upcoming-card-info p {
         color: #5f6773;
     }
+    [data-theme="light"] .live-card-status,
     [data-theme="light"] .upcoming-card-status {
         background: #f5f5f7;
     }
     [data-theme="light"] .upcoming-card-status .status {
         color: #c9302c;
     }
+    [data-theme="light"] .live-card-status .status-live {
+        background: rgba(201, 48, 44, 0.1);
+        color: #a82824;
+    }
+    [data-theme="light"] .live-card-status .status-live::before {
+        background: #c9302c;
+    }
+    [data-theme="light"] .live-card-status .date,
     [data-theme="light"] .upcoming-card-status .date {
         color: #5f6773;
     }
@@ -1257,84 +1331,225 @@
     .events-retry { margin-top: 1.25rem; }
 
     /* ============================================================
-       선발 포인트 배너 — 브랜드 솔리드 패널 (레드/블루로 두 트랙 구분)
+       선발 포인트 — 비대칭 스플릿. 좌(꿈나무, 레드)가 주, 우(청소년 대표,
+       네이비)가 부. 두 패널이 같은 크기·같은 구조로 반복되지 않게 한다.
        ============================================================ */
     .selection-banners {
         display: grid;
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: 1.6fr 1fr;
         gap: 1rem;
         margin: 2rem 0;
+        align-items: stretch;
     }
     .selection-card {
-        padding: 2rem 1.5rem;
+        display: flex;
+        flex-direction: column;
         border-radius: 12px;
-        text-align: center;
+        color: #fff;
+        text-decoration: none;
+        transition: transform 0.18s ease, box-shadow 0.18s ease;
+    }
+    .selection-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+    }
+    .selection-card:focus-visible {
+        outline: 2px solid #fff;
+        outline-offset: 3px;
+    }
+    .selection-card--youth {
+        background: #c9302c;
+        padding: 2.25rem 2rem;
+    }
+    .selection-card--national {
+        background: #1e3a8a;
+        padding: 1.5rem 1.4rem;
+        justify-content: center;
+    }
+    .selection-card-icon {
+        color: rgba(255, 255, 255, 0.85);
+        margin-bottom: 0.85rem;
+    }
+    .selection-card--youth .selection-card-icon .fm-icon { width: 2.1rem; height: 2.1rem; }
+    .selection-card--national .selection-card-icon { margin-bottom: 0.6rem; }
+    .selection-card--national .selection-card-icon .fm-icon { width: 1.4rem; height: 1.4rem; }
+    .selection-card h3 {
+        margin: 0 0 0.6rem;
+        font-size: 1.6rem;
+        font-weight: 800;
+        line-height: 1.2;
+        letter-spacing: -0.02em;
         color: #fff;
     }
-    .selection-card--youth { background: #c9302c; }
-    .selection-card--national { background: #1e3a8a; }
-    .selection-card h3 {
-        margin: 0 0 0.5rem;
-        font-size: 1.3rem;
-        font-weight: 800;
-        letter-spacing: -0.02em;
+    .selection-card h4 {
+        margin: 0 0 0.4rem;
+        font-size: 1.05rem;
+        font-weight: 700;
+        line-height: 1.3;
+        letter-spacing: -0.01em;
         color: #fff;
     }
     .selection-card p {
         margin: 0 0 1.5rem;
-        font-size: 0.9rem;
-        line-height: 1.5;
+        font-size: 0.95rem;
+        line-height: 1.55;
         color: rgba(255, 255, 255, 0.92);   /* 레드 패널 위 본문 4.5:1 확보 */
     }
+    .selection-card--national p {
+        margin-bottom: 1rem;
+        font-size: 0.85rem;
+        color: rgba(255, 255, 255, 0.88);
+    }
+    /* 주 CTA: 채워진 흰 버튼 / 부 CTA: 밑줄 링크 — 위계를 형태로 구분 */
     .selection-cta {
-        display: inline-block;
-        padding: 0.6rem 1.5rem;
-        border: 1px solid rgba(255, 255, 255, 0.75);
-        border-radius: 25px;
-        background: transparent;
-        color: #fff;
-        text-decoration: none;
-        font-weight: 600;
-        font-size: 0.9rem;
-        transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
-    }
-    .selection-cta:hover,
-    .selection-cta:focus-visible {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        margin-top: auto;
+        align-self: flex-start;
+        padding: 0.7rem 1.4rem;
+        border-radius: 999px;
         background: #fff;
-        border-color: #fff;
+        color: #a82824;
+        font-weight: 700;
+        font-size: 0.92rem;
+        transition: background 0.18s ease, color 0.18s ease;
     }
-    .selection-card--youth .selection-cta:hover,
-    .selection-card--youth .selection-cta:focus-visible { color: #a82824; }
-    .selection-card--national .selection-cta:hover,
-    .selection-card--national .selection-cta:focus-visible { color: #1e3a8a; }
-    .selection-cta:focus-visible {
-        outline: 2px solid #fff;
-        outline-offset: 3px;
+    .selection-card--youth:hover .selection-cta {
+        background: #2b0f0e;
+        color: #fff;
     }
-    @media (max-width: 640px) {
+    .selection-cta--quiet {
+        padding: 0;
+        border-radius: 0;
+        background: none;
+        color: #fff;
+        font-size: 0.85rem;
+        font-weight: 600;
+        text-decoration: underline;
+        text-underline-offset: 4px;
+    }
+    .selection-card--national:hover .selection-cta--quiet {
+        background: none;
+        color: rgba(255, 255, 255, 0.82);
+    }
+    .selection-cta .fm-icon { width: 0.9em; height: 0.9em; transform: rotate(-90deg); }
+    @media (max-width: 720px) {
         .selection-banners { grid-template-columns: 1fr; }
+        .selection-card--youth { padding: 1.75rem 1.4rem; }
+        .selection-card h3 { font-size: 1.35rem; }
     }
 
-    /* 네이비 밴드 위에서는 내 리그 카드도 .upcoming-card와 같은 표면을 쓴다 */
+    /* 네이비 밴드 위에서는 내 리그 카드도 대회 카드와 같은 표면을 쓴다.
+       라이브/예정 두 리스트 모두에 붙으므로 선택자를 함께 유지할 것 */
+    .live-cards .my-league-card,
     .upcoming-cards .my-league-card {
         background: rgba(18, 18, 26, 0.95);
     }
+    [data-theme="light"] .live-cards .my-league-card,
     [data-theme="light"] .upcoming-cards .my-league-card {
         background: #ffffff;
         border: 1px solid #e5e8eb;
     }
+    .live-cards .ml-card-title,
     .upcoming-cards .ml-card-title { color: #fff; }
-    .upcoming-cards .ml-detail { color: rgba(255, 255, 255, 0.55); }
+    .live-cards .ml-detail,
+    .upcoming-cards .ml-detail { color: rgba(255, 255, 255, 0.62); }
+    .live-cards .ml-card-right,
     .upcoming-cards .ml-card-right { color: rgba(255, 255, 255, 0.35); }
+    [data-theme="light"] .live-cards .ml-card-title,
     [data-theme="light"] .upcoming-cards .ml-card-title { color: #191f28; }
+    [data-theme="light"] .live-cards .ml-detail,
     [data-theme="light"] .upcoming-cards .ml-detail { color: #5f6773; }
+    [data-theme="light"] .live-cards .ml-card-right,
     [data-theme="light"] .upcoming-cards .ml-card-right { color: #8b95a1; }
+    .live-cards .ml-medal.gold,
     .upcoming-cards .ml-medal.gold { color: var(--fm-medal-gold, #b8860b); }
+    .live-cards .ml-medal.silver,
     .upcoming-cards .ml-medal.silver { color: var(--fm-medal-silver, #6b7280); }
+    .live-cards .ml-medal.bronze,
     .upcoming-cards .ml-medal.bronze { color: var(--fm-medal-bronze, #a0522d); }
+    [data-theme="light"] .live-cards .ml-medal.gold,
     [data-theme="light"] .upcoming-cards .ml-medal.gold { color: #8a6410; }
+    [data-theme="light"] .live-cards .ml-medal.silver,
     [data-theme="light"] .upcoming-cards .ml-medal.silver { color: #5b6270; }
+    [data-theme="light"] .live-cards .ml-medal.bronze,
     [data-theme="light"] .upcoming-cards .ml-medal.bronze { color: #8a4520; }
+
+    /* ============================================================
+       팔로우 선수 — 보더로만 구분되는 칩 스트립. 목록이 비면 섹션 전체가
+       사라진다(mobile-ux.js가 .has-follows를 토글, 기본은 display:none).
+       ============================================================ */
+    #followedPlayersSection.followed-players-section {
+        background: none;
+        border: 0;
+        border-radius: 0;
+        padding: 0;
+        margin-bottom: 1.5rem;
+    }
+    .fm-follow-strip {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem 1.1rem;
+        flex-wrap: wrap;
+        padding: 0.9rem 0;
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .fm-follow-strip .followed-players-title {
+        margin-bottom: 0;
+        flex-shrink: 0;
+    }
+    .fm-follow-strip .followed-players-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+    .fm-follow-strip .followed-player-chip { margin: 0; }
+    [data-theme="light"] .fm-follow-strip {
+        border-top-color: #e5e8eb;
+        border-bottom-color: #e5e8eb;
+    }
+    [data-theme="light"] .fm-follow-strip .followed-players-title { color: #6b7684; }
+
+    /* ============================================================
+       아이콘 배치 — 기존 이모지 자리를 그대로 넘겨받되 크기/색만 조정
+       ============================================================ */
+    .ranking-preview-trophy,
+    .ranking-preview-hint-icon {
+        display: inline-flex;
+        align-items: center;
+        color: #f0c040;               /* 미리보기 타이틀과 같은 톤 */
+    }
+    .fm-sport-chip .fm-sport-chip-icon {
+        display: inline-flex;
+        align-items: center;
+        font-size: 1rem;
+    }
+    .filter-prompt-icon {
+        display: flex;
+        justify-content: center;
+        color: rgba(255, 255, 255, 0.45);
+        margin-bottom: 1rem;
+    }
+    .filter-prompt-icon .fm-icon { width: 2.5rem; height: 2.5rem; }
+    .filter-prompt-icon--warn { color: #e0736f; }
+    [data-theme="light"] .filter-prompt-icon { color: #7b8592; }
+    [data-theme="light"] .filter-prompt-icon--warn { color: #c9302c; }
+    /* 열림 상태에서 캐럿을 뒤집는 기존 토글 규칙은 래퍼 span에 그대로 걸린다 */
+    .advanced-search-toggle .toggle-arrow,
+    .toggle-header .toggle-icon {
+        display: inline-flex;
+        align-items: center;
+    }
+    .advanced-search-toggle .toggle-arrow .fm-icon { width: 0.85rem; height: 0.85rem; }
+    .toggle-header .toggle-icon .fm-icon { width: 1.1rem; height: 1.1rem; }
+
+    /* 선호 리그 폴백 스트립 — display는 JS가 제어하므로 정렬만 CSS로 */
+    .fm-prefs-fallback { text-align: right; }
+
+    /* 검색 제안: 결과 없음 */
+    .suggestion-empty { color: var(--fm-text-muted, #8b95a1); }
 </style>
 {% endblock %}
 
@@ -1402,14 +1617,81 @@
 
 <div class="hero">
     <div class="container">
-        <h1>{{ i18n.common.site.title|default('Korean Fencing Tracker') }}</h1>
-        <p>{{ i18n.common.site.description|default('Track and analyze your fencing competition records') }}</p>
+        <div class="hero-grid">
+            <div class="hero-copy">
+                <h1 id="hero-headline">{{ _t("모든 펜싱 대회 기록을 한곳에서") }}</h1>
+                <p>{{ _t("선수 이름으로 검색하면 대회 결과, 랭킹, 상대 전적까지 바로 확인할 수 있습니다") }}</p>
+
+                <!-- Player Search: 히어로의 주 CTA -->
+                <div class="player-search">
+                    <div class="search-input-wrapper">
+                        <input type="text" class="search-input" id="player-search"
+                               aria-label="{{ i18n.common.home.player_search|default('Player Search') }}"
+                               placeholder="{{ i18n.common.home.player_search_placeholder|default('Enter player name...') }}" autocomplete="off">
+                        <div class="search-suggestions" id="search-suggestions"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 실데이터 스탯: /api/status로 갱신, 실패 시 마크업의 폴백값 유지 -->
+            <div class="fm-hero-stats">
+                <div class="fm-hero-stat">
+                    <span class="fm-hero-stat-value fm-num" id="hero-stat-competitions">148</span>
+                    <span class="fm-hero-stat-label fm-label">{{ _t("대회") }}</span>
+                </div>
+                <div class="fm-hero-stat">
+                    <span class="fm-hero-stat-value fm-num" id="hero-stat-events">2,968</span>
+                    <span class="fm-hero-stat-label fm-label">{{ _t("종목") }}</span>
+                </div>
+                <div class="fm-hero-stat">
+                    <span class="fm-hero-stat-value fm-num" id="hero-stat-players">5,320</span>
+                    <span class="fm-hero-stat-label fm-label">{{ _t("선수") }}</span>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
+<script>
+(function () {
+    // 헤드라인 단어별 스태거. 공백이 없는 로케일(ja/zh)은 자연히 1블록 페이드업이 된다.
+    var h = document.getElementById('hero-headline');
+    if (h) {
+        var text = (h.textContent || '').trim();
+        var words = text ? text.split(/\s+/) : [];
+        if (words.length) {
+            var frag = document.createDocumentFragment();
+            for (var i = 0; i < words.length; i++) {
+                var span = document.createElement('span');
+                span.className = 'hero-word';
+                span.textContent = words[i];
+                span.style.animationDelay = Math.min(i * 0.06, 0.6) + 's';
+                frag.appendChild(span);
+                if (i < words.length - 1) frag.appendChild(document.createTextNode(' '));
+            }
+            h.textContent = '';
+            h.appendChild(frag);
+            h.setAttribute('data-ready', 'anim');
+        }
+    }
+
+    // 스탯 실데이터
+    var ids = { competitions: 'hero-stat-competitions', events: 'hero-stat-events', players: 'hero-stat-players' };
+    fetch('/api/status').then(function (res) {
+        return res.ok ? res.json() : null;
+    }).then(function (data) {
+        if (!data) return;
+        Object.keys(ids).forEach(function (key) {
+            var el = document.getElementById(ids[key]);
+            var n = Number(data[key]);
+            if (el && isFinite(n) && n > 0) el.textContent = n.toLocaleString();
+        });
+    }).catch(function () { /* 폴백값 유지 */ });
+})();
+</script>
 
 <!-- Fallback league-edit entry: 미리보기가 숨겨진 상태(나이그룹 미선택 등)에서도
      온보딩된 사용자가 선호 리그를 다시 고를 수 있어야 한다 -->
-<div class="fm-prefs-fallback" id="fm-prefs-fallback" style="display:none; text-align:right;">
+<div class="fm-prefs-fallback" id="fm-prefs-fallback" style="display:none;">
     <div class="container">
         <button type="button" class="fm-prefs-edit" onclick="fmOpenSportSelector()">{{ _t("선호 리그 변경") }}</button>
     </div>
@@ -1432,7 +1714,7 @@
     <div class="container">
         <div class="ranking-preview-card">
             <div class="ranking-preview-header">
-                <span class="ranking-preview-trophy">&#127942;</span>
+                <span class="ranking-preview-trophy"><svg class="fm-icon" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M232,64H208V48a8,8,0,0,0-8-8H56a8,8,0,0,0-8,8V64H24A16,16,0,0,0,8,80V96a40,40,0,0,0,40,40h3.65A80.13,80.13,0,0,0,120,191.61V216H96a8,8,0,0,0,0,16h64a8,8,0,0,0,0-16H136V191.58c31.94-3.23,58.44-25.64,68.08-55.58H208a40,40,0,0,0,40-40V80A16,16,0,0,0,232,64ZM48,120A24,24,0,0,1,24,96V80H48v32q0,4,.39,8Zm144-8.9c0,35.52-29,64.64-64,64.9a64,64,0,0,1-64-64V56H192ZM232,96a24,24,0,0,1-24,24h-.5a81.81,81.81,0,0,0,.5-8.9V80h24Z"/></svg></span>
                 <span class="ranking-preview-title" id="ranking-preview-title"></span>
                 <button type="button" class="fm-prefs-edit" onclick="fmOpenSportSelector()">{{ _t("선호 리그 변경") }}</button>
             </div>
@@ -1447,7 +1729,7 @@
                 </a>
             </div>
             <div class="ranking-preview-login-hint" id="ranking-preview-login-hint" style="display:none;">
-                <span class="ranking-preview-hint-icon">&#128161;</span>
+                <span class="ranking-preview-hint-icon"><svg class="fm-icon" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M176,232a8,8,0,0,1-8,8H88a8,8,0,0,1,0-16h80A8,8,0,0,1,176,232Zm40-128a87.55,87.55,0,0,1-33.64,69.21A16.24,16.24,0,0,0,176,186v6a16,16,0,0,1-16,16H96a16,16,0,0,1-16-16v-6a16,16,0,0,0-6.23-12.66A87.59,87.59,0,0,1,40,104.49C39.74,56.83,78.26,17.14,125.88,16A88,88,0,0,1,216,104Zm-16,0a72,72,0,0,0-73.74-72c-39,.92-70.47,33.39-70.26,72.39a71.65,71.65,0,0,0,27.64,56.3A32,32,0,0,1,96,186v6h64v-6a32.15,32.15,0,0,1,12.47-25.35A71.65,71.65,0,0,0,200,104Zm-16.11-9.34a57.6,57.6,0,0,0-46.56-46.55,8,8,0,0,0-2.66,15.78c16.57,2.79,30.63,16.85,33.44,33.45A8,8,0,0,0,176,104a9,9,0,0,0,1.35-.11A8,8,0,0,0,183.89,94.66Z"/></svg></span>
                 <span class="ranking-preview-hint-text">{{ i18n.common.home.ranking_preview.login_hint|default('Sign in to see player names and teams.') }}</span>
                 <a class="ranking-preview-login-btn" href="/auth/login">{{ i18n.common.home.ranking_preview.login_btn|default('Sign In') }}</a>
             </div>
@@ -1455,30 +1737,26 @@
     </div>
 </div>
 
-<!-- NOW: Live Competitions Banner (동적 로드) -->
-<div class="live-competitions" id="live-competitions" style="display: none;">
+<!-- 경기 일정: 진행 중(LIVE) + 예정 대회를 하나의 네이비 밴드에 모은다.
+     각 그룹의 ID는 기존 JS(loadUpcomingCompetitions 등)가 display를 제어하므로
+     그대로 두고, 바깥 밴드만 fmShowScheduleBand()로 함께 노출한다. -->
+<section class="fm-schedule-band" id="fm-schedule-band" style="display: none;" aria-labelledby="fm-schedule-title">
     <div class="container">
-        <div class="live-header">
-            <span class="live-badge">NOW</span>
-            <span class="live-title">{{ i18n.common.live.title|default('Live Competitions') }}</span>
-        </div>
-        <div class="live-cards" id="live-cards">
-            <!-- 동적으로 로드됨 -->
-        </div>
-    </div>
-</div>
+        <h2 class="fm-schedule-title" id="fm-schedule-title">{{ _t("경기 일정") }}</h2>
 
-<!-- Upcoming: 예정 대회 Banner -->
-<div class="upcoming-competitions" id="upcoming-competitions" style="display: none;">
-    <div class="container">
-        <div class="upcoming-header">
-            <span class="upcoming-badge">UPCOMING</span>
+        <div class="live-competitions" id="live-competitions" style="display: none;">
+            <div class="live-cards" id="live-cards">
+                <!-- 동적으로 로드됨 -->
+            </div>
         </div>
-        <div class="upcoming-cards" id="upcoming-cards">
-            <!-- 동적으로 로드됨 -->
+
+        <div class="upcoming-competitions" id="upcoming-competitions" style="display: none;">
+            <div class="upcoming-cards" id="upcoming-cards">
+                <!-- 동적으로 로드됨 -->
+            </div>
         </div>
     </div>
-</div>
+</section>
 
 {% if access_level is defined and access_level != "guest" %}
 <!-- Favorites Dashboard (member+: 대회 공지 바로 아래) -->
@@ -1494,55 +1772,50 @@
     </div>
 </div>
 {% else %}
-<!-- Followed Players (guest: localStorage chips) -->
-<div class="favorites-dashboard" id="followedPlayersSection">
+<!-- Followed Players (guest: localStorage chips).
+     .followed-players-section이 있어야 mobile-ux.js가 토글하는 .has-follows가
+     먹는다 — 팔로우가 없으면 라벨만 남지 않고 섹션 전체가 숨겨진다. -->
+<div class="favorites-dashboard followed-players-section" id="followedPlayersSection">
     <div class="container">
-        <div class="followed-players-title">{{ _t('팔로우 선수') }}</div>
-        <div class="followed-players-list"></div>
+        <div class="fm-follow-strip">
+            <span class="followed-players-title">{{ _t('팔로우 선수') }}</span>
+            <div class="followed-players-list"></div>
+        </div>
     </div>
 </div>
 {% endif %}
 
 <div class="container">
 
-    <!-- Player Search -->
-    <div class="player-search">
-        <h2 style="text-align: center; margin-bottom: 1.5rem;">{{ i18n.common.home.player_search|default('Player Search') }}</h2>
-        <div class="search-input-wrapper">
-            <input type="text" class="search-input" id="player-search"
-                   placeholder="{{ i18n.common.home.player_search_placeholder|default('Enter player name...') }}" autocomplete="off">
-            <div class="search-suggestions" id="search-suggestions"></div>
-        </div>
-    </div>
-
-    <!-- Selection/꿈나무 + 청소년 대표 선발 배너 -->
+    <!-- 선발 포인트 — 비대칭 스플릿. 꿈나무(레드)가 주, 청소년 대표(네이비)가 부 -->
     <div class="selection-banners">
-        <div class="selection-card selection-card--youth">
-            <h3>🌱 {{ _t("꿈나무 선발 포인트") }}</h3>
+        <a class="selection-card selection-card--youth" href="/{{ lang|default('ko') }}/selection/kkumnamu/summary">
+            <span class="selection-card-icon" aria-hidden="true"><svg class="fm-icon" viewBox="0 0 256 256" focusable="false"><path d="M247.63,47.89a8,8,0,0,0-7.52-7.52c-51.76-3-93.32,12.74-111.18,42.22-11.8,19.49-11.78,43.16-.16,65.74a71.34,71.34,0,0,0-14.17,27L98.33,159c7.82-16.33,7.52-33.35-1-47.49-13.2-21.79-43.67-33.47-81.5-31.25a8,8,0,0,0-7.52,7.52c-2.23,37.83,9.46,68.3,31.25,81.5A45.82,45.82,0,0,0,63.44,176,54.58,54.58,0,0,0,87,170.33l25,25V224a8,8,0,0,0,16,0V194.51a55.61,55.61,0,0,1,12.27-35,73.91,73.91,0,0,0,33.31,8.4,60.9,60.9,0,0,0,31.83-8.86C234.89,141.21,250.67,99.65,247.63,47.89ZM47.81,155.6C32.47,146.31,23.79,124.32,24,96c28.32-.24,50.31,8.47,59.6,23.81,4.85,8,5.64,17.33,2.46,26.94L61.65,122.34a8,8,0,0,0-11.31,11.31l24.41,24.41C65.14,161.24,55.82,160.45,47.81,155.6Zm149.31-10.22c-13.4,8.11-29.15,8.73-45.15,2l53.69-53.7a8,8,0,0,0-11.31-11.31L140.65,136c-6.76-16-6.15-31.76,2-45.15,13.94-23,47-35.82,89.33-34.83C232.94,98.34,220.14,131.44,197.12,145.38Z"/></svg></span>
+            <h3>{{ _t("꿈나무 선발 포인트") }}</h3>
             <p>{{ _t("중1 기간 대회 성적으로 꿈나무 선발 포인트를 확인하세요") }}</p>
-            <a class="selection-cta" href="/{{ lang|default('ko') }}/selection/kkumnamu/summary">
-                {{ _t("선발 포인트 확인하기") }} →
-            </a>
-        </div>
-        <div class="selection-card selection-card--national">
-            <h3>🏆 {{ _t("청소년 대표 선발 포인트") }}</h3>
+            <span class="selection-cta">
+                {{ _t("꿈나무 포인트 보기") }}
+                <svg class="fm-icon" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg>
+            </span>
+        </a>
+        <a class="selection-card selection-card--national" href="/{{ lang|default('ko') }}/selection/national-team/summary">
+            <span class="selection-card-icon" aria-hidden="true"><svg class="fm-icon" viewBox="0 0 256 256" focusable="false"><path d="M232,64H208V48a8,8,0,0,0-8-8H56a8,8,0,0,0-8,8V64H24A16,16,0,0,0,8,80V96a40,40,0,0,0,40,40h3.65A80.13,80.13,0,0,0,120,191.61V216H96a8,8,0,0,0,0,16h64a8,8,0,0,0,0-16H136V191.58c31.94-3.23,58.44-25.64,68.08-55.58H208a40,40,0,0,0,40-40V80A16,16,0,0,0,232,64ZM48,120A24,24,0,0,1,24,96V80H48v32q0,4,.39,8Zm144-8.9c0,35.52-29,64.64-64,64.9a64,64,0,0,1-64-64V56H192ZM232,96a24,24,0,0,1-24,24h-.5a81.81,81.81,0,0,0,.5-8.9V80h24Z"/></svg></span>
+            <h4>{{ _t("청소년 대표 선발 포인트") }}</h4>
             <p>{{ _t("중2~고3 대회 성적으로 청소년 대표 선발 포인트를 확인하세요") }}</p>
-            <a class="selection-cta" href="/{{ lang|default('ko') }}/selection/national-team/summary">
-                {{ _t("선발 포인트 확인하기") }} →
-            </a>
-        </div>
+            <span class="selection-cta selection-cta--quiet">{{ _t("청소년 대표 포인트 보기") }}</span>
+        </a>
     </div>
 
     <!-- Active Filter Tags + Advanced Search Toggle (always visible) -->
     <div class="active-filters-bar" id="active-filters-bar">
         <button type="button" class="fm-sport-chip" id="fm-sport-chip" onclick="fmOpenSportSelector()">
-            <span class="fm-sport-chip-icon" aria-hidden="true">&#127919;</span>
+            <span class="fm-sport-chip-icon" aria-hidden="true"><svg class="fm-icon" viewBox="0 0 256 256" focusable="false"><path d="M221.87,83.16A104.1,104.1,0,1,1,195.67,49l22.67-22.68a8,8,0,0,1,11.32,11.32l-96,96a8,8,0,0,1-11.32-11.32l27.72-27.72a40,40,0,1,0,17.87,31.09,8,8,0,1,1,16-.9,56,56,0,1,1-22.38-41.65L184.3,60.39a87.88,87.88,0,1,0,23.13,29.67,8,8,0,0,1,14.44-6.9Z"/></svg></span>
             <span>{{ i18n.common.mobile.set_my_sport|default('내 종목 설정') }}</span>
         </button>
         <div class="active-filters" id="active-filters"></div>
         <button class="advanced-search-toggle" id="advanced-search-toggle">
             {{ i18n.common.home.advanced_search|default('Advanced Search') }}
-            <span class="toggle-arrow">▼</span>
+            <span class="toggle-arrow" aria-hidden="true"><svg class="fm-icon" viewBox="0 0 256 256" focusable="false"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg></span>
         </button>
     </div>
 
@@ -1606,7 +1879,7 @@
         </div>
         <div class="event-cards" id="event-cards">
             <div class="filter-prompt">
-                <div class="filter-prompt-icon">🎯</div>
+                <div class="filter-prompt-icon" aria-hidden="true"><svg class="fm-icon" viewBox="0 0 256 256" focusable="false"><path d="M221.87,83.16A104.1,104.1,0,1,1,195.67,49l22.67-22.68a8,8,0,0,1,11.32,11.32l-96,96a8,8,0,0,1-11.32-11.32l27.72-27.72a40,40,0,1,0,17.87,31.09,8,8,0,1,1,16-.9,56,56,0,1,1-22.38-41.65L184.3,60.39a87.88,87.88,0,1,0,23.13,29.67,8,8,0,0,1,14.44-6.9Z"/></svg></div>
                 <h4>{{ i18n.common.home.select_event|default('Select an Event') }}</h4>
                 <p>{{ i18n.common.home.select_event_desc|default('Select one or more filters above (Weapon, Gender, Event, Season, Type) to view matching events.') }}</p>
             </div>
@@ -1618,7 +1891,7 @@
     <div class="competitions-toggle">
         <div class="toggle-header" id="competitions-toggle">
             <span>{{ i18n.common.home.view_by_competition|default('View by Competition') }}</span>
-            <span class="toggle-icon" id="toggle-icon">▼</span>
+            <span class="toggle-icon" id="toggle-icon" aria-hidden="true"><svg class="fm-icon" viewBox="0 0 256 256" focusable="false"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg></span>
         </div>
         <div class="competitions-list" id="competitions-list"></div>
     </div>
@@ -1858,13 +2131,17 @@ function appendMyLeagueCard(compEventCd, targetContainer) {
                         var top3 = summary ? summary.top3 : [];
                         var status = summary ? summary.status : 'upcoming';
 
+                        // 메달은 .ml-medal의 gold/silver/bronze 색이 순위를 나르므로
+                        // 아이콘은 하나(Phosphor medal)를 currentColor로 재사용한다
+                        var medalSvg = '<svg class="fm-icon" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M216,96A88,88,0,1,0,72,163.83V240a8,8,0,0,0,11.58,7.16L128,225l44.43,22.21A8.07,8.07,0,0,0,176,248a8,8,0,0,0,8-8V163.83A87.85,87.85,0,0,0,216,96ZM56,96a72,72,0,1,1,72,72A72.08,72.08,0,0,1,56,96ZM168,227.06l-36.43-18.21a8,8,0,0,0-7.16,0L88,227.06V174.37a87.89,87.89,0,0,0,80,0ZM128,152A56,56,0,1,0,72,96,56.06,56.06,0,0,0,128,152Zm0-96A40,40,0,1,1,88,96,40,40,0,0,1,128,56Z"/></svg> ';
+
                         var detailHtml = '';
                         if (status === 'finished' && top3.length >= 3) {
                             detailHtml =
                                 '<div class="ml-podium">' +
-                                    '<span class="ml-medal gold">🥇 ' + top3[0].name + '</span> ' +
-                                    '<span class="ml-medal silver">🥈 ' + top3[1].name + '</span> ' +
-                                    '<span class="ml-medal bronze">🥉 ' + top3[2].name + '</span>' +
+                                    '<span class="ml-medal gold">' + medalSvg + top3[0].name + '</span> ' +
+                                    '<span class="ml-medal silver">' + medalSvg + top3[1].name + '</span> ' +
+                                    '<span class="ml-medal bronze">' + medalSvg + top3[2].name + '</span>' +
                                 '</div>';
                         } else if (total > 0) {
                             detailHtml = '<div class="ml-detail"><span class="fm-num fm-num--semi">' + total + '</span>{{ _t("명 참가") }}</div>';
@@ -2054,7 +2331,7 @@ async function loadEvents() {
     if (!hasFilter) {
         cardsDiv.innerHTML = `
             <div class="filter-prompt">
-                <div class="filter-prompt-icon">🎯</div>
+                <div class="filter-prompt-icon" aria-hidden="true"><svg class="fm-icon" viewBox="0 0 256 256" focusable="false"><path d="M221.87,83.16A104.1,104.1,0,1,1,195.67,49l22.67-22.68a8,8,0,0,1,11.32,11.32l-96,96a8,8,0,0,1-11.32-11.32l27.72-27.72a40,40,0,1,0,17.87,31.09,8,8,0,1,1,16-.9,56,56,0,1,1-22.38-41.65L184.3,60.39a87.88,87.88,0,1,0,23.13,29.67,8,8,0,0,1,14.44-6.9Z"/></svg></div>
                 <h4>${i18n.home.select_event}</h4>
                 <p>${i18n.home.select_event_desc}</p>
             </div>
@@ -2181,7 +2458,7 @@ function renderEventsEmpty() {
     if (!cardsDiv) return;
     cardsDiv.innerHTML = `
         <div class="filter-prompt">
-            <div class="filter-prompt-icon">🔍</div>
+            <div class="filter-prompt-icon" aria-hidden="true"><svg class="fm-icon" viewBox="0 0 256 256" focusable="false"><path d="M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z"/></svg></div>
             <h4>${i18n.home.no_results}</h4>
             <p>{{ i18n.common.home.no_results_desc|default('필터를 바꾸거나 최근 대회를 둘러보세요.') }}</p>
         </div>`;
@@ -2194,7 +2471,7 @@ function renderEventsError(retryFn) {
     if (!cardsDiv) return;
     cardsDiv.innerHTML = `
         <div class="filter-prompt">
-            <div class="filter-prompt-icon">⚠️</div>
+            <div class="filter-prompt-icon filter-prompt-icon--warn" aria-hidden="true"><svg class="fm-icon" viewBox="0 0 256 256" focusable="false"><path d="M236.8,188.09,149.35,36.22h0a24.76,24.76,0,0,0-42.7,0L19.2,188.09a23.51,23.51,0,0,0,0,23.72A24.35,24.35,0,0,0,40.55,224h174.9a24.35,24.35,0,0,0,21.33-12.19A23.51,23.51,0,0,0,236.8,188.09ZM222.93,203.8a8.5,8.5,0,0,1-7.48,4.2H40.55a8.5,8.5,0,0,1-7.48-4.2,7.59,7.59,0,0,1,0-7.72L120.52,44.21a8.75,8.75,0,0,1,15,0l87.45,151.87A7.59,7.59,0,0,1,222.93,203.8ZM120,144V104a8,8,0,0,1,16,0v40a8,8,0,0,1-16,0Zm20,36a12,12,0,1,1-12-12A12,12,0,0,1,140,180Z"/></svg></div>
             <h4>{{ i18n.common.home.load_error_title|default('불러오지 못했어요') }}</h4>
             <p>{{ i18n.common.home.load_error_desc|default('네트워크가 불안정할 수 있어요. 잠시 후 다시 시도해 주세요.') }}</p>
             <button type="button" class="btn-search events-retry">{{ i18n.common.home.retry|default('다시 시도') }}</button>
@@ -2399,7 +2676,7 @@ function setupEventListeners() {
                 const data = await res.json();
 
                 if (data.results.length === 0) {
-                    suggestions.innerHTML = '<div class="suggestion-item"><span style="color: #666;">' + i18n.home.no_results + '</span></div>';
+                    suggestions.innerHTML = '<div class="suggestion-item"><span class="suggestion-empty">' + i18n.home.no_results + '</span></div>';
                 } else {
                     suggestions.innerHTML = data.results.map(p => `
                         <div class="suggestion-item" onclick="goToPlayer('${p.name.replace(/'/g, "\\'")}')">
@@ -2440,7 +2717,13 @@ function goToPlayer(name) {
     location.href = '/player/' + encodeURIComponent(name);
 }
 
-// NOW/Upcoming 배너: 동적 데이터 로드
+// 경기 일정 밴드: 동적 데이터 로드
+// live/upcoming 중 어느 쪽이든 데이터가 들어오면 바깥 네이비 밴드를 노출한다
+function fmShowScheduleBand() {
+    const band = document.getElementById('fm-schedule-band');
+    if (band) band.style.display = '';
+}
+
 // 진행 중 대회 ID 추적 (중복 방지)
 const _ongoingCompIds = new Set();
 // Store live/upcoming data globally for event results integration
@@ -2461,13 +2744,14 @@ document.addEventListener('DOMContentLoaded', async function() {
         if (data.ongoing && data.ongoing.length > 0) {
             _liveCompetitions = data.ongoing;
             liveBanner.style.display = 'block';
+            fmShowScheduleBand();
             data.ongoing.forEach(comp => {
                 _ongoingCompIds.add(comp.event_cd);
                 if (comp.comp_idx) _ongoingCompIds.add(comp.comp_idx);
             });
             liveCards.innerHTML = data.ongoing.map(comp => `
                 <a href="/competition/${comp.comp_idx || comp.event_cd}" class="live-card" data-comp-anchor="${comp.event_cd}">
-                    <div class="live-card-icon">🏆</div>
+                    <div class="live-card-icon" aria-hidden="true"><svg class="fm-icon" viewBox="0 0 256 256" focusable="false"><path d="M232,64H208V48a8,8,0,0,0-8-8H56a8,8,0,0,0-8,8V64H24A16,16,0,0,0,8,80V96a40,40,0,0,0,40,40h3.65A80.13,80.13,0,0,0,120,191.61V216H96a8,8,0,0,0,0,16h64a8,8,0,0,0,0-16H136V191.58c31.94-3.23,58.44-25.64,68.08-55.58H208a40,40,0,0,0,40-40V80A16,16,0,0,0,232,64ZM48,120A24,24,0,0,1,24,96V80H48v32q0,4,.39,8Zm144-8.9c0,35.52-29,64.64-64,64.9a64,64,0,0,1-64-64V56H192ZM232,96a24,24,0,0,1-24,24h-.5a81.81,81.81,0,0,0,.5-8.9V80h24Z"/></svg></div>
                     <div class="live-card-info">
                         <h4>${_tr_comp(comp.name)}</h4>
                         <p><span class="fm-num fm-num--semi">Day ${comp.day_number}/${comp.total_days}</span> ${comp.venue ? '• ' + comp.venue : ''}</p>
@@ -2492,6 +2776,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             _upcomingCompetitions = filteredUpcoming;
             if (filteredUpcoming.length > 0) {
                 upcomingBanner.style.display = 'block';
+                fmShowScheduleBand();
                 upcomingCards.innerHTML = filteredUpcoming.map(comp => `
                     <a href="/competition/${comp.comp_idx || comp.event_cd}" class="upcoming-card" data-comp-anchor="${comp.event_cd}">
                         <div class="upcoming-card-icon">
@@ -2546,6 +2831,7 @@ async function loadUpcomingCompetitions() {
 
             if (additionalComps.length > 0) {
                 upcomingBanner.style.display = 'block';
+                fmShowScheduleBand();
                 const newHtml = additionalComps.slice(0, 5).map(comp => `
                     <a href="/competition/${comp.comp_idx || comp.event_cd}" class="upcoming-card" data-comp-anchor="${comp.event_cd}">
                         <div class="upcoming-card-icon">
