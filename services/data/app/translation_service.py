@@ -37,6 +37,12 @@ from app.organization_identity import (
     VERIFIED_ORG_MAPPINGS,
     KOREAN_REGIONS,
 )
+from app.i18n.competition_names import (
+    translate_competition_name as translate_competition_name_i18n,
+)
+from app.i18n.event_translator import (
+    translate_event_name as translate_event_name_i18n,
+)
 
 
 # Competition name translation patterns
@@ -552,15 +558,20 @@ class TranslationService:
 
     def translate_competition_name(self, korean_name: str) -> Dict[str, Any]:
         """
-        Convert Korean competition name to English.
+        Convert Korean competition name to English using the curated dictionary.
 
         Example: 회장배 전국펜싱선수권대회 -> President's Cup National Fencing Championship
+
+        Only curated translations (app/i18n/competition_names.py) are returned.
+        Machine romanization of a competition name reads worse than the Korean
+        original, so an unknown name yields no translation at all and callers
+        fall back to Korean.
 
         Args:
             korean_name: Korean competition name
 
         Returns:
-            Translation dict for JSONB storage
+            Translation dict for JSONB storage, or {} when no curated entry exists
         """
         if not korean_name:
             return {}
@@ -579,67 +590,18 @@ class TranslationService:
                 }
             }
 
-        # Pattern-based translation
-        english_name = self._translate_competition_pattern(korean_name)
+        english_name = translate_competition_name_i18n(korean_name, "en")
+        if english_name == korean_name:
+            return {}
 
         return {
             "en": {
                 "name": english_name,
-                "verified": False,
-                "source": "pattern_translation",
+                "verified": True,
+                "source": "curated",
                 "updated_at": now,
             }
         }
-
-    def _translate_competition_pattern(self, korean_name: str) -> str:
-        """
-        Translate competition name using pattern matching.
-
-        Applies translations from longest to shortest patterns to avoid
-        partial matches (e.g., "전국대회" before "대회").
-        """
-        result = korean_name
-
-        # Sort patterns by length (longest first) to avoid partial matches
-        sorted_patterns = sorted(
-            COMPETITION_NAME_PATTERNS.items(),
-            key=lambda x: len(x[0]),
-            reverse=True
-        )
-
-        for korean, english in sorted_patterns:
-            if korean in result:
-                result = result.replace(korean, english + " ")
-
-        # Also apply region translations
-        for korean, english in sorted(
-            KOREAN_REGIONS.items(),
-            key=lambda x: len(x[0]),
-            reverse=True
-        ):
-            if korean in result:
-                result = result.replace(korean, english + " ")
-
-        # Clean up: remove duplicate spaces and trim
-        result = re.sub(r'\s+', ' ', result).strip()
-
-        # Romanize any remaining Korean characters
-        if re.search(r'[가-힣]', result):
-            parts = []
-            current = ""
-            for char in result:
-                if is_korean_char(char):
-                    if current:
-                        parts.append(current)
-                        current = ""
-                    parts.append(romanize_syllable(char))
-                else:
-                    current += char
-            if current:
-                parts.append(current)
-            result = ''.join(parts).title()
-
-        return result
 
     def get_localized_name(
         self,
@@ -672,38 +634,29 @@ class TranslationService:
         # Fallback to original
         return record.get(fallback_field, '')
 
-    def translate_event_name(self, korean_name: str) -> str:
+    def translate_event_name(self, korean_name: str, lang: str = 'en') -> str:
         """
-        Translate event name (종목명) to English.
+        Translate event name (종목명) into the target language.
 
-        Example: "남자 플뢰레 고등부 개인" -> "Men's Foil High School Individual"
+        Example: "여중 플뢰레(개)" -> "Women's Middle School Foil Individual"
+
+        Delegates to the structural parser in app/i18n/event_translator.py so the
+        whole name is translated in one pass. Token-by-token substitution used to
+        leave mixed output ("여중 Foil(개)"), which then defeated the client-side
+        translator because it expects an untouched Korean name.
 
         Args:
             korean_name: Korean event name
+            lang: Target language code
 
         Returns:
-            English event name
+            Event name in the target language, or the Korean original if the
+            name doesn't match any known pattern
         """
         if not korean_name:
             return ""
 
-        result = korean_name.strip()
-
-        # Apply component translations (longest first to avoid partial matches)
-        sorted_components = sorted(
-            EVENT_NAME_COMPONENTS.items(),
-            key=lambda x: len(x[0]),
-            reverse=True
-        )
-
-        for korean, english in sorted_components:
-            if korean in result:
-                result = result.replace(korean, english)
-
-        # Clean up spaces
-        result = re.sub(r'\s+', ' ', result).strip()
-
-        return result
+        return translate_event_name_i18n(korean_name.strip(), lang)
 
     def get_localized_event_name(self, event: Dict[str, Any], lang: str) -> str:
         """
@@ -716,11 +669,11 @@ class TranslationService:
         Returns:
             Localized event name
         """
-        if lang == 'ko':
-            return event.get('name', '')
-
         korean_name = event.get('name', '')
-        return self.translate_event_name(korean_name)
+        if lang == 'ko':
+            return korean_name
+
+        return self.translate_event_name(korean_name, lang)
 
     def get_localized_competition_name(
         self,
@@ -744,16 +697,22 @@ class TranslationService:
         if lang == 'ko':
             return korean_name
 
-        # Check existing translations in record
+        # Curated dictionary is the single source of truth for every language.
+        translated = translate_competition_name_i18n(korean_name, lang)
+        if translated != korean_name:
+            return translated
+
+        # No curated entry: accept a stored translation only if a human verified
+        # it. Legacy "pattern_translation" rows hold machine romanization
+        # ("Daetongryeongbaenational Jongbyeol...") and must never be shown.
         translations = comp_info.get('translations', {})
         if isinstance(translations, dict):
             lang_data = translations.get(lang, {})
             if isinstance(lang_data, dict) and lang_data.get('name'):
-                return lang_data['name']
+                if lang_data.get('source') != 'pattern_translation':
+                    return lang_data['name']
 
-        # Generate translation on-the-fly
-        result = self.translate_competition_name(korean_name)
-        return result.get('en', {}).get('name', korean_name)
+        return korean_name
 
     def batch_translate_players(
         self,

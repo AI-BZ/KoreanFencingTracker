@@ -1868,43 +1868,80 @@ body {
    SCOPED to [data-theme="dark"] to avoid breaking light theme
    ===================================================== */
 
-/* Global card background override - targets all common card patterns */
+/* Card surface override — CARD CONTAINERS ONLY.
+   Do NOT reintroduce wildcard selectors such as [class*="card-"]: those match
+   every inner element of a card (.comp-card-name, .comp-card-meta, ...) and draw
+   a border + backdrop-filter on each one, stacking nested boxes inside one card.
+   Grid wrappers (.comp-cards, .event-cards, .ranking-cards) must stay out too —
+   they are layout containers, not surfaces. Add new card containers by name. */
 [data-theme="dark"] .card,
 [data-theme="dark"] .stat-card,
+[data-theme="dark"] .stat-card-large,
+[data-theme="dark"] .hero-stat-card,
+[data-theme="dark"] .stats-hero-card,
+[data-theme="dark"] .h2h-stat-card,
+[data-theme="dark"] .pool-stat-card,
 [data-theme="dark"] .player-card,
+[data-theme="dark"] .player-result-card,
+[data-theme="dark"] .fl-player-card,
+[data-theme="dark"] .h2h-player-card,
 [data-theme="dark"] .event-card,
-[data-theme="dark"] .lesson-card,
-[data-theme="dark"] .member-card,
+[data-theme="dark"] .comp-card,
+[data-theme="dark"] .comp-result-card,
 [data-theme="dark"] .competition-card,
 [data-theme="dark"] .result-card,
+[data-theme="dark"] .lesson-card,
+[data-theme="dark"] .member-card,
 [data-theme="dark"] .info-card,
+[data-theme="dark"] .pd-info-card,
 [data-theme="dark"] .data-card,
 [data-theme="dark"] .summary-card,
 [data-theme="dark"] .stats-card,
-[data-theme="dark"] [class*="-card"],
-[data-theme="dark"] [class*="card-"] {
-    background: rgba(18, 18, 26, 0.85) !important;
-    backdrop-filter: blur(10px) !important;
-    -webkit-backdrop-filter: blur(10px) !important;
-    border: 1px solid rgba(255, 255, 255, 0.08) !important;
-    color: var(--text-primary) !important;
+[data-theme="dark"] .dashboard-card,
+[data-theme="dark"] .section-card,
+[data-theme="dark"] .selection-card,
+[data-theme="dark"] .selection-points-card,
+[data-theme="dark"] .guest-sel-card,
+[data-theme="dark"] .ranking-card,
+[data-theme="dark"] .ranking-preview-card,
+[data-theme="dark"] .preview-card,
+[data-theme="dark"] .live-card,
+[data-theme="dark"] .upcoming-card,
+[data-theme="dark"] .match-card,
+[data-theme="dark"] .method-card,
+[data-theme="dark"] .strength-card,
+[data-theme="dark"] .record-card,
+[data-theme="dark"] .profile-card,
+[data-theme="dark"] .register-card,
+[data-theme="dark"] .verification-card,
+[data-theme="dark"] .welcome-card,
+[data-theme="dark"] .onboarding-card,
+[data-theme="dark"] .auth-card,
+[data-theme="dark"] .checkin-card,
+[data-theme="dark"] .favorite-card,
+[data-theme="dark"] .fl-insight-card,
+[data-theme="dark"] .fl-demo-card,
+[data-theme="dark"] .weapon-gender-card,
+[data-theme="dark"] .clickable-card {
+    background: rgba(18, 18, 26, 0.85);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: var(--text-primary);
 }
 
-/* Card headers */
-[data-theme="dark"] .card-header,
-[data-theme="dark"] [class*="-card-header"],
-[data-theme="dark"] [class*="card-header"] {
-    background: rgba(26, 26, 37, 0.95) !important;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
-    color: var(--text-primary) !important;
+/* Card headers — the generic .card-header only. Component-specific headers
+   (.result-card-header, .sel-card-header, ...) style themselves. */
+[data-theme="dark"] .card-header {
+    background: rgba(26, 26, 37, 0.95);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    color: var(--text-primary);
 }
 
 /* Card bodies */
-[data-theme="dark"] .card-body,
-[data-theme="dark"] [class*="-card-body"],
-[data-theme="dark"] [class*="card-body"] {
-    background: transparent !important;
-    color: var(--text-primary) !important;
+[data-theme="dark"] .card-body {
+    background: transparent;
+    color: var(--text-primary);
 }
 
 /* Section containers with white backgrounds */

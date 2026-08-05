@@ -2631,7 +2631,7 @@ function renderEventsEmpty() {
         <div class="filter-prompt">
             <div class="filter-prompt-icon" aria-hidden="true"><svg class="fm-icon" viewBox="0 0 256 256" focusable="false"><path d="M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z"/></svg></div>
             <h4>${i18n.home.no_results}</h4>
-            <p>{{ i18n.common.home.no_results_desc|default('필터를 바꾸거나 최근 대회를 둘러보세요.') }}</p>
+            <p>{{ i18n.common.home.no_results_desc|default(_t('필터를 바꾸거나 최근 대회를 둘러보세요.')) }}</p>
         </div>`;
     document.getElementById('pagination').innerHTML = '';
 }

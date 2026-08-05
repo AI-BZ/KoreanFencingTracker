@@ -303,7 +303,8 @@
     "league_middle": "Ortaokul",
     "league_high": "Lise",
     "league_senior": "Yetişkin",
-    "skip_age": "Geç - tümünü göster"
+    "skip_age": "Geç - tümünü göster",
+    "set_my_sport": "Branşımı seç"
   },
   "rankings": {
     "title": "FencingLab Sıralaması",

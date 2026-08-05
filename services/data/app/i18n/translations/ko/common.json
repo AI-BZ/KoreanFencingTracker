@@ -303,7 +303,8 @@
     "league_middle": "중등부",
     "league_high": "고등부",
     "league_senior": "일반부",
-    "skip_age": "건너뛰기 - 전체 보기"
+    "skip_age": "건너뛰기 - 전체 보기",
+    "set_my_sport": "내 종목 설정"
   },
   "rankings": {
     "title": "FencingLab Ranking",

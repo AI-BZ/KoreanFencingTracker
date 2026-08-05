@@ -172,6 +172,30 @@ _BASE_TRANSLATIONS = {
         "zh": "总统杯全国男女击剑锦标赛",
         "tr": "Cumhurbaşkanlığı Kupası Ulusal Eskrim Şampiyonası",
     },
+    "대통령배전국종별펜싱선수권대회": {
+        "en": "Presidential Cup National Fencing Championships by Category",
+        "fr": "Coupe Présidentielle - Championnats Nationaux d'Escrime par Catégorie",
+        "it": "Coppa Presidenziale - Campionati Nazionali di Scherma per Categoria",
+        "ja": "大統領杯全国種別フェンシング選手権大会",
+        "zh": "总统杯全国分类击剑锦标赛",
+        "tr": "Cumhurbaşkanlığı Kupası Ulusal Eskrim Şampiyonası (Kategorilere Göre)",
+    },
+    "대통령배전국남녀종별펜싱선수권대회": {
+        "en": "Presidential Cup National Fencing Championships by Category",
+        "fr": "Coupe Présidentielle - Championnats Nationaux d'Escrime par Catégorie",
+        "it": "Coppa Presidenziale - Campionati Nazionali di Scherma per Categoria",
+        "ja": "大統領杯全国男女種別フェンシング選手権大会",
+        "zh": "总统杯全国男女分类击剑锦标赛",
+        "tr": "Cumhurbaşkanlığı Kupası Ulusal Eskrim Şampiyonası (Kategorilere Göre)",
+    },
+    "대통령배 전국종별펜싱선수권대회": {
+        "en": "Presidential Cup National Fencing Championships by Category",
+        "fr": "Coupe Présidentielle - Championnats Nationaux d'Escrime par Catégorie",
+        "it": "Coppa Presidenziale - Campionati Nazionali di Scherma per Categoria",
+        "ja": "大統領杯全国種別フェンシング選手権大会",
+        "zh": "总统杯全国分类击剑锦标赛",
+        "tr": "Cumhurbaşkanlığı Kupası Ulusal Eskrim Şampiyonası (Kategorilere Göre)",
+    },
 
     # --- Kim Chang-hwan Cup ---
     "김창환배전국남녀펜싱선수권대회 겸 국가대표선수 선발대회": {
@@ -270,6 +294,32 @@ _BASE_TRANSLATIONS = {
         "zh": "韩国中高击剑联盟会长杯全国男女中高击剑锦标赛",
         "tr": "KMHFF Başkan Kupası Ulusal Ortaokul & Lise Eskrim Şampiyonası",
     },
+    # 대한중고펜싱연맹 == 한국중고펜싱연맹 (same federation, both spellings appear
+    # in KFA source data) — keep the English/abbreviation identical.
+    "대한중고펜싱연맹회장배전국중고펜싱선수권대회": {
+        "en": "KMHFF President's Cup National Middle & High School Fencing Championships",
+        "fr": "Coupe du Président KMHFF - Championnats Nationaux d'Escrime Collège & Lycée",
+        "it": "Coppa del Presidente KMHFF - Campionati Nazionali di Scherma Scuole Medie & Superiori",
+        "ja": "大韓中高フェンシング連盟会長杯全国中高フェンシング選手権大会",
+        "zh": "大韩中高击剑联盟会长杯全国中高击剑锦标赛",
+        "tr": "KMHFF Başkan Kupası Ulusal Ortaokul & Lise Eskrim Şampiyonası",
+    },
+    "대한중고펜싱연맹회장배전국남녀중고펜싱선수권대회": {
+        "en": "KMHFF President's Cup National Middle & High School Fencing Championships",
+        "fr": "Coupe du Président KMHFF - Championnats Nationaux d'Escrime Collège & Lycée",
+        "it": "Coppa del Presidente KMHFF - Campionati Nazionali di Scherma Scuole Medie & Superiori",
+        "ja": "大韓中高フェンシング連盟会長杯全国男女中高フェンシング選手権大会",
+        "zh": "大韩中高击剑联盟会长杯全国男女中高击剑锦标赛",
+        "tr": "KMHFF Başkan Kupası Ulusal Ortaokul & Lise Eskrim Şampiyonası",
+    },
+    "대한중고펜싱연맹전국남녀종별펜싱선수권대회": {
+        "en": "KMHFF National Fencing Championships by Category",
+        "fr": "Championnats Nationaux d'Escrime par Catégorie de la KMHFF",
+        "it": "Campionati Nazionali di Scherma per Categoria della KMHFF",
+        "ja": "大韓中高フェンシング連盟全国男女種別フェンシング選手権大会",
+        "zh": "大韩中高击剑联盟全国男女分类击剑锦标赛",
+        "tr": "KMHFF Ulusal Eskrim Şampiyonası (Kategorilere Göre)",
+    },
     "한국중고펜싱연맹전국남녀종별펜싱선수권대회": {
         "en": "KMHFF National Fencing Championships by Category",
         "fr": "Championnats Nationaux d'Escrime par Catégorie de la KMHFF",
@@ -355,6 +405,14 @@ _BASE_TRANSLATIONS = {
         "ja": "大韓フェンシング協会ユース国家代表選手選抜戦",
         "zh": "大韩击剑协会青少年国家代表选手选拔赛",
         "tr": "KFF Gençlik Milli Takım Seçmesi",
+    },
+    "대한펜싱협회 유소년 국가대표선수 선발전(여자 플러레)": {
+        "en": "KFF Youth National Team Selection (Women's Foil)",
+        "fr": "Sélection de l'Équipe Nationale Jeunes de la KFF (Fleuret Dames)",
+        "it": "Selezione Squadra Nazionale Giovanile della KFF (Fioretto Femminile)",
+        "ja": "大韓フェンシング協会ユース国家代表選手選抜戦（女子フルーレ）",
+        "zh": "大韩击剑协会青少年国家代表选手选拔赛（女子花剑）",
+        "tr": "KFF Gençlik Milli Takım Seçmesi (Kadın Flöre)",
     },
     "대한펜싱협회 청소년, 유소년 국가대표선수 선발전": {
         "en": "KFF Junior & Youth National Team Selection",

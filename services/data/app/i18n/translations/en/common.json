@@ -303,7 +303,8 @@
     "league_middle": "Middle School",
     "league_high": "High School",
     "league_senior": "Senior",
-    "skip_age": "Skip - show all"
+    "skip_age": "Skip - show all",
+    "set_my_sport": "Set my event"
   },
   "rankings": {
     "title": "FencingLab Ranking",

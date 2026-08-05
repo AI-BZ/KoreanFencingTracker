@@ -303,7 +303,8 @@
     "league_middle": "中学生",
     "league_high": "高校生",
     "league_senior": "一般",
-    "skip_age": "スキップ - 全て表示"
+    "skip_age": "スキップ - 全て表示",
+    "set_my_sport": "種目を設定"
   },
   "rankings": {
     "title": "FencingLab ランキング",

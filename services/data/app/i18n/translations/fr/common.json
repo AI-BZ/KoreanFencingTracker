@@ -303,7 +303,8 @@
     "league_middle": "Collège",
     "league_high": "Lycée",
     "league_senior": "Senior",
-    "skip_age": "Passer - tout afficher"
+    "skip_age": "Passer - tout afficher",
+    "set_my_sport": "Définir ma discipline"
   },
   "rankings": {
     "title": "Classement FencingLab",

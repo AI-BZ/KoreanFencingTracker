@@ -2738,6 +2738,10 @@ TRANSLATIONS = {
     "전국체전·소년체전 제외": {"en": "National & Youth Sports Festivals excluded", "fr": "Hors Festivals nationaux et juniors des sports", "it": "Esclusi i Festival sportivi nazionale e giovanile", "ja": "全国体育大会・少年体育大会を除外", "zh": "不含全国体育大会·少年体育大会", "tr": "Ulusal ve Gençler Spor Festivalleri hariç"},
     "제외": {"en": "Excluded", "fr": "Exclu", "it": "Escluso", "ja": "除外", "zh": "排除", "tr": "Hariç"},
 
+    # --- 홈 기본 뷰 / 빈 상태 (2026-08-06) ---
+    "최근 대회": {"en": "Recent competitions", "fr": "Compétitions récentes", "it": "Competizioni recenti", "ja": "最近の大会", "zh": "近期赛事", "tr": "Son müsabakalar"},
+    "필터를 바꾸거나 최근 대회를 둘러보세요.": {"en": "Try different filters, or browse recent competitions.", "fr": "Essayez d'autres filtres ou parcourez les compétitions récentes.", "it": "Prova altri filtri o sfoglia le competizioni recenti.", "ja": "フィルターを変えるか、最近の大会をご覧ください。", "zh": "请更换筛选条件，或浏览近期赛事。", "tr": "Filtreleri değiştirin veya son müsabakalara göz atın."},
+
     # --- 선호 리그 변경 진입점 (2026-08-01) ---
     "선호 리그 변경": {"en": "Change preferred league", "fr": "Modifier la ligue préférée", "it": "Cambia lega preferita", "ja": "お気に入りリーグを変更", "zh": "更改偏好联赛", "tr": "Tercih edilen ligi değiştir"},
     "언제든 다시 바꿀 수 있습니다": {"en": "You can change this anytime", "fr": "Vous pouvez le modifier à tout moment", "it": "Puoi cambiarlo in qualsiasi momento", "ja": "いつでも変更できます", "zh": "随时可以更改", "tr": "İstediğiniz zaman değiştirebilirsiniz"},

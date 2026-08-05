@@ -303,7 +303,8 @@
     "league_middle": "初中组",
     "league_high": "高中组",
     "league_senior": "成人组",
-    "skip_age": "跳过 - 显示全部"
+    "skip_age": "跳过 - 显示全部",
+    "set_my_sport": "设置我的项目"
   },
   "rankings": {
     "title": "FencingLab排名",
