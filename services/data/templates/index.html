@@ -50,7 +50,7 @@
         word-break: keep-all;
     }
 
-    /* 히어로 스탯 패널 - 실데이터(대회/종목/선수). 컴포넌트 .hero-stat-*와 이름 충돌 방지 */
+    /* 히어로 스탯 패널 - 실데이터(대회/경기/선수). 컴포넌트 .hero-stat-*와 이름 충돌 방지 */
     .fm-hero-stats {
         display: flex;
         flex-direction: column;
@@ -1898,7 +1898,7 @@
     <div class="container">
         <div class="hero-grid">
             <div class="hero-copy">
-                <h1 id="hero-headline">{{ _t("모든 펜싱 대회 기록을 한곳에서") }}</h1>
+                <h1 id="hero-headline">{{ _t("이름 하나로 펜싱 기록 전부 확인하세요") }}</h1>
                 <p>{{ _t("선수 이름으로 검색하면 대회 결과, 랭킹, 상대 전적까지 바로 확인할 수 있습니다") }}</p>
 
                 <!-- Player Search: 히어로의 주 CTA -->
@@ -1913,18 +1913,31 @@
             </div>
 
             <!-- 실데이터 스탯: /api/status로 갱신, 실패 시 마크업의 폴백값 유지 -->
+            {# 히어로 스탯 라벨은 개수를 세는 복수형이라 공용 키를 쓰지 않는다.
+               _t("대회")/_t("선수")는 표 헤더용 단수(Competition/Player)이고,
+               _t("경기")는 "12 bouts"처럼 숫자 뒤에 붙는 카운터 접미사(" bouts")다. #}
+            {% set _stat_labels = {
+                'ko': ['대회', '경기', '선수'],
+                'en': ['Competitions', 'Bouts', 'Players'],
+                'fr': ['Compétitions', 'Assauts', 'Tireurs'],
+                'it': ['Competizioni', 'Assalti', 'Schermitori'],
+                'ja': ['大会', '試合', '選手'],
+                'zh': ['赛事', '比赛', '选手'],
+                'tr': ['Yarışmalar', 'Maçlar', 'Sporcular']
+            } %}
+            {% set stat_label = _stat_labels.get(lang|default('ko'), _stat_labels['en']) %}
             <div class="fm-hero-stats">
                 <div class="fm-hero-stat">
                     <span class="fm-hero-stat-value fm-num" id="hero-stat-competitions">148</span>
-                    <span class="fm-hero-stat-label fm-label">{{ _t("대회") }}</span>
+                    <span class="fm-hero-stat-label fm-label">{{ stat_label[0] }}</span>
                 </div>
                 <div class="fm-hero-stat">
-                    <span class="fm-hero-stat-value fm-num" id="hero-stat-events">2,968</span>
-                    <span class="fm-hero-stat-label fm-label">{{ _t("종목") }}</span>
+                    <span class="fm-hero-stat-value fm-num" id="hero-stat-matches">51,848</span>
+                    <span class="fm-hero-stat-label fm-label">{{ stat_label[1] }}</span>
                 </div>
                 <div class="fm-hero-stat">
                     <span class="fm-hero-stat-value fm-num" id="hero-stat-players">5,320</span>
-                    <span class="fm-hero-stat-label fm-label">{{ _t("선수") }}</span>
+                    <span class="fm-hero-stat-label fm-label">{{ stat_label[2] }}</span>
                 </div>
             </div>
         </div>
@@ -1964,7 +1977,7 @@
 
     /* ---------- 스탯 카운트업 ----------
        마크업의 폴백값이 1차 목표, /api/status 응답이 오면 현재값에서 이어서 센다. */
-    var STAT_IDS = { competitions: 'hero-stat-competitions', events: 'hero-stat-events', players: 'hero-stat-players' };
+    var STAT_IDS = { competitions: 'hero-stat-competitions', matches: 'hero-stat-matches', players: 'hero-stat-players' };
     var current = {};
     var tokens = {};
 

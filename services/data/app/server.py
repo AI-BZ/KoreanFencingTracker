@@ -299,6 +299,7 @@ _filter_options: Dict[str, Set] = {}  # 필터 옵션 캐시
 _ranking_calculator: Optional[RankingCalculator] = None  # 랭킹 계산기
 _supabase_client: Optional["Client"] = None  # Supabase 클라이언트
 _data_source: str = "supabase"  # 현재 데이터 소스 (Supabase 전용)
+_matches_count: int = 0  # 총 경기(bout) 수 — 기동 시 1회 집계 (/api/status 히어로 스탯용)
 _identity_resolver: Optional[PlayerIdentityResolver] = None  # 선수 식별 시스템
 _fencinglab_analyzer = None  # FencingLab 분석기 (지연 로딩)
 _org_region_cache: Dict[str, Dict[str, str]] = {}  # 조직명 → {province, city}
@@ -1967,6 +1968,7 @@ def load_data():
     audit_org_types()  # org_type 분류 로직 vs DB 불일치 감사
     build_org_translation_cache()  # 조직→영문명 캐시 (i18n)
     build_player_translation_cache()  # 선수→영문명 캐시 (i18n)
+    build_matches_count()  # 총 경기 수 (히어로 스탯) — 기동 시 1회
 
     # 학년 추정기 캐시 구축
     global _grade_estimator
@@ -2022,6 +2024,30 @@ def load_data():
             logger.warning(f"[DataValidator] 검증 실행 실패: {e}")
 
     threading.Thread(target=_run_startup_validation, daemon=True).start()
+
+
+def build_matches_count() -> int:
+    """총 경기(bout) 수 집계 — 기동 시 1회만 호출.
+
+    /api/status는 홈 첫 로드마다 호출되므로 요청 시점에 세지 않고 캐시한다.
+    실패 시 0을 유지하고 /api/status에서 해당 키를 생략한다.
+    """
+    global _matches_count
+
+    if not _supabase_client:
+        _matches_count = 0
+        return 0
+
+    try:
+        # head=True: 행 본문 없이 count만 받는다 (5만 행 전송 방지)
+        res = _supabase_client.table("matches").select("id", count="exact", head=True).execute()
+        _matches_count = int(res.count or 0)
+        logger.info(f"✅ 경기 수 집계 완료: {_matches_count:,}건")
+    except Exception as e:
+        logger.warning(f"경기 수 집계 실패 (히어로 스탯에서 생략됨): {e}")
+        _matches_count = 0
+
+    return _matches_count
 
 
 def get_competitions() -> List[Dict]:
@@ -2083,7 +2109,7 @@ async def api_status():
     competitions = get_competitions()
     total_events = sum(len(c.get("events", [])) for c in competitions)
 
-    return {
+    payload = {
         "data_source": _data_source,
         "competitions": len(competitions),
         "events": total_events,
@@ -2092,6 +2118,12 @@ async def api_status():
         "pipeline_available": PIPELINE_AVAILABLE,
         "meta": _data_cache.get("meta", {})
     }
+
+    # 집계 실패 시 키를 생략해 클라이언트가 마크업 폴백값을 유지하게 한다
+    if _matches_count > 0:
+        payload["matches"] = _matches_count
+
+    return payload
 
 
 async def require_admin_or_internal(request: Request):
@@ -8256,6 +8288,7 @@ async def refresh_data_cache(request: Request):
         build_identity_resolver()
         build_org_translation_cache()
         build_player_translation_cache()
+        build_matches_count()  # 새 스크래핑분이 히어로 스탯에 반영되도록 재집계
 
         # 4. 학년 추정기 재구축
         global _grade_estimator

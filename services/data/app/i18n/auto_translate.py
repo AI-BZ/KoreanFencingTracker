@@ -2778,13 +2778,13 @@ TRANSLATIONS = {
     # =========================================================================
     # Home hero (헤드라인 / 서브텍스트)
     # =========================================================================
-    "모든 펜싱 대회 기록을 한곳에서": {
-        "en": "Every Korean fencing result in one place",
-        "fr": "Tous les résultats d'escrime coréenne",
-        "it": "Tutti i risultati della scherma coreana",
-        "ja": "韓国フェンシングの全記録をひとつに",
-        "zh": "韩国击剑赛事记录尽在于此",
-        "tr": "Tüm Kore eskrim sonuçları tek yerde",
+    "이름 하나로 펜싱 기록 전부 확인하세요": {
+        "en": "One name. Every fencing record.",
+        "fr": "Un nom. Tous les résultats d'escrime.",
+        "it": "Un nome. Tutti i risultati di scherma.",
+        "ja": "名前ひとつで、フェンシングの記録すべて",
+        "zh": "一个名字，查遍击剑记录",
+        "tr": "Tek isim. Tüm eskrim kayıtları.",
     },
     "선수 이름으로 검색하면 대회 결과, 랭킹, 상대 전적까지 바로 확인할 수 있습니다": {
         "en": "Search a player to see results, rankings and head-to-head records instantly",
