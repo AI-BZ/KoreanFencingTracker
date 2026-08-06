@@ -178,6 +178,11 @@ curl -s -o /dev/null -w "%{http_code}\n" https://analytics.fencingmind.ai/galler
 - launchd 정의: `~/Library/LaunchAgents/com.fencingmind.analytics.plist` → `~/opt/fencingmind/scripts/start-analytics.sh`
 - 로그: `~/Library/Logs/FencingMind/analytics-server.{log,error.log}`
 - 상태 확인: `launchctl list | grep fencingmind.analytics` (2번째 열이 마지막 종료 코드)
+- ⚠️ **PATH 주의**: launchd는 `/usr/bin:/bin:/usr/sbin:/sbin`만 넘겨준다. 클립 생성이
+  `ffmpeg`/`ffprobe`를 셸로 호출하므로 기동 스크립트에서 `/opt/homebrew/bin`을
+  PATH에 넣어줘야 한다. 빠지면 서버는 정상인데 클립만
+  `Clip generation failed: [Errno 2] No such file or directory: 'ffmpeg'`로 실패한다
+  (2026-08-06 실제 발생). 기동 스크립트는 저장소 밖(`~/opt/...`)에 있으니 재설치 시 주의.
 
 ---
 
