@@ -386,3 +386,143 @@ class ReportRenderer:
 </div>
 </body>
 </html>"""
+
+
+# ------------------------------------------------------------------
+# Report view preparation (web template helpers)
+# ------------------------------------------------------------------
+#
+# These functions enrich a saved/generated report dict for display only.
+# They never change the underlying judgment logic — attack_outcome,
+# attacker_side etc. are produced by analyzer.touch_matching and are
+# consumed here as-is.
+
+import re as _re
+
+_CLOCK_RE = _re.compile(r"^(\d{1,2}):(\d{2})$")
+
+OUTCOME_REASON_NO_EXCHANGE = "득점 직전 교전을 포즈 분석에서 찾지 못해 공격자를 특정할 수 없습니다"
+OUTCOME_REASON_MUTUAL = "양쪽이 동시에 전진해 공격자를 한 명으로 특정할 수 없습니다"
+OUTCOME_REASON_NO_ADVANCE = "양쪽 모두 확실한 전진 풋워크가 감지되지 않았습니다"
+
+
+def _clock_to_sec(value) -> Optional[int]:
+    m = _CLOCK_RE.match(str(value or ""))
+    if not m:
+        return None
+    return int(m.group(1)) * 60 + int(m.group(2))
+
+
+def repair_match_times(touches: list) -> list:
+    """Repair clock OCR misreads like "2:3" in already-saved reports.
+
+    A scoreboard clock always shows two seconds digits, so "2:3" means the OCR
+    dropped one digit — either the ones digit ("2:3X" → "2:3") or the tens
+    digit ("2:X3" → "2:3"). The exact value is unrecoverable, so reconstruct
+    the candidate consistent with the neighboring touches (remaining time is
+    non-increasing within a period) and mark it ``match_time_estimated`` so the
+    UI can flag it as an estimate. Valid times are left untouched.
+    """
+    times = [_clock_to_sec(t.get("match_time")) for t in touches]
+
+    for i, touch in enumerate(touches):
+        if times[i] is not None:
+            continue
+        raw = str(touch.get("match_time") or "")
+        parts = raw.split(":")
+        if len(parts) != 2 or not parts[0].isdigit() or len(parts[1]) != 1 or not parts[1].isdigit():
+            # Not a truncated clock — nothing sensible to reconstruct.
+            continue
+
+        minute, digit = int(parts[0]), int(parts[1])
+        # Both truncation modes: digit kept as tens ("M:d0".."M:d9") or as ones ("M:0d".."M:5d").
+        candidates = {minute * 60 + digit * 10 + d for d in range(10)}
+        candidates |= {minute * 60 + tens * 10 + digit for tens in range(6)}
+
+        prev_s = next((times[j] for j in range(i - 1, -1, -1) if times[j] is not None), None)
+        next_s = next((times[j] for j in range(i + 1, len(times)) if times[j] is not None), None)
+
+        # Clock counts down between consecutive touches (a period reset makes
+        # next > prev, in which case the bounds are contradictory — skip them).
+        feasible = sorted(
+            c for c in candidates
+            if (prev_s is None or c <= prev_s) and (next_s is None or c >= next_s)
+        )
+        pool = feasible if feasible else sorted(candidates)
+        estimate = pool[len(pool) // 2]
+
+        touch["match_time"] = f"{estimate // 60}:{estimate % 60:02d}"
+        touch["match_time_estimated"] = True
+
+    return touches
+
+
+def annotate_outcome_reasons(report_dict: dict) -> dict:
+    """Attach a human-readable ``outcome_reason`` to each unclear touch.
+
+    "판별 불가" alone reads like a malfunction; the reason (mutual attack, no
+    committed advance, no matching exchange) makes it an honest statement about
+    what the pose analysis could and couldn't see.
+    """
+    exchanges = report_dict.get("exchanges") or []
+    ex_by_num = {e.get("exchange_number"): e for e in exchanges}
+
+    for touch in report_dict.get("touches") or []:
+        if touch.get("attack_outcome") != "unclear":
+            continue
+        ex = ex_by_num.get(touch.get("matched_exchange_number"))
+        if ex is None:
+            touch["outcome_reason"] = OUTCOME_REASON_NO_EXCHANGE
+        elif ex.get("attacker") == "both":
+            touch["outcome_reason"] = OUTCOME_REASON_MUTUAL
+        else:
+            touch["outcome_reason"] = OUTCOME_REASON_NO_ADVANCE
+
+    return report_dict
+
+
+def build_timeline(report_dict: dict) -> list:
+    """Merge touches and exchanges into one chronological event list.
+
+    A touch and its matched exchange are the same real-world engagement (the
+    OCR score change lags the blade contact), so matched exchanges are folded
+    into their touch entry instead of appearing twice. Touch entries sort by
+    the matched exchange's start frame — when the action happened, not when
+    the scoreboard caught up.
+
+    Returns a list of ``{"kind": "touch"|"exchange", "touch": ..., "exchange":
+    ..., "sort_frame": int}`` dicts sorted chronologically.
+    """
+    touches = report_dict.get("touches") or []
+    exchanges = report_dict.get("exchanges") or []
+    ex_by_num = {e.get("exchange_number"): e for e in exchanges}
+    matched_numbers = {
+        t.get("matched_exchange_number") for t in touches
+        if t.get("matched_exchange_number") is not None
+    }
+
+    events = []
+    for t in touches:
+        ex = ex_by_num.get(t.get("matched_exchange_number"))
+        sort_frame = (ex or {}).get("start_frame")
+        if sort_frame is None:
+            sort_frame = t.get("frame") or 0
+        events.append({"kind": "touch", "touch": t, "exchange": ex, "sort_frame": sort_frame})
+
+    for e in exchanges:
+        if e.get("exchange_number") in matched_numbers:
+            continue
+        events.append({
+            "kind": "exchange", "touch": None, "exchange": e,
+            "sort_frame": e.get("start_frame") or 0,
+        })
+
+    events.sort(key=lambda ev: ev["sort_frame"])
+    return events
+
+
+def prepare_report_view(report_dict: dict) -> dict:
+    """Display-only enrichment applied before rendering the report template."""
+    repair_match_times(report_dict.get("touches") or [])
+    annotate_outcome_reasons(report_dict)
+    return report_dict

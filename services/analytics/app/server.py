@@ -29,6 +29,7 @@ from app.credits import CreditManager, SubscriptionTier
 from app.demo import generate_demo_report, generate_demo_de_report
 from app.i18n.manager import i18n
 from app.gallery import get_demo_reports, extract_youtube_id
+from app.report_renderer import prepare_report_view, build_timeline
 
 _logger = logging.getLogger(__name__)
 _BASE_DIR = Path(__file__).resolve().parent.parent
@@ -425,6 +426,7 @@ async def report_page(request: Request, job_id: str):
 
     # Enrich with aggregated stats if needed
     _enrich_report_stats(report_dict)
+    prepare_report_view(report_dict)
 
     # Resolve video for playback
     video_filename = None
@@ -444,6 +446,7 @@ async def report_page(request: Request, job_id: str):
         **_i18n_context(request),
         "report": report_dict,
         "report_json": json.dumps(report_dict, ensure_ascii=False),
+        "timeline": build_timeline(report_dict),
         "job_id": job_id,
         "report_id": job_id,
         "mock_mode": mock_mode,
@@ -657,6 +660,7 @@ async def saved_report_page(request: Request, video_id: str):
 
     # Enrich fencer_profile with aggregated distance/footwork stats
     _enrich_report_stats(report_dict)
+    prepare_report_view(report_dict)
 
     # Resolve video filename for in-report playback
     video_filename = None
@@ -684,6 +688,7 @@ async def saved_report_page(request: Request, video_id: str):
         **_i18n_context(request),
         "report": report_dict,
         "report_json": json.dumps(report_dict, ensure_ascii=False),
+        "timeline": build_timeline(report_dict),
         "job_id": f"saved-{video_id}",
         "report_id": video_id,
         "video_filename": video_filename,
@@ -743,6 +748,27 @@ def _compute_touch_clip_bounds(
         clock_events=clock_events,
         fps=fps,
     )
+
+
+@app.get("/api/analytics/clips/{report_id}/status")
+async def get_clips_status(report_id: str):
+    """List which overlay clips are already cached for a report.
+
+    Lets the report page distinguish instant playback (cached) from first-time
+    generation (~1 min of YOLO pose overlay) before the user clicks play.
+    """
+    import re as _re
+
+    clips_dir = _BASE_DIR / "data" / "clips" / "overlay" / report_id
+    cached: Dict[str, list] = {"touch": [], "exchange": []}
+    if clips_dir.exists():
+        for p in clips_dir.glob("*.mp4"):
+            m = _re.match(r"^(touch|exchange)_(\d+)\.mp4$", p.name)
+            if m and p.stat().st_size > 1000:
+                cached[m.group(1)].append(int(m.group(2)))
+    cached["touch"].sort()
+    cached["exchange"].sort()
+    return JSONResponse({"report_id": report_id, "cached": cached})
 
 
 @app.get("/api/analytics/clips/{report_id}/{event_type}/{event_number}")
