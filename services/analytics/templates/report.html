@@ -124,7 +124,7 @@
                         {% if left_club %}
                         <p class="text-[10px] text-blue-400 mb-1">{{ left_club }}</p>
                         {% endif %}
-                        <p class="text-5xl font-bold text-blue-400">{{ report.summary.final_score.split('-')[0] }}</p>
+                        <p class="text-5xl font-bold text-blue-400 fm-num">{{ report.summary.final_score.split('-')[0] }}</p>
                     </div>
                     <span class="text-3xl font-light text-gray-600">:</span>
                     <div class="text-center">
@@ -132,7 +132,7 @@
                         {% if right_club %}
                         <p class="text-[10px] text-red-400 mb-1">{{ right_club }}</p>
                         {% endif %}
-                        <p class="text-5xl font-bold text-red-400">{{ report.summary.final_score.split('-')[1] }}</p>
+                        <p class="text-5xl font-bold text-red-400 fm-num">{{ report.summary.final_score.split('-')[1] }}</p>
                     </div>
                 </div>
 
@@ -159,7 +159,7 @@
                     </span>
                     {% endif %}
                     {% if report.summary.gender is defined and report.summary.gender and report.summary.gender != 'unknown' %}
-                    <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-indigo-500/15 text-indigo-400">
+                    <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-white/10 text-gray-300">
                         {% if report.summary.gender == 'men' %}남자 (Men)
                         {% elif report.summary.gender == 'women' %}여자 (Women)
                         {% else %}{{ report.summary.gender }}
@@ -177,7 +177,7 @@
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                   d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
                         </svg>
-                        {{ report.summary.match_duration }}
+                        <span class="fm-num">{{ report.summary.match_duration }}</span>
                     </span>
                     {% endif %}
                     <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-white/10 text-gray-300">
@@ -201,19 +201,19 @@
         <div class="mt-6 pt-5 border-t border-white/10">
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div class="text-center">
-                    <p class="text-2xl font-bold text-white">{{ report.summary.total_touches }}</p>
+                    <p class="text-2xl font-bold text-white fm-num">{{ report.summary.total_touches }}</p>
                     <p class="text-xs text-gray-500 mt-0.5">총 터치</p>
                 </div>
                 <div class="text-center">
-                    <p class="text-2xl font-bold text-white">{{ report.summary.match_duration }}</p>
+                    <p class="text-2xl font-bold text-white fm-num">{{ report.summary.match_duration }}</p>
                     <p class="text-xs text-gray-500 mt-0.5">경기 시간</p>
                 </div>
                 <div class="text-center">
-                    <p class="text-2xl font-bold text-white">{{ "%.1f" | format(report.summary.analysis_time_sec) }}초</p>
+                    <p class="text-2xl font-bold text-white"><span class="fm-num">{{ "%.1f" | format(report.summary.analysis_time_sec) }}</span>초</p>
                     <p class="text-xs text-gray-500 mt-0.5">AI 분석 시간</p>
                 </div>
                 <div class="text-center">
-                    <p class="text-2xl font-bold text-white">{{ "{:,}".format(report.summary.total_frames_analyzed) }}</p>
+                    <p class="text-2xl font-bold text-white fm-num">{{ "{:,}".format(report.summary.total_frames_analyzed) }}</p>
                     <p class="text-xs text-gray-500 mt-0.5">분석 프레임 수</p>
                 </div>
             </div>
@@ -246,20 +246,20 @@
         <!-- Summary stat chips -->
         <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
             <div class="bg-white/5 rounded-xl p-3 text-center">
-                <p class="text-xl font-bold text-gray-200">{{ timeline | length }}</p>
+                <p class="text-xl font-bold text-gray-200 fm-num">{{ timeline | length }}</p>
                 <p class="text-xs text-gray-500">전체 이벤트</p>
             </div>
             <div class="bg-emerald-500/10 rounded-xl p-3 text-center">
-                <p class="text-xl font-bold text-emerald-400">{{ touch_count }}</p>
+                <p class="text-xl font-bold text-emerald-400 fm-num">{{ touch_count }}</p>
                 <p class="text-xs text-emerald-400">득점</p>
             </div>
             <div class="bg-white/5 rounded-xl p-3 text-center">
-                <p class="text-xl font-bold text-gray-300">{{ ns_count }}</p>
+                <p class="text-xl font-bold text-gray-300 fm-num">{{ ns_count }}</p>
                 <p class="text-xs text-gray-500">비득점 교전</p>
             </div>
             {% if report.continuous_summary is defined and report.continuous_summary and report.continuous_summary.type_distribution %}
             <div class="bg-green-500/10 rounded-xl p-3 text-center">
-                <p class="text-xl font-bold text-green-400">{{ report.continuous_summary.type_distribution.get('successful_defense', 0) }}</p>
+                <p class="text-xl font-bold text-green-400 fm-num">{{ report.continuous_summary.type_distribution.get('successful_defense', 0) }}</p>
                 <p class="text-xs text-green-400">방어 성공</p>
             </div>
             {% endif %}
@@ -316,7 +316,7 @@
                  data-clip-label="득점 {{ touch.score_after }} — {{ scorer_name }}"{% endif %}>
                 <div class="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0
                             {% if touch.scorer == 'left' %}bg-blue-500{% else %}bg-red-500{% endif %}">
-                    <span class="text-[11px] font-bold text-white">{{ touch.score_after }}</span>
+                    <span class="text-[11px] font-bold text-white fm-num">{{ touch.score_after }}</span>
                 </div>
                 <div class="flex-shrink-0 w-16 text-right">
                     <span class="block text-sm font-mono text-gray-200"
@@ -357,7 +357,7 @@
                     <span class="px-1.5 py-0.5 bg-white/10 text-gray-400 rounded" title="득점자 풋워크">{{ touch.pose_analysis.footwork_scorer }}</span>
                     {% endif %}
                     {% if touch.pose_analysis is defined and touch.pose_analysis and touch.pose_analysis.parry_detected %}
-                    <span class="px-1.5 py-0.5 bg-purple-500/10 text-purple-400 rounded" title="액션 유형은 추정값입니다 (빠라드 과탐지 알려짐)">🛡빠라드 <span class="opacity-60">추정</span></span>
+                    <span class="px-1.5 py-0.5 bg-gold/10 text-gold rounded" title="액션 유형은 추정값입니다 (빠라드 과탐지 알려짐)">🛡빠라드 <span class="opacity-60">추정</span></span>
                     {% endif %}
                 </div>
                 {% if playable %}
@@ -400,7 +400,7 @@
                         <span class="text-blue-400">{{ left_name }}</span> 방어
                         <span class="text-gray-600 text-xs">&middot; 득점 없음</span>
                     {% elif ex.attacker is defined and ex.attacker == 'both' %}
-                        <span class="text-purple-400 font-medium">양쪽 동시 공격</span>
+                        <span class="text-amber-400 font-medium">양쪽 동시 공격</span>
                         <span class="text-gray-600 text-xs">&middot; 득점 없음</span>
                     {% else %}
                         <span class="text-gray-500">탐색전</span>
@@ -415,10 +415,10 @@
                     <span class="px-1.5 py-0.5 bg-red-500/10 text-red-400 rounded" title="{{ right_name }} 풋워크">{{ ex.footwork_right }}</span>
                     {% endif %}
                     {% if ex.parry_left is defined and ex.parry_left %}
-                    <span class="px-1.5 py-0.5 bg-purple-500/10 text-purple-400 rounded" title="{{ left_name }} 빠라드 — 액션 유형은 추정값입니다">🛡 <span class="opacity-60">추정</span></span>
+                    <span class="px-1.5 py-0.5 bg-gold/10 text-gold rounded" title="{{ left_name }} 빠라드 — 액션 유형은 추정값입니다">🛡 <span class="opacity-60">추정</span></span>
                     {% endif %}
                     {% if ex.parry_right is defined and ex.parry_right %}
-                    <span class="px-1.5 py-0.5 bg-purple-500/10 text-purple-400 rounded" title="{{ right_name }} 빠라드 — 액션 유형은 추정값입니다">🛡 <span class="opacity-60">추정</span></span>
+                    <span class="px-1.5 py-0.5 bg-gold/10 text-gold rounded" title="{{ right_name }} 빠라드 — 액션 유형은 추정값입니다">🛡 <span class="opacity-60">추정</span></span>
                     {% endif %}
                     {% if ex.min_distance_bh is defined %}
                     <span class="px-1.5 py-0.5 bg-white/10 text-gray-500 rounded font-mono" title="최소 거리 (Body Height)">{{ "%.1f" | format(ex.min_distance_bh) }}BH</span>
@@ -499,7 +499,7 @@
                     {% for touch in report.touches %}
                     <tr class="{% if touch.scorer == 'left' %}bg-blue-500/10{% elif touch.scorer == 'right' %}bg-red-500/10{% endif %}
                                hover:bg-white/[0.02] transition-colors">
-                        <td class="px-4 py-3 text-sm font-medium text-white">{{ touch.touch_number }}</td>
+                        <td class="px-4 py-3 text-sm font-medium text-white fm-num">{{ touch.touch_number }}</td>
                         <td class="px-4 py-3">
                             <span class="block text-sm font-mono text-gray-300">{% if touch.match_time_estimated is defined and touch.match_time_estimated %}~{% endif %}{{ touch.match_time }}</span>
                             {% if touch.video_timestamp is defined and touch.video_timestamp and touch.video_timestamp != touch.match_time %}
@@ -515,7 +515,7 @@
                             <span class="text-sm text-gray-500">-</span>
                             {% endif %}
                         </td>
-                        <td class="px-4 py-3 text-sm font-mono font-semibold text-white">{{ touch.score_after }}</td>
+                        <td class="px-4 py-3 text-sm font-semibold text-white fm-num">{{ touch.score_after }}</td>
                         <td class="px-4 py-3">
                             {% set t_scorer_name = left_name if touch.scorer == 'left' else right_name %}
                             {% set t_attacker_name = left_name if touch.attacker_side == 'left' else right_name %}
@@ -555,7 +555,7 @@
                                     {% elif zone == 'out_of_distance' %}bg-white/10 text-gray-500
                                     {% else %}bg-white/10 text-gray-500{% endif %}">{{ zone }}</span>
                                 {% if pa.parry_detected %}
-                                <span class="ml-1 text-purple-400" title="빠라드 감지">🛡</span>
+                                <span class="ml-1 text-gold" title="빠라드 감지">🛡</span>
                                 {% endif %}
                             {% else %}
                                 <span class="text-gray-600">-</span>
@@ -683,7 +683,7 @@
             <!-- BH Concept Explanation -->
             <div class="flex-1">
                 <h3 class="text-sm font-bold text-white mb-3 flex items-center gap-2">
-                    <svg class="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                               d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
                     </svg>
@@ -732,7 +732,7 @@
                         <span class="text-xs text-gray-500">cm</span>
                     </div>
                     <div id="bh-conversion-result" class="mt-3 text-xs text-gray-400">
-                        <p>1.0 BH = <span id="bh-meters" class="font-mono font-bold text-white">1.19</span> m</p>
+                        <p>1.0 BH = <span id="bh-meters" class="fm-num text-white">1.19</span> m</p>
                         <p class="mt-1 text-[10px] text-gray-500">{{ t('report.bh_formula') if t else 'BH = 키 × 0.7 (어깨~발목 비율)' }}</p>
                     </div>
                 </div>
@@ -760,25 +760,25 @@
                 <div class="grid grid-cols-2 gap-3 mb-4">
                     {% if fp.joint_angle_stats.avg_hip_angle is defined and fp.joint_angle_stats.avg_hip_angle is not none %}
                     <div class="bg-white/5 rounded-xl p-3 text-center">
-                        <p class="text-xl font-bold text-gray-200">{{ "%.0f" | format(fp.joint_angle_stats.avg_hip_angle) }}°</p>
+                        <p class="text-xl font-bold text-gray-200 fm-num fm-num--semi">{{ "%.0f" | format(fp.joint_angle_stats.avg_hip_angle) }}°</p>
                         <p class="text-[10px] text-gray-500 mt-0.5">엉덩이 각도</p>
                     </div>
                     {% endif %}
                     {% if fp.joint_angle_stats.avg_front_knee is defined and fp.joint_angle_stats.avg_front_knee is not none %}
                     <div class="bg-white/5 rounded-xl p-3 text-center">
-                        <p class="text-xl font-bold text-gray-200">{{ "%.0f" | format(fp.joint_angle_stats.avg_front_knee) }}°</p>
+                        <p class="text-xl font-bold text-gray-200 fm-num fm-num--semi">{{ "%.0f" | format(fp.joint_angle_stats.avg_front_knee) }}°</p>
                         <p class="text-[10px] text-gray-500 mt-0.5">앞무릎 각도</p>
                     </div>
                     {% endif %}
                     {% if fp.joint_angle_stats.avg_trunk_lean is defined and fp.joint_angle_stats.avg_trunk_lean is not none %}
                     <div class="bg-white/5 rounded-xl p-3 text-center">
-                        <p class="text-xl font-bold text-gray-200">{{ "%.0f" | format(fp.joint_angle_stats.avg_trunk_lean) }}°</p>
+                        <p class="text-xl font-bold text-gray-200 fm-num fm-num--semi">{{ "%.0f" | format(fp.joint_angle_stats.avg_trunk_lean) }}°</p>
                         <p class="text-[10px] text-gray-500 mt-0.5">상체 기울기</p>
                     </div>
                     {% endif %}
                     {% if fp.joint_angle_stats.avg_arm_extension is defined and fp.joint_angle_stats.avg_arm_extension is not none %}
                     <div class="bg-white/5 rounded-xl p-3 text-center">
-                        <p class="text-xl font-bold text-gray-200">{{ "%.0f" | format(fp.joint_angle_stats.avg_arm_extension * 100) }}%</p>
+                        <p class="text-xl font-bold text-gray-200 fm-num fm-num--semi">{{ "%.0f" | format(fp.joint_angle_stats.avg_arm_extension * 100) }}%</p>
                         <p class="text-[10px] text-gray-500 mt-0.5">팔 신전 비율</p>
                     </div>
                     {% endif %}
@@ -805,7 +805,7 @@
                         </div>
                         <span class="text-[10px] text-gray-500 w-8">{{ count }}</span>
                         {% if fp.distance_stats.zone_success_rate is defined and zone in fp.distance_stats.zone_success_rate %}
-                        <span class="text-[10px] text-gray-500 w-10">{{ "%.0f" | format(fp.distance_stats.zone_success_rate[zone] * 100) }}%</span>
+                        <span class="text-[10px] text-gray-500 w-10 fm-num fm-num--semi">{{ "%.0f" | format(fp.distance_stats.zone_success_rate[zone] * 100) }}%</span>
                         {% endif %}
                     </div>
                     {% endfor %}

@@ -5,12 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}FencingMind Analytics{% endblock %}</title>
 
-    <!-- Fonts: Pretendard (Korean) + Inter (English) -->
+    <!-- Fonts: Pretendard (text) + Barlow Condensed (display numerals, self-hosted) -->
     <link rel="preconnect" href="https://cdn.jsdelivr.net">
-    {% if lang|default('ko') == 'ko' %}
     <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" rel="stylesheet">
-    {% endif %}
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="preload" href="/static/fonts/barlow-condensed-700-latin.woff2" as="font" type="font/woff2" crossorigin>
 
     <!-- Tailwind + Chart.js -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -20,7 +18,7 @@
             theme: {
                 extend: {
                     fontFamily: {
-                        sans: ['"Pretendard Variable"', 'Inter', '-apple-system', 'system-ui', 'sans-serif'],
+                        sans: ['"Pretendard Variable"', 'Pretendard', '-apple-system', 'system-ui', 'sans-serif'],
                     },
                     colors: {
                         brand: {
@@ -34,6 +32,13 @@
                             700: '#a31f1d',
                             800: '#8b1a17',
                             900: '#5c110f',
+                        },
+                        taeguk: {
+                            blue: '#1e3a8a',
+                            bluehover: '#172e6e',
+                        },
+                        gold: {
+                            DEFAULT: '#d4a574',
                         }
                     }
                 }
@@ -41,9 +46,10 @@
         }
     </script>
 
-    <!-- Dark Theme + Custom Styles -->
-    <link rel="stylesheet" href="/static/css/analytics-dark.css">
-    <link rel="stylesheet" href="/static/css/analytics.css">
+    <!-- Design Tokens + Dark Theme + Custom Styles -->
+    <link rel="stylesheet" href="/static/css/variables.css?v=20260806">
+    <link rel="stylesheet" href="/static/css/analytics-dark.css?v=20260806">
+    <link rel="stylesheet" href="/static/css/analytics.css?v=20260806">
     {% block head %}{% endblock %}
 </head>
 <body class="bg-[#0a0a0f] font-sans text-white min-h-screen flex flex-col">
@@ -109,7 +115,7 @@
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                       d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
                             </svg>
-                            {% block credits %}0 {{ t('common.credits') if t else '크레딧' }}{% endblock %}
+                            {% block credits %}<span class="fm-num">0</span> {{ t('common.credits') if t else '크레딧' }}{% endblock %}
                         </span>
                     </div>
                 </div>
