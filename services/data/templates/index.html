@@ -1850,6 +1850,148 @@
 
     /* 검색 제안: 결과 없음 */
     .suggestion-empty { color: var(--fm-text-muted, #8b95a1); }
+
+    /* ==================================================================
+       홈 하단 — FencingLab 샘플 + Analytics 티저 (2026-08-06)
+
+       FencingLab은 개편 중이라 진입점을 닫아 뒀다. 남은 데모 카드는 "샘플 화면"
+       이라는 것만 알리는 정적 요소이므로, 눌릴 수 있어 보이게 만드는 hover 이동과
+       글로우를 걷어낸다 (누를 수 있어 보이는데 안 눌리는 게 가장 나쁜 상태).
+       ================================================================== */
+    .fl-demo-section--sample { padding-bottom: 2rem; }
+
+    .fl-demo-card--static { cursor: default; }
+
+    /* hover는 rest와 완전히 같아야 한다. fencinglab.css의 hover 규칙이 테마별로
+       따로 있으므로(0,3,0) 여기서도 테마별로 같은 특이도로 되돌린다. */
+    .fl-demo-card--static:hover {
+        transform: none;
+        box-shadow: none;
+        border-color: var(--fl-border);
+    }
+
+    /* 각 테마의 rest 값과 정확히 같아야 한다:
+       dark  → dark-theme.css의 [data-theme="dark"] .fl-demo-card
+       light → fencinglab.css의 [data-theme="light"] .fl-demo-card */
+    [data-theme="dark"] .fl-demo-card--static:hover {
+        transform: none;
+        box-shadow: none;
+        border-color: rgba(255, 255, 255, 0.08);
+    }
+
+    [data-theme="light"] .fl-demo-card--static:hover {
+        transform: none;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+        border-color: #e5e8eb;
+    }
+
+    .fl-sample-flag {
+        margin-bottom: 0.85rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+
+    /* Analytics 티저 — 링크 없는 순수 예고.
+       차트 이미지가 다크 배경이라 프레임은 두 테마 모두 다크로 고정한다. */
+    .fm-analytics-teaser {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 1rem clamp(1rem, 4vw, 2rem) 4rem;
+    }
+
+    .fm-analytics-teaser__head {
+        max-width: 44rem;
+        margin: 0 auto 2rem;
+        text-align: center;
+    }
+
+    .fm-analytics-teaser__flag { letter-spacing: 0.06em; }
+
+    .fm-analytics-teaser__head h2 {
+        margin: 0.85rem 0 0;
+        font-size: clamp(1.3rem, 3.2vw, 1.9rem);
+        font-weight: 800;
+        letter-spacing: -0.02em;
+        line-height: 1.25;
+        color: var(--fm-text-primary);
+    }
+
+    .fm-analytics-teaser__head p {
+        margin: 0.65rem 0 0;
+        font-size: 0.95rem;
+        line-height: 1.65;
+        color: var(--fm-text-secondary);
+    }
+
+    .fm-analytics-teaser__grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
+        gap: 1.5rem;
+    }
+
+    .fm-analytics-shot {
+        margin: 0;
+        min-width: 0;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        border-radius: var(--fm-radius-md);
+        background: #12131a;
+        box-shadow: 0 12px 32px rgba(10, 10, 24, 0.20);
+    }
+
+    .fm-analytics-shot img {
+        display: block;
+        width: 100%;
+        height: auto;
+        aspect-ratio: 614 / 300;
+    }
+
+    .fm-analytics-shot figcaption {
+        padding: 0.95rem 1.1rem 1.1rem;
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .fm-analytics-shot__title {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 0.75rem;
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: #e6e7f0;
+    }
+
+    .fm-analytics-shot__score {
+        flex: none;
+        font-size: 1.4rem;
+        font-weight: 700;
+        color: #ffffff;
+    }
+
+    .fm-analytics-shot__stats {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0.75rem;
+        margin: 0.9rem 0 0;
+    }
+
+    .fm-analytics-shot__stats > div { min-width: 0; }
+
+    .fm-analytics-shot__stats dt {
+        margin: 0;
+        font-size: 0.66rem;
+        line-height: 1.35;
+        letter-spacing: 0.03em;
+        color: #9195a8;
+        overflow-wrap: anywhere;
+    }
+
+    .fm-analytics-shot__stats dd {
+        margin: 0.25rem 0 0;
+        font-size: 1.15rem;
+        line-height: 1.1;
+        color: #f1f2f8;
+    }
 </style>
 {% endblock %}
 
@@ -2470,8 +2612,56 @@
     </div>
 </div>
 
-<!-- FencingLab Demo Section -->
+<!-- FencingLab Demo Section — 개편 중이라 클릭 불가 샘플로만 표시 (2026-08-06) -->
 <div id="fencinglab-demo"></div>
+
+<!-- Analytics 티저: 다음 서비스 예고. 아직 공개 전이므로 링크를 걸지 않는다 (2026-08-06) -->
+<section class="fm-analytics-teaser" aria-labelledby="analytics-teaser-title">
+    <div class="fm-analytics-teaser__head">
+        <span class="fm-badge fm-badge--micro fm-badge--tint fm-analytics-teaser__flag">{{ _t('개발 중') }}</span>
+        <h2 id="analytics-teaser-title">{{ _t('경기 영상 AI 분석, 개발 중입니다') }}</h2>
+        <p>{{ _t('실제 경기 영상에서 터치 시점과 공격 성공 여부를 자동으로 판정합니다. 곧 공개합니다.') }}</p>
+    </div>
+
+    <div class="fm-analytics-teaser__grid">
+        {# 수치는 analytics.fencingmind.ai/gallery의 해당 분석 결과와 일치시킬 것.
+           차트 이미지에 최종 스코어와 터치 수가 그대로 보이므로, 캡션이 다른 경기의
+           수치이면 바로 들통난다 (2026-08-06 실제로 사브르 카드에서 한 번 어긋났음). #}
+        <figure class="fm-analytics-shot">
+            <img src="/static/images/analytics-preview/foil_chart.webp"
+                 alt="{{ _t('주니어 플뢰레 결승') }} LIN 15-7 LI {{ _t('스코어 타임라인 차트') }}"
+                 width="614" height="300" loading="lazy" decoding="async">
+            <figcaption>
+                <span class="fm-analytics-shot__title">
+                    {{ _t('주니어 플뢰레 결승') }}
+                    <b class="fm-num fm-analytics-shot__score">15-7</b>
+                </span>
+                <dl class="fm-analytics-shot__stats">
+                    <div><dt>{{ _t('터치') }}</dt><dd class="fm-num">22</dd></div>
+                    <div><dt>{{ _t('교환') }}</dt><dd class="fm-num">75</dd></div>
+                    <div><dt>{{ _t('경기 시간') }}</dt><dd class="fm-num">11:49</dd></div>
+                </dl>
+            </figcaption>
+        </figure>
+
+        <figure class="fm-analytics-shot">
+            <img src="/static/images/analytics-preview/sabre_chart.webp"
+                 alt="{{ _t('주니어 사브르 본선') }} 10-15 {{ _t('스코어 타임라인 차트') }}"
+                 width="614" height="300" loading="lazy" decoding="async">
+            <figcaption>
+                <span class="fm-analytics-shot__title">
+                    {{ _t('주니어 사브르 본선') }}
+                    <b class="fm-num fm-analytics-shot__score">10-15</b>
+                </span>
+                <dl class="fm-analytics-shot__stats">
+                    <div><dt>{{ _t('터치') }}</dt><dd class="fm-num">22</dd></div>
+                    <div><dt>{{ _t('교환') }}</dt><dd class="fm-num">63</dd></div>
+                    <div><dt>{{ _t('경기 시간') }}</dt><dd class="fm-num">9:35</dd></div>
+                </dl>
+            </figcaption>
+        </figure>
+    </div>
+</section>
 {% endblock %}
 
 {% block extra_js %}
@@ -3707,7 +3897,8 @@ function initSportSheetReveal() {
 window.i18n = {
     fencinglab: {
         subtitle: '{{ i18n.common.fencinglab.subtitle|default("실제 데이터 기반 선수 분석") }}',
-        view_analysis: '{{ i18n.common.fencinglab.view_analysis|default("선수 분석 보기 →") }}',
+        // 개편 중이라 데모 카드는 샘플 표시만 하고 /fencinglab 링크는 걸지 않는다 (2026-08-06)
+        sample: '{{ _t("샘플 화면") }}',
         bouts: '{{ i18n.common.fencinglab.bouts|default("경기") }}',
         win_rate: '{{ i18n.common.fencinglab.win_rate|default("승률") }}',
         pool_rate: '{{ i18n.common.fencinglab.pool_rate|default("Pool") }}',
@@ -3732,7 +3923,7 @@ document.addEventListener('DOMContentLoaded', function() {
     script1.onload = function() {
         // Then load FencingLab
         const script2 = document.createElement('script');
-        script2.src = '/static/js/fencinglab.js?v=20260806a';
+        script2.src = '/static/js/fencinglab.js?v=20260806e';
         script2.onload = function() {
             // Render demo section; hide cleanly if there is nothing to show
             if (!window.FencingLab) return;

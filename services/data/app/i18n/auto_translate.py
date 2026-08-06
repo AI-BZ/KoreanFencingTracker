@@ -2794,6 +2794,94 @@ TRANSLATIONS = {
         "zh": "搜索选手姓名，即刻查看比赛成绩、排名与交手记录",
         "tr": "Bir sporcu arayın; sonuçları, sıralamaları ve ikili karşılaşmaları anında görün",
     },
+
+    # =========================================================================
+    # 홈 하단 — FencingLab 샘플 표시 + Analytics 티저 (2026-08-06)
+    # FencingLab 개편 중이라 데모 카드는 클릭 불가 샘플로만 남기고,
+    # 같은 영역에 개발 중인 Analytics 서비스를 예고한다.
+    # =========================================================================
+    "샘플 화면": {
+        "en": "Sample",
+        "fr": "Aperçu",
+        "it": "Anteprima",
+        "ja": "サンプル",
+        "zh": "示例",
+        "tr": "Örnek",
+    },
+    "경기 영상 AI 분석, 개발 중입니다": {
+        "en": "AI match-video analysis, in development",
+        "fr": "Analyse vidéo par IA, en développement",
+        "it": "Analisi video con IA, in sviluppo",
+        "ja": "試合映像のAI分析、開発中",
+        "zh": "比赛视频AI分析，开发中",
+        "tr": "Yapay zekâ ile maç videosu analizi, geliştiriliyor",
+    },
+    "실제 경기 영상에서 터치 시점과 공격 성공 여부를 자동으로 판정합니다. 곧 공개합니다.": {
+        "en": "Detects touch timing and attack outcomes from real match footage. Coming soon.",
+        "fr": "Détecte le moment des touches et l'issue des attaques à partir de vidéos réelles. Bientôt disponible.",
+        "it": "Rileva il momento delle stoccate e l'esito degli attacchi da video reali. Presto disponibile.",
+        "ja": "実際の試合映像からタッチのタイミングと攻撃の成否を自動判定します。まもなく公開。",
+        "zh": "从真实比赛视频中自动判定得分时机与进攻成败。即将上线。",
+        "tr": "Gerçek maç görüntülerinden dokunuş anını ve hücum sonucunu otomatik belirler. Çok yakında.",
+    },
+    "개발 중": {
+        "en": "In development",
+        "fr": "En développement",
+        "it": "In sviluppo",
+        "ja": "開発中",
+        "zh": "开发中",
+        "tr": "Geliştiriliyor",
+    },
+    # Analytics 티저 카드 캡션 / 지표 라벨
+    "주니어 플뢰레 결승": {
+        "en": "Junior foil final",
+        "fr": "Finale fleuret junior",
+        "it": "Finale fioretto junior",
+        "ja": "ジュニア フルーレ決勝",
+        "zh": "青年花剑决赛",
+        "tr": "Genç flöre finali",
+    },
+    # 리포트 원본이 "사브르 본선(DE)"이라 결승으로 단정하지 않는다
+    "주니어 사브르 본선": {
+        "en": "Junior sabre direct elimination",
+        "fr": "Élimination directe sabre junior",
+        "it": "Eliminazione diretta sciabola junior",
+        "ja": "ジュニア サーブル本選(DE)",
+        "zh": "青年佩剑淘汰赛",
+        "tr": "Genç kılıç direkt eleme",
+    },
+    "터치": {
+        "en": "Touches",
+        "fr": "Touches",
+        "it": "Stoccate",
+        "ja": "タッチ",
+        "zh": "得分",
+        "tr": "Dokunuş",
+    },
+    "교환": {
+        "en": "Exchanges",
+        "fr": "Échanges",
+        "it": "Scambi",
+        "ja": "交錯",
+        "zh": "交锋",
+        "tr": "Karşılaşma",
+    },
+    "경기 시간": {
+        "en": "Bout time",
+        "fr": "Durée de l'assaut",
+        "it": "Durata dell'assalto",
+        "ja": "試合時間",
+        "zh": "比赛时长",
+        "tr": "Maç süresi",
+    },
+    "스코어 타임라인 차트": {
+        "en": "Score timeline chart",
+        "fr": "Graphique chronologique du score",
+        "it": "Grafico della progressione del punteggio",
+        "ja": "スコア推移グラフ",
+        "zh": "比分时间轴图表",
+        "tr": "Skor zaman çizelgesi grafiği",
+    },
 }
 
 

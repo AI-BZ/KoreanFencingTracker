@@ -419,6 +419,10 @@ const FencingLab = {
 
     /**
      * 데모 섹션 렌더링 (랜딩페이지용)
+     *
+     * 2026-08-06: FencingLab 개편 중이라 이 섹션은 "샘플 화면"으로만 남긴다.
+     * /fencinglab 진입 링크와 카드 hover 이동 효과를 모두 제거해, 눌러도 아무 일이
+     * 일어나지 않는 요소가 눌릴 수 있어 보이지 않게 한다. 데이터는 실제값 그대로.
      */
     async renderDemoSection(containerId) {
         const container = document.getElementById(containerId);
@@ -432,11 +436,11 @@ const FencingLab = {
         }
 
         container.innerHTML = `
-            <div class="fl-demo-section">
+            <div class="fl-demo-section fl-demo-section--sample">
                 <div class="fl-demo-title">
+                    <span class="fm-badge fm-badge--micro fm-badge--outline fl-sample-flag">${fl.sample || '샘플 화면'}</span>
                     <h2>Fencing<span>Lab</span></h2>
                     <p>${fl.subtitle || '실제 데이터 기반 선수 분석'}</p>
-                    <a href="/fencinglab" class="fl-demo-link">${fl.view_analysis || '선수 분석 보기 →'}</a>
                 </div>
                 <div class="fl-demo-grid" id="demo-cards"></div>
             </div>
@@ -445,7 +449,7 @@ const FencingLab = {
         const cardsContainer = document.getElementById('demo-cards');
         demo.demo_players.forEach((player, idx) => {
             const cardDiv = document.createElement('div');
-            cardDiv.className = 'fl-demo-card';
+            cardDiv.className = 'fl-demo-card fl-demo-card--static';
             cardDiv.innerHTML = `
                 <div class="fl-demo-player">
                     <div class="fl-player-avatar">${player.name[0]}</div>
