@@ -8,6 +8,8 @@ suitable for browser display and PDF conversion via weasyprint.
 from html import escape
 from typing import Optional
 
+from analyzer.touch_matching import NO_PRIORITY_CALL
+
 
 ACTION_KR = {
     "attack": "공격",
@@ -405,6 +407,51 @@ OUTCOME_REASON_NO_EXCHANGE = "득점 직전 교전을 포즈 분석에서 찾지
 OUTCOME_REASON_MUTUAL = "양쪽이 동시에 전진해 공격자를 한 명으로 특정할 수 없습니다"
 OUTCOME_REASON_NO_ADVANCE = "양쪽 모두 확실한 전진 풋워크가 감지되지 않았습니다"
 
+# A single valid-target lamp means the referee awarded the touch outright — the
+# priority question (FIE t.56-t.60) was never asked. That is a fact about the
+# scoring box, so it is stated positively; but it explains *why no ruling was
+# needed*, not *who attacked*, and the second half says so. Dropping that half
+# would turn an honest reclassification into a metric dressed up.
+OUTCOME_REASON_NO_PRIORITY_CALL = (
+    "{fencer}의 유효타 램프만 켜져 심판이 우선권을 판정할 필요가 없었습니다 "
+    "— 다만 공격을 시작한 선수는 특정하지 못했습니다"
+)
+
+# Both valid lamps lit, so the referee *did* rule on priority and we failed to
+# reconstruct it. Unlike the single-lamp case this is a genuine miss, and the
+# underlying footwork cause is appended so the two stay distinguishable.
+OUTCOME_REASON_PRIORITY_RULED_PREFIX = (
+    "양 램프가 켜져 심판이 우선권을 판정한 터치인데, "
+    "포즈 분석은 공격을 시작한 선수를 가리지 못했습니다 — "
+)
+
+# Neutral stand-ins when the report carries no fencer name for that side.
+SIDE_LABEL_KO = {"left": "왼쪽 선수", "right": "오른쪽 선수"}
+_UNSIDED_LABEL_KO = "한쪽 선수"
+
+# Which fencer's lone valid hit registered.
+_LAMP_SINGLE_SIDE = {"single_left": "left", "single_right": "right"}
+
+# Scoring-box lamp, in the words a referee would use. "double" means both
+# fencers landed a valid hit and the referee had to award the point on
+# priority; a single colour means only that fencer landed, so no priority
+# ruling was needed at all; white is off-target and scores nothing.
+LAMP_LABEL_KO = {
+    "double": "양 램프",
+    "single_left": "왼쪽 단독 램프",
+    "single_right": "오른쪽 단독 램프",
+    "white": "백색 램프",
+}
+
+# You cannot score without your own colour lamp, so a single lamp on the side
+# that did not score means one of the two readings is wrong. Say so instead of
+# printing the lamp as if it were established fact.
+LAMP_CONFLICT_KO = "램프 판독이 득점자와 어긋남 — 참고 불가"
+
+# Below this the lamp reading is a guess, not a reading, and the reader should
+# be told which touches those are.
+LAMP_LOW_CONFIDENCE_MAX = 0.7
+
 
 def _clock_to_sec(value) -> Optional[int]:
     m = _CLOCK_RE.match(str(value or ""))
@@ -457,26 +504,103 @@ def repair_match_times(touches: list) -> list:
     return touches
 
 
-def annotate_outcome_reasons(report_dict: dict) -> dict:
-    """Attach a human-readable ``outcome_reason`` to each unclear touch.
+def fencer_display_name(report_dict: dict, side: Optional[str]) -> str:
+    """Name to print for ``side``, falling back to its position label.
 
-    "판별 불가" alone reads like a malfunction; the reason (mutual attack, no
-    committed advance, no matching exchange) makes it an honest statement about
-    what the pose analysis could and couldn't see.
+    Reports name the fencers in ``summary.{side}_name`` and/or
+    ``{side}_fencer.name``; older ones do neither, so never print a bare
+    ``None``.
+    """
+    if side not in SIDE_LABEL_KO:
+        return _UNSIDED_LABEL_KO
+    summary = report_dict.get("summary") or {}
+    fencer = report_dict.get(f"{side}_fencer") or {}
+    name = summary.get(f"{side}_name") or fencer.get("name")
+    name = str(name).strip() if name is not None else ""
+    return name or SIDE_LABEL_KO[side]
+
+
+def annotate_outcome_reasons(report_dict: dict) -> dict:
+    """Attach a human-readable ``outcome_reason`` to each unresolved touch.
+
+    Three cases, and the lamp is what separates them:
+
+    * ``no_priority_call`` — one valid lamp. No priority ruling was ever made,
+      so this is not an analysis failure; the reason names whose lamp lit and
+      still admits the attack initiator is unidentified.
+    * ``unclear`` + ``double`` lamp — the referee *did* rule on priority and we
+      could not reconstruct it. A real miss, prefixed as such, with the
+      footwork cause kept as the underlying explanation.
+    * ``unclear`` with no lamp reading — every non-foil report. Unchanged.
+
+    Presentation only: reads the verdict fields, writes ``outcome_reason``.
     """
     exchanges = report_dict.get("exchanges") or []
     ex_by_num = {e.get("exchange_number"): e for e in exchanges}
 
     for touch in report_dict.get("touches") or []:
-        if touch.get("attack_outcome") != "unclear":
+        outcome = touch.get("attack_outcome")
+
+        if outcome == NO_PRIORITY_CALL:
+            side = _LAMP_SINGLE_SIDE.get(touch.get("lamp_pattern"))
+            touch["outcome_reason"] = OUTCOME_REASON_NO_PRIORITY_CALL.format(
+                fencer=fencer_display_name(report_dict, side),
+            )
             continue
+
+        if outcome != "unclear":
+            continue
+
         ex = ex_by_num.get(touch.get("matched_exchange_number"))
         if ex is None:
-            touch["outcome_reason"] = OUTCOME_REASON_NO_EXCHANGE
+            reason = OUTCOME_REASON_NO_EXCHANGE
         elif ex.get("attacker") == "both":
-            touch["outcome_reason"] = OUTCOME_REASON_MUTUAL
+            reason = OUTCOME_REASON_MUTUAL
         else:
-            touch["outcome_reason"] = OUTCOME_REASON_NO_ADVANCE
+            reason = OUTCOME_REASON_NO_ADVANCE
+
+        if touch.get("lamp_pattern") == "double":
+            reason = OUTCOME_REASON_PRIORITY_RULED_PREFIX + reason
+
+        touch["outcome_reason"] = reason
+
+    return report_dict
+
+
+def annotate_lamp_labels(report_dict: dict) -> dict:
+    """Attach display-only lamp strings to touches that carry a lamp reading.
+
+    Reads ``lamp_pattern`` / ``lamp_confidence`` / ``lamp_scorer_conflict``
+    (set by :func:`analyzer.touch_matching.annotate_touch_lamp`) and writes
+    ``lamp_label``, ``lamp_confidence_pct``, ``lamp_low_confidence`` and
+    ``lamp_conflict_note`` for the template. Reports produced before the lamp
+    pass — every non-foil report — have no ``lamp_pattern``, so they are left
+    exactly as they were.
+
+    Presentation only: the verdict fields (``attack_outcome``,
+    ``attacker_side``, ``lamp_pattern`` …) are consumed, never written.
+    """
+    for touch in report_dict.get("touches") or []:
+        label = LAMP_LABEL_KO.get(touch.get("lamp_pattern"))
+        if label is None:
+            # No lamp reading, or a pattern this UI has no wording for.
+            continue
+
+        try:
+            confidence = float(touch.get("lamp_confidence"))
+        except (TypeError, ValueError):
+            confidence = None
+
+        touch["lamp_label"] = label
+        touch["lamp_confidence_pct"] = (
+            int(round(confidence * 100)) if confidence is not None else None
+        )
+        touch["lamp_low_confidence"] = (
+            confidence is not None and confidence < LAMP_LOW_CONFIDENCE_MAX
+        )
+        touch["lamp_conflict_note"] = (
+            LAMP_CONFLICT_KO if touch.get("lamp_scorer_conflict") else None
+        )
 
     return report_dict
 
@@ -525,4 +649,5 @@ def prepare_report_view(report_dict: dict) -> dict:
     """Display-only enrichment applied before rendering the report template."""
     repair_match_times(report_dict.get("touches") or [])
     annotate_outcome_reasons(report_dict)
+    annotate_lamp_labels(report_dict)
     return report_dict

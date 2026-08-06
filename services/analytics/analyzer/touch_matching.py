@@ -9,6 +9,19 @@ lags the actual blade contact by a median of ~2.8s (range 0.6-4.6s, never
 negative). Matching a touch back to the preceding pose exchange is therefore
 the only way to know where the touch really happened — and which fencer was
 advancing when it did.
+
+Footwork decides ``attack_outcome``; the scoring-box lamps only explain it —
+with one deliberate exception. In foil, a single valid-target lamp means the
+referee awarded the touch outright: priority (FIE t.56-t.60) only arbitrates
+when *both* valid lamps register. So a single-lamp touch was never a priority
+case, and reporting it as ``unclear`` frames a non-case as a failure of our
+analysis. :func:`annotate_touch_lamp` therefore promotes ``unclear`` +
+single lamp to ``no_priority_call``. That is sound because which lamps lit is
+a *fact about what the box recorded*, not an inference about footwork: it
+tells us the priority question was never asked, while leaving "who attacked"
+exactly as unknown as before. ``attacker_side`` / ``defender_side`` /
+``matched_exchange_number`` are still never written by the lamp pass, and a
+``attack_success`` / ``attack_failed`` verdict is never downgraded.
 """
 
 from typing import Optional, Tuple
@@ -30,11 +43,40 @@ _MIN_CLIP_SEC = 1.5
 # Footwork that indicates giving ground rather than committing forward.
 RETREAT_FOOTWORK = "retreat"
 
+# ``no_priority_call`` is not a verdict about the attack — it records that the
+# question of priority never arose. See :data:`ATTACK_OUTCOME_KO` note below and
+# :func:`annotate_touch_lamp`.
+NO_PRIORITY_CALL = "no_priority_call"
+
 ATTACK_OUTCOME_KO = {
     "attack_success": "공격 성공",
     "attack_failed": "공격 실패 (방어 성공)",
     "unclear": "판별 불가",
+    # Only one valid-target lamp lit, so the referee awarded the touch without
+    # ruling on priority. We still do not know who attacked — this says the
+    # priority question was never asked, not that we answered it.
+    NO_PRIORITY_CALL: "단독 유효타 (우선권 판정 없음)",
 }
+
+# Why the verdict looks the way it does, once the scoring-box lamps are known.
+# The lamp explains ``attack_outcome``; it overrides it in exactly one narrow
+# case (``unclear`` + single lamp → ``no_priority_call``, see
+# :func:`annotate_touch_lamp`) and never otherwise. See
+# :func:`classify_attack_outcome_detail`.
+ATTACK_OUTCOME_DETAIL_KO = {
+    "priority_won": "동시 유효타 — 우선권 인정",
+    "clean_hit": "단독 유효타 — 상대 램프 없음",
+    "priority_lost": "동시 유효타 — 우선권 상실",
+    "attack_missed_counter_scored": "공격 불발 — 상대 단독 유효타",
+    "single_lamp_no_priority_call": "단독 유효타 — 우선권 판정 없음",
+    "double_lamp_referee_gave_scorer": "동시 유효타 — 심판이 득점자에게 우선권 부여",
+}
+
+# Lamp patterns that indicate exactly one fencer landed a valid hit.
+_SINGLE_LAMP_SIDE = {"single_left": "left", "single_right": "right"}
+
+# Every pattern LampReading can report; anything else counts as unread.
+_LAMP_PATTERNS = ("double", "single_left", "single_right", "white")
 
 
 # ------------------------------------------------------------------
@@ -234,6 +276,176 @@ def annotate_touch_outcomes(touches: list, exchanges: list, fps: float = 30.0) -
     return touches
 
 
+# ------------------------------------------------------------------
+# Lamp-informed detail (foil priority)
+# ------------------------------------------------------------------
+
+
+def lamp_scorer_conflict(pattern: Optional[str], scorer: Optional[str]) -> bool:
+    """True when a single-lamp reading contradicts the OCR scorer.
+
+    You cannot score without your own colour lamp, so ``single_left`` with a
+    right-side scorer (or vice versa) is physically impossible: one of the two
+    readings is wrong. The caller must then ignore the lamp entirely rather than
+    pick a winner between two sources it cannot arbitrate.
+    """
+    lamp_side = _SINGLE_LAMP_SIDE.get(pattern)
+    if lamp_side is None:
+        return False
+    if scorer not in ("left", "right"):
+        return False
+    return scorer != lamp_side
+
+
+def classify_attack_outcome_detail(
+    attack_outcome: Optional[str],
+    attacker_side: Optional[str],
+    scorer: Optional[str],
+    pattern: Optional[str],
+) -> Optional[str]:
+    """Refine an already-decided ``attack_outcome`` with the lamp pattern.
+
+    Returns a key of :data:`ATTACK_OUTCOME_DETAIL_KO`, or ``None`` when the
+    lamps say nothing usable (white / unread / contradicting the scorer).
+
+    ``double`` means both fencers landed and the referee applied priority, so the
+    scorer is the referee-recognised priority holder; a single colour lamp means
+    no priority ruling was needed at all.
+
+    ``unclear`` and :data:`NO_PRIORITY_CALL` are handled identically: the second
+    is the first once the lamp has been read, so classifying an already-promoted
+    touch a second time yields the same detail (idempotence).
+    """
+    if pattern is None or pattern == "white":
+        return None
+    if lamp_scorer_conflict(pattern, scorer):
+        return None
+
+    lamp_side = _SINGLE_LAMP_SIDE.get(pattern)
+
+    if attack_outcome == "attack_success":
+        if pattern == "double":
+            return "priority_won"
+        if lamp_side is not None and lamp_side == attacker_side:
+            return "clean_hit"
+        return None
+
+    if attack_outcome == "attack_failed":
+        if pattern == "double":
+            return "priority_lost"
+        if lamp_side is not None and lamp_side == scorer and scorer != attacker_side:
+            return "attack_missed_counter_scored"
+        return None
+
+    if attack_outcome in ("unclear", NO_PRIORITY_CALL):
+        if pattern == "double":
+            return "double_lamp_referee_gave_scorer"
+        if lamp_side is not None:
+            return "single_lamp_no_priority_call"
+
+    return None
+
+
+def annotate_touch_lamp(touch: dict, reading) -> dict:
+    """Add the lamp fields to an *already outcome-annotated* touch, in place.
+
+    Run this after :func:`annotate_touch_outcome`. ``reading`` is a
+    ``LampReading`` (``analyzer.tv_overlay_ocr``) or ``None`` when no lamp event
+    could be attributed to the touch.
+
+    Sets ``lamp_pattern``, ``lamp_confidence``, ``lamp_detail``,
+    ``attack_outcome_detail`` (+ ``_ko``) and ``lamp_scorer_conflict``.
+
+    It never writes ``attacker_side`` / ``defender_side`` /
+    ``matched_exchange_number`` — footwork alone decides who attacked.
+
+    It writes ``attack_outcome`` (+ ``_ko``) in exactly one case: an
+    ``unclear`` touch whose lamp pattern is ``single_left`` / ``single_right``
+    with no scorer conflict becomes :data:`NO_PRIORITY_CALL`. Only one valid
+    hit registered, so the referee awarded the touch without ruling on
+    priority — that is a fact about what the scoring box recorded, not an
+    inference about footwork, and it leaves "who attacked" as unknown as it
+    was. ``attack_success`` / ``attack_failed`` are strictly more informative
+    and are never downgraded; ``double``, ``white``, an unread lamp and a
+    scorer conflict all leave ``attack_outcome`` alone.
+
+    Idempotent: annotating twice with the same reading is a no-op.
+
+    Returns the same dict for convenience.
+    """
+    if reading is None:
+        touch["lamp_pattern"] = None
+        touch["lamp_confidence"] = 0.0
+        touch["lamp_detail"] = None
+        touch["lamp_scorer_conflict"] = False
+        touch["attack_outcome_detail"] = None
+        touch["attack_outcome_detail_ko"] = None
+        return touch
+
+    pattern = reading.pattern
+    scorer = touch.get("scorer")
+    conflict = lamp_scorer_conflict(pattern, scorer)
+
+    detail_dict = reading.to_dict()
+    touch_frame = touch.get("frame")
+    start_frame = reading.start_frame
+    detail_dict["lead_frames"] = (
+        touch_frame - start_frame
+        if touch_frame is not None and start_frame is not None
+        else None
+    )
+
+    outcome = touch.get("attack_outcome")
+
+    if conflict:
+        detail = None
+    else:
+        detail = classify_attack_outcome_detail(
+            outcome, touch.get("attacker_side"), scorer, pattern,
+        )
+        # The one permitted write-back: a single valid lamp means no priority
+        # ruling was made, so "unclear" misdescribes the touch as an analysis
+        # failure. Determined verdicts are strictly more informative and are
+        # left alone. Re-running is stable — NO_PRIORITY_CALL is not "unclear".
+        if outcome == "unclear" and pattern in _SINGLE_LAMP_SIDE:
+            touch["attack_outcome"] = NO_PRIORITY_CALL
+            touch["attack_outcome_ko"] = ATTACK_OUTCOME_KO[NO_PRIORITY_CALL]
+
+    touch["lamp_pattern"] = pattern
+    touch["lamp_confidence"] = float(reading.confidence)
+    touch["lamp_detail"] = detail_dict
+    touch["lamp_scorer_conflict"] = conflict
+    touch["attack_outcome_detail"] = detail
+    touch["attack_outcome_detail_ko"] = (
+        ATTACK_OUTCOME_DETAIL_KO[detail] if detail is not None else None
+    )
+    return touch
+
+
+def annotate_touch_lamps(touches: list, readings: list) -> list:
+    """Annotate parallel lists of touches and lamp readings; returns ``touches``.
+
+    ``readings[i]`` is the reading for ``touches[i]`` and may be ``None``. The
+    lists must be the same length — a silent zip-truncation would mis-attribute
+    every lamp after the first missing one.
+    """
+    if len(touches) != len(readings):
+        raise ValueError(
+            f"touches ({len(touches)}) and readings ({len(readings)}) must be "
+            "parallel lists of the same length",
+        )
+    for touch, reading in zip(touches, readings):
+        annotate_touch_lamp(touch, reading)
+    return touches
+
+
+def _pct(numerator: int, denominator: int) -> float:
+    """``numerator / denominator`` as a 1dp percentage; 0.0 when nothing to divide."""
+    if not denominator:
+        return 0.0
+    return round(numerator / denominator * 100, 1)
+
+
 def summarize_attack_outcomes(touches: list) -> dict:
     """Aggregate per-fencer attack attempts / successes from annotated touches.
 
@@ -242,6 +454,41 @@ def summarize_attack_outcomes(touches: list) -> dict:
     where they also scored. ``defense_success`` counts touches where the *other*
     side attacked and this side scored — the same events as the opponent's
     failed attacks, from the defender's perspective.
+
+    ``unclear_touches`` counts *only* genuinely unclear touches.
+    :data:`NO_PRIORITY_CALL` touches are counted separately in
+    ``no_priority_call_touches`` — they are not analysis failures, they are
+    touches where no priority ruling was ever made. ``attack_attempts`` and
+    everything derived from it are unaffected by the split: a
+    ``no_priority_call`` touch still has no identified attacker.
+
+    The ``"lamp"`` sub-dict tallies the scoring-box readings added by
+    :func:`annotate_touch_lamp`. ``double`` + ``single_left`` + ``single_right``
+    + ``white`` + ``unread`` always sums to ``total_touches``; ``conflict`` is a
+    cross-cutting count of single-lamp readings that contradict the scorer, so it
+    overlaps the two ``single_*`` buckets rather than adding to them.
+
+    The ``"priority"`` sub-dict reports **two different denominators on
+    purpose**, because they answer different questions and either one quoted
+    alone would mislead:
+
+    * ``ruled_unclear_rate`` = ``ruled_unclear / ruled`` — how often we fail on
+      a *genuine* priority case (double lamp, where the referee really did have
+      to rule). This measures accuracy on the hard problem.
+    * ``unexplained_rate`` = ``unexplained / total_touches`` — how much of the
+      whole bout we leave without any account at all. This measures coverage.
+
+    On the reference foil bout these read 62.5% and 22.7%. They are *not*
+    competing estimates of one quantity: the first is high because the double-
+    lamp subset is exactly the hard subset, the second is lower because most
+    touches never needed a priority call. Both are returned so neither can be
+    cited as "the" error rate.
+
+    ``ruled`` (double lamp) and ``not_required`` (single lamp) are the two
+    denominators themselves. ``unexplained`` counts touches with neither a
+    determined outcome nor a no-priority-call explanation — by construction the
+    same set as ``unclear_touches``, repeated here so the rate sits next to the
+    denominator it is computed from.
     """
     stats = {
         side: {
@@ -253,14 +500,38 @@ def summarize_attack_outcomes(touches: list) -> dict:
         }
         for side in ("left", "right")
     }
+    lamp = {
+        "double": 0,
+        "single_left": 0,
+        "single_right": 0,
+        "white": 0,
+        "unread": 0,
+        "conflict": 0,
+    }
     matched = 0
     unclear = 0
+    no_priority_call = 0
+    ruled_unclear = 0
+
+    for t in touches:
+        pattern = t.get("lamp_pattern")
+        lamp[pattern if pattern in _LAMP_PATTERNS else "unread"] += 1
+        if t.get("lamp_scorer_conflict"):
+            lamp["conflict"] += 1
+        if pattern == "double" and t.get("attack_outcome") == "unclear":
+            ruled_unclear += 1
 
     for t in touches:
         outcome = t.get("attack_outcome", "unclear")
         attacker = t.get("attacker_side")
         if t.get("matched_exchange_number") is not None:
             matched += 1
+        # Checked before the unclear test: a no-priority-call touch has no
+        # identified attacker either, so it would otherwise be swallowed by the
+        # `attacker not in (...)` guard and silently reported as unclear.
+        if outcome == NO_PRIORITY_CALL:
+            no_priority_call += 1
+            continue
         if outcome == "unclear" or attacker not in ("left", "right"):
             unclear += 1
             continue
@@ -280,10 +551,24 @@ def summarize_attack_outcomes(touches: list) -> dict:
                 stats[side]["attack_success"] / attempts * 100, 1,
             )
 
+    ruled = lamp["double"]
+    not_required = lamp["single_left"] + lamp["single_right"]
+    total = len(touches)
+
     return {
         "left": stats["left"],
         "right": stats["right"],
-        "total_touches": len(touches),
+        "total_touches": total,
         "matched_touches": matched,
         "unclear_touches": unclear,
+        "no_priority_call_touches": no_priority_call,
+        "lamp": lamp,
+        "priority": {
+            "ruled": ruled,
+            "not_required": not_required,
+            "ruled_unclear": ruled_unclear,
+            "ruled_unclear_rate": _pct(ruled_unclear, ruled),
+            "unexplained": unclear,
+            "unexplained_rate": _pct(unclear, total),
+        },
     }

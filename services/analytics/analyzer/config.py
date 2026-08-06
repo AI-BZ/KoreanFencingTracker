@@ -359,3 +359,57 @@ PHRASE_MAX_LEAD_SEC = 8.0
 # for the fallback window when no preceding exchange can be matched (low confidence,
 # real-touch position unknown so we anchor the clip END on the OCR frame itself).
 OCR_TOUCH_DELAY_MEDIAN_SEC = 2.8
+
+
+# ==================================================================
+# Foil lamp-colour reading (scoring-box lamps in the TV overlay bar)
+# ==================================================================
+#
+# The USA Fencing bottom overlay encodes the scoring-box lamps as the BACKGROUND
+# FILL of each fencer's name region, not as a separate lamp graphic:
+#   idle    → coloured text on black      → small fill fraction
+#   lamp on → white text on a solid fill  → large fill fraction
+#
+# All values below were measured on a 1280x720 foil bout.
+
+# HSV fill masks (OpenCV HSV, H in 0..179). The bounds encode the measured
+# strict inequalities inclusively for cv2.inRange:
+#   red   = S>100 and V>120 and (H<=12 or H>=168)
+#   green = 35<=H<=85 and S>60 and V>100
+#   white = S<40 and V>180
+LAMP_FILL_RED_LOWER_1 = [0, 101, 121]
+LAMP_FILL_RED_UPPER_1 = [12, 255, 255]
+LAMP_FILL_RED_LOWER_2 = [168, 101, 121]
+LAMP_FILL_RED_UPPER_2 = [180, 255, 255]
+LAMP_FILL_GREEN_LOWER = [35, 61, 101]
+LAMP_FILL_GREEN_UPPER = [85, 255, 255]
+LAMP_FILL_WHITE_LOWER = [0, 0, 181]
+LAMP_FILL_WHITE_UPPER = [180, 39, 255]
+
+# Fill fraction above which a lamp counts as ON. Measured fills:
+#   left idle (red text on black)  0.227 | left red lamp ON   0.75-0.76
+#   right idle (green text)        0.174 | right green ON     0.82
+#   white lamp ON                  0.79
+# Both populations sit far from 0.5, so the threshold has a wide margin.
+LAMP_ON_FILL_THRESHOLD = 0.5
+
+# Frame step when sampling the bar for lamp state. Step 3 still caught the
+# shortest real lamp display observed (7 frames).
+LAMP_SAMPLE_STEP = 3
+
+# The broadcast sometimes renders the two lamps of a double *sequentially* with a
+# short gap (measured gaps up to 9 frames), so runs closer than this merge into a
+# single event. Genuinely separate actions are seconds apart.
+LAMP_EVENT_MERGE_GAP = 15
+
+# Search window around the OCR score-change frame. The lamp onset leads the OCR
+# score frame by a measured 81-222 frames.
+LAMP_SEARCH_LOOKBACK = 330
+LAMP_SEARCH_FORWARD = 30
+
+# Confidence shaping: fill at which fill-based confidence saturates, lamp-on
+# duration (frames) at which duration confidence saturates, and the floor applied
+# to the duration term so a briefly-rendered lamp is penalised but not zeroed.
+LAMP_CONF_FULL_FILL = 0.75
+LAMP_CONF_FULL_FRAMES = 30
+LAMP_CONF_MIN_DURATION_FACTOR = 0.4

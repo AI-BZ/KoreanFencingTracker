@@ -37,7 +37,30 @@
       "attack_outcome_ko": "공격 실패 (방어 성공)",
       "attacker_side": "left",
       "defender_side": "right",
-      "matched_exchange_number": 16
+      "matched_exchange_number": 16,
+      "lamp_pattern": "single_right",
+      "lamp_confidence": 1.0,
+      "lamp_detail": {
+        "pattern": "single_right",
+        "confidence": 1.0,
+        "left": {
+          "state": "white",
+          "peak_fill": 0.742,
+          "on_frames": 60
+        },
+        "right": {
+          "state": "color",
+          "peak_fill": 0.822,
+          "on_frames": 60
+        },
+        "start_frame": 5832,
+        "end_frame": 5958,
+        "frames_sampled": 40,
+        "lead_frames": 108
+      },
+      "lamp_scorer_conflict": false,
+      "attack_outcome_detail": "attack_missed_counter_scored",
+      "attack_outcome_detail_ko": "공격 불발 — 상대 단독 유효타"
     },
     {
       "touch_number": 2,
@@ -62,7 +85,30 @@
       "attack_outcome_ko": "공격 실패 (방어 성공)",
       "attacker_side": "right",
       "defender_side": "left",
-      "matched_exchange_number": 18
+      "matched_exchange_number": 18,
+      "lamp_pattern": "double",
+      "lamp_confidence": 0.4,
+      "lamp_detail": {
+        "pattern": "double",
+        "confidence": 0.4,
+        "left": {
+          "state": "color",
+          "peak_fill": 0.758,
+          "on_frames": 6
+        },
+        "right": {
+          "state": "color",
+          "peak_fill": 0.824,
+          "on_frames": 51
+        },
+        "start_frame": 6285,
+        "end_frame": 6339,
+        "frames_sampled": 19,
+        "lead_frames": 105
+      },
+      "lamp_scorer_conflict": false,
+      "attack_outcome_detail": "priority_lost",
+      "attack_outcome_detail_ko": "동시 유효타 — 우선권 상실"
     },
     {
       "touch_number": 3,
@@ -87,7 +133,30 @@
       "attack_outcome_ko": "판별 불가",
       "attacker_side": "unclear",
       "defender_side": "unclear",
-      "matched_exchange_number": 22
+      "matched_exchange_number": 22,
+      "lamp_pattern": "double",
+      "lamp_confidence": 1.0,
+      "lamp_detail": {
+        "pattern": "double",
+        "confidence": 1.0,
+        "left": {
+          "state": "color",
+          "peak_fill": 0.754,
+          "on_frames": 60
+        },
+        "right": {
+          "state": "color",
+          "peak_fill": 0.824,
+          "on_frames": 54
+        },
+        "start_frame": 7116,
+        "end_frame": 7173,
+        "frames_sampled": 20,
+        "lead_frames": 114
+      },
+      "lamp_scorer_conflict": false,
+      "attack_outcome_detail": "double_lamp_referee_gave_scorer",
+      "attack_outcome_detail_ko": "동시 유효타 — 심판이 득점자에게 우선권 부여"
     },
     {
       "touch_number": 4,
@@ -112,7 +181,30 @@
       "attack_outcome_ko": "판별 불가",
       "attacker_side": "unclear",
       "defender_side": "unclear",
-      "matched_exchange_number": 23
+      "matched_exchange_number": 23,
+      "lamp_pattern": "double",
+      "lamp_confidence": 1.0,
+      "lamp_detail": {
+        "pattern": "double",
+        "confidence": 1.0,
+        "left": {
+          "state": "color",
+          "peak_fill": 0.755,
+          "on_frames": 54
+        },
+        "right": {
+          "state": "color",
+          "peak_fill": 0.823,
+          "on_frames": 57
+        },
+        "start_frame": 7479,
+        "end_frame": 7539,
+        "frames_sampled": 21,
+        "lead_frames": 81
+      },
+      "lamp_scorer_conflict": false,
+      "attack_outcome_detail": "double_lamp_referee_gave_scorer",
+      "attack_outcome_detail_ko": "동시 유효타 — 심판이 득점자에게 우선권 부여"
     },
     {
       "touch_number": 5,
@@ -133,11 +225,34 @@
         "footwork_opponent": "advance",
         "parry_detected": true
       },
-      "attack_outcome": "unclear",
-      "attack_outcome_ko": "판별 불가",
+      "attack_outcome": "no_priority_call",
+      "attack_outcome_ko": "단독 유효타 (우선권 판정 없음)",
       "attacker_side": "unclear",
       "defender_side": "unclear",
-      "matched_exchange_number": 35
+      "matched_exchange_number": 35,
+      "lamp_pattern": "single_left",
+      "lamp_confidence": 1.0,
+      "lamp_detail": {
+        "pattern": "single_left",
+        "confidence": 1.0,
+        "left": {
+          "state": "color",
+          "peak_fill": 0.754,
+          "on_frames": 60
+        },
+        "right": {
+          "state": "off",
+          "peak_fill": 0.0,
+          "on_frames": 0
+        },
+        "start_frame": 9399,
+        "end_frame": 9456,
+        "frames_sampled": 20,
+        "lead_frames": 141
+      },
+      "lamp_scorer_conflict": false,
+      "attack_outcome_detail": "single_lamp_no_priority_call",
+      "attack_outcome_detail_ko": "단독 유효타 — 우선권 판정 없음"
     },
     {
       "touch_number": 6,
@@ -158,11 +273,34 @@
         "footwork_opponent": "fleche",
         "parry_detected": true
       },
-      "attack_outcome": "unclear",
-      "attack_outcome_ko": "판별 불가",
+      "attack_outcome": "no_priority_call",
+      "attack_outcome_ko": "단독 유효타 (우선권 판정 없음)",
       "attacker_side": "unclear",
       "defender_side": "unclear",
-      "matched_exchange_number": 36
+      "matched_exchange_number": 36,
+      "lamp_pattern": "single_left",
+      "lamp_confidence": 1.0,
+      "lamp_detail": {
+        "pattern": "single_left",
+        "confidence": 1.0,
+        "left": {
+          "state": "color",
+          "peak_fill": 0.754,
+          "on_frames": 57
+        },
+        "right": {
+          "state": "off",
+          "peak_fill": 0.0,
+          "on_frames": 0
+        },
+        "start_frame": 9783,
+        "end_frame": 9837,
+        "frames_sampled": 19,
+        "lead_frames": 87
+      },
+      "lamp_scorer_conflict": false,
+      "attack_outcome_detail": "single_lamp_no_priority_call",
+      "attack_outcome_detail_ko": "단독 유효타 — 우선권 판정 없음"
     },
     {
       "touch_number": 7,
@@ -183,11 +321,34 @@
         "footwork_opponent": "advance",
         "parry_detected": true
       },
-      "attack_outcome": "unclear",
-      "attack_outcome_ko": "판별 불가",
+      "attack_outcome": "no_priority_call",
+      "attack_outcome_ko": "단독 유효타 (우선권 판정 없음)",
       "attacker_side": "unclear",
       "defender_side": "unclear",
-      "matched_exchange_number": 37
+      "matched_exchange_number": 37,
+      "lamp_pattern": "single_right",
+      "lamp_confidence": 1.0,
+      "lamp_detail": {
+        "pattern": "single_right",
+        "confidence": 1.0,
+        "left": {
+          "state": "off",
+          "peak_fill": 0.0,
+          "on_frames": 0
+        },
+        "right": {
+          "state": "color",
+          "peak_fill": 0.821,
+          "on_frames": 51
+        },
+        "start_frame": 10119,
+        "end_frame": 10167,
+        "frames_sampled": 17,
+        "lead_frames": 81
+      },
+      "lamp_scorer_conflict": false,
+      "attack_outcome_detail": "single_lamp_no_priority_call",
+      "attack_outcome_detail_ko": "단독 유효타 — 우선권 판정 없음"
     },
     {
       "touch_number": 8,
@@ -212,7 +373,30 @@
       "attack_outcome_ko": "공격 실패 (방어 성공)",
       "attacker_side": "right",
       "defender_side": "left",
-      "matched_exchange_number": 45
+      "matched_exchange_number": 45,
+      "lamp_pattern": "single_left",
+      "lamp_confidence": 1.0,
+      "lamp_detail": {
+        "pattern": "single_left",
+        "confidence": 1.0,
+        "left": {
+          "state": "color",
+          "peak_fill": 0.754,
+          "on_frames": 57
+        },
+        "right": {
+          "state": "off",
+          "peak_fill": 0.0,
+          "on_frames": 0
+        },
+        "start_frame": 11679,
+        "end_frame": 11733,
+        "frames_sampled": 19,
+        "lead_frames": 141
+      },
+      "lamp_scorer_conflict": false,
+      "attack_outcome_detail": "attack_missed_counter_scored",
+      "attack_outcome_detail_ko": "공격 불발 — 상대 단독 유효타"
     },
     {
       "touch_number": 9,
@@ -237,7 +421,30 @@
       "attack_outcome_ko": "공격 성공",
       "attacker_side": "left",
       "defender_side": "right",
-      "matched_exchange_number": 46
+      "matched_exchange_number": 46,
+      "lamp_pattern": "single_left",
+      "lamp_confidence": 1.0,
+      "lamp_detail": {
+        "pattern": "single_left",
+        "confidence": 1.0,
+        "left": {
+          "state": "color",
+          "peak_fill": 0.754,
+          "on_frames": 60
+        },
+        "right": {
+          "state": "off",
+          "peak_fill": 0.0,
+          "on_frames": 0
+        },
+        "start_frame": 12210,
+        "end_frame": 12267,
+        "frames_sampled": 20,
+        "lead_frames": 120
+      },
+      "lamp_scorer_conflict": false,
+      "attack_outcome_detail": "clean_hit",
+      "attack_outcome_detail_ko": "단독 유효타 — 상대 램프 없음"
     },
     {
       "touch_number": 10,
@@ -258,11 +465,34 @@
         "footwork_opponent": "unknown",
         "parry_detected": true
       },
-      "attack_outcome": "unclear",
-      "attack_outcome_ko": "판별 불가",
+      "attack_outcome": "no_priority_call",
+      "attack_outcome_ko": "단독 유효타 (우선권 판정 없음)",
       "attacker_side": "unclear",
       "defender_side": "unclear",
-      "matched_exchange_number": 47
+      "matched_exchange_number": 47,
+      "lamp_pattern": "single_right",
+      "lamp_confidence": 1.0,
+      "lamp_detail": {
+        "pattern": "single_right",
+        "confidence": 1.0,
+        "left": {
+          "state": "off",
+          "peak_fill": 0.0,
+          "on_frames": 0
+        },
+        "right": {
+          "state": "color",
+          "peak_fill": 0.822,
+          "on_frames": 60
+        },
+        "start_frame": 12471,
+        "end_frame": 12528,
+        "frames_sampled": 20,
+        "lead_frames": 129
+      },
+      "lamp_scorer_conflict": false,
+      "attack_outcome_detail": "single_lamp_no_priority_call",
+      "attack_outcome_detail_ko": "단독 유효타 — 우선권 판정 없음"
     },
     {
       "touch_number": 11,
@@ -283,11 +513,34 @@
         "footwork_opponent": "lunge",
         "parry_detected": true
       },
-      "attack_outcome": "unclear",
-      "attack_outcome_ko": "판별 불가",
+      "attack_outcome": "no_priority_call",
+      "attack_outcome_ko": "단독 유효타 (우선권 판정 없음)",
       "attacker_side": "unclear",
       "defender_side": "unclear",
-      "matched_exchange_number": 50
+      "matched_exchange_number": 50,
+      "lamp_pattern": "single_right",
+      "lamp_confidence": 1.0,
+      "lamp_detail": {
+        "pattern": "single_right",
+        "confidence": 1.0,
+        "left": {
+          "state": "off",
+          "peak_fill": 0.0,
+          "on_frames": 0
+        },
+        "right": {
+          "state": "color",
+          "peak_fill": 0.818,
+          "on_frames": 60
+        },
+        "start_frame": 13107,
+        "end_frame": 13164,
+        "frames_sampled": 20,
+        "lead_frames": 153
+      },
+      "lamp_scorer_conflict": false,
+      "attack_outcome_detail": "single_lamp_no_priority_call",
+      "attack_outcome_detail_ko": "단독 유효타 — 우선권 판정 없음"
     },
     {
       "touch_number": 12,
@@ -312,7 +565,30 @@
       "attack_outcome_ko": "판별 불가",
       "attacker_side": null,
       "defender_side": null,
-      "matched_exchange_number": null
+      "matched_exchange_number": null,
+      "lamp_pattern": "double",
+      "lamp_confidence": 1.0,
+      "lamp_detail": {
+        "pattern": "double",
+        "confidence": 1.0,
+        "left": {
+          "state": "color",
+          "peak_fill": 0.754,
+          "on_frames": 57
+        },
+        "right": {
+          "state": "color",
+          "peak_fill": 0.82,
+          "on_frames": 60
+        },
+        "start_frame": 14991,
+        "end_frame": 15054,
+        "frames_sampled": 22,
+        "lead_frames": 189
+      },
+      "lamp_scorer_conflict": false,
+      "attack_outcome_detail": "double_lamp_referee_gave_scorer",
+      "attack_outcome_detail_ko": "동시 유효타 — 심판이 득점자에게 우선권 부여"
     },
     {
       "touch_number": 13,
@@ -337,7 +613,30 @@
       "attack_outcome_ko": "판별 불가",
       "attacker_side": "unclear",
       "defender_side": "unclear",
-      "matched_exchange_number": 55
+      "matched_exchange_number": 55,
+      "lamp_pattern": "double",
+      "lamp_confidence": 1.0,
+      "lamp_detail": {
+        "pattern": "double",
+        "confidence": 1.0,
+        "left": {
+          "state": "color",
+          "peak_fill": 0.754,
+          "on_frames": 60
+        },
+        "right": {
+          "state": "color",
+          "peak_fill": 0.821,
+          "on_frames": 60
+        },
+        "start_frame": 15369,
+        "end_frame": 15432,
+        "frames_sampled": 22,
+        "lead_frames": 141
+      },
+      "lamp_scorer_conflict": false,
+      "attack_outcome_detail": "double_lamp_referee_gave_scorer",
+      "attack_outcome_detail_ko": "동시 유효타 — 심판이 득점자에게 우선권 부여"
     },
     {
       "touch_number": 14,
@@ -362,7 +661,30 @@
       "attack_outcome_ko": "공격 성공",
       "attacker_side": "left",
       "defender_side": "right",
-      "matched_exchange_number": 57
+      "matched_exchange_number": 57,
+      "lamp_pattern": "single_left",
+      "lamp_confidence": 1.0,
+      "lamp_detail": {
+        "pattern": "single_left",
+        "confidence": 1.0,
+        "left": {
+          "state": "color",
+          "peak_fill": 0.754,
+          "on_frames": 60
+        },
+        "right": {
+          "state": "off",
+          "peak_fill": 0.0,
+          "on_frames": 0
+        },
+        "start_frame": 16692,
+        "end_frame": 16749,
+        "frames_sampled": 20,
+        "lead_frames": 138
+      },
+      "lamp_scorer_conflict": false,
+      "attack_outcome_detail": "clean_hit",
+      "attack_outcome_detail_ko": "단독 유효타 — 상대 램프 없음"
     },
     {
       "touch_number": 15,
@@ -387,7 +709,30 @@
       "attack_outcome_ko": "공격 성공",
       "attacker_side": "left",
       "defender_side": "right",
-      "matched_exchange_number": 59
+      "matched_exchange_number": 59,
+      "lamp_pattern": "double",
+      "lamp_confidence": 1.0,
+      "lamp_detail": {
+        "pattern": "double",
+        "confidence": 1.0,
+        "left": {
+          "state": "color",
+          "peak_fill": 0.754,
+          "on_frames": 60
+        },
+        "right": {
+          "state": "color",
+          "peak_fill": 0.822,
+          "on_frames": 60
+        },
+        "start_frame": 17166,
+        "end_frame": 17229,
+        "frames_sampled": 22,
+        "lead_frames": 144
+      },
+      "lamp_scorer_conflict": false,
+      "attack_outcome_detail": "priority_won",
+      "attack_outcome_detail_ko": "동시 유효타 — 우선권 인정"
     },
     {
       "touch_number": 16,
@@ -412,7 +757,30 @@
       "attack_outcome_ko": "공격 실패 (방어 성공)",
       "attacker_side": "right",
       "defender_side": "left",
-      "matched_exchange_number": 62
+      "matched_exchange_number": 62,
+      "lamp_pattern": "single_left",
+      "lamp_confidence": 1.0,
+      "lamp_detail": {
+        "pattern": "single_left",
+        "confidence": 1.0,
+        "left": {
+          "state": "color",
+          "peak_fill": 0.754,
+          "on_frames": 60
+        },
+        "right": {
+          "state": "off",
+          "peak_fill": 0.0,
+          "on_frames": 0
+        },
+        "start_frame": 17865,
+        "end_frame": 17922,
+        "frames_sampled": 20,
+        "lead_frames": 135
+      },
+      "lamp_scorer_conflict": false,
+      "attack_outcome_detail": "attack_missed_counter_scored",
+      "attack_outcome_detail_ko": "공격 불발 — 상대 단독 유효타"
     },
     {
       "touch_number": 17,
@@ -437,7 +805,30 @@
       "attack_outcome_ko": "공격 성공",
       "attacker_side": "right",
       "defender_side": "left",
-      "matched_exchange_number": 66
+      "matched_exchange_number": 66,
+      "lamp_pattern": "single_right",
+      "lamp_confidence": 1.0,
+      "lamp_detail": {
+        "pattern": "single_right",
+        "confidence": 1.0,
+        "left": {
+          "state": "off",
+          "peak_fill": 0.0,
+          "on_frames": 0
+        },
+        "right": {
+          "state": "color",
+          "peak_fill": 0.823,
+          "on_frames": 48
+        },
+        "start_frame": 18645,
+        "end_frame": 18690,
+        "frames_sampled": 16,
+        "lead_frames": 135
+      },
+      "lamp_scorer_conflict": false,
+      "attack_outcome_detail": "clean_hit",
+      "attack_outcome_detail_ko": "단독 유효타 — 상대 램프 없음"
     },
     {
       "touch_number": 18,
@@ -458,11 +849,34 @@
         "footwork_opponent": "advance",
         "parry_detected": true
       },
-      "attack_outcome": "unclear",
-      "attack_outcome_ko": "판별 불가",
+      "attack_outcome": "no_priority_call",
+      "attack_outcome_ko": "단독 유효타 (우선권 판정 없음)",
       "attacker_side": "unclear",
       "defender_side": "unclear",
-      "matched_exchange_number": 67
+      "matched_exchange_number": 67,
+      "lamp_pattern": "single_left",
+      "lamp_confidence": 1.0,
+      "lamp_detail": {
+        "pattern": "single_left",
+        "confidence": 1.0,
+        "left": {
+          "state": "color",
+          "peak_fill": 0.754,
+          "on_frames": 75
+        },
+        "right": {
+          "state": "off",
+          "peak_fill": 0.0,
+          "on_frames": 0
+        },
+        "start_frame": 18939,
+        "end_frame": 19011,
+        "frames_sampled": 25,
+        "lead_frames": 81
+      },
+      "lamp_scorer_conflict": false,
+      "attack_outcome_detail": "single_lamp_no_priority_call",
+      "attack_outcome_detail_ko": "단독 유효타 — 우선권 판정 없음"
     },
     {
       "touch_number": 19,
@@ -487,7 +901,30 @@
       "attack_outcome_ko": "공격 실패 (방어 성공)",
       "attacker_side": "right",
       "defender_side": "left",
-      "matched_exchange_number": 69
+      "matched_exchange_number": 69,
+      "lamp_pattern": "double",
+      "lamp_confidence": 1.0,
+      "lamp_detail": {
+        "pattern": "double",
+        "confidence": 1.0,
+        "left": {
+          "state": "color",
+          "peak_fill": 0.755,
+          "on_frames": 60
+        },
+        "right": {
+          "state": "color",
+          "peak_fill": 0.824,
+          "on_frames": 60
+        },
+        "start_frame": 19407,
+        "end_frame": 19467,
+        "frames_sampled": 21,
+        "lead_frames": 123
+      },
+      "lamp_scorer_conflict": false,
+      "attack_outcome_detail": "priority_lost",
+      "attack_outcome_detail_ko": "동시 유효타 — 우선권 상실"
     },
     {
       "touch_number": 20,
@@ -508,11 +945,34 @@
         "footwork_opponent": "stationary",
         "parry_detected": false
       },
-      "attack_outcome": "unclear",
-      "attack_outcome_ko": "판별 불가",
+      "attack_outcome": "no_priority_call",
+      "attack_outcome_ko": "단독 유효타 (우선권 판정 없음)",
       "attacker_side": "unclear",
       "defender_side": "unclear",
-      "matched_exchange_number": 70
+      "matched_exchange_number": 70,
+      "lamp_pattern": "single_right",
+      "lamp_confidence": 1.0,
+      "lamp_detail": {
+        "pattern": "single_right",
+        "confidence": 1.0,
+        "left": {
+          "state": "off",
+          "peak_fill": 0.0,
+          "on_frames": 0
+        },
+        "right": {
+          "state": "color",
+          "peak_fill": 0.823,
+          "on_frames": 60
+        },
+        "start_frame": 19785,
+        "end_frame": 19842,
+        "frames_sampled": 20,
+        "lead_frames": 105
+      },
+      "lamp_scorer_conflict": false,
+      "attack_outcome_detail": "single_lamp_no_priority_call",
+      "attack_outcome_detail_ko": "단독 유효타 — 우선권 판정 없음"
     },
     {
       "touch_number": 21,
@@ -533,11 +993,34 @@
         "footwork_opponent": "fleche",
         "parry_detected": false
       },
-      "attack_outcome": "unclear",
-      "attack_outcome_ko": "판별 불가",
+      "attack_outcome": "no_priority_call",
+      "attack_outcome_ko": "단독 유효타 (우선권 판정 없음)",
       "attacker_side": "unclear",
       "defender_side": "unclear",
-      "matched_exchange_number": 73
+      "matched_exchange_number": 73,
+      "lamp_pattern": "single_right",
+      "lamp_confidence": 1.0,
+      "lamp_detail": {
+        "pattern": "single_right",
+        "confidence": 1.0,
+        "left": {
+          "state": "off",
+          "peak_fill": 0.0,
+          "on_frames": 0
+        },
+        "right": {
+          "state": "color",
+          "peak_fill": 0.819,
+          "on_frames": 60
+        },
+        "start_frame": 20298,
+        "end_frame": 20355,
+        "frames_sampled": 20,
+        "lead_frames": 102
+      },
+      "lamp_scorer_conflict": false,
+      "attack_outcome_detail": "single_lamp_no_priority_call",
+      "attack_outcome_detail_ko": "단독 유효타 — 우선권 판정 없음"
     },
     {
       "touch_number": 22,
@@ -562,7 +1045,30 @@
       "attack_outcome_ko": "판별 불가",
       "attacker_side": "unclear",
       "defender_side": "unclear",
-      "matched_exchange_number": 75
+      "matched_exchange_number": 75,
+      "lamp_pattern": "double",
+      "lamp_confidence": 1.0,
+      "lamp_detail": {
+        "pattern": "double",
+        "confidence": 1.0,
+        "left": {
+          "state": "color",
+          "peak_fill": 0.755,
+          "on_frames": 60
+        },
+        "right": {
+          "state": "color",
+          "peak_fill": 0.819,
+          "on_frames": 60
+        },
+        "start_frame": 20598,
+        "end_frame": 20661,
+        "frames_sampled": 22,
+        "lead_frames": 222
+      },
+      "lamp_scorer_conflict": false,
+      "attack_outcome_detail": "double_lamp_referee_gave_scorer",
+      "attack_outcome_detail_ko": "동시 유효타 — 심판이 득점자에게 우선권 부여"
     }
   ],
   "left_fencer": {
