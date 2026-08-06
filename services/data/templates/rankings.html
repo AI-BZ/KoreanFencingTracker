@@ -345,6 +345,14 @@
         vertical-align: middle;
     }
 
+    /* 이름 칸 안의 소속 줄 — 소속 열이 살아 있는 데스크톱에서는 보이지 않는다.
+       모바일(≤640px)에서 소속 열을 접을 때만 노출된다. */
+    .col-team-inline {
+        display: none;
+        color: var(--fm-text-muted, rgba(255, 255, 255, 0.55));
+        font-weight: 400;
+    }
+
     .medal-cell {
         text-align: center;
         vertical-align: middle;
@@ -768,7 +776,10 @@
         .ranking-info h2 {
             font-size: 1.25rem;
         }
-        /* Mobile ranking table: compact layout */
+        /* Mobile ranking table: 순위 · 이름 · 포인트 3열.
+           랭킹 표에서 포인트는 지표 자체라 절대 숨기지 않는다. 소속은 이름 아래
+           둘째 줄(.col-team-inline)로 접고, 대회수·메달 열은 숨긴다.
+           table-layout: fixed + width 100%라 가로 스크롤은 생기지 않는다. */
         .ranking-table-container {
             overflow-x: hidden;
         }
@@ -778,66 +789,55 @@
         }
         .ranking-table th,
         .ranking-table td {
-            padding: 12px 6px;
-            font-size: 0.8rem;
+            padding: 10px 6px;
+            font-size: 0.82rem;
             vertical-align: middle;
         }
-        .ranking-table .rank-cell {
-            width: 36px;
-            font-size: 0.8rem;
+        /* 고정폭 두 열(순위·포인트)을 먼저 잡아야 이름 칸이 남은 폭을 다 가져간다.
+           예전에는 순위 열이 남는 폭을 흡수해 145px까지 부풀었다. */
+        .ranking-table th.rank-cell,
+        .ranking-table td.rank-cell {
+            width: 44px;
+            font-size: 0.85rem;
             white-space: nowrap;
-            padding: 12px 2px !important;
+            padding: 10px 2px !important;
             text-align: center;
-            vertical-align: middle;
             line-height: 1.2;
         }
-        .ranking-table .col-name {
-            width: 30%;
-            vertical-align: middle;
+        .ranking-table th.points-cell,
+        .ranking-table td.points-cell {
+            width: 68px;
+            text-align: right;
+            white-space: nowrap;
+            font-size: 0.82rem !important;
         }
-        .ranking-table .col-team {
-            width: 30%;
-            vertical-align: middle;
+        .ranking-table th.col-name,
+        .ranking-table td.col-name {
+            width: auto;
+            line-height: 1.25;
         }
-        .ranking-table .col-points {
-            width: 50px;
-            vertical-align: middle;
-        }
-        /* Hide competition count and medal columns on mobile */
+        .ranking-table .col-team,
         .ranking-table .col-comp,
         .ranking-table .col-medal,
         .ranking-table .medal-cell.col-medal {
             display: none !important;
         }
-        .ranking-table td {
-            vertical-align: middle !important;
-            height: 48px;
-            padding-top: 0 !important;
-            padding-bottom: 0 !important;
-        }
-        .ranking-table td .player-link,
-        .ranking-table td > span {
+        .ranking-table td.col-name .player-link,
+        .ranking-table td.col-name > span {
+            display: block;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
             max-width: 100%;
-            line-height: 48px;
         }
-        .ranking-table .col-team {
-            line-height: 48px;
-        }
-        .ranking-table .col-team .team-badge {
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 100%;
-            padding: 3px 8px !important;
-            font-size: 0.7rem !important;
+        /* 이름 링크가 두 줄(이름 + 소속)을 품는다. 링크에 걸린 44px 탭 타깃이
+           두 줄을 함께 덮으므로 행 높이가 두 배로 늘지 않는다. */
+        .ranking-table td.col-name .col-team-inline {
+            display: block;
+            margin-top: 1px;
+            font-size: 0.7rem;
             line-height: 1.2;
-            vertical-align: middle;
-        }
-        .points-cell {
-            font-size: 0.8rem !important;
+            font-weight: 400;
         }
     }
 
@@ -1406,22 +1406,22 @@
                         <thead>
                             <tr>
                                 <th class="rank-cell">{{ i18n.common.table.rank|default('Rank') }}</th>
-                                <th>{{ i18n.common.table.name|default('Name') }}</th>
-                                <th>{{ i18n.common.table.team|default('Team') }}</th>
-                                <th class="points-cell">{{ i18n.common.table.points|default('Points') }}</th>
-                                <th>{{ i18n.common.table.competition|default('Competition') }}</th>
-                                <th class="medal-cell">🏅</th>
+                                <th class="col-name">{{ i18n.common.table.name|default('Name') }}</th>
+                                <th class="col-team">{{ i18n.common.table.team|default('Team') }}</th>
+                                <th class="points-cell col-points">{{ i18n.common.table.points|default('Points') }}</th>
+                                <th class="col-comp">{{ i18n.common.table.competition|default('Competition') }}</th>
+                                <th class="medal-cell col-medal">🏅</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for r in guest_preview.rankings %}
                             <tr>
                                 <td class="rank-cell {% if r.rank <= 3 %}rank-{{ r.rank }}{% endif %}">{{ r.rank }}</td>
-                                <td>????</td>
-                                <td><span class="team-badge">????</span></td>
-                                <td class="points-cell">{{ "%.1f"|format(r.points) }}</td>
-                                <td>{{ r.competitions }}</td>
-                                <td class="medal-cell">
+                                <td class="col-name">????<span class="col-team-inline">????</span></td>
+                                <td class="col-team"><span class="team-badge">????</span></td>
+                                <td class="points-cell col-points">{{ "%.1f"|format(r.points) }}</td>
+                                <td class="col-comp">{{ r.competitions }}</td>
+                                <td class="medal-cell col-medal">
                                     {% if r.gold > 0 %}<span class="medal medal-gold">{{ r.gold }}</span>{% endif %}
                                     {% if r.silver > 0 %}<span class="medal medal-silver">{{ r.silver }}</span>{% endif %}
                                     {% if r.bronze > 0 %}<span class="medal medal-bronze">{{ r.bronze }}</span>{% endif %}
@@ -1909,9 +1909,12 @@ document.addEventListener('DOMContentLoaded', function() {
             const teams = teamsToShow.slice(0, 2).map(t => `<span class="team-badge">${t}</span>`).join('');
             const displayName = r.display_name || r.name;
             const teamStr = teamsToShow.length > 0 ? teamsToShow[0] : '';
+            // 소속 줄은 링크 '안'에 넣는다 — 모바일에서 이름 칸이 두 줄이 될 때
+            // 44px 탭 타깃 하나가 두 줄을 함께 덮어야 행이 불필요하게 높아지지 않는다.
+            const teamLine = teamStr ? `<span class="col-team-inline">${teamStr}</span>` : '';
             const playerLink = r.blurred
-                ? `<span>${displayName}</span>`
-                : `<a href="/${currentLang}/player/${encodeURIComponent(r.name)}?team=${encodeURIComponent(teamStr)}" class="player-link">${displayName}</a>`;
+                ? `<span>${displayName}${teamLine}</span>`
+                : `<a href="/${currentLang}/player/${encodeURIComponent(r.name)}?team=${encodeURIComponent(teamStr)}" class="player-link">${displayName}${teamLine}</a>`;
             return `<tr class="${rowClass}">
                     <td class="rank-cell ${rankClass}">${r.rank}</td>
                     <td class="col-name">${playerLink}</td>

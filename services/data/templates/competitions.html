@@ -430,11 +430,32 @@
         .page-header h1 { font-size: 1.6rem; }
         .page-header { padding: 2rem 0 1rem; }
         .competitions-controls { padding: 1rem; }
-        .comp-card { flex-direction: column; align-items: flex-start; }
+        .comp-cards { gap: 0.6rem; }
+        .comp-card {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.4rem;
+            padding: 0.85rem 1rem;
+        }
         /* Column flex + align-items:flex-start would size the info block to the
            nowrap title's max-content; force full width so the title truncates. */
         .comp-card-info { width: 100%; min-width: 0; }
-        .comp-card-right { text-align: left; margin-left: 0; margin-top: 0.5rem; }
+        .comp-card-name { font-size: 0.98rem; margin-bottom: 0.2rem; }
+        .comp-card-meta { font-size: 0.78rem; gap: 0.5rem; }
+        /* 날짜와 화살표를 한 행에 둔다. 세로 스택으로 두면 화살표가 혼자
+           한 줄을 차지해 카드가 불필요하게 길어졌다. */
+        .comp-card-right {
+            width: 100%;
+            margin-left: 0;
+            margin-top: 0;
+            text-align: left;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.5rem;
+        }
+        .comp-card-date { font-size: 0.82rem; }
+        .comp-card-arrow { margin-top: 0; font-size: 1rem; line-height: 1; }
         .year-tabs { gap: 0.35rem; }
         .year-tab { padding: 0.4rem 0.75rem; font-size: 0.8rem; }
     }

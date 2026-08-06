@@ -7167,7 +7167,16 @@ async def fencinglab_tracked_players(
 
         club_data = []
         for p in players:
-            analytics = analyzer.analyze_player(p["name"], p["team"])
+            # 한 선수의 데이터 이상이 목록 전체를 죽이지 않도록 격리한다.
+            # 실패한 선수는 아래 else 분기를 타서 "데이터 없음"으로 표시된다.
+            try:
+                analytics = analyzer.analyze_player(p["name"], p["team"])
+            except Exception as e:
+                logger.warning(
+                    f"FencingLab tracked-players: analyze_player 실패 "
+                    f"({p['name']}/{p['team']}): {e}"
+                )
+                analytics = None
 
             # 선수명, 팀명 번역 (동기식 캐시 사용)
             display_name = get_localized_player_name_sync(p["name"], lang)

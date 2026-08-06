@@ -162,6 +162,16 @@
         animation: fmDdayPop 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
     }
 
+    /* 데이터 목록(검색 결과·일정 카드)은 스태거하지 않는다. 사용자가 결과를 기다리는
+       영역이라 순차 등장이 곧 로딩 지연으로 읽힌다. 그룹 전체가 한 번에 짧게 뜬다. */
+    :root[data-motion="on"] .fm-group-fade {
+        animation: fmGroupFade 0.14s ease-out both;
+    }
+    @keyframes fmGroupFade {
+        from { opacity: 0; }
+        to   { opacity: 1; }
+    }
+
     /* 5) 마이크로 인터랙션 */
     .search-input {
         transition: border-color 0.2s ease, box-shadow 0.2s ease,
@@ -195,6 +205,7 @@
         :root[data-motion="on"] .hero .player-search,
         :root[data-motion="on"] .fm-hero-stat,
         :root[data-motion="on"] .fm-reveal,
+        :root[data-motion="on"] .fm-group-fade,
         :root[data-motion="on"] .fm-reveal.is-in .upcoming-card-status .status {
             animation: none !important;
             transition: none !important;
@@ -1003,8 +1014,18 @@
             padding-left: 0.75rem;
         }
         .fm-hero-stat-value { font-size: 1.65rem; }
-        .event-card { flex-direction: column; align-items: flex-start; }
-        .event-date { text-align: left; margin-top: 0.5rem; }
+        /* 검색 결과 카드도 대회 목록과 같은 기준으로 압축한다 */
+        .event-cards { gap: 0.6rem; }
+        .event-card {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.35rem;
+            padding: 0.85rem 1rem;
+        }
+        .event-name { font-size: 1rem; margin-bottom: 0.2rem; }
+        .event-meta { font-size: 0.8rem; }
+        .event-tags { margin-top: 0.4rem; gap: 0.35rem; }
+        .event-date { text-align: left; margin-top: 0; font-size: 0.8rem; }
         .filter-grid { grid-template-columns: 1fr; }
     }
 
@@ -1976,10 +1997,15 @@
     }
 
     /* ---------- 스탯 카운트업 ----------
-       마크업의 폴백값이 1차 목표, /api/status 응답이 오면 현재값에서 이어서 센다. */
+       카운트업은 페이지당 딱 한 번만 돈다. 히어로 진입(0.52s)까지가 /api/status를
+       기다리는 창이고, 그 안에 오면 실제값으로 센다. 늦게 오면 진행 중인 카운트의
+       목표만 갈아끼우거나(재시작 아님) 연출 없이 숫자만 교체한다.
+       예전에는 폴백값으로 한 번, 응답 후 또 한 번 세서 숫자가 두 번 움직였다 —
+       서버가 느린 날에는 20초 뒤에 다시 움직여 "끊긴다"는 인상을 줬다. */
     var STAT_IDS = { competitions: 'hero-stat-competitions', matches: 'hero-stat-matches', players: 'hero-stat-players' };
     var current = {};
-    var tokens = {};
+    var running = {};      // el.id → 카운트 rAF 루프가 도는 중인가
+    var animTarget = {};   // el.id → 그 루프가 향하는 목표(최신값이 이긴다)
 
     // 최종값이 차지할 폭을 먼저 확보해 카운트 도중 자리가 흔들리지 않게 한다
     function reserveWidth(el, target) {
@@ -1995,22 +2021,25 @@
 
     function countTo(el, target) {
         if (!el || !isFinite(target) || target <= 0) return;
+        animTarget[el.id] = target;
         if (!motion) { current[el.id] = target; el.textContent = target.toLocaleString(); return; }
         reserveWidth(el, target);
         var from = current[el.id] != null ? current[el.id] : 0;
         if (from === target) { el.textContent = target.toLocaleString(); return; }
-        var token = tokens[el.id] = (tokens[el.id] || 0) + 1;
+        if (running[el.id]) return;   // 이미 도는 루프가 새 목표를 읽는다 — 재시작하지 않는다
+        running[el.id] = true;
         var t0 = 0;
         var DUR = 1100;
         function step(ts) {
-            if (tokens[el.id] !== token) return;   // 더 최신 카운트가 시작됐으면 물러난다
             if (!t0) t0 = ts;
             var p = Math.min((ts - t0) / DUR, 1);
             var eased = 1 - Math.pow(1 - p, 4);
-            var v = p < 1 ? Math.round(from + (target - from) * eased) : target;
+            var goal = animTarget[el.id];
+            var v = p < 1 ? Math.round(from + (goal - from) * eased) : goal;
             current[el.id] = v;
             el.textContent = v.toLocaleString();
             if (p < 1) requestAnimationFrame(step);
+            else running[el.id] = false;
         }
         requestAnimationFrame(step);
     }
@@ -2023,6 +2052,44 @@
         if (isFinite(n) && n > 0) fallbackTargets[key] = n;
     });
 
+    var apiStats = null;   // /api/status 응답 (도착 전 null)
+    var started = false;   // 카운트업이 이미 시작됐는가
+
+    function targetFor(key) {
+        if (apiStats) {
+            var n = Number(apiStats[key]);
+            if (isFinite(n) && n > 0) return n;
+        }
+        return fallbackTargets[key];
+    }
+
+    // 유일한 시작 지점. 이 시점에 응답이 와 있으면 실제값으로, 아니면 폴백값으로 센다.
+    function startCount() {
+        if (started) return;
+        started = true;
+        Object.keys(fallbackTargets).forEach(function (key) {
+            countTo(document.getElementById(STAT_IDS[key]), targetFor(key));
+        });
+    }
+
+    // 늦게 도착한 실제값 — 두 번째 애니메이션은 만들지 않는다.
+    // 카운트가 도는 중이면 목표만 갈아끼우고, 끝났으면 숫자만 조용히 바꾼다.
+    // 폴백값과 실제값이 같으면(정상 상태) 아무 일도 일어나지 않는다.
+    function adoptLate() {
+        Object.keys(STAT_IDS).forEach(function (key) {
+            var el = document.getElementById(STAT_IDS[key]);
+            if (!el) return;
+            var n = targetFor(key);
+            if (!isFinite(n) || n <= 0) return;
+            reserveWidth(el, n);
+            if (running[el.id]) { animTarget[el.id] = n; return; }
+            if (current[el.id] === n) return;
+            current[el.id] = n;
+            animTarget[el.id] = n;
+            el.textContent = n.toLocaleString();
+        });
+    }
+
     if (motion) {
         // 폭을 먼저 잡아둔 뒤 0으로 되돌린다. 스탯 자체는 0.52s까지 아직 안 보인다.
         Object.keys(fallbackTargets).forEach(function (key) {
@@ -2031,27 +2098,29 @@
             current[el.id] = 0;
             el.textContent = '0';
         });
-        setTimeout(function () {
-            Object.keys(fallbackTargets).forEach(function (key) {
-                countTo(document.getElementById(STAT_IDS[key]), fallbackTargets[key]);
-            });
-        }, 520);
+        setTimeout(startCount, 520);
+    } else {
+        // 무모션: 마크업의 폴백값이 이미 최종 상태다. 실제값이 오면 조용히 교체된다.
+        started = true;
+        Object.keys(fallbackTargets).forEach(function (key) {
+            var el = document.getElementById(STAT_IDS[key]);
+            if (el) current[el.id] = fallbackTargets[key];
+        });
     }
 
     fetch('/api/status').then(function (res) {
         return res.ok ? res.json() : null;
     }).then(function (data) {
         if (!data) return;
-        Object.keys(STAT_IDS).forEach(function (key) {
-            var el = document.getElementById(STAT_IDS[key]);
-            var n = Number(data[key]);
-            if (el && isFinite(n) && n > 0) countTo(el, n);
-        });
+        apiStats = data;
+        // 아직 시작 전이면 startCount()가 실제값을 쓴다. 이미 시작했으면 조용히 반영.
+        if (started) adoptLate();
     }).catch(function () { /* 폴백값 유지 */ });
 
     /* ---------- 스크롤 리빌 ----------
        .fm-reveal          → 요소 자신이 1회 등장
-       [data-fm-stagger]   → 직계 자식들이 40ms 간격으로 순차 등장 (동적 카드 포함)
+       [data-fm-stagger]   → 직계 자식들이 40ms 간격으로 순차 등장 (프로모 배너 전용.
+                             검색 결과·일정 카드 같은 데이터 목록에는 쓰지 않는다)
        엔진은 motion.dev inView가 준비되면 그쪽, 아니면 네이티브 IntersectionObserver.
        scroll 이벤트는 쓰지 않는다. */
     var engine = null;
@@ -2151,18 +2220,28 @@
 
         // 이 스크립트는 파싱 도중(히어로 직후)에 실행되므로 아래 카드 컨테이너들은
         // 아직 존재하지 않는다. DOM이 끝난 뒤에 붙여야 감시가 실제로 걸린다.
+        // 데이터 목록이 새로 채워졌을 때의 등장 연출. 카드 하나하나가 아니라
+        // 그룹이 통째로 0.14s 페이드한다 — 결과가 "순차적으로 도착하는" 인상을 주지 않는다.
+        function groupFade(node) {
+            if (!node || node.querySelector('.loading')) return;   // 로딩 플레이스홀더는 건너뛴다
+            node.classList.remove('fm-group-fade');
+            void node.offsetWidth;                                  // reflow로 애니메이션 재시작
+            node.classList.add('fm-group-fade');
+        }
+
         ready(function () {
             scan();
             // 동적으로 채워지는 카드 컨테이너만 좁게 감시한다 (body 전체 관찰 금지)
             if (typeof MutationObserver === 'function') {
-                var mo = new MutationObserver(function () {
-                    if (mo._q) return;
-                    mo._q = true;
-                    requestAnimationFrame(function () { mo._q = false; scan(); });
-                });
                 ['live-cards', 'upcoming-cards', 'event-cards'].forEach(function (id) {
                     var n = document.getElementById(id);
-                    if (n) mo.observe(n, { childList: true });
+                    if (!n) return;
+                    var mo = new MutationObserver(function () {
+                        if (mo._q) return;
+                        mo._q = true;
+                        requestAnimationFrame(function () { mo._q = false; groupFade(n); scan(); });
+                    });
+                    mo.observe(n, { childList: true });
                 });
             }
         });
@@ -2239,13 +2318,13 @@
         <h2 class="fm-schedule-title fm-reveal" id="fm-schedule-title">{{ _t("경기 일정") }}</h2>
 
         <div class="live-competitions" id="live-competitions" style="display: none;">
-            <div class="live-cards" id="live-cards" data-fm-stagger>
+            <div class="live-cards" id="live-cards">
                 <!-- 동적으로 로드됨 -->
             </div>
         </div>
 
         <div class="upcoming-competitions" id="upcoming-competitions" style="display: none;">
-            <div class="upcoming-cards" id="upcoming-cards" data-fm-stagger>
+            <div class="upcoming-cards" id="upcoming-cards">
                 <!-- 동적으로 로드됨 -->
             </div>
         </div>
@@ -2371,7 +2450,7 @@
             </div>
             <span class="results-count" id="results-count"></span>
         </div>
-        <div class="event-cards" id="event-cards" data-fm-stagger>
+        <div class="event-cards" id="event-cards">
             <div class="filter-prompt">
                 <div class="filter-prompt-icon" aria-hidden="true"><svg class="fm-icon" viewBox="0 0 256 256" focusable="false"><path d="M221.87,83.16A104.1,104.1,0,1,1,195.67,49l22.67-22.68a8,8,0,0,1,11.32,11.32l-96,96a8,8,0,0,1-11.32-11.32l27.72-27.72a40,40,0,1,0,17.87,31.09,8,8,0,1,1,16-.9,56,56,0,1,1-22.38-41.65L184.3,60.39a87.88,87.88,0,1,0,23.13,29.67,8,8,0,0,1,14.44-6.9Z"/></svg></div>
                 <h4>{{ i18n.common.home.select_event|default('Select an Event') }}</h4>

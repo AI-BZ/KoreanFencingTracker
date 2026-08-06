@@ -715,16 +715,16 @@
    7. RANKINGS TABLE - MOBILE RESPONSIVE
    ============================================ */
 @media (max-width: 640px) {
-    /* Rankings table: show only rank, name, points on mobile */
-    .ranking-table th:nth-child(n+4),
-    .ranking-table td:nth-child(n+4) {
+    /* Rankings table: 순위 · 이름(+소속) · 포인트만 남긴다.
+       열은 위치(nth-child)가 아니라 이름(.col-*)으로 고른다 — 예전 nth-child(n+4)
+       규칙은 4번째인 '포인트'까지 숨기고 last-child로 메달을 되살려서, 정작
+       랭킹의 핵심 지표인 포인트가 모바일에서 사라져 있었다.
+       열 폭·이름 칸 2줄 처리는 rankings.html의 인라인 스타일이 담당한다. */
+    .ranking-table .col-team,
+    .ranking-table .col-comp,
+    .ranking-table .col-medal,
+    .ranking-table .medal-cell.col-medal {
         display: none;
-    }
-
-    /* Show medal column (last) */
-    .ranking-table th:last-child,
-    .ranking-table td:last-child {
-        display: table-cell;
     }
 
     .ranking-table th,
