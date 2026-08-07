@@ -130,6 +130,66 @@ def compute_joint_angles_for_side(
     return ja
 
 
+def compute_forward_arm_extension(fencer: FencerPose, side: str) -> Optional[float]:
+    """Extension ratio (0-1) of the arm held toward the opponent, or None.
+
+    :func:`compute_joint_angles` assumes the weapon arm is the anatomical arm
+    nearest the opponent (right arm for the left-hand fencer). That assumption
+    breaks for left-handers, and handedness detection is not always able to
+    settle the question — on the reference foil final it returned ``None`` for
+    both fencers at confidence 0.03-0.04.
+
+    Rather than trust the assumption, pick per frame whichever wrist is further
+    toward the opponent and measure that arm. A fencer's weapon hand leads; the
+    rear arm trails behind the body. This makes the signal independent of
+    handedness, and it also survives the occlusion case where the far-side arm
+    disappears while the near-side one is visible.
+
+    ``compute_joint_angles().arm_extension_ratio`` is deliberately left alone —
+    the clip overlay renders it and must keep showing the same number.
+
+    Returns ``None`` when neither arm has a confident shoulder/elbow/wrist
+    triple.
+    """
+    kps = fencer.keypoints
+    if len(kps) < 17:
+        return None
+
+    # Left-of-frame fencer faces right, so larger x is toward the opponent.
+    toward_opponent = 1.0 if side == "left" else -1.0
+
+    best_ratio: Optional[float] = None
+    best_reach: Optional[float] = None
+
+    for shoulder_idx, elbow_idx, wrist_idx in (
+        (KP_LEFT_SHOULDER, KP_LEFT_ELBOW, KP_LEFT_WRIST),
+        (KP_RIGHT_SHOULDER, KP_RIGHT_ELBOW, KP_RIGHT_WRIST),
+    ):
+        sh, elb, wr = kps[shoulder_idx], kps[elbow_idx], kps[wrist_idx]
+        if not (kp_valid(sh) and kp_valid(elb) and kp_valid(wr)):
+            continue
+        reach = toward_opponent * wr.x
+        if best_reach is None or reach > best_reach:
+            best_reach = reach
+            angle = angle_between_points(
+                (sh.x, sh.y), (elb.x, elb.y), (wr.x, wr.y),
+            )
+            best_ratio = angle / 180.0
+
+    return best_ratio
+
+
+def compute_forward_arm_extension_for_side(
+    pose_result: PoseResult,
+    side: str,
+) -> Optional[float]:
+    """:func:`compute_forward_arm_extension` for a whole frame; None if absent."""
+    fencer = get_fencer_by_side(pose_result, side)
+    if fencer is None:
+        return None
+    return compute_forward_arm_extension(fencer, side)
+
+
 def detect_handedness(
     pose_sequence: List[PoseResult],
     side: str,

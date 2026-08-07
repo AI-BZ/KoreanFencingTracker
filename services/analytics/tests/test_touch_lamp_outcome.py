@@ -499,6 +499,14 @@ class TestSerialisationParity:
             "attacker_side": "left",
             "defender_side": "right",
             "matched_exchange_number": 12,
+            # Priority-estimation fields. Written even with no judge, and even
+            # for a footwork verdict, so that a touch dict has one shape
+            # regardless of weapon — a consumer can read attacker_confidence
+            # without first knowing whether the bout was foil.
+            "attacker_confidence": "high",
+            "attacker_method": "footwork",
+            "priority_detail": None,
+            "priority_reason": None,
         }
 
     def test_none_reading_adds_only_null_valued_keys(self):

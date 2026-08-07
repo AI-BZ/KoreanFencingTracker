@@ -24,6 +24,7 @@ exactly as unknown as before. ``attacker_side`` / ``defender_side`` /
 ``attack_success`` / ``attack_failed`` verdict is never downgraded.
 """
 
+from dataclasses import dataclass
 from typing import Optional, Tuple
 
 from analyzer.config import (
@@ -221,6 +222,71 @@ def determine_attacker(exchange: dict) -> str:
     return attacker if attacker in ("left", "right") else "unclear"
 
 
+# How confident we are about *who attacked* — a separate axis from
+# ``attack_outcome``, which says whether that attack worked. Footwork that
+# isolates a single aggressor is a determination; an arm-extension estimate is
+# not, and the two must never be summed together as if they were.
+CONFIDENCE_HIGH = "high"
+CONFIDENCE_ESTIMATED = "estimated"
+METHOD_FOOTWORK = "footwork"
+
+
+@dataclass(frozen=True)
+class AttackerResolution:
+    """Who attacked, how sure we are, and how we decided."""
+
+    side: str = "unclear"
+    confidence: Optional[str] = None
+    method: Optional[str] = None
+    detail: Optional[dict] = None
+    reason: Optional[str] = None
+
+
+def resolve_attacker(exchange: dict, judge=None) -> AttackerResolution:
+    """Attacker for an exchange, footwork first and priority estimation second.
+
+    The cascade is strictly ordered so the weaker signal can never overwrite the
+    stronger one:
+
+    1. :func:`determine_attacker` — one side alone committing forward. Anything
+       it decides is final and carries :data:`CONFIDENCE_HIGH`.
+    2. ``judge`` (a weapon priority judge, foil only) — runs *only* on what step
+       1 left unclear, and is marked :data:`CONFIDENCE_ESTIMATED`.
+    3. Neither — ``"unclear"``, exactly as before.
+
+    ``judge=None`` reproduces the pre-priority behaviour byte for byte, which is
+    what every non-foil weapon and every report predating the arm series gets.
+
+    ``judge`` is duck-typed rather than imported: it needs a ``method`` string
+    and a ``judge(exchange)`` returning an object with ``attacker`` / ``grade`` /
+    ``reason`` / ``detail``. Keeping it injected is what lets this module stay
+    free of any dependency on ``ml``, so the analyzer layer does not have to know
+    which weapons have judges — and a sabre judge can be added without touching
+    this file.
+    """
+    footwork_side = determine_attacker(exchange)
+    if footwork_side in ("left", "right"):
+        return AttackerResolution(
+            side=footwork_side,
+            confidence=CONFIDENCE_HIGH,
+            method=METHOD_FOOTWORK,
+        )
+
+    if judge is None:
+        return AttackerResolution()
+
+    call = judge.judge(exchange)
+    if call.attacker in ("left", "right"):
+        return AttackerResolution(
+            side=call.attacker,
+            confidence=call.grade,
+            method=judge.method,
+            detail=call.detail,
+            reason=call.reason,
+        )
+    return AttackerResolution(detail=call.detail, reason=call.reason)
+
+
 def classify_attack_outcome(scorer: Optional[str], attacker_side: Optional[str]) -> str:
     """Compare the OCR scorer with the attacker: success / failed / unclear."""
     if attacker_side not in ("left", "right"):
@@ -235,22 +301,35 @@ def classify_attack_outcome(scorer: Optional[str], attacker_side: Optional[str])
 # ------------------------------------------------------------------
 
 
-def annotate_touch_outcome(touch: dict, exchanges: list, fps: float = 30.0) -> dict:
+def annotate_touch_outcome(
+    touch: dict,
+    exchanges: list,
+    fps: float = 30.0,
+    judge=None,
+) -> dict:
     """Add ``attack_outcome`` / ``attacker_side`` / ``matched_exchange_number`` in place.
 
     Returns the same dict for convenience. A touch that cannot be matched to a
     preceding exchange gets ``attack_outcome="unclear"`` and
     ``matched_exchange_number=None`` — never a guess.
+
+    With a ``judge`` (see :func:`resolve_attacker`) three more keys appear:
+    ``attacker_confidence``, ``attacker_method`` and, when the judge produced
+    numbers, ``priority_detail`` / ``priority_reason``. They are written
+    unconditionally — including as ``None`` — so a touch dict's shape does not
+    depend on which weapon it came from.
     """
     exchange, _gap = match_touch_to_exchange(touch.get("frame"), exchanges, fps)
 
     if exchange is None:
+        resolution = AttackerResolution()
         attacker_side = None
         defender_side = None
         matched_number = None
         outcome = "unclear"
     else:
-        attacker = determine_attacker(exchange)
+        resolution = resolve_attacker(exchange, judge=judge)
+        attacker = resolution.side
         attacker_side = attacker
         if attacker == "left":
             defender_side = "right"
@@ -266,13 +345,22 @@ def annotate_touch_outcome(touch: dict, exchanges: list, fps: float = 30.0) -> d
     touch["attacker_side"] = attacker_side
     touch["defender_side"] = defender_side
     touch["matched_exchange_number"] = matched_number
+    touch["attacker_confidence"] = resolution.confidence
+    touch["attacker_method"] = resolution.method
+    touch["priority_detail"] = resolution.detail
+    touch["priority_reason"] = resolution.reason
     return touch
 
 
-def annotate_touch_outcomes(touches: list, exchanges: list, fps: float = 30.0) -> list:
+def annotate_touch_outcomes(
+    touches: list,
+    exchanges: list,
+    fps: float = 30.0,
+    judge=None,
+) -> list:
     """Annotate every touch in ``touches`` (in place) and return the list."""
     for t in touches:
-        annotate_touch_outcome(t, exchanges, fps)
+        annotate_touch_outcome(t, exchanges, fps, judge=judge)
     return touches
 
 
@@ -400,16 +488,37 @@ def annotate_touch_lamp(touch: dict, reading) -> dict:
     if conflict:
         detail = None
     else:
-        detail = classify_attack_outcome_detail(
-            outcome, touch.get("attacker_side"), scorer, pattern,
-        )
         # The one permitted write-back: a single valid lamp means no priority
         # ruling was made, so "unclear" misdescribes the touch as an analysis
         # failure. Determined verdicts are strictly more informative and are
         # left alone. Re-running is stable — NO_PRIORITY_CALL is not "unclear".
-        if outcome == "unclear" and pattern in _SINGLE_LAMP_SIDE:
+        #
+        # An *estimated* verdict is withdrawn here too, and this is the only
+        # place a verdict is ever taken back. Priority estimation runs before the
+        # lamps are read, so it can guess an attacker for a touch the referee
+        # never had to rule on. The lamp is direct evidence about that: one
+        # valid hit means the priority question was never asked, which outranks
+        # our inference about who was attacking. Leaving the estimate would print
+        # a priority holder directly beside the words "no priority ruling". The
+        # footwork verdict is not withdrawn — it describes who advanced, which is
+        # true regardless of how many lamps lit.
+        estimated = touch.get("attacker_confidence") == CONFIDENCE_ESTIMATED
+        if pattern in _SINGLE_LAMP_SIDE and (outcome == "unclear" or estimated):
             touch["attack_outcome"] = NO_PRIORITY_CALL
             touch["attack_outcome_ko"] = ATTACK_OUTCOME_KO[NO_PRIORITY_CALL]
+            if estimated:
+                touch["attacker_side"] = "unclear"
+                touch["defender_side"] = "unclear"
+                touch["attacker_confidence"] = None
+                touch["attacker_method"] = None
+                touch["priority_reason"] = "withdrawn_single_lamp"
+
+        # Classified from the post-write-back state so a withdrawn estimate is
+        # described as the single-lamp non-case it is, not as the clean hit its
+        # retracted attacker would have implied.
+        detail = classify_attack_outcome_detail(
+            touch.get("attack_outcome"), touch.get("attacker_side"), scorer, pattern,
+        )
 
     touch["lamp_pattern"] = pattern
     touch["lamp_confidence"] = float(reading.confidence)
@@ -512,6 +621,7 @@ def summarize_attack_outcomes(touches: list) -> dict:
     unclear = 0
     no_priority_call = 0
     ruled_unclear = 0
+    estimated = 0
 
     for t in touches:
         pattern = t.get("lamp_pattern")
@@ -535,6 +645,9 @@ def summarize_attack_outcomes(touches: list) -> dict:
         if outcome == "unclear" or attacker not in ("left", "right"):
             unclear += 1
             continue
+
+        if t.get("attacker_confidence") == CONFIDENCE_ESTIMATED:
+            estimated += 1
 
         defender = "right" if attacker == "left" else "left"
         stats[attacker]["attack_attempts"] += 1
@@ -562,6 +675,11 @@ def summarize_attack_outcomes(touches: list) -> dict:
         "matched_touches": matched,
         "unclear_touches": unclear,
         "no_priority_call_touches": no_priority_call,
+        # Subset of the counted attacks whose attacker came from priority
+        # estimation rather than footwork. The per-side totals deliberately do
+        # not split on it — an attack is an attack — but the count is published
+        # so a reader can see how much of the statistic rests on an estimate.
+        "estimated_touches": estimated,
         "lamp": lamp,
         "priority": {
             "ruled": ruled,

@@ -8,9 +8,11 @@ Adding a fourth ``attack_outcome`` state is only safe if it takes touches
    ``attack_failed``. A determined verdict is strictly more informative than
    "no priority ruling was made", so being downgraded to ``no_priority_call``
    would be a loss of information, not a gain in honesty.
-2. Every report produced before the lamp pass existed. Six of the seven
-   continuous gallery reports have no ``lamp_pattern`` on any touch; they must
-   serialise and summarise exactly as they did.
+2. Every report produced before the lamp pass existed. The non-foil continuous
+   gallery reports have no ``lamp_pattern`` on any touch; they must serialise
+   and summarise exactly as they did. (The foil bouts have since been through
+   the lamp pass and are no longer members of that set — they are covered by
+   the promotion tests below instead.)
 
 The expected values are written out literally rather than derived, so that a
 change in the annotation code shows up as a test failure instead of quietly
@@ -375,7 +377,6 @@ class TestNoLampDataUnaffected:
             "usaf_UzQ8Ci7lft8_continuous_report.json",
             "usaf_hKUXgUsDOKE_continuous_report.json",
             "usaf_zTsHbehQrC0_continuous_report.json",
-            "nac_y12wf_lee_esaki_k-spxGdlWfo_continuous_report.json",
         ],
     )
     def test_lampless_gallery_report_has_no_promoted_touches(self, name):

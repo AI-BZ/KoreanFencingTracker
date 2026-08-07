@@ -8,7 +8,7 @@ suitable for browser display and PDF conversion via weasyprint.
 from html import escape
 from typing import Optional
 
-from analyzer.touch_matching import NO_PRIORITY_CALL
+from analyzer.touch_matching import CONFIDENCE_ESTIMATED, NO_PRIORITY_CALL
 
 
 ACTION_KR = {
@@ -407,6 +407,32 @@ OUTCOME_REASON_NO_EXCHANGE = "득점 직전 교전을 포즈 분석에서 찾지
 OUTCOME_REASON_MUTUAL = "양쪽이 동시에 전진해 공격자를 한 명으로 특정할 수 없습니다"
 OUTCOME_REASON_NO_ADVANCE = "양쪽 모두 확실한 전진 풋워크가 감지되지 않았습니다"
 
+# Why priority estimation declined, when it ran and did not settle the touch.
+# "동시 공격에 가깝다"는 실패가 아니라 판정이다 — 플뢰레에서 동시 공격은 심판도
+# 점수를 주지 않는 실제 상황이므로, 못 가린 것이 아니라 가릴 것이 없었다고 적는다.
+OUTCOME_REASON_PRIORITY_SIMULTANE = (
+    "양쪽의 공격 개시 정도가 비슷해 어느 쪽이 먼저 공격했다고 보기 어렵습니다"
+)
+OUTCOME_REASON_PRIORITY_LOW_QUALITY = (
+    "접촉 직전 구간에서 두 선수의 팔·몸 위치를 충분히 읽지 못했습니다"
+)
+#: Judge decline reasons → the sentence shown for them. Reasons not listed here
+#: fall through to the footwork explanation, which is the more informative one.
+PRIORITY_DECLINE_REASONS = {
+    "simultaneous": OUTCOME_REASON_PRIORITY_SIMULTANE,
+    "low_quality": OUTCOME_REASON_PRIORITY_LOW_QUALITY,
+}
+
+#: Shown beside an attacker that priority estimation supplied rather than
+#: footwork determined. The label is deliberately a separate word from the
+#: verdict itself so a reader cannot mistake the two.
+ESTIMATED_BADGE_KO = "추정"
+ESTIMATED_BADGE_TITLE = (
+    "풋워크만으로는 공격자를 가릴 수 없어, 접촉 직전 구간의 팔 뻗기와 전진 정도를 "
+    "비교해 추정한 결과입니다. 심판 판정의 재현이 아니라 코칭 참고용 지표이며, "
+    "풋워크로 확정한 터치와는 신뢰도가 다릅니다."
+)
+
 # A single valid-target lamp means the referee awarded the touch outright — the
 # priority question (FIE t.56-t.60) was never asked. That is a fact about the
 # scoring box, so it is stated positively; but it explains *why no ruling was
@@ -552,7 +578,14 @@ def annotate_outcome_reasons(report_dict: dict) -> dict:
             continue
 
         ex = ex_by_num.get(touch.get("matched_exchange_number"))
-        if ex is None:
+        # When priority estimation ran and declined, its reason is the more
+        # specific one: the footwork explanation ("both advanced") is what made
+        # the touch reach the judge in the first place, so repeating it would
+        # describe the question rather than the answer.
+        priority = PRIORITY_DECLINE_REASONS.get(touch.get("priority_reason"))
+        if priority is not None:
+            reason = priority
+        elif ex is None:
             reason = OUTCOME_REASON_NO_EXCHANGE
         elif ex.get("attacker") == "both":
             reason = OUTCOME_REASON_MUTUAL
@@ -605,6 +638,24 @@ def annotate_lamp_labels(report_dict: dict) -> dict:
     return report_dict
 
 
+def annotate_estimated_badges(report_dict: dict) -> dict:
+    """Mark touches whose attacker was estimated rather than determined.
+
+    Writes ``estimated_badge`` / ``estimated_badge_title``, and nothing else.
+    A determined verdict and an estimated one are printed in the same sentence
+    shape, so without a visible marker a reader has no way to tell which kind of
+    claim they are looking at — and the estimate is the weaker of the two by a
+    wide margin. Touches with a footwork verdict, and every report predating
+    priority estimation, get no badge.
+    """
+    for touch in report_dict.get("touches") or []:
+        if touch.get("attacker_confidence") != CONFIDENCE_ESTIMATED:
+            continue
+        touch["estimated_badge"] = ESTIMATED_BADGE_KO
+        touch["estimated_badge_title"] = ESTIMATED_BADGE_TITLE
+    return report_dict
+
+
 def build_timeline(report_dict: dict) -> list:
     """Merge touches and exchanges into one chronological event list.
 
@@ -650,4 +701,5 @@ def prepare_report_view(report_dict: dict) -> dict:
     repair_match_times(report_dict.get("touches") or [])
     annotate_outcome_reasons(report_dict)
     annotate_lamp_labels(report_dict)
+    annotate_estimated_badges(report_dict)
     return report_dict

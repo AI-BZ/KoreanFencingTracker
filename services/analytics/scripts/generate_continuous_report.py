@@ -22,11 +22,13 @@ except ImportError:
     print("ERROR: opencv-python required.")
     sys.exit(1)
 
+from analyzer.config import PRIORITY_WINDOW_LEAD_SEC
 from analyzer.touch_matching import (
     annotate_touch_outcomes,
     classify_exchange_sides,
     summarize_attack_outcomes,
 )
+from ml.weapon_analyzers import build_priority_judge
 
 
 def format_timestamp(frame: int, fps: float) -> str:
@@ -110,6 +112,39 @@ def find_ocr_report(video_stem: str, output_dir) -> "Path | None":
     return None
 
 
+PRIORITY_SERIES_KEYS = (
+    "arm_series_left", "arm_series_right",
+    "hip_x_series_left", "hip_x_series_right",
+)
+
+
+def validate_priority_series_frames(exchanges: list, lead_frames: int) -> None:
+    """Raise if a serialized priority series sits outside the window it describes.
+
+    ``analyze_continuous`` works in sample indices while the report is written in
+    original video frames, and the two are a factor of ``--sample-every`` apart.
+    Forgetting that multiplication once already cost this pipeline a silently
+    wrong ``min_distance_frame``; here it would attach one exchange's arm motion
+    to another's verdict, which no downstream check would catch. So the invariant
+    is asserted at write time instead of being left to code review.
+
+    Every series frame must fall within
+    ``[start_frame − lead_frames − slack, min_distance_frame + slack]``.
+    """
+    slack = 1
+    for ex in exchanges:
+        low = ex["start_frame"] - lead_frames - slack
+        high = ex.get("min_distance_frame", ex["end_frame"]) + slack
+        for key in PRIORITY_SERIES_KEYS:
+            for frame, _value in ex.get(key) or ():
+                if not (low <= frame <= high):
+                    raise ValueError(
+                        f"exchange {ex.get('exchange_number')}: {key} frame "
+                        f"{frame} outside [{low}, {high}] — sample-index to "
+                        "video-frame conversion is wrong",
+                    )
+
+
 def _distance_zone(bh: float) -> str:
     """Map BH distance to zone name."""
     if bh > 1.8:
@@ -142,6 +177,15 @@ def main():
     parser.add_argument(
         "--merge-ocr", type=str, default=None,
         help="Path to existing OCR report JSON to merge scoring data (auto-detected if not specified)",
+    )
+    parser.add_argument(
+        "--weapon", type=str, default=None,
+        choices=["foil", "epee", "sabre"],
+        help=(
+            "Override the weapon when the filename defeats the metadata parser. "
+            "Foil priority estimation is gated on this, so an unrecognised "
+            "filename would otherwise silently disable it."
+        ),
     )
     parser.add_argument(
         "--with-overlays", action="store_true",
@@ -186,15 +230,22 @@ def main():
     print(f"  My fencer:   {args.my_fencer}")
     print(f"{'='*60}\n")
 
+    # Decode every frame but keep only the sampled ones. Holding the full
+    # decoded video was enough to get the process killed on a 20-minute bout;
+    # only every --sample-every'th frame is ever used, so the other two thirds
+    # were being retained for nothing.
     print("Reading frames...", end=" ", flush=True)
-    frames = []
+    sampled_frames = []
+    read_count = 0
     while True:
         ret, frame = cap.read()
         if not ret:
             break
-        frames.append(frame)
+        if read_count % args.sample_every == 0:
+            sampled_frames.append(frame)
+        read_count += 1
     cap.release()
-    print(f"{len(frames)} frames read.")
+    print(f"{read_count} frames read, {len(sampled_frames)} sampled.")
 
     # Import ML modules
     from ml.pose_estimator import PoseEstimator
@@ -206,8 +257,6 @@ def main():
     analyzer = PoseAnalyzer()
     analyzer.fps = fps
 
-    # Sample frames for batch processing
-    sampled_frames = frames[::args.sample_every]
     print(f"Running pose estimation on {len(sampled_frames)} sampled frames...")
 
     t0 = time.time()
@@ -240,13 +289,20 @@ def main():
             scoring_frames_sampled = {f // args.sample_every for f in scoring_frames_raw}
             print(f"  Scoring frames: {len(scoring_frames_sampled)} (from {len(ocr_touches)} OCR touches)")
 
-    # Run continuous analysis
+    # Run continuous analysis. The priority lead is converted from seconds into
+    # samples *here*, where both fps and the sampling stride are known — inside
+    # analyze_continuous the sequence is already sampled and its true frame rate
+    # is not recoverable.
+    priority_lead_samples = max(
+        1, round(PRIORITY_WINDOW_LEAD_SEC * fps / args.sample_every),
+    )
     print("Running continuous analysis...")
     continuous_result = analyzer.analyze_continuous(
         pose_sequence=pose_results,
         sample_every_n=1,  # Already sampled
         my_fencer=args.my_fencer,
         scoring_frames=scoring_frames_sampled if scoring_frames_sampled else None,
+        priority_lead_samples=priority_lead_samples,
     )
     t_analysis = time.time() - t0
 
@@ -323,13 +379,28 @@ def main():
         if ex.parry_right is not None and ex.parry_right.parry_detected:
             ex_dict["parry_right"] = True
 
-        # Determine attacker/defender based on footwork (shared rule — the same
-        # one that decides each touch's attack_outcome).
-        ex_dict["attacker"], ex_dict["defender"] = classify_exchange_sides(
-            fw_left_val, fw_right_val,
-        )
+        # Priority signal series. Sample indices → original video frames, the
+        # same ×sample_every conversion applied to every other frame number
+        # above. Getting this wrong would silently place the series outside the
+        # exchange it belongs to, so it is asserted rather than trusted.
+        for name in (
+            "arm_series_left", "arm_series_right",
+            "hip_x_series_left", "hip_x_series_right",
+        ):
+            series = getattr(ex, name)
+            if not series:
+                continue
+            ex_dict[name] = [
+                [frame * args.sample_every,
+                 None if value is None else round(value, 3)]
+                for frame, value in series
+            ]
 
         exchanges_list.append(ex_dict)
+
+    validate_priority_series_frames(
+        exchanges_list, priority_lead_samples * args.sample_every,
+    )
 
     # Count exchange types
     from collections import Counter
@@ -514,7 +585,15 @@ def main():
             # `pose_analysis` above: only the *preceding* exchange within the
             # measured OCR delay counts, so an unmatched touch stays "unclear"
             # rather than borrowing footwork from an unrelated exchange.
-            annotate_touch_outcomes(ocr_touches, exchanges_list, fps)
+            # Foil priority estimation, when it is enabled and the bout is foil.
+            # The weapon has to be resolved before the OCR summary merge further
+            # down, because the cascade is gated on it: an unrecognised weapon
+            # would silently skip estimation rather than fail loudly.
+            weapon = args.weapon or ocr_report.get("summary", {}).get("weapon")
+            judge = build_priority_judge(weapon, exchanges_list, fps)
+            if judge is not None:
+                print(f"  Priority estimation active (weapon={weapon})")
+            annotate_touch_outcomes(ocr_touches, exchanges_list, fps, judge=judge)
             attack_outcomes = summarize_attack_outcomes(ocr_touches)
             report_dict["continuous_summary"]["attack_outcomes"] = attack_outcomes
             for side in ("left", "right"):
@@ -524,7 +603,9 @@ def main():
                 f"{attack_outcomes['left']['attack_attempts']}, "
                 f"right {attack_outcomes['right']['attack_success']}/"
                 f"{attack_outcomes['right']['attack_attempts']}, "
-                f"unclear {attack_outcomes['unclear_touches']}/{attack_outcomes['total_touches']}"
+                f"unclear {attack_outcomes['unclear_touches']}/{attack_outcomes['total_touches']}, "
+                f"no priority call {attack_outcomes['no_priority_call_touches']}/"
+                f"{attack_outcomes['total_touches']}"
             )
 
             report_dict["touches"] = ocr_touches
@@ -574,6 +655,11 @@ def main():
         # Merge OCR warnings
         for w in ocr_report.get("warnings", []):
             report_dict["warnings"].append(w)
+
+        # An explicit --weapon outranks the OCR report's guess, which is itself
+        # only a filename parse.
+        if args.weapon:
+            report_dict["summary"]["weapon"] = args.weapon
 
         # Store clock events (Allez/Halt proxy) from OCR if available
         clock_events = ocr_report.get("clock_events", [])
