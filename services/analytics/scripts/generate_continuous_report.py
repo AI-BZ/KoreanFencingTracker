@@ -12,6 +12,7 @@ Usage:
 
 import argparse
 import json
+import resource
 import sys
 import time
 from pathlib import Path
@@ -37,6 +38,29 @@ def format_timestamp(frame: int, fps: float) -> str:
     m = int(seconds // 60)
     s = int(seconds % 60)
     return f"{m}:{s:02d}"
+
+
+def peak_memory_gb() -> float:
+    """Peak resident set size of this process, in GB.
+
+    ``ru_maxrss`` is bytes on macOS/BSD but kilobytes on Linux, so the raw value
+    is off by 1024x depending on where the pipeline runs. Normalising here keeps
+    the number printed at the end of a run comparable across machines.
+    """
+    peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    if sys.platform != "darwin":
+        peak *= 1024
+    return peak / (1024 ** 3)
+
+
+# How many sampled frames to hold in memory before handing them to the pose
+# estimator. This buys nothing in throughput — PoseEstimator.estimate_poses_batch
+# is a per-frame loop, so pose results are byte-identical at any chunk size — it
+# exists purely to bound the live frame buffer. At 720p a decoded BGR frame is
+# ~2.8MB, so 256 caps the buffer near 0.7GB regardless of bout length, while
+# still passing a list to the batch API so a future implementation that does
+# real batching keeps something worth batching.
+POSE_CHUNK_FRAMES = 256
 
 
 # Capture-pipeline prefixes that the OCR report filename never carries.
@@ -230,23 +254,6 @@ def main():
     print(f"  My fencer:   {args.my_fencer}")
     print(f"{'='*60}\n")
 
-    # Decode every frame but keep only the sampled ones. Holding the full
-    # decoded video was enough to get the process killed on a 20-minute bout;
-    # only every --sample-every'th frame is ever used, so the other two thirds
-    # were being retained for nothing.
-    print("Reading frames...", end=" ", flush=True)
-    sampled_frames = []
-    read_count = 0
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
-        if read_count % args.sample_every == 0:
-            sampled_frames.append(frame)
-        read_count += 1
-    cap.release()
-    print(f"{read_count} frames read, {len(sampled_frames)} sampled.")
-
     # Import ML modules
     from ml.pose_estimator import PoseEstimator
     from ml.pose_analyzer import PoseAnalyzer
@@ -257,10 +264,58 @@ def main():
     analyzer = PoseAnalyzer()
     analyzer.fps = fps
 
-    print(f"Running pose estimation on {len(sampled_frames)} sampled frames...")
-
+    # Decode every frame, keep only the sampled ones, and run pose estimation on
+    # each chunk before reading the next.
+    #
+    # The previous shape collected every sampled frame into one list and only
+    # then called the estimator. At 720p / --sample-every 3 that accumulates
+    # ~1.7GB per minute of video, which held 32.7GB for a 20-minute bout and got
+    # the process killed with no traceback. Nothing downstream needs the pixels:
+    # `pose_results` carries joint coordinates only (a few KB per frame), so the
+    # frames can be dropped the moment inference returns.
+    print("Reading frames + estimating poses...")
     t0 = time.time()
-    pose_results = estimator.estimate_poses_batch(sampled_frames)
+    pose_results = []
+    chunk = []
+    read_count = 0
+    sampled_count = 0
+
+    def _flush_chunk():
+        """Infer on the buffered frames, then drop the references."""
+        nonlocal chunk, sampled_count
+        if not chunk:
+            return
+        # start_idx keeps frame_idx continuous across chunks, so pose_results is
+        # indexed exactly as it was when the whole video went in as one list.
+        pose_results.extend(
+            estimator.estimate_poses_batch(chunk, start_idx=sampled_count)
+        )
+        sampled_count += len(chunk)
+        chunk = []
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        if read_count % args.sample_every == 0:
+            chunk.append(frame)
+            if len(chunk) >= POSE_CHUNK_FRAMES:
+                _flush_chunk()
+                print(
+                    f"  {sampled_count} sampled frames posed "
+                    f"({read_count + 1}/{total_frames} read, "
+                    f"peak {peak_memory_gb():.1f}GB)",
+                    flush=True,
+                )
+        read_count += 1
+        frame = None  # release the decoded frame we chose not to sample
+    cap.release()
+    _flush_chunk()
+    print(
+        f"  {read_count} frames read, {sampled_count} sampled, "
+        f"{len(pose_results)} poses estimated."
+    )
+    print(f"  Peak memory after pose estimation: {peak_memory_gb():.2f}GB")
 
     # Load OCR report early so we can extract scoring_frames for analyze_continuous()
     ocr_report = None
@@ -430,7 +485,7 @@ def main():
             "final_score": "연속 분석",
             "total_touches": 0,
             "match_duration": match_duration,
-            "total_frames_analyzed": len(sampled_frames),
+            "total_frames_analyzed": sampled_count,
             "analysis_time_sec": round(t_analysis, 1),
             "weapon": "epee",
             "bout_type": "de",
@@ -783,6 +838,7 @@ def main():
         print(f"    Defenses: {my_stats.get('defenses', 0)}")
     print(f"  Duration:    {match_duration}")
     print(f"  Processing:  {t_analysis:.1f}s ({t_analysis/duration_sec:.2f}x realtime)")
+    print(f"  Peak memory: {peak_memory_gb():.2f}GB")
     if clip_results:
         print(f"  Clips:       {len(clip_results)} generated")
     print(f"{'='*60}")
