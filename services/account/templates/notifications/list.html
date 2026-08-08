@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block title %}{{ i18n.account.notifications.title|default('알림') }}{% endblock %}
+
+{% block head %}
+<style>
+    .notif-container {
+        max-width: 700px;
+        margin: 32px auto;
+        padding: 0 16px;
+    }
+    .notif-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+    .notif-header h2 { font-size: 1.25rem; font-weight: 700; }
+    .notif-header .count { font-size: 0.85rem; color: var(--text-muted); }
+    .notif-item {
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 16px 20px;
+        margin-bottom: 10px;
+        transition: background 0.15s;
+    }
+    .notif-item.unread {
+        border-left: 3px solid var(--info-color);
+        background: rgba(59, 130, 246, 0.08);
+    }
+    .notif-item .notif-title {
+        font-weight: 600;
+        font-size: 0.95rem;
+        color: var(--text-primary);
+        margin-bottom: 4px;
+    }
+    .notif-item .notif-body {
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+        line-height: 1.6;
+        white-space: pre-wrap;
+    }
+    .notif-item .notif-meta {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 8px;
+        font-size: 0.75rem;
+        color: var(--text-muted);
+    }
+    .notif-item .mark-read-btn {
+        font-size: 0.75rem;
+        color: var(--accent-gold);
+        cursor: pointer;
+        border: none;
+        background: none;
+        padding: 2px 6px;
+    }
+    .notif-item .mark-read-btn:hover { text-decoration: underline; }
+    .notif-empty {
+        text-align: center;
+        padding: 60px 20px;
+        color: var(--text-muted);
+        font-size: 0.9rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="notif-container">
+    <div class="notif-header">
+        <h2>{{ i18n.account.notifications.title|default('알림') }}</h2>
+        <span class="count">{{ i18n.account.notifications.total_count|default('총 {count}건')|replace('{count}', total|string) }}</span>
+    </div>
+
+    {% for n in notifications %}
+    <div class="notif-item {% if not n.is_read %}unread{% endif %}" id="notif-{{ n.id }}">
+        <div class="notif-title">{{ n.title }}</div>
+        <div class="notif-body">{{ n.body }}</div>
+        <div class="notif-meta">
+            <span>{{ (n.created_at or '')[:16] | replace('T', ' ') }}</span>
+            {% if not n.is_read %}
+            <button class="mark-read-btn" onclick="markRead('{{ n.id }}', this)">{{ i18n.account.notifications.mark_read|default('읽음 처리') }}</button>
+            {% else %}
+            <span style="color:#16a34a;">{{ i18n.account.notifications.read|default('읽음') }}</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+
+    {% if not notifications %}
+    <div class="notif-empty">{{ i18n.account.notifications.no_notifications|default('알림이 없습니다') }}</div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function markRead(id, btn) {
+    try {
+        const res = await fetch(`/account/notifications/${id}/read`, { method: 'POST' });
+        if (res.ok) {
+            const item = document.getElementById(`notif-${id}`);
+            item.classList.remove('unread');
+            btn.outerHTML = '<span style="color:#16a34a;">{{ i18n.account.notifications.read|default("읽음") }}</span>';
+        }
+    } catch (e) { console.error(e); }
+}
+</script>
+{% endblock %}

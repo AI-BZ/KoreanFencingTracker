@@ -36,7 +36,7 @@
                 <span class="logo-text">{{ i18n.common.site.title|default('Korean Fencing Tracker') }}</span>
             </a>
             <div class="auth-nav" id="authNav">
-                <a href="/auth/login" class="auth-btn login-btn" id="loginBtn">{{ i18n.common.nav.login|default('Login') }}</a>
+                <a href="https://account.fencingmind.ai/auth/login?redirect=https://data.fencingmind.ai" class="auth-btn login-btn" id="loginBtn">{{ i18n.common.nav.login|default('Login') }}</a>
             </div>
             <div class="nav-links">
                 <a href="/{{ lang|default('ko') }}/">{{ i18n.common.nav.search|default('Search') }}</a>
@@ -65,8 +65,12 @@
 
     <footer class="footer">
         <div class="container">
-            <p>{{ i18n.common.footer.copyright|default('Korean Fencing Tracker') }} &copy; 2024-2025</p>
+            <p>{{ i18n.common.footer.copyright|default('Korean Fencing Tracker') }} &copy; 2024-2026</p>
             <p>{{ i18n.common.footer.data_source|default('데이터 출처') }}: <a href="https://fencing.sports.or.kr" target="_blank">KFF</a></p>
+            <p>
+                <a href="https://account.fencingmind.ai/legal/terms">이용약관</a> |
+                <a href="https://account.fencingmind.ai/legal/privacy">개인정보처리방침</a>
+            </p>
         </div>
     </footer>
 
@@ -104,17 +108,23 @@
         updateParallax();
     })();
 
-    // 로그인 상태 확인
-    document.addEventListener('DOMContentLoaded', async function() {
+    // 로그인 상태 확인 (user_display 쿠키 - JS 읽기 가능)
+    document.addEventListener('DOMContentLoaded', function() {
         try {
-            const response = await fetch('/auth/me');
-            if (response.ok) {
-                const member = await response.json();
+            const cookies = document.cookie.split(';').reduce((acc, c) => {
+                const [k, ...v] = c.trim().split('=');
+                acc[k] = v.join('=');
+                return acc;
+            }, {});
+            const displayRaw = cookies['user_display'];
+            if (displayRaw) {
+                const info = JSON.parse(decodeURIComponent(displayRaw));
                 const authNav = document.getElementById('authNav');
                 authNav.innerHTML = `
-                    <a href="/auth/verification" class="auth-btn profile-btn">
-                        ${member.display_name || member.full_name[0]}
+                    <a href="https://account.fencingmind.ai/account/me" class="auth-btn profile-btn">
+                        ${info.email || '마이페이지'}
                     </a>
+                    <a href="https://account.fencingmind.ai/auth/logout" class="auth-btn login-btn" style="margin-left:8px;">로그아웃</a>
                 `;
             }
         } catch (e) {

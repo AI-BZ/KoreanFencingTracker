@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="{{ lang|default('ko') }}" data-theme="{{ theme|default('dark') }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}FencingMind{% endblock %}</title>
+
+    <!-- PWA -->
+    <link rel="manifest" href="/static/manifest.json">
+    <meta name="theme-color" content="#c9302c">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="/static/images/icons/icon-192.png">
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" sizes="192x192" href="/static/images/icons/icon-192.png">
+
+    <!-- Fonts: Pretendard (Korean) + Inter (English) -->
+    <link rel="preconnect" href="https://cdn.jsdelivr.net">
+    {% if lang|default('ko') == 'ko' %}
+    <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" rel="stylesheet">
+    {% endif %}
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-tertiary: #1a1a25;
+            --bg-card: rgba(18, 18, 26, 0.85);
+            --bg-card-hover: rgba(26, 26, 37, 0.9);
+            --accent-primary: #c9302c;
+            --accent-secondary: #1e3a8a;
+            --accent-gold: #d4a574;
+            --text-primary: #ffffff;
+            --text-secondary: #b4b4c4;
+            --text-muted: #6b6b7b;
+            --border-color: rgba(255, 255, 255, 0.08);
+            --border-light: rgba(255, 255, 255, 0.15);
+            --glow-primary: rgba(201, 48, 44, 0.3);
+            --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+            --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.4);
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --danger-color: #ef4444;
+            --info-color: #3b82f6;
+        }
+
+        [data-theme="light"] {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f5f5f7;
+            --bg-tertiary: #f0f0f5;
+            --bg-card: #ffffff;
+            --bg-card-hover: #f9f9fb;
+            --text-primary: #191f28;
+            --text-secondary: #4e5968;
+            --text-muted: #8b95a1;
+            --border-color: rgba(0, 0, 0, 0.08);
+            --border-light: rgba(0, 0, 0, 0.12);
+            --glow-primary: transparent;
+            --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
+            --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: 'Pretendard Variable', 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            font-weight: 400;
+            letter-spacing: -0.01em;
+            overflow-x: hidden;
+        }
+
+        /* Parallax Background */
+        .parallax-bg {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: -2;
+            background: linear-gradient(135deg, #0a0a0f 0%, #12121a 50%, #0f0f1a 100%);
+        }
+        .parallax-overlay {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: radial-gradient(ellipse at 50% 0%, rgba(201, 48, 44, 0.08) 0%, transparent 60%),
+                        radial-gradient(ellipse at 80% 80%, rgba(30, 58, 138, 0.06) 0%, transparent 50%);
+        }
+
+        /* Navbar */
+        .navbar {
+            background: rgba(10, 10, 15, 0.95);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border-color);
+            padding: 12px 0;
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            z-index: 1000;
+        }
+        .navbar .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .logo {
+            display: flex;
+            align-items: center;
+            text-decoration: none;
+        }
+        .logo img { height: 28px; width: auto; }
+        .nav-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .nav-link {
+            color: var(--text-secondary);
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            border: 1px solid transparent;
+        }
+        .nav-link:hover {
+            color: var(--text-primary);
+            background: rgba(255, 255, 255, 0.05);
+            border-color: var(--border-light);
+        }
+
+        /* Language Switcher */
+        .lang-switcher { display: inline-flex; gap: 4px; }
+        .lang-switcher a {
+            color: var(--text-muted);
+            text-decoration: none;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        .lang-switcher a.active {
+            color: var(--text-primary);
+            background: rgba(255, 255, 255, 0.1);
+        }
+        .lang-switcher a:hover { color: var(--text-primary); }
+
+        /* Main Content */
+        .main-content {
+            min-height: calc(100vh - 200px);
+            padding-top: 80px;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Footer */
+        .site-footer {
+            background: var(--bg-secondary);
+            border-top: 1px solid var(--border-color);
+            padding: 30px 0;
+            text-align: center;
+            position: relative;
+            z-index: 1;
+        }
+        .footer-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+        .footer-links { margin-bottom: 10px; }
+        .footer-links a {
+            color: var(--accent-gold);
+            text-decoration: none;
+            font-size: 0.85rem;
+        }
+        .footer-links .sep {
+            color: var(--text-muted);
+            margin: 0 8px;
+        }
+        .footer-copyright {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+        }
+
+        /* Light theme overrides */
+        [data-theme="light"] .parallax-bg,
+        [data-theme="light"] .parallax-overlay { display: none; }
+        [data-theme="light"] body { background: #ffffff; }
+        [data-theme="light"] .navbar {
+            background: rgba(255, 255, 255, 0.95);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+        [data-theme="light"] .nav-link { color: #4e5968; }
+        [data-theme="light"] .nav-link:hover {
+            color: #191f28;
+            background: rgba(0, 0, 0, 0.04);
+        }
+        [data-theme="light"] .lang-switcher a { color: #8b95a1; }
+        [data-theme="light"] .lang-switcher a.active {
+            color: #191f28;
+            background: rgba(0, 0, 0, 0.06);
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .nav-right { gap: 8px; }
+            .nav-link { padding: 6px 10px; font-size: 0.85rem; }
+            .lang-switcher a { padding: 3px 6px; font-size: 0.7rem; }
+        }
+
+        /* PWA Install Banner (Phase 5) */
+        .install-banner {
+            position: fixed;
+            left: 0; right: 0; bottom: 0;
+            z-index: 1100;
+            display: none;
+            padding: 14px 16px;
+            background: var(--bg-card);
+            border-top: 1px solid var(--border-light);
+            box-shadow: var(--shadow-md);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+        .install-banner.is-visible { display: block; }
+        .install-banner-inner {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+        .install-banner-icon {
+            flex-shrink: 0;
+            color: var(--accent-primary);
+            display: inline-flex;
+            align-items: center;
+        }
+        .install-banner-text {
+            flex: 1;
+            color: var(--text-secondary);
+            font-size: 0.88rem;
+            line-height: 1.5;
+        }
+        .install-banner-action {
+            flex-shrink: 0;
+            padding: 9px 18px;
+            background: var(--accent-primary);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.88rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        .install-banner-action:hover { opacity: 0.85; }
+        .install-banner-action:disabled { opacity: 0.6; cursor: default; }
+        .install-banner-close {
+            flex-shrink: 0;
+            width: 32px;
+            height: 32px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: transparent;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-muted);
+            font-size: 1.1rem;
+            line-height: 1;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .install-banner-close:hover {
+            color: var(--text-primary);
+            border-color: var(--border-light);
+        }
+        @media (max-width: 768px) {
+            .install-banner { padding: 12px 14px; }
+            .install-banner-inner { gap: 10px; flex-wrap: wrap; }
+            .install-banner-text { font-size: 0.82rem; flex-basis: 100%; order: 2; }
+            .install-banner-icon { order: 1; }
+            .install-banner-action { order: 3; }
+            .install-banner-close { order: 1; margin-left: auto; }
+        }
+    </style>
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <!-- Background -->
+    <div class="parallax-bg">
+        <div class="parallax-overlay"></div>
+    </div>
+
+    <!-- Navbar -->
+    <nav class="navbar">
+        <div class="container">
+            <a href="/" class="logo">
+                {% if theme == 'light' %}
+                <img src="/static/images/logo/FencingMind_logo_long.png" alt="FencingMind" height="28">
+                {% else %}
+                <img src="/static/images/logo/FencingMind_logo_long_white.png" alt="FencingMind" height="28">
+                {% endif %}
+            </a>
+            <div class="nav-right">
+                <a href="/notifications/settings" class="nav-link">{{ t('app.notif.nav', '알림 설정') }}</a>
+                <a href="https://data.fencingmind.ai" class="nav-link">{{ t('common.nav.data', 'Data') }}</a>
+                <div class="lang-switcher">
+                    {% for sl in supported_langs|default(['ko', 'en', 'fr', 'it', 'ja', 'zh', 'tr']) %}
+                    <a href="?lang={{ sl }}" class="{% if sl == lang|default('ko') %}active{% endif %}" title="{{ language_names[sl]|default(sl|upper) if language_names is defined else sl|upper }}">{{ sl|upper }}</a>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- PWA Install Banner (Phase 5) -->
+    <div id="install-banner"
+         class="install-banner"
+         role="region"
+         aria-label="{{ t('app.install.banner_label', 'Install app') }}"
+         aria-hidden="true"
+         data-txt-ios-guide="{{ t('app.install.ios_guide', 'Tap the Safari Share button → \"Add to Home Screen\" to install the app.') }}"
+         data-txt-ios-push="{{ t('app.install.ios_push', 'Installing enables push notifications.') }}"
+         data-txt-install-prompt="{{ t('app.install.prompt', 'Install FencingMind as an app for push notifications and quick access.') }}"
+         data-txt-install-action="{{ t('app.install.action', 'Install App') }}">
+        <div class="install-banner-inner">
+            <span class="install-banner-icon" aria-hidden="true">
+                <!-- Share icon (iOS hint) -->
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
+                    <polyline points="16 6 12 2 8 6"></polyline>
+                    <line x1="12" y1="2" x2="12" y2="15"></line>
+                </svg>
+            </span>
+            <span id="install-banner-text" class="install-banner-text"></span>
+            <button id="install-banner-action" class="install-banner-action" type="button" hidden></button>
+            <button id="install-banner-close" class="install-banner-close" type="button"
+                    aria-label="{{ t('app.install.dismiss', 'Dismiss') }}">&times;</button>
+        </div>
+    </div>
+
+    <footer class="site-footer">
+        <div class="footer-container">
+            <div class="footer-links">
+                <a href="https://account.fencingmind.ai/legal/terms">{{ t('common.footer.terms', 'Terms') }}</a>
+                <span class="sep">|</span>
+                <a href="https://account.fencingmind.ai/legal/privacy">{{ t('common.footer.privacy', 'Privacy') }}</a>
+                <span class="sep">|</span>
+                <a href="mailto:privacy@fencingmind.ai">{{ t('common.footer.privacy_inquiry', 'Privacy Inquiry') }}</a>
+            </div>
+            <div class="footer-copyright">&copy; 2024-2026 FencingMind LLC</div>
+        </div>
+    </footer>
+
+    <!-- Service Worker Registration -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/service-worker.js', { scope: '/' })
+                    .then((reg) => {
+                        console.log('SW registered, scope:', reg.scope);
+                    })
+                    .catch((err) => {
+                        console.warn('SW registration failed:', err);
+                    });
+            });
+        }
+    </script>
+
+    <!-- PWA install affordances (iOS guide banner + centralized beforeinstallprompt) -->
+    <script src="/static/js/install.js" defer></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

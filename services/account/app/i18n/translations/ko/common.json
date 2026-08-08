@@ -1,0 +1,86 @@
+{
+    "nav": {
+        "login": "로그인",
+        "logout": "로그아웃",
+        "register": "회원가입",
+        "dashboard": "대시보드",
+        "my_account": "내 계정",
+        "home": "홈"
+    },
+    "footer": {
+        "terms": "이용약관",
+        "privacy": "개인정보처리방침",
+        "privacy_inquiry": "개인정보 문의",
+        "copyright": "2024-2026 FencingMind LLC"
+    },
+    "member_types": {
+        "general": "일반 회원",
+        "player": "선수회원",
+        "player_parent": "선수 부모회원",
+        "club_coach": "클럽 코치",
+        "club_director": "클럽 감독/대표",
+        "school_coach": "학교 코치",
+        "school_director": "학교 감독"
+    },
+    "status": {
+        "active": "활성",
+        "inactive": "휴회",
+        "suspended": "정지",
+        "pending": "대기",
+        "approved": "승인",
+        "rejected": "거부",
+        "verified": "인증완료",
+        "submitted": "제출됨",
+        "unverified": "미인증",
+        "auto_verified": "자동인증",
+        "running": "운영중"
+    },
+    "buttons": {
+        "save": "저장",
+        "cancel": "취소",
+        "confirm": "확인",
+        "delete": "삭제",
+        "edit": "수정",
+        "search": "검색",
+        "back": "뒤로",
+        "submit": "제출",
+        "send": "발송",
+        "retry": "다시 시도",
+        "view": "보기",
+        "detail": "상세",
+        "review": "검토",
+        "close": "닫기"
+    },
+    "labels": {
+        "name": "이름",
+        "email": "이메일",
+        "phone": "연락처",
+        "birth_date": "생년월일",
+        "nickname": "닉네임",
+        "member_type": "회원 유형",
+        "status": "상태",
+        "date": "날짜",
+        "created_at": "가입일",
+        "required": "필수",
+        "optional": "선택",
+        "subject": "제목",
+        "body": "본문",
+        "content": "내용"
+    },
+    "messages": {
+        "no_data": "데이터가 없습니다",
+        "no_results": "검색 결과가 없습니다",
+        "loading": "로딩 중...",
+        "confirm_action": "진행하시겠습니까?",
+        "success": "성공",
+        "error": "오류가 발생했습니다"
+    },
+    "pagination": {
+        "prev": "이전",
+        "next": "다음"
+    },
+    "language": {
+        "ko": "한국어",
+        "en": "English"
+    }
+}

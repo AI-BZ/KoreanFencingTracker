@@ -1,0 +1,251 @@
+{% extends "admin/layout.html" %}
+
+{% block title %}{{ i18n.admin.approvals.title|default('승인 관리') }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .filter-tabs {
+        display: flex;
+        gap: 0;
+        margin-bottom: 20px;
+        border-bottom: 1px solid var(--gray-200);
+    }
+    .filter-tabs a {
+        padding: 10px 16px;
+        font-size: 0.85rem;
+        color: var(--gray-500);
+        border-bottom: 2px solid transparent;
+    }
+    .filter-tabs a:hover { color: var(--gray-800); text-decoration: none; }
+    .filter-tabs a.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+    .approval-card {
+        background: #fff;
+        border: 1px solid var(--gray-200);
+        border-radius: 8px;
+        padding: 16px 20px;
+        margin-bottom: 12px;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 16px;
+        flex-wrap: wrap;
+    }
+    .approval-card .info { flex: 1; min-width: 250px; }
+    .approval-card .info h4 { font-size: 0.95rem; font-weight: 600; margin-bottom: 4px; }
+    .approval-card .info p { font-size: 0.82rem; color: var(--gray-500); margin: 2px 0; }
+    .approval-card .meta { font-size: 0.75rem; color: var(--gray-400); }
+    .approval-card .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .confidence-bar {
+        width: 80px;
+        height: 6px;
+        background: var(--gray-200);
+        border-radius: 3px;
+        overflow: hidden;
+        display: inline-block;
+        vertical-align: middle;
+    }
+    .confidence-bar .fill {
+        height: 100%;
+        border-radius: 3px;
+    }
+    .brn-layers { display: flex; gap: 6px; margin-top: 4px; }
+    .brn-layer {
+        font-size: 0.7rem;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-weight: 600;
+    }
+    .brn-layer.pass { background: var(--success-light); color: var(--success); }
+    .brn-layer.fail { background: var(--danger-light); color: var(--danger); }
+    .brn-layer.na { background: var(--gray-100); color: var(--gray-400); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+    <h2 style="font-size:1.25rem; font-weight:700;">{{ i18n.admin.approvals.title|default('승인 관리') }}</h2>
+    <span style="font-size:0.85rem; color:var(--gray-500);">{{ i18n.admin.approvals.pending_count|default('총 {count}건 대기')|replace('{count}', items|length|string) }}</span>
+</div>
+
+<!-- Filter Tabs -->
+<div class="filter-tabs">
+    <a href="/account/admin/approvals" class="{% if not type_filter %}active{% endif %}">
+        {{ i18n.admin.approvals.all_filter|default('전체') }} ({{ counts.total }})
+    </a>
+    <a href="/account/admin/approvals?type=verification" class="{% if type_filter == 'verification' %}active{% endif %}">
+        {{ i18n.admin.approvals.verification_filter|default('본인인증') }} ({{ counts.verification }})
+    </a>
+    <a href="/account/admin/approvals?type=player_claim" class="{% if type_filter == 'player_claim' %}active{% endif %}">
+        {{ i18n.admin.approvals.player_claim_filter|default('선수 Claim') }} ({{ counts.player_claim }})
+    </a>
+    <a href="/account/admin/approvals?type=org_claim" class="{% if type_filter == 'org_claim' %}active{% endif %}">
+        {{ i18n.admin.approvals.org_claim_filter|default('조직 Claim') }} ({{ counts.org_claim }})
+    </a>
+    <a href="/account/admin/approvals?type=parent_claim" class="{% if type_filter == 'parent_claim' %}active{% endif %}">
+        학부모 인증 ({{ counts.parent_claim }})
+    </a>
+</div>
+
+<!-- Approval Items -->
+{% for item in items %}
+<div class="approval-card">
+    <div class="info">
+        <!-- Type badge -->
+        {% if item.type == 'verification' %}
+            <span class="status-badge status-pending" style="margin-bottom:6px;">{{ i18n.admin.approvals.identity_badge|default('본인인증') }}</span>
+        {% elif item.type == 'player_claim' %}
+            <span class="status-badge" style="background:#eef2ff; color:#4f46e5; margin-bottom:6px;">{{ i18n.admin.approvals.player_claim_badge|default('선수 Claim') }}</span>
+        {% elif item.type == 'org_claim' %}
+            <span class="status-badge" style="background:#fef3c7; color:#92400e; margin-bottom:6px;">{{ i18n.admin.approvals.org_claim_badge|default('조직 Claim') }}</span>
+        {% elif item.type == 'parent_claim' %}
+            <span class="status-badge" style="background:#fce7f3; color:#9d174d; margin-bottom:6px;">학부모 인증</span>
+        {% endif %}
+
+        <h4>
+            {% if item.member_name %}{{ item.member_name }}{% else %}ID: {{ (item.member_id or '')[:8] }}{% endif %}
+            <span class="status-badge status-{{ item.status }}" style="margin-left:6px;">{{ item.status }}</span>
+        </h4>
+
+        <!-- Type-specific info -->
+        {% if item.type == 'verification' %}
+            <p>{{ i18n.admin.approvals.verification_type_label|default('인증 유형') }}: {{ item.verification_type or '-' }}</p>
+            {% if item.ai_confidence is not none %}
+            <p>
+                {{ i18n.admin.approvals.ai_confidence_label|default('AI 신뢰도') }}:
+                <span class="confidence-bar">
+                    <span class="fill" style="width:{{ (item.ai_confidence * 100)|int }}%; background:{% if item.ai_confidence >= 0.85 %}var(--success){% elif item.ai_confidence >= 0.60 %}var(--warning){% else %}var(--danger){% endif %};"></span>
+                </span>
+                {{ "%.2f"|format(item.ai_confidence) }}
+            </p>
+            {% endif %}
+
+        {% elif item.type == 'player_claim' %}
+            <p>{{ i18n.admin.approvals.player_label|default('선수') }}: #{{ item.player_id }} {{ item.player_name or '' }}</p>
+            {% if item.confidence_score is not none %}
+            <p>
+                {{ i18n.admin.approvals.matching_score_label|default('매칭 점수') }}:
+                <span class="confidence-bar">
+                    <span class="fill" style="width:{{ (item.confidence_score * 100)|int }}%; background:{% if item.confidence_score >= 0.85 %}var(--success){% elif item.confidence_score >= 0.50 %}var(--warning){% else %}var(--danger){% endif %};"></span>
+                </span>
+                {{ "%.2f"|format(item.confidence_score) }}
+            </p>
+            {% endif %}
+
+        {% elif item.type == 'org_claim' %}
+            <p>{{ i18n.admin.approvals.organization_label|default('조직') }}: #{{ item.organization_id }} {{ item.org_name or '' }} ({{ item.claim_type or '-' }})</p>
+            {% if item.brn_number %}
+            <p>{{ i18n.admin.approvals.brn_number_label|default('사업자번호') }}: {{ item.brn_number }}</p>
+            <div class="brn-layers">
+                <span class="brn-layer {% if item.brn_ocr_confidence and item.brn_ocr_confidence > 0.5 %}pass{% else %}na{% endif %}">
+                    OCR {% if item.brn_ocr_confidence %}{{ "%.0f"|format(item.brn_ocr_confidence * 100) }}%{% endif %}
+                </span>
+                <span class="brn-layer {% if item.brn_checkdigit_valid %}pass{% elif item.brn_checkdigit_valid == false %}fail{% else %}na{% endif %}">
+                    {{ i18n.admin.approvals.brn_checkdigit|default('검증식') }} {% if item.brn_checkdigit_valid %}OK{% elif item.brn_checkdigit_valid == false %}FAIL{% else %}-{% endif %}
+                </span>
+                <span class="brn-layer {% if item.brn_nts_valid %}pass{% elif item.brn_nts_valid == false %}fail{% else %}na{% endif %}">
+                    {{ i18n.admin.approvals.brn_nts|default('국세청') }} {% if item.brn_nts_valid %}OK{% elif item.brn_nts_valid == false %}FAIL{% else %}-{% endif %}
+                </span>
+            </div>
+            {% endif %}
+
+        {% elif item.type == 'parent_claim' %}
+            <p>자녀: <strong>{{ item.child_name }}</strong>
+                {% if item.child_birth_year %}({{ item.child_birth_year }}년생){% endif %}
+                {% if item.child_team_name %} · {{ item.child_team_name }}{% endif %}
+            </p>
+            <p>관계:
+                {% if item.relationship_type == 'father' %}부
+                {% elif item.relationship_type == 'mother' %}모
+                {% elif item.relationship_type == 'legal_guardian' %}법정대리인
+                {% elif item.relationship_type == 'grandparent' %}조부모
+                {% else %}기타{% endif %}
+                {% if item.matched_player_name %} · 매칭 선수: {{ item.matched_player_name }} (#{{ item.matched_player_id }}){% endif %}
+            </p>
+            {% if item.ai_confidence is not none %}
+            <p>
+                AI 신뢰도:
+                <span class="confidence-bar">
+                    <span class="fill" style="width:{{ (item.ai_confidence * 100)|int }}%; background:{% if item.ai_confidence >= 0.80 %}var(--success){% elif item.ai_confidence >= 0.50 %}var(--warning){% else %}var(--danger){% endif %};"></span>
+                </span>
+                {{ "%.2f"|format(item.ai_confidence) }}
+                {% if item.ai_recommendation %}
+                · 권장: <strong>{{ item.ai_recommendation }}</strong>
+                {% endif %}
+            </p>
+            {% endif %}
+
+            <!-- AI Report Details -->
+            {% if item.ai_report %}
+            <details style="margin-top:8px; font-size:0.82rem;">
+                <summary style="cursor:pointer; color:var(--primary); font-weight:600;">AI 분석 리포트 보기</summary>
+                <div style="margin-top:8px; padding:10px; background:var(--gray-50, #f9fafb); border-radius:6px;">
+                    {% if item.ai_report.evidence %}
+                    <table style="width:100%; font-size:0.78rem; border-collapse:collapse; margin-bottom:8px;">
+                        <thead>
+                            <tr style="border-bottom:1px solid var(--gray-200);">
+                                <th style="text-align:left; padding:4px 6px;">신호</th>
+                                <th style="text-align:left; padding:4px 6px;">설명</th>
+                                <th style="text-align:right; padding:4px 6px;">가중치</th>
+                                <th style="text-align:right; padding:4px 6px;">점수</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for ev in item.ai_report.evidence %}
+                            <tr style="border-bottom:1px solid var(--gray-100);">
+                                <td style="padding:4px 6px; font-weight:500;">{{ ev.signal }}</td>
+                                <td style="padding:4px 6px; color:var(--gray-500);">{{ ev.description }}</td>
+                                <td style="text-align:right; padding:4px 6px;">{{ ev.weight }}</td>
+                                <td style="text-align:right; padding:4px 6px; font-weight:600;">{{ ev.score }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% endif %}
+
+                    {% if item.ai_report.flags %}
+                    <div style="margin-bottom:6px;">
+                        {% for flag in item.ai_report.flags %}
+                        <span style="display:inline-block; padding:2px 8px; border-radius:4px; font-size:0.75rem; margin:2px;
+                            {% if flag.type == 'warning' %}background:#fef3c7; color:#92400e;
+                            {% elif flag.type == 'error' %}background:#fee2e2; color:#991b1b;
+                            {% else %}background:#e0f2fe; color:#075985;{% endif %}">
+                            {% if flag.type == 'warning' %}⚠️{% elif flag.type == 'error' %}🚨{% else %}ℹ️{% endif %}
+                            {{ flag.message }}
+                        </span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+
+                    {% if item.ai_report.reasoning %}
+                    <p style="color:var(--gray-600); line-height:1.5; margin:0;">{{ item.ai_report.reasoning }}</p>
+                    {% endif %}
+                </div>
+            </details>
+            {% endif %}
+        {% endif %}
+
+        <div class="meta">{{ i18n.admin.approvals.submitted_label|default('제출') }}: {{ (item.created_at or '')[:16] | replace('T', ' ') }}</div>
+    </div>
+
+    <div class="actions">
+        <form method="POST" action="/account/admin/approvals/{{ item.type }}/{{ item.id }}/approve" style="display:inline;">
+            <input type="hidden" name="reason" value="">
+            <button type="submit" class="btn btn-success btn-sm" onclick="var r=prompt('{{ i18n.admin.approvals.approve_prompt|default('승인 사유 (선택)') }}');if(r!==null)this.form.querySelector('[name=reason]').value=r;else return false;">{{ i18n.admin.approvals.approve|default('승인') }}</button>
+        </form>
+        <form method="POST" action="/account/admin/approvals/{{ item.type }}/{{ item.id }}/reject" style="display:inline;">
+            <input type="hidden" name="reason" value="">
+            <button type="submit" class="btn btn-danger btn-sm" onclick="var r=prompt('{{ i18n.admin.approvals.reject_prompt|default('거부 사유를 입력하세요') }}');if(!r)return false;this.form.querySelector('[name=reason]').value=r;">{{ i18n.admin.approvals.reject|default('거부') }}</button>
+        </form>
+        {% if item.member_id %}
+            <a href="/account/admin/members/{{ item.member_id }}" class="btn btn-sm">{{ i18n.admin.approvals.member_btn|default('회원') }}</a>
+        {% endif %}
+    </div>
+</div>
+{% endfor %}
+
+{% if not items %}
+<div class="card">
+    <div class="empty-state">{{ i18n.admin.approvals.no_pending|default('대기 중인 승인 건이 없습니다') }}</div>
+</div>
+{% endif %}
+{% endblock %}

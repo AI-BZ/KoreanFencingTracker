@@ -262,6 +262,12 @@ curl -s -o /dev/null -w "%{http_code}\n" https://analytics.fencingmind.ai/galler
 
 ---
 
+## 인증 연동
+- **회원가입/로그인**: account.fencingmind.ai (port 70)에서 처리
+- **JWT 검증**: `from shared_core.auth.jwt import get_current_member`
+- **역할 확인**: `from shared_core.auth.dependencies import require_auth`
+- **회원 관리 API 직접 구현 금지** — account 서비스만 담당
+
 ## Git 브랜치 규칙
 - 이 서비스의 코드는 `feature/analytics/*` 브랜치에서만 수정
 - 다른 서비스 코드 수정 금지
@@ -496,6 +502,68 @@ GET /api/analytics/status → capabilities + phase
 "왼쪽 선수: 런지(lunge) 비율 45% — 예측 가능한 패턴, 리포스트 혼합 권장"
 "오른쪽 선수: 파리-리포스트 성공률 25% — 파리 타이밍 연습 필요"
 "양 선수 간 거리: 평균 2.1m — 에페 적정 거리보다 가까움, 거리 관리 주의"
+
+---
+
+## 🎨 UI 디자인 규칙 (필수)
+
+> ⚠️ **2026-08-08 실태 정정**: 아래 shared-ui 임포트 지침은 모노레포 리팩터 당시 작성됐다.
+> 실제로는 `packages/shared-ui/styles/variables.css`가 2026-06-01 이후 방치된 구버전이라
+> Barlow Condensed `@font-face`와 `.fm-num`이 없다. analytics는 2026-08-08에
+> `services/data/static/css/variables.css`(실질 최신 원본)를 복사해 `static/css/variables.css`로
+> 두고 있으며, 토큰을 고칠 때는 **data를 먼저 고치고 미러링**한다.
+> 경위는 `claudedocs/PLAN_디자인통일.md` §8 참조.
+
+
+**📖 반드시 참조:** `packages/shared-ui/DESIGN_SYSTEM.md`
+
+### 필수 CSS 임포트
+```html
+<link rel="stylesheet" href="/packages/shared-ui/styles/variables.css">
+<link rel="stylesheet" href="/packages/shared-ui/styles/base.css">
+<link rel="stylesheet" href="/packages/shared-ui/styles/components.css">
+```
+
+### 핵심 규칙
+| 규칙 | 설명 |
+|------|------|
+| 🔴 **다크 모드만** | 라이트 모드 UI 금지 |
+| 🔴 **CSS 변수 사용** | `--fm-*` 변수 필수 (하드코딩 색상 금지) |
+| 🔴 **컴포넌트 클래스** | `fm-btn`, `fm-card`, `fm-input` 등 사용 |
+| 🔴 **배경 구조** | `fm-parallax-bg` + `fm-parallax-overlay` |
+
+### 색상 팔레트 (태극기 컬러)
+```css
+--fm-accent-primary: #c9302c;    /* 빨강 - Primary CTA */
+--fm-accent-secondary: #1e3a8a;  /* 파랑 - Secondary */
+--fm-bg-card: rgba(18, 18, 26, 0.85);  /* 글래스 카드 */
+```
+
+### 분석 리포트 카드 예시
+```html
+<div class="fm-card">
+    <div class="fm-card-header">
+        <h3 class="fm-card-title">경기 분석 결과</h3>
+        <span class="fm-badge fm-badge-success">분석 완료</span>
+    </div>
+    <div class="fm-card-body">
+        <div class="fm-grid fm-grid-cols-3 fm-gap-4">
+            <div class="fm-stat">
+                <span class="fm-stat-value">78%</span>
+                <span class="fm-stat-label">공격 성공률</span>
+            </div>
+            <div class="fm-stat">
+                <span class="fm-stat-value">12</span>
+                <span class="fm-stat-label">기술 패턴</span>
+            </div>
+            <div class="fm-stat">
+                <span class="fm-stat-value">A+</span>
+                <span class="fm-stat-label">종합 등급</span>
+            </div>
+        </div>
+        <button class="fm-btn fm-btn-primary fm-btn-block">상세 리포트</button>
+    </div>
+</div>
 ```
 
 ---

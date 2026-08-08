@@ -1,0 +1,118 @@
+{% extends "admin/layout.html" %}
+
+{% block title %}{{ i18n.admin.dashboard.title|default('대시보드') }}{% endblock %}
+
+{% block content %}
+<!-- KPI Cards -->
+<div class="grid-4" style="margin-bottom: 24px;">
+    <div class="card">
+        <div class="kpi-value">{{ stats.total_members }}</div>
+        <div class="kpi-label">{{ i18n.admin.dashboard.total_members|default('전체 회원') }}</div>
+    </div>
+    <div class="card">
+        <div class="kpi-value">{{ stats.today_signups }}</div>
+        <div class="kpi-label">{{ i18n.admin.dashboard.today_signups|default('오늘 가입') }}</div>
+    </div>
+    <div class="card">
+        <div class="kpi-value">{{ stats.paid_subscriptions }}</div>
+        <div class="kpi-label">{{ i18n.admin.dashboard.paid_subscriptions|default('유료 구독') }}</div>
+    </div>
+    <div class="card">
+        <div class="kpi-value" style="color: var(--warning);">{{ stats.pending_approvals }}</div>
+        <div class="kpi-label">{{ i18n.admin.dashboard.pending_approvals|default('승인 대기') }}</div>
+    </div>
+</div>
+
+<!-- Approval Queue Summary + Service Status -->
+<div class="grid-2" style="margin-bottom: 24px;">
+    <!-- Approval Queue Summary -->
+    <div class="card">
+        <div class="card-header">{{ i18n.admin.dashboard.approval_queue|default('승인 대기 현황') }}</div>
+        <table>
+            <thead>
+                <tr>
+                    <th>{{ i18n.admin.dashboard.approval_type|default('유형') }}</th>
+                    <th style="text-align:right;">{{ i18n.admin.dashboard.approval_count|default('대기 건수') }}</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>{{ i18n.admin.dashboard.verification_gemini|default('본인인증 (Gemini)') }}</td>
+                    <td style="text-align:right; font-weight:600;">{{ approval_summary.verification }}</td>
+                    <td><a href="/account/admin/approvals?type=verification" class="btn btn-sm">{{ i18n.admin.dashboard.review_btn|default('검토') }}</a></td>
+                </tr>
+                <tr>
+                    <td>{{ i18n.admin.dashboard.player_claim|default('선수 데이터 Claim') }}</td>
+                    <td style="text-align:right; font-weight:600;">{{ approval_summary.player_claim }}</td>
+                    <td><a href="/account/admin/approvals?type=player_claim" class="btn btn-sm">{{ i18n.admin.dashboard.review_btn|default('검토') }}</a></td>
+                </tr>
+                <tr>
+                    <td>{{ i18n.admin.dashboard.org_claim|default('조직 소유권 Claim') }}</td>
+                    <td style="text-align:right; font-weight:600;">{{ approval_summary.org_claim }}</td>
+                    <td><a href="/account/admin/approvals?type=org_claim" class="btn btn-sm">{{ i18n.admin.dashboard.review_btn|default('검토') }}</a></td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Service Status -->
+    <div class="card">
+        <div class="card-header">{{ i18n.admin.dashboard.service_status|default('서비스 현황') }}</div>
+        <table>
+            <thead>
+                <tr>
+                    <th>{{ i18n.admin.dashboard.service_name|default('서비스') }}</th>
+                    <th style="text-align:right;">{{ i18n.admin.dashboard.subscriptions|default('구독') }}</th>
+                    <th style="text-align:right;">{{ i18n.admin.dashboard.paid|default('유료') }}</th>
+                    <th>{{ i18n.admin.dashboard.status|default('상태') }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for svc in service_stats %}
+                <tr>
+                    <td style="font-weight:600;">{{ svc.name }}</td>
+                    <td style="text-align:right;">{{ svc.total }}</td>
+                    <td style="text-align:right;">{{ svc.paid }}</td>
+                    <td><span class="status-badge status-active">{{ i18n.admin.dashboard.running|default('운영중') }}</span></td>
+                </tr>
+                {% endfor %}
+                {% if not service_stats %}
+                <tr>
+                    <td colspan="4" class="empty-state">{{ i18n.admin.dashboard.no_subscription_data|default('구독 데이터 없음') }}</td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Recent Activity -->
+<div class="card">
+    <div class="card-header">{{ i18n.admin.dashboard.recent_activity|default('최근 활동') }}</div>
+    {% if recent_activity %}
+    <table>
+        <thead>
+            <tr>
+                <th>{{ i18n.admin.dashboard.activity_time|default('시간') }}</th>
+                <th>{{ i18n.admin.dashboard.activity_action|default('행동') }}</th>
+                <th>{{ i18n.admin.dashboard.activity_target|default('대상') }}</th>
+                <th>{{ i18n.admin.dashboard.activity_admin|default('관리자') }}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for log in recent_activity %}
+            <tr>
+                <td style="color:var(--gray-400); font-size:0.8rem; white-space:nowrap;">{{ log.created_at[:16] | replace('T', ' ') }}</td>
+                <td>{{ log.action }}</td>
+                <td>{{ log.target_type }} {{ log.target_id or '' }}</td>
+                <td style="font-size:0.8rem;">{{ log.admin_name or log.admin_id[:8] }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">{{ i18n.admin.dashboard.no_activity|default('아직 관리자 활동 기록이 없습니다') }}</div>
+    {% endif %}
+</div>
+{% endblock %}

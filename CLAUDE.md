@@ -6,27 +6,31 @@
 
 ---
 
-## 🏗️ 6대 서브도메인 아키텍처
+## 🏗️ 8대 서브도메인 아키텍처
 
 ### 서브도메인 구조
 | 서브도메인 | 용도 | 상태 | 포트 |
 |------------|------|------|------|
+| **account.fencingmind.ai** | 인증/프로필/구독 관리 | 🔨 개발 중 | 70 |
 | **data.fencingmind.ai** | 펜싱 데이터 (대회, 선수, 랭킹) | ✅ 운영 중 | 71 |
-| **app.fencingmind.ai** | SaaS 플랫폼 (클럽/코치/선수/학부모) | 🔨 개발 중 | 72 |
+| **club.fencingmind.ai** | 클럽 관리 SaaS (클럽/코치/선수/학부모) | 🔨 개발 중 | 72 |
 | **community.fencingmind.ai** | 커뮤니티 (포럼, Q&A) | 📋 계획 | 73 |
 | **shop.fencingmind.ai** | 드롭쉬핑 (용품) | 📋 계획 | 74 |
 | **blog.fencingmind.ai** | 콘텐츠 (기술 가이드, 리뷰) | 📋 계획 | 75 |
 | **analytics.fencingmind.ai** | AI 경기 분석 | 📋 계획 | 76 |
+| **app.fencingmind.ai** | PWA/알림 허브 (FCM + 카카오 알림톡) | 🔨 개발 중 | 77 |
 
 ### 수익 모델 요약
 | 서비스 | 모델 | 예상 수익 |
 |--------|------|----------|
+| Account | 직접 수익 없음 (인프라) | - |
 | Data | API 구독 ($99~999/월) | B2B |
-| App | SaaS 구독 ($9.99~299/월) | B2C/B2B |
+| Club | SaaS 구독 ($9.99~299/월) | B2C/B2B |
 | Community | 광고 + 프리미엄 멤버십 | B2C |
 | Shop | 드롭쉬핑 마진 (15~30%) | B2C |
 | Blog | 광고 + 스폰서 콘텐츠 | B2C |
 | Analytics | 건별/구독 ($19.99~499/월) | B2C/B2B |
+| App | 직접 수익 없음 (인프라) | - |
 
 ---
 
@@ -50,11 +54,12 @@
 ├─────────────────────────────────────────────────────────────────────┤
 │  (기존 유지)    competitions, events, players, matches, rankings     │
 │  data_*         데이터 파이프라인 (data_events, validation_logs 등)   │
-│  app_*          SaaS 기능 (app_notifications, app_schedules 등)      │
+│  club_*         클럽 SaaS 기능 (club_notifications, club_schedules 등) │
 │  community_*    커뮤니티 (community_posts, community_comments 등)    │
 │  shop_*         쇼핑 (shop_products, shop_orders 등)                 │
 │  blog_*         블로그 (blog_articles, blog_comments 등)             │
 │  analytics_*    AI 분석 (analytics_videos, analytics_results 등)     │
+│  app_*          PWA/알림 (app_push_subscriptions, app_notification_log 등) │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -73,7 +78,7 @@ members (핵심)
 
 member_services (서비스별 구독)
 ├── member_id → members
-├── service_id: 'data' | 'app' | 'community' | 'shop' | 'blog' | 'analytics'
+├── service_id: 'data' | 'club' | 'community' | 'shop' | 'blog' | 'analytics' | 'app'
 ├── tier: 'free' | 'basic' | 'premium'
 └── settings: JSONB (서비스별 설정)
 ```
@@ -81,9 +86,99 @@ member_services (서비스별 구독)
 ### 결제 시스템: 서비스별 분리
 | 서비스 | 결제 특성 | 테이블 |
 |--------|----------|--------|
-| app (SaaS) | 월정액 구독 | app_subscriptions |
+| club (SaaS) | 월정액 구독 | club_subscriptions |
 | shop (쇼핑) | 건별 결제 | shop_payments |
 | analytics (AI) | 크레딧 기반 | analytics_credits |
+
+---
+
+## 🌐 다국어 & 테마 정책 (i18n & Theme Policy)
+
+### 구현 상태 (2026-05-31)
+| 구성 요소 | 상태 | 위치 |
+|-----------|------|------|
+| **shared_core.i18n 모듈** | ✅ 완료 | `packages/shared_core/i18n/` |
+| **공유 번역 (7개 언어)** | ✅ 완료 | `packages/shared_core/i18n/translations/` |
+| **account 서비스 연동** | ✅ 완료 | 자체 i18n + shared_core 미들웨어 |
+| **data 서비스 연동** | ✅ 완료 | 자체 i18n + shared_core 미들웨어 |
+| **club 서비스 연동** | ⏳ 각 워크트리에서 진행 필요 | `FencingMind-club` 워크트리 |
+| **shop 서비스 연동** | ⏳ 각 워크트리에서 진행 필요 | `FencingMind-shop` 워크트리 |
+| **analytics 서비스 연동** | ⏳ 각 워크트리에서 진행 필요 | `FencingMind-analytics` 워크트리 |
+| **community 서비스 연동** | ⏳ 각 워크트리에서 진행 필요 | `FencingMind-community` 워크트리 |
+| **blog 서비스 연동** | ⏳ 각 워크트리에서 진행 필요 | `FencingMind-blog` 워크트리 |
+| **app 서비스 연동** | ⏳ 각 워크트리에서 진행 필요 | `FencingMind-app` 워크트리 |
+
+### 지원 언어 (7개)
+| 코드 | 언어 | 테마 | 비고 |
+|------|------|------|------|
+| `ko` | 한국어 | Light | 기본 언어, Toss/Apple 스타일 |
+| `en` | English | Dark | 글로벌 기본 |
+| `fr` | Français | Dark | |
+| `it` | Italiano | Dark | |
+| `ja` | 日本語 | Light | |
+| `zh` | 中文 | Light | |
+| `tr` | Türkçe | Dark | |
+
+### 테마 결정 규칙
+- **수동 테마 토글 없음** — 언어 선택이 테마를 자동 결정
+- 아시아 3개 언어(ko, ja, zh) → Light 테마
+- 서양 4개 언어(en, fr, it, tr) → Dark 테마
+- `LANG_THEME_MAP` 딕셔너리로 관리 (`shared_core.i18n.constants`)
+
+### 테마 구현 방식
+- `<html data-theme="light|dark">` 속성으로 CSS 변수 전환
+- 디자인 토큰: `packages/shared-ui/styles/variables.css`
+- 각 서비스 미들웨어가 `request.state.theme` 설정
+- 로고: light → 검정 텍스트 로고, dark → 흰색 텍스트 로고
+
+### 🔴 금지 사항
+- ❌ 테마 수동 토글 UI 구현 금지
+- ❌ 하드코딩 색상 사용 금지 (CSS 변수 필수)
+- ❌ 서비스별 다른 언어 목록 금지 (7개 통일)
+- ❌ 서비스별 다른 언어 전환 UI 금지 (포맷 통일)
+
+### shared_core.i18n 모듈 사용법
+```python
+# 서비스의 server.py에서 (공유 번역만 사용)
+from shared_core.i18n import LanguageMiddleware
+app.add_middleware(LanguageMiddleware)
+
+# 서비스별 번역을 추가로 로드하려면 (deep merge)
+from shared_core.i18n import LanguageMiddleware, create_shared_i18n
+from pathlib import Path
+i18n = create_shared_i18n(extra_dirs=[Path(__file__).parent / "i18n" / "translations"])
+app.add_middleware(LanguageMiddleware, i18n=i18n)
+
+# 라우터에서 템플릿 컨텍스트
+from shared_core.i18n import create_language_context
+context = create_language_context(request)
+```
+
+### 번역 파일 구조 (Deep Merge)
+```
+packages/shared_core/i18n/translations/   (공통 번역, 기본)
+    + 서비스별 app/i18n/translations/      (서비스 고유, 오버라이드)
+    = 최종 번역 (deep merge, 서비스별이 우선)
+```
+- 미번역 언어는 en fallback → ko fallback → 키 자체 반환 순서
+- 새 언어 추가 시 모든 서비스에 동시 추가
+
+### LanguageMiddleware가 request.state에 설정하는 값
+| 키 | 타입 | 설명 |
+|----|------|------|
+| `lang` | str | 현재 언어 코드 (예: 'ko') |
+| `theme` | str | 'light' 또는 'dark' |
+| `t` | callable | 번역 함수 `t('common.nav.login')` |
+| `supported_langs` | list | 지원 언어 목록 |
+| `language_names` | dict | 언어 표시명 |
+| `i18n_data` | dict | 현재 언어의 전체 번역 데이터 |
+
+### 언어 감지 우선순위
+1. `?lang=` 쿼리 파라미터
+2. URL 경로 접두사 (`/{lang}/...`)
+3. `lang` 쿠키 (domain: `.fencingmind.ai`)
+4. `Accept-Language` 헤더
+5. 기본값: `ko`
 
 ---
 
@@ -93,12 +188,14 @@ member_services (서비스별 구독)
 ```
 main                           # 프로덕션 (보호됨)
 ├── develop                    # 통합 개발
+│   ├── feature/account/*       # account.fencingmind.ai
 │   ├── feature/data/*         # data.fencingmind.ai
-│   ├── feature/app/*          # app.fencingmind.ai
+│   ├── feature/club/*         # club.fencingmind.ai
 │   ├── feature/community/*    # community.fencingmind.ai
 │   ├── feature/shop/*         # shop.fencingmind.ai
 │   ├── feature/blog/*         # blog.fencingmind.ai
 │   ├── feature/analytics/*    # analytics.fencingmind.ai
+│   ├── feature/app/*          # app.fencingmind.ai
 │   └── feature/shared/*       # 공유 패키지
 └── release/v*                 # 릴리스 브랜치
 ```
@@ -106,13 +203,37 @@ main                           # 프로덕션 (보호됨)
 ### Worktree 설정 명령어
 ```bash
 # 서브도메인별 worktree 생성
+git worktree add ../FencingMind-account feature/account/main
 git worktree add ../FencingMind-data   feature/data/main
-git worktree add ../FencingMind-app    feature/app/main
+git worktree add ../FencingMind-club   feature/club/main
 git worktree add ../FencingMind-community feature/community/main
 git worktree add ../FencingMind-shop   feature/shop/main
 git worktree add ../FencingMind-blog   feature/blog/main
 git worktree add ../FencingMind-analytics feature/analytics/main
+git worktree add ../FencingMind-app    feature/app/main
 ```
+
+### 현재 활성 Worktree 목록
+```
+/Users/gyejinpark/Documents/GitHub/fencingmind           → feature/account/init (메인 저장소)
+/Users/gyejinpark/Documents/GitHub/FencingMind-data       → feature/data/main
+/Users/gyejinpark/Documents/GitHub/FencingMind-club       → feature/club/main
+/Users/gyejinpark/Documents/GitHub/FencingMind-community  → feature/community/main
+/Users/gyejinpark/Documents/GitHub/FencingMind-shop       → feature/shop/main
+/Users/gyejinpark/Documents/GitHub/FencingMind-blog       → feature/blog/main
+/Users/gyejinpark/Documents/GitHub/FencingMind-analytics  → feature/analytics/main
+/Users/gyejinpark/Documents/GitHub/FencingMind-app        → feature/app/main
+```
+
+### 🔴 워크트리별 수정 범위 (CRITICAL)
+각 워크트리의 Claude 세션에서 수정 가능한 파일:
+| 워크트리 | 수정 가능 | 수정 금지 |
+|----------|----------|----------|
+| `fencingmind` (메인) | `services/account/`, `packages/shared_core/`, `packages/shared-ui/`, 프로젝트 공통 | 다른 `services/*/` |
+| `FencingMind-data` | `services/data/` | 다른 `services/*/` |
+| `FencingMind-club` | `services/club/` | 다른 `services/*/` |
+| `FencingMind-app` | `services/app/` | 다른 `services/*/` |
+| (기타 동일 패턴) | `services/{해당서비스}/` | 다른 `services/*/` |
 
 ### 🔴 Merge 충돌 방지 규칙 (CRITICAL)
 | 규칙 | 설명 |
@@ -125,15 +246,215 @@ git worktree add ../FencingMind-analytics feature/analytics/main
 
 ---
 
+## 🔴 로고 규칙 (LOGO RULES - DO NOT CHANGE)
+
+### 로고 원본 저장소
+```
+services/logo/                              ← 모든 로고 원본 (중앙 저장소)
+├── FencingMind_logo_long.png               # 기본 (검은 텍스트)
+├── FencingMind_logo_long_white.png         # 다크 테마용 (흰 텍스트) ⭐
+├── FencingMind_logo_long_Tracker.png       # Data 서비스 (검은 텍스트)
+├── FencingMind_logo_long_Tracker_white.png # Data 서비스 다크 테마용 ⭐
+├── FencingMind_logo_long_Club.png          # Club 서비스 (검은 텍스트)
+├── FencingMind_logo_long_Club_white.png    # Club 서비스 다크 테마용 ⭐
+├── FencingMind_logo_long_Shop.png          # Shop 서비스 (검은 텍스트)
+├── FencingMind_logo_long_Shop_white.png    # Shop 서비스 다크 테마용 ⭐
+├── FencingMind_logo_square.png             # 정사각형 (파비콘/앱 아이콘)
+├── FencingMind_logo_square_white.png       # 정사각형 다크 테마용
+├── FencingMind_logo_square_tracker.png     # Data 정사각형
+├── FencingMind_logo_square_tracker_white.png
+├── FencingMind_logo_square_shop.png        # Shop 정사각형
+├── FencingMind_logo_square_shop_white.png
+└── *.afdesign                              # Affinity Designer 원본 파일
+```
+
+### 서비스별 로고 매핑 (테마별 2종)
+| 서비스 | 서비스명 | Dark 테마 (white) | Light 테마 (검정) |
+|--------|---------|-------------------|-------------------|
+| **account** | (없음) | `FencingMind_logo_long_white.png` | `FencingMind_logo_long.png` |
+| **data** | Tracker | `FencingMind_logo_long_Tracker_white.png` | `FencingMind_logo_long_Tracker.png` |
+| **club** | Club | `FencingMind_logo_long_Club_white.png` | `FencingMind_logo_long_Club.png` |
+| **shop** | Shop | `FencingMind_logo_long_Shop_white.png` | `FencingMind_logo_long_Shop.png` |
+| **community** | Community | `FencingMind_logo_long_white.png` (기본) | `FencingMind_logo_long.png` (기본) |
+| **blog** | Blog | `FencingMind_logo_long_white.png` (기본) | `FencingMind_logo_long.png` (기본) |
+| **analytics** | Analytics | `FencingMind_logo_long_white.png` (기본) | `FencingMind_logo_long.png` (기본) |
+| **app** | (없음) | `FencingMind_logo_long_white.png` | `FencingMind_logo_long.png` |
+
+### 각 서비스에서 로고 사용법
+각 서비스의 `static/images/logo/`에 필요한 로고를 복사하여 사용:
+```bash
+# 예: data 서비스
+cp services/logo/FencingMind_logo_long_Tracker_white.png \
+   services/data/static/images/logo/
+
+# 예: account 서비스
+cp services/logo/FencingMind_logo_long_white.png \
+   services/account/static/images/logo/
+```
+
+### HTML 로고 마크업 (표준 — 테마별 분기)
+```html
+<!-- Jinja2 템플릿에서 테마별 로고 분기 -->
+{% if theme == 'dark' %}
+<a href="/" class="logo">
+    <img src="/static/images/logo/FencingMind_logo_long_Tracker_white.png"
+         alt="FencingMind Tracker" height="32">
+</a>
+{% else %}
+<a href="/" class="logo">
+    <img src="/static/images/logo/FencingMind_logo_long_Tracker.png"
+         alt="FencingMind Tracker" height="32">
+</a>
+{% endif %}
+```
+- `theme` 변수는 `LanguageMiddleware`가 `request.state.theme`에 설정
+- 템플릿 컨텍스트: `create_language_context(request)`에서 자동 포함
+
+### 로고 형태 선택 기준
+| 형태 | 용도 |
+|------|------|
+| `_long` | navbar, 헤더, 이메일 상단 |
+| `_square` | 파비콘, 앱 아이콘, SNS 프로필 |
+| `_white` | 다크 테마 배경 (현재 모든 서비스) |
+| (white 없음) | 라이트 테마, 인쇄물, 명함 |
+
+### 🔴 금지 사항
+- ❌ 이모지(⚔️, 🤺 등)를 로고 대용으로 사용 금지
+- ❌ 서비스명 없이 "FencingMind"만 단독 사용 금지 (account 서비스 제외)
+- ❌ 로고 색상/폰트를 임의 변경 금지 — 반드시 원본 이미지 사용
+- ❌ "Korean Fencing Tracker" 등 비공식 명칭 사용 금지
+- ❌ `services/logo/` 외 경로에서 로고 원본 관리 금지
+
+---
+
+## 🔐 통합 인증 UI 규칙 (ALL SERVICES MUST FOLLOW)
+
+**모든 서브도메인(data, club, community, shop, blog, analytics, app)은 아래 규칙을 반드시 따라야 합니다.**
+
+### 인증 주체
+- **Account 서비스만 로그인/회원가입을 처리** — 다른 서비스에서 직접 구현 금지
+- 각 서비스는 auth shim 라우터로 account 서비스로 리다이렉트만 함
+- JWT 쿠키(domain=.fencingmind.ai)를 읽어서 인증 상태 확인
+
+### 로그인 버튼 (통일)
+```
+[카카오 아이콘] 카카오로 시작하기     ← 노란색 (#FEE500), 검은 글자
+[구글 아이콘]   Google로 계속하기     ← 흰색 배경, 회색 테두리
+```
+- 버튼 순서: 카카오 → 구글 (한국 시장 우선)
+- 버튼 높이: 48px, 모서리: 8px, 아이콘: 24x24px
+- CSS 클래스: `.auth-btn`, `.kakao-btn`, `.google-btn`
+- SVG 아이콘: `services/account/templates/auth/login.html` 참조
+
+### 로그인 URL 패턴
+```
+로그인:  /auth/login?redirect={현재페이지URL}
+로그아웃: /auth/logout (GET, POST 둘 다 지원)
+```
+- `/auth/login` → account 서비스로 리다이렉트 (auth shim)
+- `redirect` 파라미터로 로그인 후 원래 페이지 복귀
+- 환경변수: `ACCOUNT_SERVICE_URL` (기본값: `https://account.fencingmind.ai`)
+
+### Auth Shim 라우터 (각 서비스에 필수 구현)
+```python
+# services/{service}/app/auth/router.py — data 서비스 참조
+ACCOUNT_URL = os.getenv("ACCOUNT_SERVICE_URL", "https://account.fencingmind.ai")
+
+@router.get("/auth/login")   # → account 서비스 리다이렉트
+@router.get("/auth/me")      # → 로컬 JWT 디코드 (shared_core 사용)
+@router.post("/auth/logout") # → account 서비스 리다이렉트
+@router.get("/auth/logout")  # → account 서비스 리다이렉트
+```
+참고 구현: `services/data/app/auth/router.py`
+
+### 로그인 상태 유지 (JWT 쿠키)
+```
+Cookie: access_token=eyJhbGci...
+  Domain: .fencingmind.ai
+  Path: /
+  HttpOnly: true
+  Secure: true
+  SameSite: Lax
+```
+- 서버 사이드: `shared_core.auth.jwt.extract_token(request)` → 쿠키에서 자동 추출
+- 클라이언트 사이드: HttpOnly이므로 JS 접근 불가 (보안)
+
+### Navbar 로그인/로그아웃 UI (통일)
+```html
+<!-- 비로그인 상태 -->
+<a href="/auth/login?redirect={{ request.url }}" class="btn-login">로그인</a>
+
+<!-- 로그인 상태 -->
+<div class="nav-profile-dropdown">
+    <button class="nav-profile-btn">
+        <span class="nav-profile-avatar">{{ member.full_name[0] }}</span>
+        <span class="nav-profile-name">{{ member.full_name }}</span>
+    </button>
+    <div class="nav-profile-menu">
+        <a href="/dashboard">대시보드</a>
+        <a href="https://account.fencingmind.ai/account/me">내 계정</a>
+        <a href="#" onclick="handleLogout()">로그아웃</a>
+    </div>
+</div>
+```
+
+### 로그아웃 JS (통일)
+```javascript
+function handleLogout() {
+    localStorage.removeItem('access_token');
+    document.cookie = 'access_token=; Path=/; Domain=.fencingmind.ai; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+    window.location.href = '/auth/logout';
+}
+```
+
+### 푸터 링크 (통일)
+```
+이용약관 | 개인정보처리방침 | 개인정보 문의
+```
+- 이용약관: `https://account.fencingmind.ai/legal/terms`
+- 개인정보처리방침: `https://account.fencingmind.ai/legal/privacy`
+- 개인정보 문의: `mailto:privacy@fencingmind.ai`
+- 하단: `(c) 2024-2026 FencingMind LLC`
+
+### club_role vs 사이트 관리자 (혼동 금지)
+```
+club_role (클럽 내 역할) — organization_id 스코프 내에서만 유효
+  owner       = 이 클럽의 대표 (다른 클럽 접근 불가, 사이트 관리 불가)
+  head_coach  = 이 클럽의 수석 코치
+  coach       = 이 클럽의 코치
+  student     = 이 클럽의 수강생
+  parent      = 이 클럽의 학부모
+
+사이트 관리자 (별개 시스템)
+  members.is_admin = true → account.fencingmind.ai/admin 접근
+  club_role과 무관한 독립적인 권한
+```
+- Club 서비스에서 URL에 `/admin`을 사용하지 않음 → `/dashboard/owner` 사용
+- 모든 클럽 데이터 조회 시 `WHERE organization_id = {member.organization_id}` 필수
+
+### 관련 문서
+- `docs/CLUB_AUTH_GUIDE.md` — Club 서비스 인증 연동 상세 가이드
+- `docs/DATA_ACCESS_CONTROL.md` — Data 서비스 등급별 접근 권한 명세
+- `packages/shared_core/CLAUDE.md` — 공유 인증 패키지 설명
+
+---
+
 ## 📁 모노레포 폴더 구조 (현재)
 
 ```
 FencingMind/
 ├── packages/                    # 공유 패키지 ✅
-│   ├── shared-core/             # 인증, DB, 타입
-│   │   ├── auth/
-│   │   ├── db/
-│   │   ├── types/
+│   ├── shared_core/             # 인증, DB, 타입, 개인정보, i18n ✅ 구현 완료
+│   │   ├── auth/                # JWT, OAuth, Dependencies
+│   │   │   └── oauth/           # OAuthHandler, providers
+│   │   ├── db/                  # Supabase 싱글톤 클라이언트
+│   │   ├── types/               # 공유 Enum (MemberType, ClubRole 등)
+│   │   ├── privacy/             # 마스킹, 익명화
+│   │   ├── i18n/                # 다국어 지원 (7개 언어, 테마 매핑)
+│   │   │   ├── constants.py     # SUPPORTED_LANGUAGES, LANG_THEME_MAP
+│   │   │   ├── manager.py       # TranslationManager (deep merge)
+│   │   │   ├── middleware.py    # LanguageMiddleware
+│   │   │   └── translations/    # 공유 번역 (7개 언어)
 │   │   └── utils/
 │   ├── shared-ui/               # 공유 UI 컴포넌트
 │   │   ├── components/
@@ -144,6 +465,11 @@ FencingMind/
 │       └── member/
 │
 ├── services/                    # 서브도메인별 서비스 ✅
+│   ├── account/                # account.fencingmind.ai 🔨 개발 중
+│   │   ├── app/
+│   │   ├── templates/
+│   │   └── tests/
+│   │
 │   ├── data/                    # data.fencingmind.ai ✅ 운영 중
 │   │   ├── app/                 # FastAPI 앱
 │   │   ├── scraper/             # 스크래퍼
@@ -154,9 +480,11 @@ FencingMind/
 │   │   ├── scheduler/           # 스케줄러
 │   │   └── video/               # 영상 (→ analytics로 이동 예정)
 │   │
-│   ├── app/                     # app.fencingmind.ai 🔨 개발 중
+│   ├── club/                    # club.fencingmind.ai 🔨 개발 중
 │   │   ├── api/
-│   │   ├── club/
+│   │   ├── dashboard/
+│   │   ├── checkin/
+│   │   ├── members/
 │   │   ├── player/
 │   │   └── parent/
 │   │
@@ -176,11 +504,17 @@ FencingMind/
 │   │   ├── articles/
 │   │   └── cms/
 │   │
-│   └── analytics/               # analytics.fencingmind.ai 📋 계획
-│       ├── api/
-│       ├── video/
-│       ├── ml/
-│       └── reports/
+│   ├── analytics/               # analytics.fencingmind.ai 📋 계획
+│   │   ├── api/
+│   │   ├── video/
+│   │   ├── ml/
+│   │   └── reports/
+│   │
+│   └── app/                     # app.fencingmind.ai 🔨 개발 중
+│       ├── app/                 # FastAPI 앱
+│       ├── templates/           # Jinja2 템플릿
+│       ├── static/              # 정적 파일
+│       └── tests/
 │
 ├── database/migrations/         # 전체 마이그레이션 (공유)
 ├── infrastructure/              # Docker, Nginx, K8s ✅
@@ -196,14 +530,39 @@ FencingMind/
 ### 서버 실행 방법
 ```bash
 # 프로젝트 루트에서 실행 (PYTHONPATH 설정 필수!)
-cd /Users/gyejinpark/Documents/GitHub/FencingCommunityDropShipping
+cd /Users/gyejinpark/Documents/GitHub/fencingmind
 
-# data 서비스 실행
-PYTHONPATH="${PWD}:${PWD}/services/data" python -m uvicorn services.data.app.server:app --host 0.0.0.0 --port 71
+# data 서비스 실행 (packages 경로 포함 필수!)
+PYTHONPATH="${PWD}:${PWD}/packages:${PWD}/services/data" python -m uvicorn services.data.app.server:app --host 0.0.0.0 --port 71
+
+# account 서비스 실행
+PYTHONPATH="${PWD}:${PWD}/packages:${PWD}/services/account" python -m uvicorn services.account.app.server:app --host 0.0.0.0 --port 70
+
+# app 서비스 실행
+PYTHONPATH="${PWD}:${PWD}/packages:${PWD}/services/app" python -m uvicorn services.app.app.server:app --host 0.0.0.0 --port 77
 
 # 또는 환경변수 export 후 실행
-export PYTHONPATH="${PWD}:${PWD}/services/data"
+export PYTHONPATH="${PWD}:${PWD}/packages:${PWD}/services/data"
 python -m uvicorn services.data.app.server:app --host 0.0.0.0 --port 71
+```
+
+### Import 규칙 (shared_core)
+```python
+# ✅ 새 코드 (권장) - shared_core에서 직접 import
+from shared_core.auth.jwt import create_access_token, get_current_member
+from shared_core.types.member import MemberType, ClubRole
+from shared_core.privacy.masking import mask_korean_name
+from shared_core.db.client import get_supabase_client
+from shared_core.auth.dependencies import ServiceMemberContext, require_coach
+
+# ✅ i18n import (권장)
+from shared_core.i18n import LanguageMiddleware, create_language_context
+from shared_core.i18n import SUPPORTED_LANGUAGES, LANG_THEME_MAP, LANGUAGE_NAMES
+from shared_core.i18n import TranslationManager, create_shared_i18n
+
+# ✅ 기존 호환성 (shim) - data 서비스 내에서만 동작
+from app.auth.models import MemberType  # → shared_core.types.member에서 가져옴
+from app.auth.privacy import mask_korean_name  # → shared_core.privacy.masking에서 가져옴
 ```
 
 ---
@@ -229,6 +588,13 @@ python -m uvicorn services.data.app.server:app --host 0.0.0.0 --port 71
   - ✅ 현재 소속: `최병철펜싱클럽`
   - ✅ 소속 이력: `송도펜싱클럽(2023-06~2024-08)`, `최병철펜싱클럽(2024-09~현재)`
   - ❌ 잘못된 표시: `송도펜싱클럽, 최병철펜싱클럽` (두 개 나열 금지)
+
+### 4. 개인정보 서류 수집 금지 (NO PERSONAL DOCUMENT COLLECTION)
+- **가족관계증명서, 주민등록등본, 건강보험자격확인서 등 개인정보 서류 절대 수집 금지**
+- 개인정보 리스크를 키우는 행위는 리스크가 조금이라도 있으면 절대 하지 않음
+- 본인 인증은 AI 추론 + 관리자 검토 방식으로만 처리
+- 예외: 사업자등록증 (조직 Claim용 - 공개 정보)
+- 학부모 인증: 선수 데이터 교차 검증 + AI 추론으로만 처리
 
 ---
 
@@ -306,7 +672,26 @@ mcp__supabase__execute_sql("SELECT * FROM players WHERE team_name LIKE '%최병�
 ## Project Overview
 대한펜싱협회(fencing.sports.or.kr) 대회 결과 데이터를 수집하여 웹사이트로 제공하는 프로젝트
 
-## Current Status (2025-12-22)
+## Current Status (2026-05-31)
+
+### 서비스별 개발 현황
+| 서비스 | 워크트리 | 브랜치 | i18n | 테마 | 로고 | 상태 |
+|--------|----------|--------|------|------|------|------|
+| **account** | `FencingMind` (메인) | `feature/account/init` | ✅ 자체 구현 | ✅ 완료 | ✅ 배포 | 🔨 개발 중 |
+| **data** | `FencingMind-data` | `feature/data/main` | ✅ 자체 구현 | ✅ 완료 | ✅ 배포 | ✅ 운영 중 |
+| **club** | `FencingMind-club` | `feature/club/main` | ⚠️ 자체 i18n 있음 | ⏳ 연동 필요 | ⏳ 미배포 | 🔨 개발 중 |
+| **shop** | `FencingMind-shop` | `feature/shop/main` | ⚠️ ko/en만 있음 | ⏳ 연동 필요 | ⏳ 미배포 | 📋 초기 개발 |
+| **analytics** | `FencingMind-analytics` | `feature/analytics/main` | ⚠️ 자체 i18n 있음 | ⏳ 연동 필요 | ⏳ 미배포 | 📋 초기 개발 |
+| **community** | `FencingMind-community` | `feature/community/main` | ❌ 없음 | ❌ 없음 | ❌ 없음 | 📋 계획 |
+| **blog** | `FencingMind-blog` | `feature/blog/main` | ❌ 없음 | ❌ 없음 | ❌ 없음 | 📋 계획 |
+| **app** | `FencingMind-app` | `feature/app/main` | ⏳ shared_core 연동 예정 | ⏳ 연동 예정 | ✅ 복사 완료 | 🔨 개발 중 |
+
+### i18n 통일 작업 진행 계획
+각 서비스 워크트리에서 `shared_core.i18n`을 import하여 연동해야 함:
+1. 기존 자체 i18n → `shared_core.i18n.LanguageMiddleware` 교체
+2. 서비스별 번역은 `extra_dirs`로 deep merge
+3. 테마 자동 결정 (언어 기반) 적용
+4. 로고 light/dark 분기 적용
 
 ### Scraping Status
 | 연도 | 상태 | 비고 |
@@ -359,15 +744,17 @@ mcp__supabase__get_table_schema - 스키마 조회
 ### 마이그레이션 파일 위치
 ```
 database/migrations/
-├── 001_create_tables.sql        # 기본 테이블
-└── 002_add_organizations_table.sql  # 조직/주소 테이블
+├── 001_create_tables.sql                # 기본 테이블
+├── 002_add_organizations_table.sql      # 조직/주소 테이블
+├── ...                                  # 003~020 (생략)
+└── 021_create_app_tables.sql            # App 서비스 (PWA/알림)
 ```
 
 ## Architecture
 
 ### Components
 ```
-FencingCommunityDropShipping/
+fencingmind/
 ├── app/
 │   ├── server.py          # FastAPI 웹 서버
 │   └── ai_chat.py         # AI 검색 기능
@@ -472,9 +859,14 @@ MAX_CONCURRENT_REQUESTS=3
 
 ## Next Steps
 1. [x] ~~JSON 데이터를 Supabase에 업로드~~ (완료 - 2025-12-22)
-2. [ ] 서버 코드를 Supabase 전용으로 수정 (JSON 로드 로직 제거)
-3. [ ] 클럽 관리 기능 완성 (로스터, 출석, 비용)
-4. [ ] 카카오 로그인 연동
+2. [x] ~~서버 코드를 Supabase 전용으로 수정~~ (완료 - JSON 로드 로직 제거됨)
+3. [x] ~~shared_core.i18n 공유 모듈 구현~~ (완료 - 2026-05-31, 7개 언어 + 테마 매핑)
+4. [ ] 각 서비스 워크트리에서 shared_core.i18n 연동 (club, shop, analytics, community, blog, app)
+5. [ ] 파비콘 통일 (`services/logo/favicon.ico` → 모든 서비스)
+6. [ ] 로고 light/dark 분기 배포 (각 서비스 워크트리에서 진행)
+7. [ ] 클럽 관리 기능 완성 (로스터, 출석, 비용)
+8. [ ] 카카오 로그인 연동
+9. [ ] app 서비스 알림 파이프라인 (FCM + 카카오 알림톡)
 
 ## Fencing Terminology (용어 체계)
 
@@ -661,6 +1053,79 @@ templates/club/
 ├── dashboard.html      # 코치용 대시보드
 └── checkin.html        # 학생용 체크인
 ```
+
+## App Service - PWA/알림 허브 (app.fencingmind.ai)
+
+### 개요
+data 서비스에서 PWA 캐시 문제가 발생하여 PWA를 독립 서비스로 분리.
+FCM 웹 푸시 + 카카오 알림톡 알림 허브 역할. data 서비스는 알림 발신자(대회 결과, 랭킹 변동 이벤트)로만 동작.
+
+### 알림 흐름 (data -> app -> 사용자)
+```
+Data Service                    App Service                   User
+    |                               |                           |
+    |-- EventPublisher.publish() -->|                           |
+    |   (data_events 테이블 기록)     |                           |
+    |                    EventPoller (30초 간격 폴링)              |
+    |                               |                           |
+    |                    _process_event():                       |
+    |                      1. 대상 회원 결정                       |
+    |                      2. 알림 설정 확인                       |
+    |                      3. notifications 행 삽입               |
+    |                      4. FCM 웹 푸시 발송 ---------> 브라우저 푸시
+    |                      5. 카카오 알림톡 발송 --------> 카카오톡
+    |                      6. app_notification_log 기록           |
+```
+
+### 서비스 간 통신: Supabase 테이블 폴링
+- data 서비스는 기존 `EventPublisher`로 `data_events` 테이블에 기록 (변경 없음)
+- app 서비스가 `app_event_cursor`의 워터마크 기반으로 30초마다 폴링
+- 서비스 간 직접 HTTP 호출 없음 -> 결합도 최소, 내결함성 보장
+
+### PWA 캐시 전략 (이전 data 서비스 문제 방지)
+- **API/HTML**: network-first (캐시 부실 방지)
+- **static/**: cache-first (CACHE_NAME 버전으로 배포시 버스트)
+- **외부 CDN**: 캐시 안 함
+
+### DB 테이블 (Migration 021)
+- `app_push_subscriptions` - FCM 토큰 + 카카오 사용자 ID 저장
+- `app_notification_preferences` - 카테고리별 채널 opt-in/opt-out
+- `app_notification_log` - 발송 이력 (채널별 상태 추적)
+- `app_event_cursor` - data_events 폴링 워터마크
+
+### 구현 순서 (각 단계별 별도 브랜치)
+1. `feature/app/init` - 스캐폴드 + auth shim
+2. `feature/app/notifications` - 알림 구독 UI + 설정
+3. `feature/app/pipeline` - data<->app 이벤트 폴러 + NotificationDispatcher
+4. `feature/app/fcm` - FCM 웹 푸시
+5. `feature/app/pwa` - manifest.json + service worker
+6. `feature/app/kakao-alimtalk` - 카카오 알림톡 (비즈니스 채널 필요)
+7. `feature/app/offline` - 오프라인 지원
+
+### 외부 의존성 (향후 필요)
+| 의존성 | 필요 시점 | 비고 |
+|--------|----------|------|
+| Firebase 프로젝트 (FCM) | Phase 4 | VAPID 키 발급 |
+| 카카오 비즈니스 채널 | Phase 6 | 알림톡 템플릿 승인 필요 |
+| Cloudflare DNS CNAME | 배포 시 | `app.fencingmind.ai` |
+| Cloudflare Tunnel 업데이트 | 배포 시 | app 서비스 라우팅 추가 |
+| `pywebpush` 패키지 | Phase 4 | `arch -arm64 python3 -m pip install pywebpush` |
+
+### 관련 파일
+```
+services/app/
+├── app/
+│   ├── server.py          # FastAPI 앱 (port 77), health check
+│   ├── config.py          # AppSettings
+│   └── auth/
+│       └── router.py      # Auth shim (data 서비스 패턴 복사)
+├── templates/             # Jinja2 템플릿
+├── static/
+│   └── images/logo/       # 로고 (account과 동일)
+└── tests/
+```
+
+---
 
 ## Important Notes
 - 2019년 이전 데이터는 디지털 형태로 존재하지 않음 (스크래핑 대상 아님)

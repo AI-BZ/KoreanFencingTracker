@@ -514,20 +514,9 @@ def calculate_points_legacy(
 class RankingCalculator:
     """펜싱 랭킹 계산기"""
 
-    def __init__(self, data_file: str = None):
+    def __init__(self):
         self.results: List[PlayerResult] = []
         self.data = None
-
-        if data_file:
-            self.load_data(data_file)
-
-    def load_data(self, data_file: str):
-        """JSON 데이터 로드"""
-        with open(data_file, "r", encoding="utf-8") as f:
-            self.data = json.load(f)
-
-        self._extract_results()
-        logger.info(f"데이터 로드 완료: {len(self.results)}개 결과")
 
     def load_from_data(self, data: dict):
         """메모리 데이터에서 로드 (Supabase 캐시용)
