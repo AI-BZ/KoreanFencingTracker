@@ -303,7 +303,117 @@ EXCHANGE_MIN_DISTANCE_CHANGE_BH = 0.3
 EXCHANGE_MAX_MIN_DISTANCE_BH = 2.5
 EXCHANGE_MERGE_SEPARATION_FRAMES = 10    # if re-approach within N frames of separation → merge into same exchange
 CONTINUOUS_SAMPLE_EVERY_N = 5            # analyze every N frames
-CONTINUOUS_MAX_FRAMES = 10800            # max frames to analyze (6min @30fps)
+# Cap on the *sequence handed to* analyze_continuous, counted in whatever units
+# the caller sampled at — not in video frames. The report generator passes an
+# already-decimated sequence (every 3rd frame), so 10800 silently truncated a
+# 28-minute bout at the 18-minute mark: pose estimation ran on the whole video,
+# exchange detection quietly stopped two thirds of the way in, and every touch
+# after that was reported as having no matching exchange. Raised to cover a full
+# DE bout with the standard 3-frame stride. The cap exists to bound memory in
+# the exchange pass, which is cheap relative to the pose pass that already ran.
+CONTINUOUS_MAX_FRAMES = 36000
+
+# --- Foil priority estimation (ml.weapon_analyzers.foil) ---
+# Everything below is *estimation*, never a determination. Footwork alone still
+# decides the high-confidence attacker; these constants only govern the weaker
+# arm-extension fallback that runs on exchanges footwork cannot separate.
+#
+# PRIORITY_WINDOW_LEAD_SEC: how far before the exchange start the arm/hip series
+# is captured. 1.5s covers the preparation that precedes the approach without
+# reaching back into the previous phrase (the window is additionally clamped to
+# the previous exchange's end, which the measured failure mode demanded: a
+# defender still drifting forward from the last phrase gets flagged first).
+PRIORITY_WINDOW_LEAD_SEC = 1.5
+# Judgment window: N seconds of run-up, ending PRIORITY_DECISION_END_OFFSET_SEC
+# before the nearest-approach frame. Anchored on nearest approach because the OCR
+# score frame lags real contact by a measured ~2.8s median.
+#
+# Both values are calibration results, not guesses, and both moved a long way
+# from the design's starting point (1.5s ending exactly at nearest approach):
+# the last ~0.6s before closest approach is the collision itself, where the two
+# fencers overlap, keypoints swap between them and the extension signal is
+# meaningless. Including it was measured to invert the verdict on the reference
+# bout. The longer 2.5s window then buys back the samples that trimming costs.
+PRIORITY_DECISION_WINDOW_SEC = 2.5
+PRIORITY_DECISION_END_OFFSET_SEC = 0.6
+# Median-smoothing width (samples) applied to both series. Keypoint dropout and
+# occlusion produce single-sample 0.9→0.1 spikes; 5 samples ≈ 0.5s at the
+# standard 3-frame sampling.
+PRIORITY_SMOOTH_WINDOW = 5
+# Forward-motion weighting of the extension signal. FIE t.56 defines an attack
+# as extending *while* advancing, so extension alone is not priority: a
+# counter-attack made while giving ground scores zero. Calibration put standing
+# still at zero as well — crediting a stationary extension measurably hurt,
+# which reads as the rule being meant literally: an attack requires the
+# approach, and an extension without one is a preparation, not an attack.
+PRIORITY_FWD_STATIONARY_WEIGHT = 0.0
+# Hip-centre velocity (body heights per sample) above which motion counts as
+# committed rather than standing still. Expressed in BH so it is independent of
+# broadcast resolution and zoom level.
+PRIORITY_FWD_MIN_VX_BH = 0.01
+# Decision gates. margin = |commit_left − commit_right|.
+#
+# Calibrated, not chosen. The design's starting 0.15 margin was measured to be
+# far too wide for the un-normalised signal: it made only 3 calls across three
+# bouts. 0.05 makes 11 and is right on 10 of them. The commit floor is kept at a
+# non-zero value even though the search was indifferent to it — it costs no
+# accuracy and keeps the "neither fencer did anything" case from being decided
+# by noise. Both are inert while PRIORITY_ESTIMATION_ENABLED is off.
+PRIORITY_CLEAR_MARGIN = 0.05
+PRIORITY_MIN_COMMIT = 0.05
+# Fraction of the decision window that must carry usable arm *and* hip data on
+# both sides. Below this the exchange is left unjudged rather than guessed.
+PRIORITY_MIN_QUALITY = 0.6
+# Whether to normalise each fencer's extension against their own resting guard.
+#
+# The design argued for this and the argument was sound: en-garde extension
+# ranges 0.6-0.9 between fencers, so one fencer's resting arm can read higher
+# than the other's attacking arm, and an absolute threshold would be meaningless.
+# Measurement disagreed, decisively. Normalising made the judge answer "right"
+# on every single call it made across both validation bouts — 6 for 6 — because
+# the baseline is itself estimated from the same noisy per-frame signal, and a
+# fencer whose estimate lands high can never score. The normalisation stopped
+# being a correction and became the answer. Turning it off took balanced
+# accuracy from 50% (chance) to 93%.
+#
+# The design's premise still stands; what fails is estimating the baseline from
+# this data. Left off until there is a baseline that does not come from the same
+# noise it is supposed to cancel.
+PRIORITY_BASELINE_NORMALISE = False
+# Minimum lead-in samples pooled per side before a session baseline is trusted.
+# Below it the baseline falls back to all stored samples for that side. Only
+# consulted when PRIORITY_BASELINE_NORMALISE is on.
+PRIORITY_BASELINE_MIN_SAMPLES = 20
+# Master switch. The design fixed a release gate: an estimated attacker only
+# ships if it is right at least 75% of the time on referee-derived labels.
+#
+# OFF, on the generalisation evidence. Measured on 16 double-lamp labels from
+# three foil bouts (scripts/calibrate_foil_priority.py reproduces all of this):
+#
+#   majority-class baseline           62%   ("always answer left")
+#   tuned, all 16 labels              91%   (10/11 calls, balanced 93%)
+#   leave-one-out                     91%
+#   bout-level holdout                50%   (5/10 — chance)
+#
+# The first three clear the gate and the last does not, and the last is the one
+# that describes an unseen bout. Holding out a single bout changed which grid
+# cell won, and the cell chosen without that bout scored 0/4 on it. With 720
+# combinations searched against 16 labels, 173 of them clearing 75%, the tuned
+# figure cannot be distinguished from a fit to these three bouts.
+#
+# This is not "the signal does not exist" — one fixed setting gets 10/11 across
+# bouts whose answers are all-left, all-right and all-left respectively, so it
+# is discriminating rather than echoing a class prior. What is missing is
+# evidence that the thresholds transfer. More labelled bouts settle it; the flag
+# is the only thing that needs to change.
+#
+# When False the judge is still built, unit-tested and callable; it is simply
+# never consulted, so every verdict comes from footwork exactly as before.
+PRIORITY_ESTIMATION_ENABLED = False
+# Fallback baseline when a side has no usable samples at all. En-garde arm
+# extension measured 0.6–0.9 across the validation bouts, so a neutral 0.7 keeps
+# the normalisation finite without pretending to know the fencer's style.
+PRIORITY_BASELINE_DEFAULT = 0.7
 
 # --- Clock state tracking (Allez/Halt proxy) ---
 CLOCK_RUNNING_CONFIRM_FRAMES = 3   # N consecutive frames with time decrease = clock running (Allez)
@@ -359,3 +469,57 @@ PHRASE_MAX_LEAD_SEC = 8.0
 # for the fallback window when no preceding exchange can be matched (low confidence,
 # real-touch position unknown so we anchor the clip END on the OCR frame itself).
 OCR_TOUCH_DELAY_MEDIAN_SEC = 2.8
+
+
+# ==================================================================
+# Foil lamp-colour reading (scoring-box lamps in the TV overlay bar)
+# ==================================================================
+#
+# The USA Fencing bottom overlay encodes the scoring-box lamps as the BACKGROUND
+# FILL of each fencer's name region, not as a separate lamp graphic:
+#   idle    → coloured text on black      → small fill fraction
+#   lamp on → white text on a solid fill  → large fill fraction
+#
+# All values below were measured on a 1280x720 foil bout.
+
+# HSV fill masks (OpenCV HSV, H in 0..179). The bounds encode the measured
+# strict inequalities inclusively for cv2.inRange:
+#   red   = S>100 and V>120 and (H<=12 or H>=168)
+#   green = 35<=H<=85 and S>60 and V>100
+#   white = S<40 and V>180
+LAMP_FILL_RED_LOWER_1 = [0, 101, 121]
+LAMP_FILL_RED_UPPER_1 = [12, 255, 255]
+LAMP_FILL_RED_LOWER_2 = [168, 101, 121]
+LAMP_FILL_RED_UPPER_2 = [180, 255, 255]
+LAMP_FILL_GREEN_LOWER = [35, 61, 101]
+LAMP_FILL_GREEN_UPPER = [85, 255, 255]
+LAMP_FILL_WHITE_LOWER = [0, 0, 181]
+LAMP_FILL_WHITE_UPPER = [180, 39, 255]
+
+# Fill fraction above which a lamp counts as ON. Measured fills:
+#   left idle (red text on black)  0.227 | left red lamp ON   0.75-0.76
+#   right idle (green text)        0.174 | right green ON     0.82
+#   white lamp ON                  0.79
+# Both populations sit far from 0.5, so the threshold has a wide margin.
+LAMP_ON_FILL_THRESHOLD = 0.5
+
+# Frame step when sampling the bar for lamp state. Step 3 still caught the
+# shortest real lamp display observed (7 frames).
+LAMP_SAMPLE_STEP = 3
+
+# The broadcast sometimes renders the two lamps of a double *sequentially* with a
+# short gap (measured gaps up to 9 frames), so runs closer than this merge into a
+# single event. Genuinely separate actions are seconds apart.
+LAMP_EVENT_MERGE_GAP = 15
+
+# Search window around the OCR score-change frame. The lamp onset leads the OCR
+# score frame by a measured 81-222 frames.
+LAMP_SEARCH_LOOKBACK = 330
+LAMP_SEARCH_FORWARD = 30
+
+# Confidence shaping: fill at which fill-based confidence saturates, lamp-on
+# duration (frames) at which duration confidence saturates, and the floor applied
+# to the duration term so a briefly-rendered lamp is penalised but not zeroed.
+LAMP_CONF_FULL_FILL = 0.75
+LAMP_CONF_FULL_FRAMES = 30
+LAMP_CONF_MIN_DURATION_FACTOR = 0.4

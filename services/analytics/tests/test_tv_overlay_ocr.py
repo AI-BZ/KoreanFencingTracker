@@ -31,12 +31,25 @@ from analyzer.tv_overlay_ocr import (
     TVOverlayOCR,
     TVScoreTracker,
     OVERLAY_LAYOUTS,
+    LampBarReader,
+    LampEvent,
+    LampReading,
+    LampSideReading,
+    _lamp_pattern,
 )
 from analyzer.config import (
     OVERLAY_BAR_Y_RATIO,
     OVERLAY_BAR_HEIGHT,
     OVERLAY_SCORE_DEBOUNCE,
     OVERLAY_OCR_SAMPLE_INTERVAL,
+    LAMP_ON_FILL_THRESHOLD,
+    LAMP_SAMPLE_STEP,
+    LAMP_EVENT_MERGE_GAP,
+    LAMP_SEARCH_LOOKBACK,
+    LAMP_SEARCH_FORWARD,
+    LAMP_CONF_FULL_FILL,
+    LAMP_CONF_FULL_FRAMES,
+    LAMP_CONF_MIN_DURATION_FACTOR,
 )
 
 # Check if pytesseract is available for OCR tests
@@ -573,3 +586,524 @@ class TestParseTimeSeconds:
         tracker = TVScoreTracker()
         assert tracker._parse_time_seconds("abc") is None
         assert tracker._parse_time_seconds("") is None
+
+
+# ── Lamp bar fixtures ──
+
+_LAMP_BGR = {
+    "red": (0, 0, 255),
+    "green": (0, 255, 0),
+    "white": (255, 255, 255),
+}
+
+
+def _lamp_region_x(side, w=1280):
+    """Painted x range for a side, using the same scaling as _get_region."""
+    x_start, x_end = OVERLAY_LAYOUTS["usa_fencing"]["lamp_regions"][side]
+    scale = w / 1280.0
+    return int(x_start * scale), int(x_end * scale)
+
+
+def _make_lamp_frame(left=None, right=None, left_fill=1.0, right_fill=1.0,
+                     h=720, w=1280):
+    """Black frame with the overlay bar painted to a given lamp fill fraction.
+
+    `left`/`right` are "red"/"green"/"white"/None; the fill fraction is the
+    fraction of the region's columns painted, over the full bar height.
+    """
+    frame = np.zeros((h, w, 3), dtype=np.uint8)
+    bar_h = int(OVERLAY_BAR_HEIGHT * h / 720)
+    bar_y = min(int(h * OVERLAY_BAR_Y_RATIO), h - bar_h)
+
+    for side, color, fill in (("left", left, left_fill), ("right", right, right_fill)):
+        if color is None:
+            continue
+        x1, x2 = _lamp_region_x(side, w)
+        painted = int((x2 - x1) * fill)
+        frame[bar_y:bar_y + bar_h, x1:x1 + painted] = _LAMP_BGR[color]
+
+    return frame
+
+
+def _color_at(spans, idx):
+    for start, end, color in spans:
+        if start <= idx <= end:
+            return color
+    return None
+
+
+def _lamp_frames(left_spans=(), right_spans=(), first=0, last=300,
+                 step=LAMP_SAMPLE_STEP, h=720, w=1280):
+    """Yield (frame_index, frame) over a sampling grid, lit per span."""
+    for idx in range(first, last + 1, step):
+        yield idx, _make_lamp_frame(
+            left=_color_at(left_spans, idx),
+            right=_color_at(right_spans, idx),
+            h=h, w=w,
+        )
+
+
+def _idle_frame(h=720, w=1280):
+    """Idle bar: coloured text on black, simulated as ~20% coloured pixels."""
+    return _make_lamp_frame(
+        left="red", right="green", left_fill=0.2, right_fill=0.2, h=h, w=w,
+    )
+
+
+# ── Lamp config / layout tests ──
+
+class TestLampConfig:
+    def test_on_threshold_between_idle_and_lit(self):
+        assert 0.227 < LAMP_ON_FILL_THRESHOLD < 0.75
+
+    def test_sample_step_positive(self):
+        assert LAMP_SAMPLE_STEP > 0
+
+    def test_merge_gap_above_measured_double_gap(self):
+        assert LAMP_EVENT_MERGE_GAP >= 9
+
+    def test_search_window(self):
+        assert LAMP_SEARCH_LOOKBACK > LAMP_SEARCH_FORWARD > 0
+
+    def test_confidence_shaping(self):
+        assert LAMP_CONF_FULL_FILL > LAMP_ON_FILL_THRESHOLD
+        assert LAMP_CONF_FULL_FRAMES > 0
+        assert 0.0 < LAMP_CONF_MIN_DURATION_FACTOR < 1.0
+
+
+class TestLampLayout:
+    def test_lamp_regions_present(self):
+        layout = OVERLAY_LAYOUTS["usa_fencing"]
+        assert set(layout["lamp_regions"]) == {"left", "right"}
+
+    def test_lamp_regions_match_name_regions(self):
+        layout = OVERLAY_LAYOUTS["usa_fencing"]
+        assert layout["lamp_regions"]["left"] == layout["regions"]["left_name"]
+        assert layout["lamp_regions"]["right"] == layout["regions"]["right_name"]
+
+    def test_lamp_colors(self):
+        colors = OVERLAY_LAYOUTS["usa_fencing"]["lamp_colors"]
+        assert colors["left"] == "red"
+        assert colors["right"] == "green"
+
+
+# ── Lamp dataclass tests ──
+
+class TestLampDataclasses:
+    def test_side_reading_to_dict(self):
+        d = LampSideReading(state="color", peak_fill=0.76, on_frames=45).to_dict()
+        assert d["state"] == "color"
+        assert d["peak_fill"] == 0.76
+        assert d["on_frames"] == 45
+
+    def test_reading_defaults(self):
+        reading = LampReading()
+        assert reading.pattern is None
+        assert reading.confidence == 0.0
+        assert reading.left.state == "off"
+        assert reading.right.state == "off"
+        assert reading.start_frame is None
+        assert reading.end_frame is None
+
+    def test_reading_serializable(self):
+        reading = LampReading(
+            pattern="double",
+            confidence=0.9,
+            left=LampSideReading(state="color", peak_fill=0.75, on_frames=30),
+            right=LampSideReading(state="color", peak_fill=0.82, on_frames=30),
+            start_frame=100,
+            end_frame=130,
+            frames_sampled=11,
+        )
+        parsed = json.loads(json.dumps(reading.to_dict()))
+        assert parsed["pattern"] == "double"
+        assert parsed["left"]["state"] == "color"
+
+    def test_event_to_dict(self):
+        event = LampEvent(
+            start_frame=10,
+            end_frame=40,
+            left=LampSideReading(state="color", peak_fill=0.75, on_frames=30),
+            right=LampSideReading(),
+            frames_sampled=11,
+        )
+        d = event.to_dict()
+        assert d["start_frame"] == 10
+        assert d["right"]["state"] == "off"
+
+
+# ── LampBarReader tests ──
+
+class TestLampBarReader:
+    def test_constructs_without_pytesseract(self, monkeypatch):
+        """Lamp reading is colour-fill based, so no OCR dependency is needed."""
+        import analyzer.tv_overlay_ocr as module
+        original = module.pytesseract
+        try:
+            module.pytesseract = None
+            reader = LampBarReader()
+            assert reader.layout is not None
+        finally:
+            module.pytesseract = original
+
+    def test_invalid_layout_raises(self):
+        with pytest.raises(ValueError, match="Unknown layout"):
+            LampBarReader(layout="nonexistent")
+
+    def test_read_side_fills_shape(self):
+        reader = LampBarReader()
+        fills = reader.read_side_fills(_idle_frame())
+        assert set(fills) == {"left", "right"}
+        assert set(fills["left"]) == {"red", "green", "white"}
+
+    def test_idle_fills_below_threshold(self):
+        reader = LampBarReader()
+        fills = reader.read_side_fills(_idle_frame())
+        assert fills["left"]["red"] == pytest.approx(0.2, abs=0.02)
+        assert fills["right"]["green"] == pytest.approx(0.2, abs=0.02)
+        assert fills["left"]["white"] == 0.0
+        assert fills["right"]["white"] == 0.0
+
+    def test_idle_frame_both_sides_off(self):
+        reader = LampBarReader()
+        assert reader.read_side_states(_idle_frame()) == ("off", "off")
+
+    def test_red_lamp_left_only(self):
+        reader = LampBarReader()
+        frame = _make_lamp_frame(left="red", right="green", right_fill=0.2)
+        assert reader.read_side_states(frame) == ("color", "off")
+
+    def test_green_lamp_right_only(self):
+        reader = LampBarReader()
+        frame = _make_lamp_frame(left="red", left_fill=0.2, right="green")
+        assert reader.read_side_states(frame) == ("off", "color")
+
+    def test_white_lamp_both_sides(self):
+        reader = LampBarReader()
+        frame = _make_lamp_frame(left="white", right="white")
+        assert reader.read_side_states(frame) == ("white", "white")
+
+    def test_wrong_colour_does_not_light_a_side(self):
+        """A green fill in the left region is not the left side's lamp colour."""
+        reader = LampBarReader()
+        frame = _make_lamp_frame(left="green", right="red")
+        assert reader.read_side_states(frame) == ("off", "off")
+
+    def test_fill_just_under_threshold_is_off(self):
+        reader = LampBarReader()
+        frame = _make_lamp_frame(left="red", left_fill=0.48)
+        assert reader.read_side_states(frame)[0] == "off"
+
+    def test_fill_just_over_threshold_is_on(self):
+        reader = LampBarReader()
+        frame = _make_lamp_frame(left="red", left_fill=0.52)
+        assert reader.read_side_states(frame)[0] == "color"
+
+    def test_no_overlay_bar_reads_off(self):
+        reader = LampBarReader()
+        assert reader.read_side_states(_make_frame_no_overlay()) == ("off", "off")
+
+
+# ── Lamp pattern mapping ──
+
+class TestLampPattern:
+    def test_double(self):
+        assert _lamp_pattern("color", "color") == "double"
+
+    def test_single_left(self):
+        assert _lamp_pattern("color", "off") == "single_left"
+        assert _lamp_pattern("color", "white") == "single_left"
+
+    def test_single_right(self):
+        assert _lamp_pattern("off", "color") == "single_right"
+        assert _lamp_pattern("white", "color") == "single_right"
+
+    def test_white_only(self):
+        assert _lamp_pattern("white", "white") == "white"
+        assert _lamp_pattern("white", "off") == "white"
+        assert _lamp_pattern("off", "white") == "white"
+
+    def test_nothing(self):
+        assert _lamp_pattern("off", "off") is None
+
+    def test_white_event_from_scan_maps_to_white(self):
+        reader = LampBarReader()
+        events = reader.scan_events(_lamp_frames(
+            left_spans=[(30, 60, "white")],
+            right_spans=[(30, 60, "white")],
+            last=90,
+        ))
+        assert len(events) == 1
+        assert _lamp_pattern(events[0].left.state, events[0].right.state) == "white"
+
+    def test_single_white_side_from_scan_maps_to_white(self):
+        reader = LampBarReader()
+        events = reader.scan_events(_lamp_frames(
+            left_spans=[(30, 60, "white")],
+            last=90,
+        ))
+        assert len(events) == 1
+        assert events[0].right.state == "off"
+        assert _lamp_pattern(events[0].left.state, events[0].right.state) == "white"
+
+
+# ── scan_events tests ──
+
+class TestLampScanEvents:
+    def test_idle_sequence_yields_no_events(self):
+        reader = LampBarReader()
+        frames = ((i, _idle_frame()) for i in range(0, 60, LAMP_SAMPLE_STEP))
+        assert reader.scan_events(frames) == []
+
+    def test_single_event_bounds_and_states(self):
+        reader = LampBarReader()
+        events = reader.scan_events(_lamp_frames(
+            left_spans=[(30, 60, "red")],
+            last=120,
+        ))
+        assert len(events) == 1
+        event = events[0]
+        assert event.start_frame == 30
+        assert event.end_frame == 60
+        assert event.left.state == "color"
+        assert event.right.state == "off"
+        assert event.left.peak_fill == 1.0
+        assert event.frames_sampled == 11
+
+    def test_on_frames_counts_frames_not_samples(self):
+        reader = LampBarReader()
+        events = reader.scan_events(_lamp_frames(
+            left_spans=[(30, 60, "red")],
+            last=120,
+        ))
+        assert events[0].left.on_frames == 11 * LAMP_SAMPLE_STEP
+
+    def test_sequential_double_merges_into_one_event(self):
+        """Measured case: the two lamps of a double render sequentially."""
+        reader = LampBarReader()
+        events = reader.scan_events(_lamp_frames(
+            left_spans=[(0, 6, "red")],
+            right_spans=[(18, 45, "green")],
+            last=120,
+        ))
+        assert len(events) == 1
+        assert events[0].left.state == "color"
+        assert events[0].right.state == "color"
+        assert events[0].start_frame == 0
+        assert events[0].end_frame == 45
+
+    def test_far_apart_runs_stay_separate(self):
+        reader = LampBarReader()
+        events = reader.scan_events(_lamp_frames(
+            left_spans=[(0, 6, "red")],
+            right_spans=[(66, 90, "green")],
+            last=150,
+        ))
+        assert len(events) == 2
+        assert events[0].left.state == "color"
+        assert events[0].right.state == "off"
+        assert events[1].left.state == "off"
+        assert events[1].right.state == "color"
+
+    def test_merged_event_on_frames_exclude_the_gap(self):
+        reader = LampBarReader()
+        events = reader.scan_events(_lamp_frames(
+            left_spans=[(0, 6, "red")],
+            right_spans=[(18, 45, "green")],
+            last=120,
+        ))
+        event = events[0]
+        assert event.left.on_frames == 3 * LAMP_SAMPLE_STEP
+        assert event.right.on_frames == 10 * LAMP_SAMPLE_STEP
+
+    def test_union_state_prefers_color_over_white(self):
+        reader = LampBarReader()
+        events = reader.scan_events(_lamp_frames(
+            left_spans=[(0, 15, "white"), (18, 30, "red")],
+            last=90,
+        ))
+        assert len(events) == 1
+        assert events[0].left.state == "color"
+
+
+# ── read_touch_lamp tests ──
+
+class TestReadTouchLamp:
+    def test_single_left_pattern(self):
+        reader = LampBarReader()
+        events = reader.scan_events(_lamp_frames(
+            left_spans=[(30, 90, "red")],
+            last=200,
+        ))
+        reading = reader.read_touch_lamp(events, touch_frame=180)
+        assert reading.pattern == "single_left"
+        assert reading.start_frame == 30
+        assert reading.end_frame == 90
+
+    def test_single_right_pattern(self):
+        reader = LampBarReader()
+        events = reader.scan_events(_lamp_frames(
+            right_spans=[(30, 90, "green")],
+            last=200,
+        ))
+        reading = reader.read_touch_lamp(events, touch_frame=180)
+        assert reading.pattern == "single_right"
+
+    def test_double_pattern(self):
+        reader = LampBarReader()
+        events = reader.scan_events(_lamp_frames(
+            left_spans=[(30, 90, "red")],
+            right_spans=[(30, 90, "green")],
+            last=200,
+        ))
+        reading = reader.read_touch_lamp(events, touch_frame=180)
+        assert reading.pattern == "double"
+
+    def test_mirroring_swaps_single_left_and_single_right(self):
+        reader = LampBarReader()
+        left_events = reader.scan_events(_lamp_frames(
+            left_spans=[(30, 90, "red")], last=200,
+        ))
+        right_events = reader.scan_events(_lamp_frames(
+            right_spans=[(30, 90, "green")], last=200,
+        ))
+        left_reading = reader.read_touch_lamp(left_events, touch_frame=180)
+        right_reading = reader.read_touch_lamp(right_events, touch_frame=180)
+
+        assert left_reading.pattern == "single_left"
+        assert right_reading.pattern == "single_right"
+        assert left_reading.left.to_dict() == right_reading.right.to_dict()
+        assert left_reading.right.to_dict() == right_reading.left.to_dict()
+
+    def test_no_events_returns_empty_reading(self):
+        reader = LampBarReader()
+        reading = reader.read_touch_lamp([], touch_frame=100)
+        assert reading.pattern is None
+        assert reading.confidence == 0.0
+        assert reading.left.state == "off"
+        assert reading.right.state == "off"
+        assert reading.start_frame is None
+        assert reading.end_frame is None
+
+    def test_white_only_event_never_wins_over_colour_event(self):
+        """A white-only event cannot have produced a point, however close it is."""
+        reader = LampBarReader()
+        events = reader.scan_events(_lamp_frames(
+            left_spans=[(0, 30, "red"), (200, 230, "white")],
+            right_spans=[(200, 230, "white")],
+            last=300,
+        ))
+        assert len(events) == 2
+
+        reading = reader.read_touch_lamp(events, touch_frame=260)
+        assert reading.pattern == "single_left"
+        assert reading.start_frame == 0
+
+    def test_latest_qualifying_event_wins(self):
+        reader = LampBarReader()
+        events = reader.scan_events(_lamp_frames(
+            left_spans=[(0, 30, "red")],
+            right_spans=[(201, 231, "green")],
+            last=300,
+        ))
+        reading = reader.read_touch_lamp(events, touch_frame=260)
+        assert reading.pattern == "single_right"
+        assert reading.start_frame == 201
+
+    def test_previous_end_prevents_reusing_previous_touch_event(self):
+        reader = LampBarReader()
+        events = reader.scan_events(_lamp_frames(
+            left_spans=[(0, 30, "red")],
+            right_spans=[(201, 231, "green")],
+            last=300,
+        ))
+        first = reader.read_touch_lamp(events, touch_frame=100)
+        assert first.pattern == "single_left"
+
+        clamped = reader.read_touch_lamp(
+            events, touch_frame=100, previous_end=first.end_frame,
+        )
+        assert clamped.pattern is None
+
+        second = reader.read_touch_lamp(
+            events, touch_frame=260, previous_end=first.end_frame,
+        )
+        assert second.pattern == "single_right"
+        assert second.start_frame == 201
+
+    def test_event_beyond_lookback_is_rejected(self):
+        reader = LampBarReader()
+        events = reader.scan_events(_lamp_frames(
+            left_spans=[(0, 30, "red")],
+            last=60,
+        ))
+        assert reader.read_touch_lamp(events, touch_frame=400).pattern is None
+        assert reader.read_touch_lamp(
+            events, touch_frame=LAMP_SEARCH_LOOKBACK,
+        ).pattern == "single_left"
+
+    def test_event_beyond_forward_window_is_rejected(self):
+        reader = LampBarReader()
+        events = reader.scan_events(_lamp_frames(
+            left_spans=[(300, 330, "red")],
+            first=300, last=360,
+        ))
+        assert reader.read_touch_lamp(events, touch_frame=100).pattern is None
+
+
+# ── Lamp confidence tests ──
+
+class TestLampConfidence:
+    def _double_events(self):
+        reader = LampBarReader()
+        return reader, reader.scan_events(_lamp_frames(
+            left_spans=[(0, 90, "red"), (201, 288, "red")],
+            right_spans=[(0, 90, "green"), (201, 207, "green")],
+            last=330,
+        ))
+
+    def test_short_second_lamp_scores_lower_than_a_long_one(self):
+        reader, events = self._double_events()
+        assert len(events) == 2
+
+        long_double = reader.read_touch_lamp(events, touch_frame=120)
+        short_double = reader.read_touch_lamp(events, touch_frame=320)
+
+        assert long_double.pattern == "double"
+        assert short_double.pattern == "double"
+        assert short_double.confidence < long_double.confidence
+
+    def test_confidence_within_unit_range(self):
+        reader, events = self._double_events()
+        for touch_frame in (120, 320):
+            reading = reader.read_touch_lamp(events, touch_frame=touch_frame)
+            assert 0.0 <= reading.confidence <= 1.0
+
+    def test_short_lamp_confidence_floored_by_duration_factor(self):
+        reader, events = self._double_events()
+        short_double = reader.read_touch_lamp(events, touch_frame=320)
+        assert short_double.confidence >= LAMP_CONF_MIN_DURATION_FACTOR * 0.5
+
+    def test_full_fill_and_duration_saturate_at_one(self):
+        reader = LampBarReader()
+        events = reader.scan_events(_lamp_frames(
+            left_spans=[(0, 90, "red")],
+            last=150,
+        ))
+        reading = reader.read_touch_lamp(events, touch_frame=120)
+        assert reading.left.peak_fill >= LAMP_CONF_FULL_FILL
+        assert reading.left.on_frames >= LAMP_CONF_FULL_FRAMES
+        assert reading.confidence == 1.0
+
+    def test_marginal_fill_lowers_confidence(self):
+        reader = LampBarReader()
+        strong = reader.scan_events(_lamp_frames(
+            left_spans=[(0, 90, "red")], last=150,
+        ))
+        marginal = reader.scan_events(
+            (i, _make_lamp_frame(left="red", left_fill=0.55))
+            for i in range(0, 91, LAMP_SAMPLE_STEP)
+        )
+        strong_reading = reader.read_touch_lamp(strong, touch_frame=120)
+        marginal_reading = reader.read_touch_lamp(marginal, touch_frame=120)
+        assert marginal_reading.confidence < strong_reading.confidence

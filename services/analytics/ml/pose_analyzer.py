@@ -355,6 +355,48 @@ class PoseAnalyzer:
         """Compute per-joint velocity and acceleration for a fencer."""
         return kin.compute_joint_kinematics(pose_sequence, side, sample_every_n)
 
+    def _extract_priority_series(
+        self,
+        seq: List[PoseResult],
+        win_start: int,
+        win_end: int,
+        side: str,
+    ) -> Tuple[List[Tuple[int, Optional[float]]], List[Tuple[int, Optional[float]]]]:
+        """Arm-extension and hip-x series over ``[win_start .. win_end]`` inclusive.
+
+        Frames where the fencer is missing or the keypoints are not confident
+        enough yield ``None`` entries rather than being skipped, so a consumer
+        can tell "arm was down" from "we could not see the arm" — the
+        difference between a counter-attack and a dropout.
+
+        Hip x is divided by the fencer's mean body height across the window, so
+        a velocity threshold expressed in body heights means the same thing on a
+        wide shot and a close-up.
+        """
+        arm_series: List[Tuple[int, Optional[float]]] = []
+        hip_px: List[Tuple[int, Optional[float]]] = []
+        heights: List[float] = []
+
+        for idx in range(win_start, win_end + 1):
+            fencer = get_fencer_by_side(seq[idx], side)
+            if fencer is None:
+                arm_series.append((idx, None))
+                hip_px.append((idx, None))
+                continue
+            arm_series.append((idx, kin.compute_forward_arm_extension(fencer, side)))
+            hip_center = body_metrics.compute_hip_center(fencer)
+            hip_px.append((idx, None if hip_center is None else hip_center[0]))
+            bh = body_metrics.compute_body_height(fencer)
+            if bh:
+                heights.append(bh)
+
+        avg_bh = sum(heights) / len(heights) if heights else None
+        hip_series = [
+            (idx, None if x is None or not avg_bh else x / avg_bh)
+            for idx, x in hip_px
+        ]
+        return arm_series, hip_series
+
     # ------------------------------------------------------------------
     # Per-frame action state classification
     # ------------------------------------------------------------------
@@ -399,8 +441,19 @@ class PoseAnalyzer:
         my_fencer: Optional[str] = None,
         scoring_frames: Optional[Set[int]] = None,
         lamp_white_frames: Optional[Set[int]] = None,
+        priority_lead_samples: int = 0,
     ) -> ContinuousAnalysisResult:
-        """Analyze the full bout to detect exchanges (scoring and non-scoring)."""
+        """Analyze the full bout to detect exchanges (scoring and non-scoring).
+
+        ``priority_lead_samples`` > 0 additionally captures the per-frame arm
+        extension and hip position that foil priority estimation needs, over
+        ``[start − priority_lead_samples .. min_distance_frame]``. The lead is
+        given in *samples of the sequence passed in*, not video frames: this
+        function has no way to know how the caller sampled the video, and
+        guessing it from ``self.fps`` is exactly the class of frame-unit
+        confusion that has bitten this pipeline before. The caller converts
+        (``PRIORITY_WINDOW_LEAD_SEC × fps / sample_every``).
+        """
         if not pose_sequence:
             return ContinuousAnalysisResult()
 
@@ -451,6 +504,12 @@ class PoseAnalyzer:
         scoring_count = 0
         non_scoring_count = 0
 
+        # Previous exchange end, used to stop the priority window from reaching
+        # back into the preceding phrase. Measured failure mode: a defender
+        # still drifting forward after the last touch gets scored as the
+        # aggressor of the next one.
+        prev_end_frame = -1
+
         for (start_frame, end_frame, min_frame, min_dist) in raw_exchanges:
             # Build a sub-sequence for this exchange
             sub_start = max(0, start_frame)
@@ -493,6 +552,22 @@ class PoseAnalyzer:
             kin_l = kin_l if kin_l else None
             kin_r = kin_r if kin_r else None
 
+            # Priority signal windows (foil). Anchored on the nearest-approach
+            # frame because that is the best available estimate of real blade
+            # contact; motion after contact says nothing about who started it.
+            arm_l = arm_r = hip_l = hip_r = None
+            if priority_lead_samples > 0:
+                win_start = max(
+                    0, start_frame - priority_lead_samples, prev_end_frame + 1,
+                )
+                win_end = min(len(seq) - 1, max(min_frame, win_start))
+                arm_l, hip_l = self._extract_priority_series(
+                    seq, win_start, win_end, "left",
+                )
+                arm_r, hip_r = self._extract_priority_series(
+                    seq, win_start, win_end, "right",
+                )
+
             ex = ExchangeEvent(
                 start_frame=start_frame,
                 end_frame=end_frame,
@@ -507,8 +582,13 @@ class PoseAnalyzer:
                 joint_angles_right=ja_r,
                 kinematics_left=kin_l,
                 kinematics_right=kin_r,
+                arm_series_left=arm_l,
+                arm_series_right=arm_r,
+                hip_x_series_left=hip_l,
+                hip_x_series_right=hip_r,
             )
             exchanges.append(ex)
+            prev_end_frame = end_frame
 
             if exchange_scoring:
                 scoring_count += 1

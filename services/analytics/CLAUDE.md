@@ -678,8 +678,53 @@ TV 중계나 선수 촬영은 Phase 1 이벤트가 없으므로 모든 프레임
 | 풀 매치 | 15~20분 | 30분 | 441~570초 | Phase 1 비용 선형 증가 |
 | TV 중계 | 제한 없음 | 60분+ | 세그먼트 단위 | TVBroadcastAnalyzer가 장면 분할 |
 
-**제한 요소**: 메모리가 아닌 시간 — 영상 길이에 비례하여 Phase 1 시간 증가.
-30분 이상 영상도 기술적으로 가능하나, 사용자 대기 시간이 길어짐 → 비동기 처리 필수.
+**메모리 상한은 해소됨** (2026-08-08, 청크 스트리밍 전환).
+
+`scripts/generate_continuous_report.py`는 이제 프레임을 `POSE_CHUNK_FRAMES`(256)
+단위로 **읽기 → 포즈 추론 → 즉시 해제**한다. `pose_results`(관절 좌표)만 누적되므로
+피크 메모리가 **영상 길이와 무관**하다.
+
+| 영상 | 해상도 | 샘플 프레임 | 이전(전량 적재) | 현재(스트리밍) |
+|------|--------|-----------|---------------|--------------|
+| 11:49 (21,258f) | 720p | 7,086 | 18.85GB ✅ | **2.09GB** ✅ |
+| 19:41 (35,458f) | 720p | 11,820 | 32.7GB ❌ 프로세스 사망 | **2.11GB** ✅ 성공 |
+| 28:44 (51,694f) | 360p | 17,232 | ~11.9GB | **1.31GB** ✅ 성공 |
+
+→ 11:49 기준 **9.0배 감소**. 결과 동일성은 Li–Lin 리포트 재생성으로 검증
+(724KB JSON 전체가 바이트 단위 동일, `analysis_time_sec` 한 줄만 상이).
+`PoseEstimator.estimate_poses_batch`가 내부적으로 프레임 단위 루프라 청크 경계가
+결과에 영향을 주지 않기 때문 — 청크 크기를 바꿔도 결과는 같다.
+
+**🔴 진짜 제약은 길이가 아니라 "길이 × 해상도"였다.** 위 표에서 28:44 영상이
+19:41 영상보다 오히려 메모리를 덜 쓴 이유는 360p라서다(프레임당 691KB vs 720p
+2.76MB). 이전 문서가 "실질 상한 약 15분"이라고 적은 것은 720p 기준이었고,
+길이만으로 상한을 말하면 틀린다.
+
+**현재 실측 상한**: `data/raw/`에서 가장 긴 영상이 28:44(360p)이고 성공했다.
+720p 최장 영상은 19:41이고 역시 성공했다. 피크가 길이에 대해 평탄하므로
+(20분 구간 내내 2.1GB 고정) 상한은 길이가 아니라 동시 실행 프로세스 수로 결정된다.
+분석당 약 2GB로 잡으면 된다.
+
+### 🔴 리포트 재생성 시 램프 판독이 소실된다 (2026-08-08 실제로 당함)
+
+`generate_continuous_report.py`는 램프를 읽지 않는다. `lamp_pattern` /
+`lamp_confidence`는 **별도 스크립트** `detect_touch_lamps.py`가 나중에 주입하는
+필드다. 따라서 기존 리포트를 재생성하면 **램프가 조용히 사라지고**, 램프에 의존하는
+`no_priority_call` 판정 8건이 전부 `unclear`로 후퇴한다. 에러도 경고도 없다.
+
+```bash
+# 재생성했다면 램프를 반드시 다시 주입할 것
+PYTHONPATH=. .venv/bin/python3 scripts/generate_continuous_report.py <video> ...
+PYTHONPATH=. .venv/bin/python3 scripts/detect_touch_lamps.py \
+    --report data/reports/<id>_continuous_report.json --video <video> \
+    --labels-csv data/labels_priority_<id>.csv
+
+# 확인: 램프가 살아 있는지
+python3 -c "import json,collections;d=json.load(open('data/reports/<id>_continuous_report.json'));print(collections.Counter(t.get('lamp_pattern') for t in d['touches']))"
+```
+
+판정 분포로도 확인된다 — 램프가 있으면 `no_priority_call`이 나오고, 없으면 그 건수가
+`unclear`에 합쳐진다.
 
 ### 서비스화 시 비용 구조
 

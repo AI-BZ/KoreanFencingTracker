@@ -13,7 +13,7 @@ Phase 7:  PhraseAnnotation
 
 from dataclasses import dataclass, asdict, field
 from enum import Enum
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Tuple
 
 
 class EventType(Enum):
@@ -503,6 +503,17 @@ class ExchangeEvent:
     joint_angles_right: Optional[JointAngles] = None
     kinematics_left: Optional[List[FrameKinematics]] = None
     kinematics_right: Optional[List[FrameKinematics]] = None
+    # Per-frame signals for foil priority estimation, sampled over
+    # [start_frame − lead .. min_distance_frame]. Each entry is
+    # ``(frame_index, value)`` with ``value=None`` where the pose was unusable —
+    # the gaps are kept rather than dropped so the judge can measure coverage.
+    # Arm values are forward-arm extension ratios (0-1); hip values are the hip
+    # centre's x position in body heights, so velocity thresholds do not depend
+    # on broadcast resolution.
+    arm_series_left: Optional[List[Tuple[int, Optional[float]]]] = None
+    arm_series_right: Optional[List[Tuple[int, Optional[float]]]] = None
+    hip_x_series_left: Optional[List[Tuple[int, Optional[float]]]] = None
+    hip_x_series_right: Optional[List[Tuple[int, Optional[float]]]] = None
 
     def to_dict(self) -> dict:
         d: dict = {
@@ -528,6 +539,16 @@ class ExchangeEvent:
             d["kinematics_left"] = [fk.to_dict() for fk in self.kinematics_left]
         if self.kinematics_right is not None:
             d["kinematics_right"] = [fk.to_dict() for fk in self.kinematics_right]
+        for name in (
+            "arm_series_left", "arm_series_right",
+            "hip_x_series_left", "hip_x_series_right",
+        ):
+            series = getattr(self, name)
+            if series is not None:
+                d[name] = [
+                    [frame, None if value is None else round(value, 3)]
+                    for frame, value in series
+                ]
         return d
 
 

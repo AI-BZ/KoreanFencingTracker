@@ -43,6 +43,27 @@ from analyzer.config import (
     CLOCK_STOPPED_CONFIRM_FRAMES,
 )
 
+from typing import Iterable, Iterator
+
+from analyzer.config import (
+    LAMP_FILL_RED_LOWER_1,
+    LAMP_FILL_RED_UPPER_1,
+    LAMP_FILL_RED_LOWER_2,
+    LAMP_FILL_RED_UPPER_2,
+    LAMP_FILL_GREEN_LOWER,
+    LAMP_FILL_GREEN_UPPER,
+    LAMP_FILL_WHITE_LOWER,
+    LAMP_FILL_WHITE_UPPER,
+    LAMP_ON_FILL_THRESHOLD,
+    LAMP_SAMPLE_STEP,
+    LAMP_EVENT_MERGE_GAP,
+    LAMP_SEARCH_LOOKBACK,
+    LAMP_SEARCH_FORWARD,
+    LAMP_CONF_FULL_FILL,
+    LAMP_CONF_FULL_FRAMES,
+    LAMP_CONF_MIN_DURATION_FACTOR,
+)
+
 
 # ── Layout presets ──────────────────────────────────────────
 
@@ -65,6 +86,17 @@ OVERLAY_LAYOUTS = {
             "name_secondary": "red",
             "score": ["white", "green"],
             "time": ["white", "green", "red", "blue"],
+        },
+        # The scoring-box lamps are rendered as the background fill of each
+        # fencer's name region, so the lamp ROIs are the name ROIs.
+        "lamp_regions": {
+            "left":  (120, 440),
+            "right": (840, 1175),
+        },
+        # Which lamp colour counts as that side's valid-hit lamp.
+        "lamp_colors": {
+            "left": "red",
+            "right": "green",
         },
     },
 }
@@ -786,3 +818,315 @@ class TVScoreTracker:
         )
         self._events.append(event)
         return event
+
+
+# ── Lamp colour reading ─────────────────────────────────────
+
+_LAMP_SIDES = ("left", "right")
+_LAMP_STATE_RANK = {"off": 0, "white": 1, "color": 2}
+
+
+@dataclass
+class LampSideReading:
+    """One fencer's lamp state across a single lamp event."""
+    state: str = "off"          # "color" | "white" | "off"
+    peak_fill: float = 0.0      # peak fill fraction of the winning mask
+    on_frames: int = 0          # frames (not samples) the side was non-"off"
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass
+class LampEvent:
+    """A contiguous stretch of frames during which at least one lamp was lit."""
+    start_frame: int
+    end_frame: int
+    left: LampSideReading
+    right: LampSideReading
+    frames_sampled: int
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass
+class LampReading:
+    """The lamp event attributed to one scoring touch."""
+    pattern: Optional[str] = None   # "double" | "single_left" | "single_right" | "white"
+    confidence: float = 0.0
+    left: LampSideReading = field(default_factory=LampSideReading)
+    right: LampSideReading = field(default_factory=LampSideReading)
+    start_frame: Optional[int] = None
+    end_frame: Optional[int] = None
+    frames_sampled: int = 0
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+def _clip(value: float, low: float, high: float) -> float:
+    return max(low, min(high, value))
+
+
+def _infer_sample_step(indices: List[int]) -> int:
+    """Frames covered by one sample, inferred from the sampling grid itself.
+
+    scan_events takes an arbitrary iterable of (frame_index, frame), so the
+    caller's step is not known; the tightest spacing in the grid is it.
+    """
+    diffs = [b - a for a, b in zip(indices, indices[1:]) if b > a]
+    return min(diffs) if diffs else 1
+
+
+def _lamp_pattern(left_state: str, right_state: str) -> Optional[str]:
+    if left_state == "color" and right_state == "color":
+        return "double"
+    if left_state == "color":
+        return "single_left"
+    if right_state == "color":
+        return "single_right"
+    if "white" in (left_state, right_state):
+        return "white"
+    return None
+
+
+def _lamp_side_confidence(reading: LampSideReading) -> float:
+    span = LAMP_CONF_FULL_FILL - LAMP_ON_FILL_THRESHOLD
+    fill_conf = _clip((reading.peak_fill - LAMP_ON_FILL_THRESHOLD) / span, 0.0, 1.0)
+    dur_conf = _clip(
+        reading.on_frames / LAMP_CONF_FULL_FRAMES,
+        LAMP_CONF_MIN_DURATION_FACTOR,
+        1.0,
+    )
+    return fill_conf * dur_conf
+
+
+def _lamp_confidence(pattern: Optional[str], event: LampEvent) -> float:
+    """Confidence of the pattern, set by its weakest determining side.
+
+    A double whose second lamp only rendered for a handful of frames must score
+    below one where both lamps were lit for the full display, so the minimum —
+    not the mean — is taken over the sides that determine the pattern.
+    """
+    if pattern is None:
+        return 0.0
+    wanted = "white" if pattern == "white" else "color"
+    sides = [r for r in (event.left, event.right) if r.state == wanted]
+    if not sides:
+        return 0.0
+    return round(min(_lamp_side_confidence(r) for r in sides), 3)
+
+
+class LampBarReader:
+    """Read the scoring-box lamp colours out of the TV overlay bar.
+
+    The USA Fencing overlay encodes the lamps as the background fill of each
+    fencer's name region — idle is coloured text on black, a lit lamp is white
+    text on a solid colour fill — so the state is a fill fraction, not text.
+    No OCR is involved and pytesseract is not required.
+
+    The bar crop and x-scaling are TVOverlayOCR's geometry helpers, called
+    unbound: they read only ``self.layout``, so the two readers cannot drift
+    apart on where a region actually is.
+    """
+
+    def __init__(self, layout: str = "usa_fencing"):
+        if layout not in OVERLAY_LAYOUTS:
+            raise ValueError(f"Unknown layout: {layout}. Available: {list(OVERLAY_LAYOUTS.keys())}")
+        base = OVERLAY_LAYOUTS[layout]
+        if "lamp_regions" not in base or "lamp_colors" not in base:
+            raise ValueError(f"Layout {layout} defines no lamp regions")
+        self._lamp_regions = base["lamp_regions"]
+        self._lamp_colors = base["lamp_colors"]
+        self.layout = {**base, "regions": {**base["regions"], **self._lamp_regions}}
+
+    # ── Public API ──
+
+    def read_side_fills(self, frame: np.ndarray) -> dict:
+        """Fill fraction of each lamp mask, per side.
+
+        Returns:
+            {"left": {"red": f, "green": f, "white": f}, "right": {...}}
+        """
+        bar = TVOverlayOCR._crop_overlay_bar(self, frame)
+        fills = {}
+        for side in _LAMP_SIDES:
+            region = None
+            if bar is not None and bar.size:
+                region = TVOverlayOCR._get_region(self, bar, side)
+            fills[side] = self._region_fills(region)
+        return fills
+
+    def read_side_states(self, frame: np.ndarray) -> Tuple[str, str]:
+        """(left_state, right_state), each "color" | "white" | "off"."""
+        fills = self.read_side_fills(frame)
+        return tuple(self._state_from_fills(s, fills[s]) for s in _LAMP_SIDES)
+
+    def scan_events(self, frames: Iterable[Tuple[int, np.ndarray]]) -> List[LampEvent]:
+        """Group sampled frames into lamp events.
+
+        Args:
+            frames: iterable of (frame_index, BGR frame), in increasing order.
+        """
+        samples = []
+        for frame_index, frame in frames:
+            fills = self.read_side_fills(frame)
+            states = {s: self._state_from_fills(s, fills[s]) for s in _LAMP_SIDES}
+            samples.append((int(frame_index), states, fills))
+
+        step = _infer_sample_step([s[0] for s in samples])
+
+        runs: List[list] = []
+        current: list = []
+        for sample in samples:
+            if any(state != "off" for state in sample[1].values()):
+                current.append(sample)
+            elif current:
+                runs.append(current)
+                current = []
+        if current:
+            runs.append(current)
+
+        merged: List[list] = []
+        for run in runs:
+            if merged and run[0][0] - merged[-1][-1][0] <= LAMP_EVENT_MERGE_GAP:
+                merged[-1].extend(run)
+            else:
+                merged.append(list(run))
+
+        return [self._build_event(run, step) for run in merged]
+
+    def scan_video_events(
+        self,
+        video_path,
+        start_frame: int,
+        end_frame: int,
+        step: int = LAMP_SAMPLE_STEP,
+    ) -> List[LampEvent]:
+        """Scan a frame range of a video file for lamp events."""
+        return self.scan_events(
+            self._iter_video_frames(video_path, start_frame, end_frame, step)
+        )
+
+    def read_touch_lamp(
+        self,
+        events: List[LampEvent],
+        touch_frame: int,
+        previous_end: Optional[int] = None,
+    ) -> LampReading:
+        """Pick the lamp event that produced the touch at `touch_frame`.
+
+        Only events containing a colour lamp are eligible: a scoring touch always
+        lights a colour lamp, so a white-only event can never have produced the
+        point even when it sits closer to the OCR score frame.
+        """
+        candidates = [e for e in events if "color" in (e.left.state, e.right.state)]
+
+        if previous_end is not None:
+            candidates = [e for e in candidates if e.start_frame > previous_end]
+
+        candidates = [
+            e for e in candidates
+            if e.start_frame <= touch_frame + LAMP_SEARCH_FORWARD
+            and touch_frame - e.start_frame <= LAMP_SEARCH_LOOKBACK
+        ]
+
+        if not candidates:
+            return LampReading()
+
+        chosen = max(candidates, key=lambda e: e.start_frame)
+        pattern = _lamp_pattern(chosen.left.state, chosen.right.state)
+
+        return LampReading(
+            pattern=pattern,
+            confidence=_lamp_confidence(pattern, chosen),
+            left=chosen.left,
+            right=chosen.right,
+            start_frame=chosen.start_frame,
+            end_frame=chosen.end_frame,
+            frames_sampled=chosen.frames_sampled,
+        )
+
+    # ── Internal methods ──
+
+    def _region_fills(self, region: Optional[np.ndarray]) -> dict:
+        if region is None or region.size == 0:
+            return {"red": 0.0, "green": 0.0, "white": 0.0}
+
+        hsv = cv2.cvtColor(region, cv2.COLOR_BGR2HSV)
+        total = float(hsv.shape[0] * hsv.shape[1])
+
+        red = cv2.bitwise_or(
+            cv2.inRange(hsv, np.array(LAMP_FILL_RED_LOWER_1), np.array(LAMP_FILL_RED_UPPER_1)),
+            cv2.inRange(hsv, np.array(LAMP_FILL_RED_LOWER_2), np.array(LAMP_FILL_RED_UPPER_2)),
+        )
+        green = cv2.inRange(hsv, np.array(LAMP_FILL_GREEN_LOWER), np.array(LAMP_FILL_GREEN_UPPER))
+        white = cv2.inRange(hsv, np.array(LAMP_FILL_WHITE_LOWER), np.array(LAMP_FILL_WHITE_UPPER))
+
+        return {
+            "red": float(np.count_nonzero(red)) / total,
+            "green": float(np.count_nonzero(green)) / total,
+            "white": float(np.count_nonzero(white)) / total,
+        }
+
+    def _state_from_fills(self, side: str, fills: dict) -> str:
+        lamp_color = self._lamp_colors[side]
+        if fills.get(lamp_color, 0.0) > LAMP_ON_FILL_THRESHOLD:
+            return "color"
+        if fills["white"] > LAMP_ON_FILL_THRESHOLD:
+            return "white"
+        return "off"
+
+    def _build_event(self, run: list, step: int) -> LampEvent:
+        readings = {}
+        for side in _LAMP_SIDES:
+            state = "off"
+            for _, states, _ in run:
+                if _LAMP_STATE_RANK[states[side]] > _LAMP_STATE_RANK[state]:
+                    state = states[side]
+
+            peak = 0.0
+            if state != "off":
+                channel = self._lamp_colors[side] if state == "color" else "white"
+                peak = max(fills[side][channel] for _, _, fills in run)
+
+            on_samples = sum(1 for _, states, _ in run if states[side] != "off")
+            readings[side] = LampSideReading(
+                state=state,
+                peak_fill=round(peak, 3),
+                on_frames=on_samples * step,
+            )
+
+        return LampEvent(
+            start_frame=run[0][0],
+            end_frame=run[-1][0],
+            left=readings["left"],
+            right=readings["right"],
+            frames_sampled=len(run),
+        )
+
+    def _iter_video_frames(
+        self,
+        video_path,
+        start_frame: int,
+        end_frame: int,
+        step: int,
+    ) -> Iterator[Tuple[int, np.ndarray]]:
+        """Seek once, then decode sequentially — per-frame seeking is far slower."""
+        cap = cv2.VideoCapture(str(video_path))
+        if not cap.isOpened():
+            return
+        try:
+            start = max(0, int(start_frame))
+            cap.set(cv2.CAP_PROP_POS_FRAMES, start)
+            index = start
+            while index <= end_frame:
+                ok, frame = cap.read()
+                if not ok:
+                    break
+                if (index - start) % step == 0:
+                    yield index, frame
+                index += 1
+        finally:
+            cap.release()

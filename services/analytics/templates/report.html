@@ -326,14 +326,22 @@
                 <div class="flex-1 min-w-0 text-sm leading-snug">
                     {% if touch.attack_outcome is defined and touch.attack_outcome == 'attack_success' %}
                         <span class="font-semibold {% if touch.scorer == 'left' %}text-blue-400{% else %}text-red-400{% endif %}">{{ scorer_name }}</span>
+                        {% if touch.estimated_badge %}<span class="align-middle px-1.5 py-0.5 rounded border border-gray-600 text-gray-400 text-[10px] font-medium" title="{{ touch.estimated_badge_title }}">{{ touch.estimated_badge }}</span>{% endif %}
                         <span class="text-gray-300">공격 성공 →</span>
                         <span class="text-emerald-400 font-semibold">득점</span>
                     {% elif touch.attack_outcome is defined and touch.attack_outcome == 'attack_failed' %}
                         <span class="font-semibold {% if touch.attacker_side == 'left' %}text-blue-400{% else %}text-red-400{% endif %}">{{ attacker_name }}</span>
+                        {% if touch.estimated_badge %}<span class="align-middle px-1.5 py-0.5 rounded border border-gray-600 text-gray-400 text-[10px] font-medium" title="{{ touch.estimated_badge_title }}">{{ touch.estimated_badge }}</span>{% endif %}
                         <span class="text-gray-400">공격 실패 →</span>
                         <span class="font-semibold {% if touch.scorer == 'left' %}text-blue-400{% else %}text-red-400{% endif %}">{{ scorer_name }}</span>
                         <span class="text-gray-300">방어 성공 후</span>
                         <span class="text-emerald-400 font-semibold">득점</span>
+                    {% elif touch.attack_outcome is defined and touch.attack_outcome == 'no_priority_call' %}
+                        <span class="font-semibold {% if touch.scorer == 'left' %}text-blue-400{% else %}text-red-400{% endif %}">{{ scorer_name }}</span>
+                        <span class="text-emerald-400 font-semibold">득점</span>
+                        <span class="text-gray-400 text-xs"
+                              title="유효타 램프가 한쪽만 켜진 터치입니다. 우선권은 양쪽 유효타가 동시에 인정될 때만 가리므로, 심판은 우선권을 판정하지 않고 득점을 인정했습니다.">&middot; {{ touch.attack_outcome_ko if touch.attack_outcome_ko is defined and touch.attack_outcome_ko else '단독 유효타 (우선권 판정 없음)' }}</span>
+                        <span class="block text-[10px] text-gray-600 mt-0.5">{{ touch.outcome_reason if touch.outcome_reason is defined and touch.outcome_reason else '공격을 시작한 선수는 특정하지 못했습니다' }}</span>
                     {% else %}
                         <span class="font-semibold {% if touch.scorer == 'left' %}text-blue-400{% else %}text-red-400{% endif %}">{{ scorer_name }}</span>
                         <span class="text-emerald-400 font-semibold">득점</span>
@@ -343,6 +351,23 @@
                         <span class="block text-[10px] text-gray-600 mt-0.5">{{ touch.outcome_reason }}</span>
                         {% endif %}
                         {% endif %}
+                    {% endif %}
+                    {% if touch.lamp_label is defined and touch.lamp_label %}
+                    <span class="block text-[10px] mt-1">
+                        <span class="px-1.5 py-0.5 rounded
+                                     {% if touch.lamp_pattern == 'single_left' %}bg-blue-500/10 text-blue-400
+                                     {% elif touch.lamp_pattern == 'single_right' %}bg-red-500/10 text-red-400
+                                     {% else %}bg-white/10 text-gray-400{% endif %}"
+                              title="스코어링 박스 램프 판독 — 판정 근거가 아니라 참고 정보입니다">{{ touch.lamp_label }}</span>
+                        {% if touch.lamp_conflict_note %}
+                        <span class="text-amber-400 ml-1">{{ touch.lamp_conflict_note }}</span>
+                        {% elif touch.attack_outcome_detail_ko is defined and touch.attack_outcome_detail_ko %}
+                        <span class="text-gray-500 ml-1">{{ touch.attack_outcome_detail_ko }}</span>
+                        {% endif %}
+                        {% if touch.lamp_low_confidence and touch.lamp_confidence_pct is not none %}
+                        <span class="text-amber-400 ml-1" title="램프 판독 신뢰도가 낮아 이 램프 정보는 불확실합니다">판독 신뢰도 <span class="fm-num">{{ touch.lamp_confidence_pct }}%</span></span>
+                        {% endif %}
+                    </span>
                     {% endif %}
                 </div>
                 <div class="hidden sm:flex items-center gap-1 flex-shrink-0 text-[10px]">
@@ -521,15 +546,38 @@
                             {% set t_attacker_name = left_name if touch.attacker_side == 'left' else right_name %}
                             {% if touch.attack_outcome == 'attack_success' %}
                             <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">공격 성공</span>
+                            {% if touch.estimated_badge %}<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium text-gray-400 border border-gray-600" title="{{ touch.estimated_badge_title }}">{{ touch.estimated_badge }}</span>{% endif %}
                             <span class="block text-[11px] text-gray-400 mt-1">{{ t_scorer_name }} 공격 → 득점</span>
                             {% elif touch.attack_outcome == 'attack_failed' %}
                             <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-orange-500/15 text-orange-400 border border-orange-500/20">공격 실패</span>
+                            {% if touch.estimated_badge %}<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium text-gray-400 border border-gray-600" title="{{ touch.estimated_badge_title }}">{{ touch.estimated_badge }}</span>{% endif %}
                             <span class="block text-[11px] text-gray-400 mt-1">{{ t_attacker_name }} 공격 실패 → {{ t_scorer_name }} 방어 후 득점</span>
+                            {% elif touch.attack_outcome == 'no_priority_call' %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-white/10 text-gray-300 border border-white/15"
+                                  title="유효타 램프가 한쪽만 켜진 터치입니다. 우선권은 양쪽 유효타가 동시에 인정될 때만 가리므로, 심판은 우선권을 판정하지 않고 득점을 인정했습니다.">{{ touch.attack_outcome_ko if touch.attack_outcome_ko is defined and touch.attack_outcome_ko else '단독 유효타 (우선권 판정 없음)' }}</span>
+                            <span class="block text-[10px] text-gray-500 mt-1 max-w-[180px]">{{ touch.outcome_reason if touch.outcome_reason is defined and touch.outcome_reason else '공격을 시작한 선수는 특정하지 못했습니다' }}</span>
                             {% else %}
                             <span class="text-xs text-gray-500">판별 불가</span>
                             {% if touch.outcome_reason is defined and touch.outcome_reason %}
                             <span class="block text-[10px] text-gray-600 mt-1 max-w-[180px]">{{ touch.outcome_reason }}</span>
                             {% endif %}
+                            {% endif %}
+                            {% if touch.lamp_label is defined and touch.lamp_label %}
+                            <span class="block text-[10px] mt-1 max-w-[180px]">
+                                <span class="px-1.5 py-0.5 rounded
+                                             {% if touch.lamp_pattern == 'single_left' %}bg-blue-500/10 text-blue-400
+                                             {% elif touch.lamp_pattern == 'single_right' %}bg-red-500/10 text-red-400
+                                             {% else %}bg-white/10 text-gray-400{% endif %}"
+                                      title="스코어링 박스 램프 판독 — 판정 근거가 아니라 참고 정보입니다">{{ touch.lamp_label }}</span>
+                                {% if touch.lamp_conflict_note %}
+                                <span class="text-amber-400">{{ touch.lamp_conflict_note }}</span>
+                                {% elif touch.attack_outcome_detail_ko is defined and touch.attack_outcome_detail_ko %}
+                                <span class="text-gray-500">{{ touch.attack_outcome_detail_ko }}</span>
+                                {% endif %}
+                                {% if touch.lamp_low_confidence and touch.lamp_confidence_pct is not none %}
+                                <span class="text-amber-400" title="램프 판독 신뢰도가 낮아 이 램프 정보는 불확실합니다">판독 신뢰도 <span class="fm-num">{{ touch.lamp_confidence_pct }}%</span></span>
+                                {% endif %}
+                            </span>
                             {% endif %}
                         </td>
                         <td class="px-4 py-3 text-sm text-gray-300">
