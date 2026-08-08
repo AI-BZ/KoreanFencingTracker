@@ -434,6 +434,16 @@ def main():
         if ex.parry_right is not None and ex.parry_right.parry_detected:
             ex_dict["parry_right"] = True
 
+        # Attacker/defender from footwork — the same rule that decides each
+        # touch's attack_outcome. Dropping this assignment leaves every
+        # exchange with attacker=None, which silently zeroes
+        # continuous_summary.fencer_stats and renders as "0 attacks, 0
+        # defenses" for both fencers in the report. It has gone missing once
+        # already, so it stays next to the footwork values it reads.
+        ex_dict["attacker"], ex_dict["defender"] = classify_exchange_sides(
+            fw_left_val, fw_right_val,
+        )
+
         # Priority signal series. Sample indices → original video frames, the
         # same ×sample_every conversion applied to every other frame number
         # above. Getting this wrong would silently place the series outside the

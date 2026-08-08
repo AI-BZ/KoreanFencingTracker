@@ -163,3 +163,36 @@ class TestFindOcrReport:
         it is not an 11-char YouTube ID."""
         d = self._dir(tmp_path, "short_report.json")
         assert find_ocr_report("some_video_short", d).name == "short_report.json"
+
+
+class TestExchangeAttackerIsAssigned:
+    """The script must actually call classify_exchange_sides, not just import it.
+
+    A refactor once dropped the ``ex_dict["attacker"], ex_dict["defender"] =
+    classify_exchange_sides(...)`` line while leaving the import in place. Every
+    exchange then serialised with ``attacker: None``, which zeroes
+    ``continuous_summary.fencer_stats`` and renders as "0 attacks, 0 defenses"
+    for both fencers. Nothing raised, no test failed, and the reports shipped
+    that way.
+
+    Checking the parsed AST rather than the source text keeps this from breaking
+    on reformatting while still catching a deletion.
+    """
+
+    def test_classify_exchange_sides_is_called(self):
+        import ast
+        import inspect
+
+        import scripts.generate_continuous_report as module
+
+        tree = ast.parse(inspect.getsource(module))
+        called = {
+            node.func.id
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+        }
+        assert "classify_exchange_sides" in called, (
+            "generate_continuous_report imports classify_exchange_sides but never "
+            "calls it — every exchange will serialise with attacker=None and the "
+            "per-fencer attack/defense counts will silently read zero."
+        )

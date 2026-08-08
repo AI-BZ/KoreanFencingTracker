@@ -5,8 +5,8 @@
     "total_touches": 26,
     "match_duration": "28:44",
     "total_frames_analyzed": 17232,
-    "analysis_time_sec": 244.9,
-    "weapon": "foil",
+    "analysis_time_sec": 259.5,
+    "weapon": "unknown",
     "bout_type": "unknown",
     "gender": "unknown",
     "age_group": "unknown"
@@ -1490,6 +1490,8 @@
       "footwork_left": "fleche",
       "footwork_right": "retreat",
       "parry_left": true,
+      "attacker": "left",
+      "defender": "right",
       "arm_series_left": [
         [
           13872,
@@ -2104,6 +2106,8 @@
       "min_distance_bh": 1.5,
       "footwork_left": "advance",
       "footwork_right": "unknown",
+      "attacker": "left",
+      "defender": "right",
       "arm_series_left": [
         [
           14076,
@@ -2734,6 +2738,8 @@
       "min_distance_bh": 1.37,
       "footwork_left": "advance",
       "footwork_right": "retreat",
+      "attacker": "left",
+      "defender": "right",
       "arm_series_left": [
         [
           14262,
@@ -3285,6 +3291,8 @@
       "footwork_left": "advance",
       "footwork_right": "advance",
       "parry_right": true,
+      "attacker": "both",
+      "defender": "both",
       "arm_series_left": [
         [
           14502,
@@ -3901,6 +3909,8 @@
       "footwork_right": "advance",
       "parry_left": true,
       "parry_right": true,
+      "attacker": "both",
+      "defender": "both",
       "arm_series_left": [
         [
           14748,
@@ -4579,6 +4589,8 @@
       "min_distance_bh": 2.16,
       "footwork_left": "unknown",
       "footwork_right": "advance",
+      "attacker": "right",
+      "defender": "left",
       "arm_series_left": [
         [
           15171,
@@ -5098,6 +5110,8 @@
       "footwork_left": "advance",
       "footwork_right": "advance",
       "parry_left": true,
+      "attacker": "both",
+      "defender": "both",
       "arm_series_left": [
         [
           15384,
@@ -5745,6 +5759,8 @@
       "footwork_left": "lunge",
       "footwork_right": "retreat",
       "parry_left": true,
+      "attacker": "left",
+      "defender": "right",
       "arm_series_left": [
         [
           15648,
@@ -6727,6 +6743,8 @@
       "min_distance_bh": 2.4,
       "footwork_left": "fleche",
       "footwork_right": "retreat",
+      "attacker": "left",
+      "defender": "right",
       "arm_series_left": [
         [
           15999,
@@ -7374,6 +7392,8 @@
       "footwork_left": "stationary",
       "footwork_right": "stationary",
       "parry_left": true,
+      "attacker": "unknown",
+      "defender": "unknown",
       "arm_series_left": [
         [
           16482,
@@ -8276,6 +8296,8 @@
       "min_distance_bh": 2.28,
       "footwork_left": "retreat",
       "footwork_right": "advance",
+      "attacker": "right",
+      "defender": "left",
       "arm_series_left": [
         [
           16797,
@@ -9354,6 +9376,8 @@
       "min_distance_bh": 2.0,
       "footwork_left": "unknown",
       "footwork_right": "advance",
+      "attacker": "right",
+      "defender": "left",
       "arm_series_left": [
         [
           17154,
@@ -9776,6 +9800,8 @@
       "min_distance_bh": 2.46,
       "footwork_left": "advance",
       "footwork_right": "retreat",
+      "attacker": "left",
+      "defender": "right",
       "arm_series_left": [
         [
           17451,
@@ -10566,6 +10592,8 @@
       "min_distance_bh": 2.47,
       "footwork_left": "stationary",
       "footwork_right": "retreat",
+      "attacker": "unknown",
+      "defender": "unknown",
       "arm_series_left": [
         [
           17616,
@@ -11133,6 +11161,8 @@
       "footwork_left": "fleche",
       "footwork_right": "unknown",
       "parry_right": true,
+      "attacker": "left",
+      "defender": "right",
       "arm_series_left": [
         [
           17769,
@@ -11876,6 +11906,8 @@
       "footwork_left": "unknown",
       "footwork_right": "stationary",
       "parry_left": true,
+      "attacker": "unknown",
+      "defender": "unknown",
       "arm_series_left": [
         [
           18528,
@@ -13244,6 +13276,8 @@
       "footwork_right": "stationary",
       "parry_left": true,
       "parry_right": true,
+      "attacker": "left",
+      "defender": "right",
       "arm_series_left": [
         [
           18990,
@@ -13603,6 +13637,8 @@
       "footwork_left": "unknown",
       "footwork_right": "advance",
       "parry_right": true,
+      "attacker": "right",
+      "defender": "left",
       "arm_series_left": [
         [
           19242,
@@ -14154,6 +14190,8 @@
       "footwork_left": "advance",
       "footwork_right": "stationary",
       "parry_right": true,
+      "attacker": "left",
+      "defender": "right",
       "arm_series_left": [
         [
           19386,
@@ -14402,6 +14440,8 @@
       "footwork_right": "unknown",
       "parry_left": true,
       "parry_right": true,
+      "attacker": "left",
+      "defender": "right",
       "arm_series_left": [
         [
           19440,
@@ -15080,6 +15120,8 @@
       "min_distance_bh": 1.98,
       "footwork_left": "advance",
       "footwork_right": "fleche",
+      "attacker": "both",
+      "defender": "both",
       "arm_series_left": [
         [
           19569,
@@ -15486,6 +15528,8 @@
       "min_distance_bh": 1.63,
       "footwork_left": "stationary",
       "footwork_right": "unknown",
+      "attacker": "unknown",
+      "defender": "unknown",
       "arm_series_left": [
         [
           19647,
@@ -15829,6 +15873,8 @@
       "footwork_left": "unknown",
       "footwork_right": "fleche",
       "parry_right": true,
+      "attacker": "right",
+      "defender": "left",
       "arm_series_left": [
         [
           19725,
@@ -15965,6 +16011,8 @@
       "footwork_right": "advance",
       "parry_left": true,
       "parry_right": true,
+      "attacker": "right",
+      "defender": "left",
       "arm_series_left": [
         [
           19764,
@@ -16133,6 +16181,8 @@
       "footwork_right": "fleche",
       "parry_left": true,
       "parry_right": true,
+      "attacker": "right",
+      "defender": "left",
       "arm_series_left": [
         [
           19800,
@@ -16269,6 +16319,8 @@
       "footwork_right": "fleche",
       "parry_left": true,
       "parry_right": true,
+      "attacker": "right",
+      "defender": "left",
       "arm_series_left": [
         [
           19902,
@@ -16900,6 +16952,8 @@
       "footwork_left": "advance",
       "footwork_right": "fleche",
       "parry_right": true,
+      "attacker": "both",
+      "defender": "both",
       "arm_series_left": [
         [
           20211,
@@ -17371,6 +17425,8 @@
       "footwork_left": "advance",
       "footwork_right": "advance",
       "parry_right": true,
+      "attacker": "both",
+      "defender": "both",
       "arm_series_left": [
         [
           20301,
@@ -17633,6 +17689,8 @@
       "min_distance_bh": 0.34,
       "footwork_left": "retreat",
       "footwork_right": "fleche",
+      "attacker": "right",
+      "defender": "left",
       "arm_series_left": [
         [
           20355,
@@ -18519,6 +18577,8 @@
       "min_distance_bh": 1.3,
       "footwork_left": "stationary",
       "footwork_right": "fleche",
+      "attacker": "right",
+      "defender": "left",
       "arm_series_left": [
         [
           20622,
@@ -19405,6 +19465,8 @@
       "min_distance_bh": 0.84,
       "footwork_left": "fleche",
       "footwork_right": "unknown",
+      "attacker": "left",
+      "defender": "right",
       "arm_series_left": [
         [
           21225,
@@ -19955,6 +20017,8 @@
       "min_distance_bh": 2.34,
       "footwork_left": "lunge",
       "footwork_right": "unknown",
+      "attacker": "left",
+      "defender": "right",
       "arm_series_left": [
         [
           22131,
@@ -20585,6 +20649,8 @@
       "min_distance_bh": 0.39,
       "footwork_left": "stationary",
       "footwork_right": "unknown",
+      "attacker": "unknown",
+      "defender": "unknown",
       "arm_series_left": [
         [
           22911,
@@ -22015,6 +22081,8 @@
       "min_distance_bh": 0.77,
       "footwork_left": "stationary",
       "footwork_right": "retreat",
+      "attacker": "unknown",
+      "defender": "unknown",
       "arm_series_left": [
         [
           23280,
@@ -22549,6 +22617,8 @@
       "min_distance_bh": 0.48,
       "footwork_left": "stationary",
       "footwork_right": "stationary",
+      "attacker": "unknown",
+      "defender": "unknown",
       "arm_series_left": [
         [
           23436,
@@ -25548,6 +25618,8 @@
       "footwork_left": "unknown",
       "footwork_right": "unknown",
       "parry_right": true,
+      "attacker": "unknown",
+      "defender": "unknown",
       "arm_series_left": [
         [
           24327,
@@ -25970,6 +26042,8 @@
       "min_distance_bh": 2.05,
       "footwork_left": "retreat",
       "footwork_right": "advance",
+      "attacker": "right",
+      "defender": "left",
       "arm_series_left": [
         [
           24636,
@@ -26569,6 +26643,8 @@
       "footwork_left": "unknown",
       "footwork_right": "unknown",
       "parry_right": true,
+      "attacker": "unknown",
+      "defender": "unknown",
       "arm_series_left": [
         [
           25002,
@@ -27328,6 +27404,8 @@
       "footwork_left": "fleche",
       "footwork_right": "advance",
       "parry_right": true,
+      "attacker": "both",
+      "defender": "both",
       "arm_series_left": [
         [
           25632,
@@ -27718,6 +27796,8 @@
       "min_distance_bh": 2.08,
       "footwork_left": "advance",
       "footwork_right": "retreat",
+      "attacker": "left",
+      "defender": "right",
       "arm_series_left": [
         [
           25734,
@@ -28156,6 +28236,8 @@
       "min_distance_bh": 2.15,
       "footwork_left": "advance",
       "footwork_right": "unknown",
+      "attacker": "left",
+      "defender": "right",
       "arm_series_left": [
         [
           26508,
@@ -29154,6 +29236,8 @@
       "min_distance_bh": 1.86,
       "footwork_left": "fleche",
       "footwork_right": "retreat",
+      "attacker": "left",
+      "defender": "right",
       "arm_series_left": [
         [
           26784,
@@ -30600,6 +30684,8 @@
       "min_distance_bh": 0.77,
       "footwork_left": "fleche",
       "footwork_right": "retreat",
+      "attacker": "left",
+      "defender": "right",
       "arm_series_left": [
         [
           27168,
@@ -31167,6 +31253,8 @@
       "footwork_left": "fleche",
       "footwork_right": "retreat",
       "parry_right": true,
+      "attacker": "left",
+      "defender": "right",
       "arm_series_left": [
         [
           27522,
@@ -31909,6 +31997,8 @@
       "min_distance_bh": 1.73,
       "footwork_left": "fleche",
       "footwork_right": "unknown",
+      "attacker": "left",
+      "defender": "right",
       "arm_series_left": [
         [
           27786,
@@ -32587,6 +32677,8 @@
       "min_distance_bh": 1.22,
       "footwork_left": "advance",
       "footwork_right": "advance",
+      "attacker": "both",
+      "defender": "both",
       "arm_series_left": [
         [
           28023,
@@ -33073,6 +33165,8 @@
       "min_distance_bh": 1.7,
       "footwork_left": "fleche",
       "footwork_right": "stationary",
+      "attacker": "left",
+      "defender": "right",
       "arm_series_left": [
         [
           28410,
@@ -33800,6 +33894,8 @@
       "footwork_left": "fleche",
       "footwork_right": "stationary",
       "parry_left": true,
+      "attacker": "left",
+      "defender": "right",
       "arm_series_left": [
         [
           28698,
@@ -34158,6 +34254,8 @@
       "min_distance_bh": 1.7,
       "footwork_left": "stationary",
       "footwork_right": "advance",
+      "attacker": "right",
+      "defender": "left",
       "arm_series_left": [
         [
           28809,
@@ -35108,6 +35206,8 @@
       "min_distance_bh": 0.53,
       "footwork_left": "fleche",
       "footwork_right": "retreat",
+      "attacker": "left",
+      "defender": "right",
       "arm_series_left": [
         [
           28998,
@@ -35402,6 +35502,8 @@
       "min_distance_bh": 0.55,
       "footwork_left": "stationary",
       "footwork_right": "stationary",
+      "attacker": "unknown",
+      "defender": "unknown",
       "arm_series_left": [
         [
           29064,
@@ -35760,6 +35862,8 @@
       "min_distance_bh": 0.54,
       "footwork_left": "stationary",
       "footwork_right": "stationary",
+      "attacker": "unknown",
+      "defender": "unknown",
       "arm_series_left": [
         [
           29145,
@@ -35830,6 +35934,8 @@
       "min_distance_bh": 1.03,
       "footwork_left": "stationary",
       "footwork_right": "stationary",
+      "attacker": "unknown",
+      "defender": "unknown",
       "arm_series_left": [
         [
           29190,
@@ -35996,6 +36102,8 @@
       "min_distance_bh": 0.97,
       "footwork_left": "unknown",
       "footwork_right": "fleche",
+      "attacker": "right",
+      "defender": "left",
       "arm_series_left": [
         [
           29232,
@@ -36290,6 +36398,8 @@
       "min_distance_bh": 0.44,
       "footwork_left": "lunge",
       "footwork_right": "stationary",
+      "attacker": "left",
+      "defender": "right",
       "arm_series_left": [
         [
           29292,
@@ -36984,6 +37094,8 @@
       "min_distance_bh": 0.0,
       "footwork_left": "unknown",
       "footwork_right": "stationary",
+      "attacker": "unknown",
+      "defender": "unknown",
       "arm_series_left": [
         [
           30660,
@@ -50942,6 +51054,8 @@
       "min_distance_bh": 0.88,
       "footwork_left": "lunge",
       "footwork_right": "fleche",
+      "attacker": "both",
+      "defender": "both",
       "arm_series_left": [
         [
           33822,
@@ -51860,6 +51974,8 @@
       "min_distance_bh": 1.61,
       "footwork_left": "fleche",
       "footwork_right": "advance",
+      "attacker": "both",
+      "defender": "both",
       "arm_series_left": [
         [
           33999,
@@ -52252,6 +52368,8 @@
       "footwork_right": "fleche",
       "parry_left": true,
       "parry_right": true,
+      "attacker": "both",
+      "defender": "both",
       "arm_series_left": [
         [
           34101,
@@ -52818,6 +52936,8 @@
       "min_distance_bh": 0.95,
       "footwork_left": "fleche",
       "footwork_right": "fleche",
+      "attacker": "both",
+      "defender": "both",
       "arm_series_left": [
         [
           35826,
@@ -54170,6 +54290,8 @@
       "footwork_right": "fleche",
       "parry_left": true,
       "parry_right": true,
+      "attacker": "both",
+      "defender": "both",
       "arm_series_left": [
         [
           36084,
@@ -54865,6 +54987,8 @@
       "footwork_left": "unknown",
       "footwork_right": "stationary",
       "parry_right": true,
+      "attacker": "unknown",
+      "defender": "unknown",
       "arm_series_left": [
         [
           36228,
@@ -55143,6 +55267,8 @@
       "min_distance_bh": 2.48,
       "footwork_left": "retreat",
       "footwork_right": "stationary",
+      "attacker": "unknown",
+      "defender": "unknown",
       "arm_series_left": [
         [
           36510,
@@ -55470,6 +55596,8 @@
       "footwork_left": "fleche",
       "footwork_right": "advance",
       "parry_left": true,
+      "attacker": "both",
+      "defender": "both",
       "arm_series_left": [
         [
           36690,
@@ -55924,6 +56052,8 @@
       "min_distance_bh": 2.26,
       "footwork_left": "fleche",
       "footwork_right": "retreat",
+      "attacker": "left",
+      "defender": "right",
       "arm_series_left": [
         [
           37086,
@@ -56379,6 +56509,8 @@
       "footwork_left": "retreat",
       "footwork_right": "fleche",
       "parry_left": true,
+      "attacker": "right",
+      "defender": "left",
       "arm_series_left": [
         [
           37176,
@@ -56803,6 +56935,8 @@
       "footwork_right": "advance",
       "parry_left": true,
       "parry_right": true,
+      "attacker": "both",
+      "defender": "both",
       "arm_series_left": [
         [
           37284,
@@ -56954,6 +57088,8 @@
       "footwork_left": "fleche",
       "footwork_right": "stationary",
       "parry_left": true,
+      "attacker": "left",
+      "defender": "right",
       "arm_series_left": [
         [
           37323,
@@ -57472,6 +57608,8 @@
       "min_distance_bh": 2.18,
       "footwork_left": "advance",
       "footwork_right": "advance",
+      "attacker": "both",
+      "defender": "both",
       "arm_series_left": [
         [
           37773,
@@ -57846,6 +57984,8 @@
       "min_distance_bh": 2.38,
       "footwork_left": "lunge",
       "footwork_right": "retreat",
+      "attacker": "left",
+      "defender": "right",
       "arm_series_left": [
         [
           38007,
@@ -58476,6 +58616,8 @@
       "min_distance_bh": 1.94,
       "footwork_left": "fleche",
       "footwork_right": "retreat",
+      "attacker": "left",
+      "defender": "right",
       "arm_series_left": [
         [
           38175,
@@ -58898,6 +59040,8 @@
       "min_distance_bh": 1.83,
       "footwork_left": "unknown",
       "footwork_right": "advance",
+      "attacker": "right",
+      "defender": "left",
       "arm_series_left": [
         [
           38265,
@@ -59000,6 +59144,8 @@
       "min_distance_bh": 0.43,
       "footwork_left": "unknown",
       "footwork_right": "retreat",
+      "attacker": "unknown",
+      "defender": "unknown",
       "arm_series_left": [
         [
           38400,
@@ -59630,6 +59776,8 @@
       "min_distance_bh": 2.27,
       "footwork_left": "advance",
       "footwork_right": "retreat",
+      "attacker": "left",
+      "defender": "right",
       "arm_series_left": [
         [
           38664,
@@ -60244,6 +60392,8 @@
       "min_distance_bh": 1.73,
       "footwork_left": "stationary",
       "footwork_right": "stationary",
+      "attacker": "unknown",
+      "defender": "unknown",
       "arm_series_left": [
         [
           38820,
@@ -60698,6 +60848,8 @@
       "min_distance_bh": 2.33,
       "footwork_left": "fleche",
       "footwork_right": "retreat",
+      "attacker": "left",
+      "defender": "right",
       "arm_series_left": [
         [
           39096,
@@ -61456,6 +61608,8 @@
       "min_distance_bh": 0.23,
       "footwork_left": "unknown",
       "footwork_right": "unknown",
+      "attacker": "unknown",
+      "defender": "unknown",
       "arm_series_left": [
         [
           39705,
@@ -66502,6 +66656,8 @@
       "min_distance_bh": 0.39,
       "footwork_left": "retreat",
       "footwork_right": "advance",
+      "attacker": "right",
+      "defender": "left",
       "arm_series_left": [
         [
           40653,
@@ -66940,6 +67096,8 @@
       "min_distance_bh": 2.38,
       "footwork_left": "advance",
       "footwork_right": "fleche",
+      "attacker": "both",
+      "defender": "both",
       "arm_series_left": [
         [
           41664,
@@ -67522,6 +67680,8 @@
       "min_distance_bh": 0.68,
       "footwork_left": "fleche",
       "footwork_right": "stationary",
+      "attacker": "left",
+      "defender": "right",
       "arm_series_left": [
         [
           41994,
@@ -69096,6 +69256,8 @@
       "min_distance_bh": 0.63,
       "footwork_left": "advance",
       "footwork_right": "unknown",
+      "attacker": "left",
+      "defender": "right",
       "arm_series_left": [
         [
           42459,
@@ -69871,6 +70033,8 @@
       "footwork_left": "fleche",
       "footwork_right": "retreat",
       "parry_left": true,
+      "attacker": "left",
+      "defender": "right",
       "arm_series_left": [
         [
           43419,
@@ -70293,6 +70457,8 @@
       "min_distance_bh": 0.45,
       "footwork_left": "unknown",
       "footwork_right": "retreat",
+      "attacker": "unknown",
+      "defender": "unknown",
       "arm_series_left": [
         [
           43851,
@@ -71324,6 +71490,8 @@
       "footwork_left": "fleche",
       "footwork_right": "advance",
       "parry_left": true,
+      "attacker": "both",
+      "defender": "both",
       "arm_series_left": [
         [
           44238,
@@ -71922,6 +72090,8 @@
       "min_distance_bh": 1.61,
       "footwork_left": "unknown",
       "footwork_right": "unknown",
+      "attacker": "unknown",
+      "defender": "unknown",
       "arm_series_left": [
         [
           44367,
@@ -72441,6 +72611,8 @@
       "footwork_left": "fleche",
       "footwork_right": "retreat",
       "parry_left": true,
+      "attacker": "left",
+      "defender": "right",
       "arm_series_left": [
         [
           44718,
@@ -73136,6 +73308,8 @@
       "footwork_left": "advance",
       "footwork_right": "advance",
       "parry_left": true,
+      "attacker": "both",
+      "defender": "both",
       "arm_series_left": [
         [
           45168,
@@ -73703,6 +73877,8 @@
       "footwork_left": "fleche",
       "footwork_right": "advance",
       "parry_left": true,
+      "attacker": "both",
+      "defender": "both",
       "arm_series_left": [
         [
           45348,
@@ -74574,6 +74750,8 @@
       "footwork_left": "fleche",
       "footwork_right": "advance",
       "parry_left": true,
+      "attacker": "both",
+      "defender": "both",
       "arm_series_left": [
         [
           45660,
@@ -74964,6 +75142,8 @@
       "min_distance_bh": 2.2,
       "footwork_left": "unknown",
       "footwork_right": "lunge",
+      "attacker": "right",
+      "defender": "left",
       "arm_series_left": [
         [
           45756,
@@ -75130,6 +75310,8 @@
       "min_distance_bh": 0.45,
       "footwork_left": "advance",
       "footwork_right": "retreat",
+      "attacker": "left",
+      "defender": "right",
       "arm_series_left": [
         [
           45984,
@@ -75616,6 +75798,8 @@
       "min_distance_bh": 1.99,
       "footwork_left": "unknown",
       "footwork_right": "lunge",
+      "attacker": "right",
+      "defender": "left",
       "arm_series_left": [
         [
           46104,
@@ -76023,6 +76207,8 @@
       "footwork_left": "fleche",
       "footwork_right": "retreat",
       "parry_left": true,
+      "attacker": "left",
+      "defender": "right",
       "arm_series_left": [
         [
           46674,
@@ -76814,6 +77000,8 @@
       "footwork_left": "advance",
       "footwork_right": "retreat",
       "parry_left": true,
+      "attacker": "left",
+      "defender": "right",
       "arm_series_left": [
         [
           46965,
@@ -77476,6 +77664,8 @@
       "min_distance_bh": 2.36,
       "footwork_left": "unknown",
       "footwork_right": "retreat",
+      "attacker": "unknown",
+      "defender": "unknown",
       "arm_series_left": [
         [
           47190,
@@ -78010,6 +78200,8 @@
       "min_distance_bh": 0.56,
       "footwork_left": "retreat",
       "footwork_right": "unknown",
+      "attacker": "unknown",
+      "defender": "unknown",
       "arm_series_left": [
         [
           47328,
@@ -78608,6 +78800,8 @@
       "min_distance_bh": 1.15,
       "footwork_left": "stationary",
       "footwork_right": "retreat",
+      "attacker": "unknown",
+      "defender": "unknown",
       "arm_series_left": [
         [
           47829,
@@ -79062,6 +79256,8 @@
       "min_distance_bh": 2.44,
       "footwork_left": "retreat",
       "footwork_right": "advance",
+      "attacker": "right",
+      "defender": "left",
       "arm_series_left": [
         [
           48405,
@@ -79677,6 +79873,8 @@
       "footwork_left": "unknown",
       "footwork_right": "unknown",
       "parry_left": true,
+      "attacker": "unknown",
+      "defender": "unknown",
       "arm_series_left": [
         [
           48597,
@@ -80195,6 +80393,8 @@
       "min_distance_bh": 0.24,
       "footwork_left": "retreat",
       "footwork_right": "fleche",
+      "attacker": "right",
+      "defender": "left",
       "arm_series_left": [
         [
           48732,
@@ -80570,6 +80770,8 @@
       "footwork_left": "fleche",
       "footwork_right": "retreat",
       "parry_left": true,
+      "attacker": "left",
+      "defender": "right",
       "arm_series_left": [
         [
           48984,
@@ -81634,6 +81836,8 @@
       "footwork_right": "advance",
       "parry_left": true,
       "parry_right": true,
+      "attacker": "both",
+      "defender": "both",
       "arm_series_left": [
         [
           49233,
@@ -82058,6 +82262,8 @@
       "footwork_right": "advance",
       "parry_left": true,
       "parry_right": true,
+      "attacker": "both",
+      "defender": "both",
       "arm_series_left": [
         [
           50295,
@@ -82625,6 +82831,8 @@
       "footwork_left": "fleche",
       "footwork_right": "retreat",
       "parry_left": true,
+      "attacker": "left",
+      "defender": "right",
       "arm_series_left": [
         [
           51045,
@@ -83175,6 +83383,8 @@
       "min_distance_bh": 2.3,
       "footwork_left": "retreat",
       "footwork_right": "advance",
+      "attacker": "right",
+      "defender": "left",
       "arm_series_left": [
         [
           51393,
@@ -83630,6 +83840,8 @@
       "footwork_left": "advance",
       "footwork_right": "fleche",
       "parry_left": true,
+      "attacker": "both",
+      "defender": "both",
       "arm_series_left": [
         [
           51489,
@@ -84213,12 +84425,12 @@
     },
     "fencer_stats": {
       "left": {
-        "attacks": 0,
-        "defenses": 0
+        "attacks": 61,
+        "defenses": 21
       },
       "right": {
-        "attacks": 0,
-        "defenses": 0
+        "attacks": 45,
+        "defenses": 37
       }
     },
     "attack_outcomes": {
@@ -84266,6 +84478,34 @@
       "message": "총 106회 교환 감지",
       "severity": "info",
       "evidence": "실패 공격 30회, 방어 성공 21회, 상호 후퇴 0회"
+    },
+    {
+      "category": "attack_analysis",
+      "target": "left",
+      "message": "왼쪽 선수: 비득점 교환 중 공격 시도 61회",
+      "severity": "info",
+      "evidence": "적극적 풋워크(전진/런지/플레쉬) 기반 공격 감지"
+    },
+    {
+      "category": "defense_analysis",
+      "target": "left",
+      "message": "왼쪽 선수: 상대 공격 방어 21회",
+      "severity": "info",
+      "evidence": "상대의 적극적 접근에 대한 방어/후퇴 감지"
+    },
+    {
+      "category": "attack_analysis",
+      "target": "right",
+      "message": "오른쪽 선수: 비득점 교환 중 공격 시도 45회",
+      "severity": "info",
+      "evidence": "적극적 풋워크(전진/런지/플레쉬) 기반 공격 감지"
+    },
+    {
+      "category": "defense_analysis",
+      "target": "right",
+      "message": "오른쪽 선수: 상대 공격 방어 37회",
+      "severity": "info",
+      "evidence": "상대의 적극적 접근에 대한 방어/후퇴 감지"
     },
     {
       "category": "weakness",
