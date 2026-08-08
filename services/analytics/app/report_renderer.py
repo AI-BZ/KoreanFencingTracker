@@ -1,0 +1,705 @@
+"""
+HTML report renderer for fencing match analysis.
+
+Converts MatchReport dict into standalone HTML with inline CSS,
+suitable for browser display and PDF conversion via weasyprint.
+"""
+
+from html import escape
+from typing import Optional
+
+from analyzer.touch_matching import CONFIDENCE_ESTIMATED, NO_PRIORITY_CALL
+
+
+ACTION_KR = {
+    "attack": "공격",
+    "riposte": "리포스트",
+    "parry": "파리",
+    "lunge": "런지",
+    "fleche": "플레쉬",
+    "retreat": "후퇴",
+    "advance": "전진",
+    "counter_attack": "콘트르아탁",
+    "remise": "르미즈",
+    "unknown": "미식별",
+}
+
+WEAPON_KR = {
+    "foil": "플뢰레",
+    "epee": "에페",
+    "sabre": "사브르",
+}
+
+SEVERITY_STYLE = {
+    "info": ("background:#eff6ff;border-left:4px solid #3b82f6;", "#1e40af"),
+    "warning": ("background:#fffbeb;border-left:4px solid #f59e0b;", "#92400e"),
+    "suggestion": ("background:#f0fdf4;border-left:4px solid #22c55e;", "#166534"),
+}
+
+SIDE_KR = {"left": "왼쪽", "right": "오른쪽"}
+
+
+class ReportRenderer:
+    """Renders MatchReport dict to standalone HTML string."""
+
+    def render_html(self, report_dict: dict, standalone: bool = True) -> str:
+        """
+        Render MatchReport dict to HTML string.
+
+        Args:
+            report_dict: MatchReport.to_dict() output
+            standalone: If True, include full HTML document with embedded CSS
+
+        Returns:
+            HTML string
+        """
+        summary = report_dict.get("summary", {})
+        touches = report_dict.get("touches", [])
+        left = report_dict.get("left_fencer")
+        right = report_dict.get("right_fencer")
+        insights = report_dict.get("insights", [])
+        meta = report_dict.get("meta", {})
+
+        parts = []
+        parts.append(self._render_summary(summary))
+        parts.append(self._render_score_timeline(touches))
+        parts.append(self._render_touch_table(touches))
+        if left or right:
+            parts.append(self._render_fencer_stats(left, right))
+        if insights:
+            parts.append(self._render_insights(insights))
+        parts.append(self._render_meta(meta))
+
+        body = "\n".join(parts)
+
+        if standalone:
+            return self._wrap_document(body, summary)
+        return body
+
+    # ------------------------------------------------------------------
+    # Section renderers
+    # ------------------------------------------------------------------
+
+    def _render_summary(self, summary: dict) -> str:
+        score = escape(str(summary.get("final_score", "0-0")))
+        weapon = summary.get("weapon")
+        weapon_label = WEAPON_KR.get(weapon, weapon) if weapon else ""
+        duration = escape(str(summary.get("match_duration", "")))
+        total_touches = summary.get("total_touches", 0)
+
+        weapon_html = ""
+        if weapon_label:
+            weapon_html = (
+                f'<span style="display:inline-block;background:#dbeafe;color:#1e40af;'
+                f'padding:2px 10px;border-radius:9999px;font-size:14px;margin-left:12px;">'
+                f"{escape(weapon_label)}</span>"
+            )
+
+        return f"""
+<div style="background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.1);padding:24px;margin-bottom:20px;">
+  <h2 style="margin:0 0 16px;font-size:20px;color:#111;">경기 요약</h2>
+  <div style="display:flex;gap:32px;flex-wrap:wrap;align-items:center;">
+    <div style="text-align:center;">
+      <div style="font-size:48px;font-weight:700;color:#111;letter-spacing:2px;">{score}</div>
+      <div style="font-size:13px;color:#6b7280;margin-top:4px;">최종 스코어{weapon_html}</div>
+    </div>
+    <div style="display:flex;gap:24px;">
+      <div style="text-align:center;">
+        <div style="font-size:28px;font-weight:600;color:#374151;">{total_touches}</div>
+        <div style="font-size:13px;color:#6b7280;">총 터치</div>
+      </div>
+      <div style="text-align:center;">
+        <div style="font-size:28px;font-weight:600;color:#374151;">{duration}</div>
+        <div style="font-size:13px;color:#6b7280;">경기 시간</div>
+      </div>
+    </div>
+  </div>
+</div>"""
+
+    def _render_score_timeline(self, touches: list) -> str:
+        if not touches:
+            return ""
+
+        rows = []
+        for t in touches:
+            scorer = t.get("scorer", "")
+            score_after = escape(str(t.get("score_after", "")))
+            match_time = escape(str(t.get("match_time", "")))
+            left_marker = "●" if scorer == "left" else ""
+            right_marker = "●" if scorer == "right" else ""
+
+            left_style = 'color:#2563eb;font-weight:700;' if scorer == "left" else 'color:#d1d5db;'
+            right_style = 'color:#dc2626;font-weight:700;' if scorer == "right" else 'color:#d1d5db;'
+
+            rows.append(
+                f"<tr>"
+                f'<td style="padding:6px 12px;text-align:center;font-size:13px;color:#6b7280;">{match_time}</td>'
+                f'<td style="padding:6px 12px;text-align:center;{left_style}font-size:18px;">{left_marker}</td>'
+                f'<td style="padding:6px 12px;text-align:center;font-weight:600;font-size:15px;">{score_after}</td>'
+                f'<td style="padding:6px 12px;text-align:center;{right_style}font-size:18px;">{right_marker}</td>'
+                f"</tr>"
+            )
+
+        return f"""
+<div style="background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.1);padding:24px;margin-bottom:20px;">
+  <h2 style="margin:0 0 16px;font-size:20px;color:#111;">스코어 타임라인</h2>
+  <table style="width:100%;border-collapse:collapse;">
+    <thead>
+      <tr style="border-bottom:2px solid #e5e7eb;">
+        <th style="padding:8px 12px;text-align:center;font-size:13px;color:#6b7280;font-weight:600;">시간</th>
+        <th style="padding:8px 12px;text-align:center;font-size:13px;color:#2563eb;font-weight:600;">왼쪽</th>
+        <th style="padding:8px 12px;text-align:center;font-size:13px;color:#6b7280;font-weight:600;">스코어</th>
+        <th style="padding:8px 12px;text-align:center;font-size:13px;color:#dc2626;font-weight:600;">오른쪽</th>
+      </tr>
+    </thead>
+    <tbody>
+      {"".join(rows)}
+    </tbody>
+  </table>
+</div>"""
+
+    def _render_touch_table(self, touches: list) -> str:
+        if not touches:
+            return ""
+
+        rows = []
+        for t in touches:
+            num = t.get("touch_number", "")
+            match_time = escape(str(t.get("match_time", "")))
+            video_ts = escape(str(t.get("video_timestamp", "")))
+            scorer = t.get("scorer", "")
+            scorer_kr = SIDE_KR.get(scorer, scorer or "")
+            score_after = escape(str(t.get("score_after", "")))
+
+            action = t.get("action_scorer", "unknown") or "unknown"
+            action_kr = ACTION_KR.get(action, action)
+            conf = t.get("action_confidence", 0)
+            conf_pct = f"{conf * 100:.0f}%" if conf else "-"
+
+            opp_action = t.get("action_opponent") or ""
+            opp_kr = ACTION_KR.get(opp_action, opp_action) if opp_action else "-"
+
+            scorer_color = "#2563eb" if scorer == "left" else "#dc2626" if scorer == "right" else "#374151"
+
+            rows.append(
+                f"<tr style='border-bottom:1px solid #f3f4f6;'>"
+                f'<td style="padding:8px 10px;text-align:center;font-size:13px;">{num}</td>'
+                f'<td style="padding:8px 10px;text-align:center;font-size:13px;">{match_time}</td>'
+                f'<td style="padding:8px 10px;text-align:center;font-size:13px;color:{scorer_color};font-weight:600;">{escape(scorer_kr)}</td>'
+                f'<td style="padding:8px 10px;text-align:center;font-size:13px;font-weight:600;">{score_after}</td>'
+                f'<td style="padding:8px 10px;text-align:center;font-size:13px;">{escape(action_kr)}</td>'
+                f'<td style="padding:8px 10px;text-align:center;font-size:13px;color:#6b7280;">{conf_pct}</td>'
+                f'<td style="padding:8px 10px;text-align:center;font-size:13px;">{escape(opp_kr)}</td>'
+                f"</tr>"
+            )
+
+        return f"""
+<div style="background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.1);padding:24px;margin-bottom:20px;">
+  <h2 style="margin:0 0 16px;font-size:20px;color:#111;">터치 상세</h2>
+  <table style="width:100%;border-collapse:collapse;">
+    <thead>
+      <tr style="border-bottom:2px solid #e5e7eb;background:#f9fafb;">
+        <th style="padding:8px 10px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;">#</th>
+        <th style="padding:8px 10px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;">시간</th>
+        <th style="padding:8px 10px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;">득점자</th>
+        <th style="padding:8px 10px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;">스코어</th>
+        <th style="padding:8px 10px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;">동작</th>
+        <th style="padding:8px 10px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;">신뢰도</th>
+        <th style="padding:8px 10px;text-align:center;font-size:12px;color:#6b7280;font-weight:600;">상대 동작</th>
+      </tr>
+    </thead>
+    <tbody>
+      {"".join(rows)}
+    </tbody>
+  </table>
+</div>"""
+
+    def _render_fencer_stats(self, left: Optional[dict], right: Optional[dict]) -> str:
+        cards = []
+        for fencer, color, label in [
+            (left, "#2563eb", "왼쪽 선수"),
+            (right, "#dc2626", "오른쪽 선수"),
+        ]:
+            if fencer is None:
+                continue
+            scored = fencer.get("total_touches_scored", 0)
+            conceded = fencer.get("total_touches_conceded", 0)
+            dist = fencer.get("action_distribution", [])
+            top_action = fencer.get("most_common_action", "unknown") or "unknown"
+            top_pct = fencer.get("most_common_action_pct", 0)
+
+            bar_rows = []
+            for d in dist:
+                act = d.get("action", "unknown")
+                act_kr = ACTION_KR.get(act, act)
+                pct = d.get("percentage", 0)
+                cnt = d.get("count", 0)
+                bar_width = max(pct, 2)
+                bar_rows.append(
+                    f'<div style="display:flex;align-items:center;margin-bottom:6px;">'
+                    f'<div style="width:80px;font-size:13px;color:#374151;">{escape(act_kr)}</div>'
+                    f'<div style="flex:1;background:#f3f4f6;border-radius:4px;height:20px;margin:0 8px;">'
+                    f'<div style="width:{bar_width}%;background:{color};border-radius:4px;height:20px;'
+                    f'min-width:2px;"></div>'
+                    f'</div>'
+                    f'<div style="width:60px;font-size:12px;color:#6b7280;text-align:right;">'
+                    f'{cnt}회 ({pct:.0f}%)</div>'
+                    f'</div>'
+                )
+
+            cards.append(f"""
+<div style="flex:1;min-width:280px;background:#fff;border-radius:8px;
+  box-shadow:0 1px 3px rgba(0,0,0,0.1);padding:20px;border-top:3px solid {color};">
+  <h3 style="margin:0 0 12px;font-size:17px;color:{color};">{escape(label)}</h3>
+  <div style="display:flex;gap:16px;margin-bottom:16px;">
+    <div style="text-align:center;flex:1;">
+      <div style="font-size:24px;font-weight:700;color:#111;">{scored}</div>
+      <div style="font-size:12px;color:#6b7280;">득점</div>
+    </div>
+    <div style="text-align:center;flex:1;">
+      <div style="font-size:24px;font-weight:700;color:#111;">{conceded}</div>
+      <div style="font-size:12px;color:#6b7280;">실점</div>
+    </div>
+    <div style="text-align:center;flex:1;">
+      <div style="font-size:14px;font-weight:600;color:#111;">{escape(ACTION_KR.get(top_action, top_action))}</div>
+      <div style="font-size:12px;color:#6b7280;">주요 동작 ({top_pct:.0f}%)</div>
+    </div>
+  </div>
+  <div style="margin-top:8px;">
+    <div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:8px;">동작 분포</div>
+    {"".join(bar_rows)}
+  </div>
+</div>""")
+
+        return f"""
+<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:20px;">
+  {"".join(cards)}
+</div>"""
+
+    def _render_insights(self, insights: list) -> str:
+        cards = []
+        for ins in insights:
+            severity = ins.get("severity", "info")
+            bg_style, text_color = SEVERITY_STYLE.get(severity, SEVERITY_STYLE["info"])
+            target = ins.get("target", "")
+            target_kr = SIDE_KR.get(target, target)
+            category = ins.get("category", "")
+            message = escape(str(ins.get("message", "")))
+            evidence = escape(str(ins.get("evidence", "")))
+
+            severity_label = {"info": "정보", "warning": "주의", "suggestion": "제안"}.get(severity, severity)
+
+            cards.append(
+                f'<div style="{bg_style}padding:16px;border-radius:6px;margin-bottom:10px;">'
+                f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
+                f'<span style="font-size:12px;font-weight:600;color:{text_color};text-transform:uppercase;">'
+                f'{escape(severity_label)} — {escape(target_kr)}</span>'
+                f'<span style="font-size:11px;color:#9ca3af;">{escape(category)}</span>'
+                f'</div>'
+                f'<div style="font-size:14px;color:#111;margin-bottom:4px;">{message}</div>'
+                f'<div style="font-size:12px;color:#6b7280;">근거: {evidence}</div>'
+                f'</div>'
+            )
+
+        return f"""
+<div style="background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.1);padding:24px;margin-bottom:20px;">
+  <h2 style="margin:0 0 16px;font-size:20px;color:#111;">코칭 인사이트</h2>
+  {"".join(cards)}
+</div>"""
+
+    def _render_meta(self, meta: dict) -> str:
+        phase = meta.get("phase", "")
+        pose_model = escape(str(meta.get("pose_model", "")))
+        action_model = escape(str(meta.get("action_model", "")))
+
+        return f"""
+<div style="margin-top:24px;padding:12px 16px;background:#f9fafb;border-radius:6px;
+  font-size:12px;color:#9ca3af;text-align:center;">
+  FencingMind Analytics &middot; Phase {phase} &middot; Pose: {pose_model} &middot; Action: {action_model}
+</div>"""
+
+    # ------------------------------------------------------------------
+    # Document wrapper
+    # ------------------------------------------------------------------
+
+    def _wrap_document(self, body: str, summary: dict) -> str:
+        score = escape(str(summary.get("final_score", "")))
+        weapon = summary.get("weapon")
+        weapon_kr = WEAPON_KR.get(weapon, "") if weapon else ""
+        title_parts = ["FencingMind 경기 분석"]
+        if weapon_kr:
+            title_parts.append(weapon_kr)
+        if score:
+            title_parts.append(score)
+        title = escape(" — ".join(title_parts))
+
+        return f"""<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{title}</title>
+<style>
+  @page {{
+    size: A4 portrait;
+    margin: 15mm;
+  }}
+  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+  body {{
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", sans-serif;
+    background: #f3f4f6;
+    color: #111827;
+    line-height: 1.5;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }}
+  .container {{
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 24px 16px;
+  }}
+  .header {{
+    text-align: center;
+    margin-bottom: 24px;
+  }}
+  .header h1 {{
+    font-size: 24px;
+    font-weight: 700;
+    color: #111827;
+  }}
+  .header p {{
+    font-size: 13px;
+    color: #9ca3af;
+    margin-top: 4px;
+  }}
+  @media print {{
+    body {{ background: #fff; }}
+    .container {{ padding: 0; }}
+  }}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>FencingMind 경기 분석 리포트</h1>
+    <p>AI 기반 펜싱 경기 영상 분석</p>
+  </div>
+{body}
+</div>
+</body>
+</html>"""
+
+
+# ------------------------------------------------------------------
+# Report view preparation (web template helpers)
+# ------------------------------------------------------------------
+#
+# These functions enrich a saved/generated report dict for display only.
+# They never change the underlying judgment logic — attack_outcome,
+# attacker_side etc. are produced by analyzer.touch_matching and are
+# consumed here as-is.
+
+import re as _re
+
+_CLOCK_RE = _re.compile(r"^(\d{1,2}):(\d{2})$")
+
+OUTCOME_REASON_NO_EXCHANGE = "득점 직전 교전을 포즈 분석에서 찾지 못해 공격자를 특정할 수 없습니다"
+OUTCOME_REASON_MUTUAL = "양쪽이 동시에 전진해 공격자를 한 명으로 특정할 수 없습니다"
+OUTCOME_REASON_NO_ADVANCE = "양쪽 모두 확실한 전진 풋워크가 감지되지 않았습니다"
+
+# Why priority estimation declined, when it ran and did not settle the touch.
+# "동시 공격에 가깝다"는 실패가 아니라 판정이다 — 플뢰레에서 동시 공격은 심판도
+# 점수를 주지 않는 실제 상황이므로, 못 가린 것이 아니라 가릴 것이 없었다고 적는다.
+OUTCOME_REASON_PRIORITY_SIMULTANE = (
+    "양쪽의 공격 개시 정도가 비슷해 어느 쪽이 먼저 공격했다고 보기 어렵습니다"
+)
+OUTCOME_REASON_PRIORITY_LOW_QUALITY = (
+    "접촉 직전 구간에서 두 선수의 팔·몸 위치를 충분히 읽지 못했습니다"
+)
+#: Judge decline reasons → the sentence shown for them. Reasons not listed here
+#: fall through to the footwork explanation, which is the more informative one.
+PRIORITY_DECLINE_REASONS = {
+    "simultaneous": OUTCOME_REASON_PRIORITY_SIMULTANE,
+    "low_quality": OUTCOME_REASON_PRIORITY_LOW_QUALITY,
+}
+
+#: Shown beside an attacker that priority estimation supplied rather than
+#: footwork determined. The label is deliberately a separate word from the
+#: verdict itself so a reader cannot mistake the two.
+ESTIMATED_BADGE_KO = "추정"
+ESTIMATED_BADGE_TITLE = (
+    "풋워크만으로는 공격자를 가릴 수 없어, 접촉 직전 구간의 팔 뻗기와 전진 정도를 "
+    "비교해 추정한 결과입니다. 심판 판정의 재현이 아니라 코칭 참고용 지표이며, "
+    "풋워크로 확정한 터치와는 신뢰도가 다릅니다."
+)
+
+# A single valid-target lamp means the referee awarded the touch outright — the
+# priority question (FIE t.56-t.60) was never asked. That is a fact about the
+# scoring box, so it is stated positively; but it explains *why no ruling was
+# needed*, not *who attacked*, and the second half says so. Dropping that half
+# would turn an honest reclassification into a metric dressed up.
+OUTCOME_REASON_NO_PRIORITY_CALL = (
+    "{fencer}의 유효타 램프만 켜져 심판이 우선권을 판정할 필요가 없었습니다 "
+    "— 다만 공격을 시작한 선수는 특정하지 못했습니다"
+)
+
+# Both valid lamps lit, so the referee *did* rule on priority and we failed to
+# reconstruct it. Unlike the single-lamp case this is a genuine miss, and the
+# underlying footwork cause is appended so the two stay distinguishable.
+OUTCOME_REASON_PRIORITY_RULED_PREFIX = (
+    "양 램프가 켜져 심판이 우선권을 판정한 터치인데, "
+    "포즈 분석은 공격을 시작한 선수를 가리지 못했습니다 — "
+)
+
+# Neutral stand-ins when the report carries no fencer name for that side.
+SIDE_LABEL_KO = {"left": "왼쪽 선수", "right": "오른쪽 선수"}
+_UNSIDED_LABEL_KO = "한쪽 선수"
+
+# Which fencer's lone valid hit registered.
+_LAMP_SINGLE_SIDE = {"single_left": "left", "single_right": "right"}
+
+# Scoring-box lamp, in the words a referee would use. "double" means both
+# fencers landed a valid hit and the referee had to award the point on
+# priority; a single colour means only that fencer landed, so no priority
+# ruling was needed at all; white is off-target and scores nothing.
+LAMP_LABEL_KO = {
+    "double": "양 램프",
+    "single_left": "왼쪽 단독 램프",
+    "single_right": "오른쪽 단독 램프",
+    "white": "백색 램프",
+}
+
+# You cannot score without your own colour lamp, so a single lamp on the side
+# that did not score means one of the two readings is wrong. Say so instead of
+# printing the lamp as if it were established fact.
+LAMP_CONFLICT_KO = "램프 판독이 득점자와 어긋남 — 참고 불가"
+
+# Below this the lamp reading is a guess, not a reading, and the reader should
+# be told which touches those are.
+LAMP_LOW_CONFIDENCE_MAX = 0.7
+
+
+def _clock_to_sec(value) -> Optional[int]:
+    m = _CLOCK_RE.match(str(value or ""))
+    if not m:
+        return None
+    return int(m.group(1)) * 60 + int(m.group(2))
+
+
+def repair_match_times(touches: list) -> list:
+    """Repair clock OCR misreads like "2:3" in already-saved reports.
+
+    A scoreboard clock always shows two seconds digits, so "2:3" means the OCR
+    dropped one digit — either the ones digit ("2:3X" → "2:3") or the tens
+    digit ("2:X3" → "2:3"). The exact value is unrecoverable, so reconstruct
+    the candidate consistent with the neighboring touches (remaining time is
+    non-increasing within a period) and mark it ``match_time_estimated`` so the
+    UI can flag it as an estimate. Valid times are left untouched.
+    """
+    times = [_clock_to_sec(t.get("match_time")) for t in touches]
+
+    for i, touch in enumerate(touches):
+        if times[i] is not None:
+            continue
+        raw = str(touch.get("match_time") or "")
+        parts = raw.split(":")
+        if len(parts) != 2 or not parts[0].isdigit() or len(parts[1]) != 1 or not parts[1].isdigit():
+            # Not a truncated clock — nothing sensible to reconstruct.
+            continue
+
+        minute, digit = int(parts[0]), int(parts[1])
+        # Both truncation modes: digit kept as tens ("M:d0".."M:d9") or as ones ("M:0d".."M:5d").
+        candidates = {minute * 60 + digit * 10 + d for d in range(10)}
+        candidates |= {minute * 60 + tens * 10 + digit for tens in range(6)}
+
+        prev_s = next((times[j] for j in range(i - 1, -1, -1) if times[j] is not None), None)
+        next_s = next((times[j] for j in range(i + 1, len(times)) if times[j] is not None), None)
+
+        # Clock counts down between consecutive touches (a period reset makes
+        # next > prev, in which case the bounds are contradictory — skip them).
+        feasible = sorted(
+            c for c in candidates
+            if (prev_s is None or c <= prev_s) and (next_s is None or c >= next_s)
+        )
+        pool = feasible if feasible else sorted(candidates)
+        estimate = pool[len(pool) // 2]
+
+        touch["match_time"] = f"{estimate // 60}:{estimate % 60:02d}"
+        touch["match_time_estimated"] = True
+
+    return touches
+
+
+def fencer_display_name(report_dict: dict, side: Optional[str]) -> str:
+    """Name to print for ``side``, falling back to its position label.
+
+    Reports name the fencers in ``summary.{side}_name`` and/or
+    ``{side}_fencer.name``; older ones do neither, so never print a bare
+    ``None``.
+    """
+    if side not in SIDE_LABEL_KO:
+        return _UNSIDED_LABEL_KO
+    summary = report_dict.get("summary") or {}
+    fencer = report_dict.get(f"{side}_fencer") or {}
+    name = summary.get(f"{side}_name") or fencer.get("name")
+    name = str(name).strip() if name is not None else ""
+    return name or SIDE_LABEL_KO[side]
+
+
+def annotate_outcome_reasons(report_dict: dict) -> dict:
+    """Attach a human-readable ``outcome_reason`` to each unresolved touch.
+
+    Three cases, and the lamp is what separates them:
+
+    * ``no_priority_call`` — one valid lamp. No priority ruling was ever made,
+      so this is not an analysis failure; the reason names whose lamp lit and
+      still admits the attack initiator is unidentified.
+    * ``unclear`` + ``double`` lamp — the referee *did* rule on priority and we
+      could not reconstruct it. A real miss, prefixed as such, with the
+      footwork cause kept as the underlying explanation.
+    * ``unclear`` with no lamp reading — every non-foil report. Unchanged.
+
+    Presentation only: reads the verdict fields, writes ``outcome_reason``.
+    """
+    exchanges = report_dict.get("exchanges") or []
+    ex_by_num = {e.get("exchange_number"): e for e in exchanges}
+
+    for touch in report_dict.get("touches") or []:
+        outcome = touch.get("attack_outcome")
+
+        if outcome == NO_PRIORITY_CALL:
+            side = _LAMP_SINGLE_SIDE.get(touch.get("lamp_pattern"))
+            touch["outcome_reason"] = OUTCOME_REASON_NO_PRIORITY_CALL.format(
+                fencer=fencer_display_name(report_dict, side),
+            )
+            continue
+
+        if outcome != "unclear":
+            continue
+
+        ex = ex_by_num.get(touch.get("matched_exchange_number"))
+        # When priority estimation ran and declined, its reason is the more
+        # specific one: the footwork explanation ("both advanced") is what made
+        # the touch reach the judge in the first place, so repeating it would
+        # describe the question rather than the answer.
+        priority = PRIORITY_DECLINE_REASONS.get(touch.get("priority_reason"))
+        if priority is not None:
+            reason = priority
+        elif ex is None:
+            reason = OUTCOME_REASON_NO_EXCHANGE
+        elif ex.get("attacker") == "both":
+            reason = OUTCOME_REASON_MUTUAL
+        else:
+            reason = OUTCOME_REASON_NO_ADVANCE
+
+        if touch.get("lamp_pattern") == "double":
+            reason = OUTCOME_REASON_PRIORITY_RULED_PREFIX + reason
+
+        touch["outcome_reason"] = reason
+
+    return report_dict
+
+
+def annotate_lamp_labels(report_dict: dict) -> dict:
+    """Attach display-only lamp strings to touches that carry a lamp reading.
+
+    Reads ``lamp_pattern`` / ``lamp_confidence`` / ``lamp_scorer_conflict``
+    (set by :func:`analyzer.touch_matching.annotate_touch_lamp`) and writes
+    ``lamp_label``, ``lamp_confidence_pct``, ``lamp_low_confidence`` and
+    ``lamp_conflict_note`` for the template. Reports produced before the lamp
+    pass — every non-foil report — have no ``lamp_pattern``, so they are left
+    exactly as they were.
+
+    Presentation only: the verdict fields (``attack_outcome``,
+    ``attacker_side``, ``lamp_pattern`` …) are consumed, never written.
+    """
+    for touch in report_dict.get("touches") or []:
+        label = LAMP_LABEL_KO.get(touch.get("lamp_pattern"))
+        if label is None:
+            # No lamp reading, or a pattern this UI has no wording for.
+            continue
+
+        try:
+            confidence = float(touch.get("lamp_confidence"))
+        except (TypeError, ValueError):
+            confidence = None
+
+        touch["lamp_label"] = label
+        touch["lamp_confidence_pct"] = (
+            int(round(confidence * 100)) if confidence is not None else None
+        )
+        touch["lamp_low_confidence"] = (
+            confidence is not None and confidence < LAMP_LOW_CONFIDENCE_MAX
+        )
+        touch["lamp_conflict_note"] = (
+            LAMP_CONFLICT_KO if touch.get("lamp_scorer_conflict") else None
+        )
+
+    return report_dict
+
+
+def annotate_estimated_badges(report_dict: dict) -> dict:
+    """Mark touches whose attacker was estimated rather than determined.
+
+    Writes ``estimated_badge`` / ``estimated_badge_title``, and nothing else.
+    A determined verdict and an estimated one are printed in the same sentence
+    shape, so without a visible marker a reader has no way to tell which kind of
+    claim they are looking at — and the estimate is the weaker of the two by a
+    wide margin. Touches with a footwork verdict, and every report predating
+    priority estimation, get no badge.
+    """
+    for touch in report_dict.get("touches") or []:
+        if touch.get("attacker_confidence") != CONFIDENCE_ESTIMATED:
+            continue
+        touch["estimated_badge"] = ESTIMATED_BADGE_KO
+        touch["estimated_badge_title"] = ESTIMATED_BADGE_TITLE
+    return report_dict
+
+
+def build_timeline(report_dict: dict) -> list:
+    """Merge touches and exchanges into one chronological event list.
+
+    A touch and its matched exchange are the same real-world engagement (the
+    OCR score change lags the blade contact), so matched exchanges are folded
+    into their touch entry instead of appearing twice. Touch entries sort by
+    the matched exchange's start frame — when the action happened, not when
+    the scoreboard caught up.
+
+    Returns a list of ``{"kind": "touch"|"exchange", "touch": ..., "exchange":
+    ..., "sort_frame": int}`` dicts sorted chronologically.
+    """
+    touches = report_dict.get("touches") or []
+    exchanges = report_dict.get("exchanges") or []
+    ex_by_num = {e.get("exchange_number"): e for e in exchanges}
+    matched_numbers = {
+        t.get("matched_exchange_number") for t in touches
+        if t.get("matched_exchange_number") is not None
+    }
+
+    events = []
+    for t in touches:
+        ex = ex_by_num.get(t.get("matched_exchange_number"))
+        sort_frame = (ex or {}).get("start_frame")
+        if sort_frame is None:
+            sort_frame = t.get("frame") or 0
+        events.append({"kind": "touch", "touch": t, "exchange": ex, "sort_frame": sort_frame})
+
+    for e in exchanges:
+        if e.get("exchange_number") in matched_numbers:
+            continue
+        events.append({
+            "kind": "exchange", "touch": None, "exchange": e,
+            "sort_frame": e.get("start_frame") or 0,
+        })
+
+    events.sort(key=lambda ev: ev["sort_frame"])
+    return events
+
+
+def prepare_report_view(report_dict: dict) -> dict:
+    """Display-only enrichment applied before rendering the report template."""
+    repair_match_times(report_dict.get("touches") or [])
+    annotate_outcome_reasons(report_dict)
+    annotate_lamp_labels(report_dict)
+    annotate_estimated_badges(report_dict)
+    return report_dict

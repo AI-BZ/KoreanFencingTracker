@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fencing Clip Labeling Tool</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Shared design tokens. This page does not extend base.html, so it also does
+         not inherit base's tailwind.config — use the stock palette here only. -->
+    <link rel="stylesheet" href="/static/css/variables.css?v=20260806">
+    <style>
+        .kbd { @apply px-2 py-1 bg-gray-200 rounded text-sm font-mono border border-gray-300; }
+        .label-btn { @apply px-4 py-2 rounded font-semibold transition-all duration-150; }
+        .label-btn:hover { @apply scale-105; }
+        .label-btn.selected { @apply ring-4 ring-blue-400 scale-105; }
+        .action-btn { @apply bg-blue-100 text-blue-800 hover:bg-blue-200; }
+        .action-btn.selected { @apply bg-blue-600 text-white; }
+        .dir-btn { @apply bg-emerald-100 text-emerald-800 hover:bg-emerald-200; }
+        .dir-btn.selected { @apply bg-emerald-600 text-white; }
+        .stat-chip { @apply px-3 py-1 rounded-full text-sm font-medium; }
+        video { max-height: 400px; }
+        .pose-box { @apply bg-sky-950 border border-sky-700 rounded-lg p-4; }
+        .pose-metric { @apply flex justify-between items-center py-1 border-b border-sky-800; }
+        .pose-metric:last-child { @apply border-b-0; }
+        /* No width transition: the bar is repainted on clip change, not animated. */
+        .zone-badge { @apply px-2 py-0.5 rounded text-xs font-bold uppercase; }
+        .zone-out { @apply bg-green-900 text-green-300; }
+        .zone-adv-lunge { @apply bg-yellow-900 text-yellow-300; }
+        .zone-lunge { @apply bg-orange-900 text-orange-300; }
+        .zone-extension { @apply bg-red-900 text-red-300; }
+        .zone-infighting { @apply bg-red-800 text-red-200; }
+        .footwork-badge { @apply px-2 py-0.5 rounded text-xs font-bold; }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen">
+    <div class="max-w-6xl mx-auto p-4">
+        <!-- Header -->
+        <div class="flex items-center justify-between mb-4">
+            <h1 class="text-2xl font-bold">Fencing Clip Labeling</h1>
+            <div class="flex items-center gap-4">
+                <span id="data-source-badge" class="stat-chip bg-sky-800 text-sky-200 text-xs">--</span>
+                <span id="progress-text" class="text-lg font-mono">0/0 (0%)</span>
+                <div class="w-48 bg-gray-700 rounded-full h-3">
+                    <div id="progress-bar" class="bg-blue-500 h-3 rounded-full progress-bar" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main content -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Left: Video -->
+            <div>
+                <div class="bg-gray-800 rounded-xl p-4">
+                    <video id="video-player" class="w-full rounded-lg" autoplay loop muted playsinline>
+                        <source id="video-source" src="" type="video/mp4">
+                    </video>
+                    <div class="mt-2 flex justify-between items-center text-sm text-gray-400">
+                        <span id="clip-filename" class="font-mono">--</span>
+                        <span id="clip-index" class="font-mono">#0</span>
+                    </div>
+                </div>
+
+                <!-- Navigation -->
+                <div class="flex justify-between mt-3">
+                    <button onclick="navigate(-1)" class="px-4 py-2 bg-gray-700 rounded hover:bg-gray-600">
+                        &larr; Prev
+                    </button>
+                    <button onclick="jumpToNext()" class="px-4 py-2 bg-blue-700 rounded hover:bg-blue-600">
+                        Next Unreviewed &rarr;
+                    </button>
+                    <button onclick="navigate(1)" class="px-4 py-2 bg-gray-700 rounded hover:bg-gray-600">
+                        Next &rarr;
+                    </button>
+                </div>
+            </div>
+
+            <!-- Right: Pose Analysis + Controls -->
+            <div>
+                <!-- Pose Analysis Panel -->
+                <div id="pose-box" class="pose-box mb-4">
+                    <div class="flex items-center gap-2 mb-3">
+                        <span class="text-lg">&#x1F4CA;</span>
+                        <span class="font-semibold text-sky-300">Pose Analysis</span>
+                        <span id="pose-confidence" class="ml-auto stat-chip bg-sky-800 text-sky-200">--</span>
+                    </div>
+
+                    <!-- Distance -->
+                    <div class="pose-metric">
+                        <span class="text-sky-400 text-sm">Distance</span>
+                        <div class="flex items-center gap-2">
+                            <span id="pose-distance-value" class="font-mono text-sm">--</span>
+                            <span id="pose-distance-zone" class="zone-badge zone-lunge">--</span>
+                        </div>
+                    </div>
+
+                    <!-- Closing speed -->
+                    <div class="pose-metric">
+                        <span class="text-sky-400 text-sm">Closing Speed</span>
+                        <span id="pose-closing-speed" class="font-mono text-sm">--</span>
+                    </div>
+
+                    <!-- Left fencer footwork -->
+                    <div class="pose-metric">
+                        <span class="text-sky-400 text-sm">L Footwork</span>
+                        <div class="flex items-center gap-2">
+                            <span id="pose-fw-left" class="footwork-badge bg-blue-900 text-blue-300">--</span>
+                            <span id="pose-fw-left-conf" class="text-xs text-gray-500">--</span>
+                        </div>
+                    </div>
+
+                    <!-- Right fencer footwork -->
+                    <div class="pose-metric">
+                        <span class="text-sky-400 text-sm">R Footwork</span>
+                        <div class="flex items-center gap-2">
+                            <span id="pose-fw-right" class="footwork-badge bg-blue-900 text-blue-300">--</span>
+                            <span id="pose-fw-right-conf" class="text-xs text-gray-500">--</span>
+                        </div>
+                    </div>
+
+                    <!-- Parry detection -->
+                    <div class="pose-metric">
+                        <span class="text-sky-400 text-sm">Parry</span>
+                        <span id="pose-parry-info" class="text-sm">--</span>
+                    </div>
+
+                    <!-- Suggestion -->
+                    <div class="mt-3 pt-3 border-t border-sky-700">
+                        <div class="flex items-center gap-2">
+                            <span>&#x1F4A1;</span>
+                            <span class="text-sky-300 text-sm font-semibold">Suggestion:</span>
+                            <span id="pose-suggested-label" class="font-bold text-lg text-sky-100">--</span>
+                        </div>
+                        <div class="text-xs text-sky-500 mt-1" id="pose-reasoning">--</div>
+                    </div>
+                </div>
+
+                <!-- Gemini suggestion (collapsed, legacy) -->
+                <details id="gemini-details" class="mb-4">
+                    <summary class="text-xs text-gray-600 cursor-pointer hover:text-gray-400">
+                        &#x1F916; Gemini suggestion (legacy)
+                    </summary>
+                    <div class="bg-amber-950 border border-amber-800 rounded-lg p-3 mt-1">
+                        <div class="text-sm text-amber-300" id="gemini-label">--</div>
+                        <div class="text-xs text-amber-600 mt-1" id="gemini-reasoning">--</div>
+                    </div>
+                </details>
+
+                <!-- Action selection -->
+                <div class="mb-4">
+                    <div class="text-sm text-gray-400 mb-2">Action <span class="text-gray-500">(keys 1-4)</span></div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button class="label-btn action-btn" data-action="attack" onclick="selectAction('attack')">
+                            <span class="kbd">1</span> Attack
+                        </button>
+                        <button class="label-btn action-btn" data-action="riposte" onclick="selectAction('riposte')">
+                            <span class="kbd">2</span> Riposte
+                        </button>
+                        <button class="label-btn action-btn" data-action="counter_attack" onclick="selectAction('counter_attack')">
+                            <span class="kbd">3</span> Counter-Attack
+                        </button>
+                        <button class="label-btn action-btn" data-action="remise" onclick="selectAction('remise')">
+                            <span class="kbd">4</span> Remise
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Direction selection -->
+                <div class="mb-4">
+                    <div class="text-sm text-gray-400 mb-2">Direction <span class="text-gray-500">(keys L/R)</span></div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button class="label-btn dir-btn" data-direction="left" onclick="selectDirection('left')">
+                            <span class="kbd">L</span> Left
+                        </button>
+                        <button class="label-btn dir-btn" data-direction="right" onclick="selectDirection('right')">
+                            <span class="kbd">R</span> Right
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Accept / Confirm / Skip / Undo -->
+                <div class="flex gap-2 mb-4">
+                    <button onclick="acceptSuggestion()" id="accept-btn"
+                        class="px-4 py-3 bg-sky-700 rounded-lg font-bold hover:bg-sky-600">
+                        <span class="kbd">A</span> Accept
+                    </button>
+                    <button onclick="confirmLabel()" id="confirm-btn"
+                        class="flex-1 px-4 py-3 bg-green-600 rounded-lg font-bold text-lg hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed">
+                        <span class="kbd">Enter</span> Confirm & Next
+                    </button>
+                    <button onclick="skipClip()" class="px-4 py-3 bg-gray-600 rounded-lg hover:bg-gray-500">
+                        <span class="kbd">S</span> Skip
+                    </button>
+                    <button onclick="undoLast()" class="px-4 py-3 bg-red-800 rounded-lg hover:bg-red-700">
+                        <span class="kbd">U</span> Undo
+                    </button>
+                </div>
+
+                <!-- Review status indicator -->
+                <div id="review-status" class="text-sm text-gray-500 mb-4 hidden">
+                    <span class="inline-block px-2 py-1 bg-green-900 text-green-300 rounded">Already reviewed</span>
+                    <span id="reviewed-as" class="ml-2 font-mono">--</span>
+                </div>
+
+                <!-- Stats -->
+                <div class="bg-gray-800 rounded-lg p-3">
+                    <div class="text-sm text-gray-400 mb-2">Progress</div>
+                    <div id="stats-grid" class="grid grid-cols-4 gap-2 text-center text-xs">
+                        <div class="stat-chip bg-blue-900 text-blue-200">ATK: <span id="stat-atk">0</span></div>
+                        <div class="stat-chip bg-rose-900 text-rose-200">RIP: <span id="stat-rip">0</span></div>
+                        <div class="stat-chip bg-cyan-900 text-cyan-200">CA: <span id="stat-ca">0</span></div>
+                        <div class="stat-chip bg-orange-900 text-orange-200">REM: <span id="stat-rem">0</span></div>
+                    </div>
+                    <div class="mt-2 text-sm text-gray-400">
+                        Suggestion agreement: <span id="stat-agreement" class="font-bold">--</span>
+                    </div>
+                </div>
+
+                <!-- Sort control -->
+                <div class="mt-3 flex gap-2 text-sm">
+                    <span class="text-gray-500">Sort:</span>
+                    <button onclick="setSort('confidence')" class="sort-btn text-blue-400 hover:text-blue-300" data-sort="confidence">Confidence &uarr;</button>
+                    <button onclick="setSort('filename')" class="sort-btn text-gray-400 hover:text-gray-300" data-sort="filename">Filename</button>
+                    <button onclick="setSort('action')" class="sort-btn text-gray-400 hover:text-gray-300" data-sort="action">Action</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Keyboard shortcuts reference -->
+        <div class="mt-6 text-center text-xs text-gray-600">
+            <span class="kbd">1</span> Attack
+            <span class="kbd ml-2">2</span> Riposte
+            <span class="kbd ml-2">3</span> Counter
+            <span class="kbd ml-2">4</span> Remise
+            <span class="mx-3">|</span>
+            <span class="kbd">L</span> Left
+            <span class="kbd ml-2">R</span> Right
+            <span class="mx-3">|</span>
+            <span class="kbd">A</span> Accept
+            <span class="kbd ml-2">Enter</span> Confirm
+            <span class="kbd ml-2">S</span> Skip
+            <span class="kbd ml-2">U</span> Undo
+            <span class="mx-3">|</span>
+            <span class="kbd">&larr;</span><span class="kbd">&rarr;</span> Navigate
+        </div>
+    </div>
+
+    <script>
+    // State
+    let currentIndex = 0;
+    let currentClip = null;
+    let selectedAction = null;
+    let selectedDirection = null;
+
+    const ZONE_CLASSES = {
+        'out_of_distance': 'zone-out',
+        'advance_lunge': 'zone-adv-lunge',
+        'lunge': 'zone-lunge',
+        'extension': 'zone-extension',
+        'infighting': 'zone-infighting',
+    };
+
+    const ZONE_LABELS = {
+        'out_of_distance': 'Out',
+        'advance_lunge': 'Adv-Lunge',
+        'lunge': 'Lunge',
+        'extension': 'Extension',
+        'infighting': 'Infight',
+    };
+
+    // Load clip at index
+    async function loadClip(index) {
+        const resp = await fetch(`/api/clip/${index}`);
+        const data = await resp.json();
+        if (data.error) return;
+
+        currentIndex = index;
+        currentClip = data;
+
+        // Update video
+        const video = document.getElementById('video-player');
+        const source = document.getElementById('video-source');
+        source.src = `/clips/${data.filename}`;
+        video.load();
+        video.play();
+
+        // Update info
+        document.getElementById('clip-filename').textContent = data.filename;
+        document.getElementById('clip-index').textContent = `#${data.index + 1} / ${data.total}`;
+
+        // Data source badge
+        const srcBadge = document.getElementById('data-source-badge');
+        srcBadge.textContent = data.data_source === 'pose' ? 'POSE' : data.data_source === 'gemini' ? 'GEMINI' : 'NONE';
+
+        // Update Pose Analysis Panel
+        updatePosePanel(data);
+
+        // Update Gemini legacy
+        document.getElementById('gemini-label').textContent =
+            `${data.gemini_action.toUpperCase()} ${data.gemini_direction.toUpperCase()}`;
+        document.getElementById('gemini-reasoning').textContent =
+            data.gemini_reasoning || '(no reasoning)';
+
+        // Pre-select best suggestion
+        if (data.suggested_action && data.suggested_action !== 'unknown') {
+            selectAction(data.suggested_action);
+        }
+        if (data.suggested_direction && data.suggested_direction !== 'unknown') {
+            selectDirection(data.suggested_direction);
+        }
+
+        // Show review status
+        const statusEl = document.getElementById('review-status');
+        if (data.is_reviewed) {
+            statusEl.classList.remove('hidden');
+            document.getElementById('reviewed-as').textContent = data.reviewed_label;
+        } else {
+            statusEl.classList.add('hidden');
+        }
+
+        updateStats();
+    }
+
+    // Update pose analysis panel
+    function updatePosePanel(data) {
+        // Confidence
+        const conf = data.pose_confidence || data.suggested_confidence || 0;
+        document.getElementById('pose-confidence').textContent = `${Math.round(conf * 100)}%`;
+
+        // Distance
+        const dist = data.pose_distance;
+        if (dist) {
+            document.getElementById('pose-distance-value').textContent =
+                `${dist.distance_bh.toFixed(2)} BH`;
+            const zoneEl = document.getElementById('pose-distance-zone');
+            const zone = dist.distance_zone || 'unknown';
+            zoneEl.textContent = ZONE_LABELS[zone] || zone;
+            zoneEl.className = `zone-badge ${ZONE_CLASSES[zone] || 'bg-gray-700 text-gray-400'}`;
+
+            const speed = dist.closing_speed_bh || 0;
+            const speedText = speed > 0 ? `+${speed.toFixed(1)} BH/s (closing)` :
+                              speed < 0 ? `${speed.toFixed(1)} BH/s (separating)` : '0 BH/s';
+            document.getElementById('pose-closing-speed').textContent = speedText;
+        } else {
+            document.getElementById('pose-distance-value').textContent = '--';
+            document.getElementById('pose-distance-zone').textContent = '--';
+            document.getElementById('pose-distance-zone').className = 'zone-badge bg-gray-700 text-gray-400';
+            document.getElementById('pose-closing-speed').textContent = '--';
+        }
+
+        // Footwork
+        updateFootwork('left', data.pose_footwork_left);
+        updateFootwork('right', data.pose_footwork_right);
+
+        // Parry
+        const parryL = data.pose_parry_left;
+        const parryR = data.pose_parry_right;
+        let parryText = '';
+        if (parryL && parryL.parry_detected) {
+            parryText += `L detected (${Math.round(parryL.confidence * 100)}%)`;
+        }
+        if (parryR && parryR.parry_detected) {
+            if (parryText) parryText += ' | ';
+            parryText += `R detected (${Math.round(parryR.confidence * 100)}%)`;
+        }
+        if (!parryText) parryText = 'None detected';
+        document.getElementById('pose-parry-info').textContent = parryText;
+
+        // Suggestion
+        const suggestedLabel = data.suggested_label || data.pose_suggested_label || '--';
+        document.getElementById('pose-suggested-label').textContent = suggestedLabel.toUpperCase().replace('_', ' ');
+        document.getElementById('pose-reasoning').textContent = data.suggested_reasoning || data.pose_reasoning || '';
+    }
+
+    function updateFootwork(side, fw) {
+        const typeEl = document.getElementById(`pose-fw-${side}`);
+        const confEl = document.getElementById(`pose-fw-${side}-conf`);
+        if (fw) {
+            const type = (fw.footwork_type || 'unknown').toUpperCase();
+            typeEl.textContent = type;
+            confEl.textContent = `${Math.round(fw.confidence * 100)}%`;
+        } else {
+            typeEl.textContent = '--';
+            confEl.textContent = '--';
+        }
+    }
+
+    // Select action
+    function selectAction(action) {
+        selectedAction = action;
+        document.querySelectorAll('.action-btn').forEach(btn => {
+            btn.classList.toggle('selected', btn.dataset.action === action);
+        });
+    }
+
+    // Select direction
+    function selectDirection(direction) {
+        selectedDirection = direction;
+        document.querySelectorAll('.dir-btn').forEach(btn => {
+            btn.classList.toggle('selected', btn.dataset.direction === direction);
+        });
+    }
+
+    // Accept suggestion (A key)
+    function acceptSuggestion() {
+        if (!currentClip) return;
+        const label = currentClip.suggested_label || currentClip.pose_suggested_label;
+        if (!label || label === 'unknown') return;
+
+        // Parse label into action + direction
+        const parts = label.split('_');
+        if (parts.length >= 2) {
+            const direction = parts[parts.length - 1];
+            const action = parts.slice(0, -1).join('_');
+            selectAction(action);
+            selectDirection(direction);
+            // Auto-confirm after accepting
+            confirmLabel();
+        }
+    }
+
+    // Confirm label
+    async function confirmLabel() {
+        if (!selectedAction || !selectedDirection || !currentClip) return;
+
+        const label = `${selectedAction}_${selectedDirection}`;
+        const resp = await fetch('/api/label', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({filename: currentClip.filename, action_label: label})
+        });
+        const data = await resp.json();
+        if (data.ok) {
+            jumpToNext();
+        }
+    }
+
+    // Skip clip
+    async function skipClip() {
+        if (!currentClip) return;
+        await fetch('/api/skip', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({filename: currentClip.filename})
+        });
+        jumpToNext();
+    }
+
+    // Undo
+    async function undoLast() {
+        const resp = await fetch('/api/undo', {method: 'POST'});
+        const data = await resp.json();
+        if (data.ok) {
+            loadClip(data.index);
+        }
+    }
+
+    // Navigate
+    function navigate(delta) {
+        const newIndex = currentIndex + delta;
+        if (currentClip && newIndex >= 0 && newIndex < currentClip.total) {
+            loadClip(newIndex);
+        }
+    }
+
+    // Jump to next unreviewed
+    async function jumpToNext() {
+        const resp = await fetch(`/api/next-unreviewed/${currentIndex}`);
+        const data = await resp.json();
+        loadClip(data.index);
+    }
+
+    // Update stats
+    async function updateStats() {
+        const resp = await fetch('/api/stats');
+        const stats = await resp.json();
+
+        document.getElementById('progress-text').textContent =
+            `${stats.reviewed}/${stats.total} (${stats.progress_pct}%)`;
+        document.getElementById('progress-bar').style.width = `${stats.progress_pct}%`;
+
+        // Label distribution
+        const dist = stats.label_distribution || {};
+        const atkCount = (dist.attack_left || 0) + (dist.attack_right || 0);
+        const ripCount = (dist.riposte_left || 0) + (dist.riposte_right || 0);
+        const caCount = (dist.counter_attack_left || 0) + (dist.counter_attack_right || 0);
+        const remCount = (dist.remise_left || 0) + (dist.remise_right || 0);
+
+        document.getElementById('stat-atk').textContent = atkCount;
+        document.getElementById('stat-rip').textContent = ripCount;
+        document.getElementById('stat-ca').textContent = caCount;
+        document.getElementById('stat-rem').textContent = remCount;
+        document.getElementById('stat-agreement').textContent =
+            `${stats.suggestion_agreement_rate || stats.gemini_agreement_rate || 0}%`;
+    }
+
+    // Sort
+    async function setSort(sortBy) {
+        await fetch('/api/sort', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({sort_by: sortBy})
+        });
+        document.querySelectorAll('.sort-btn').forEach(btn => {
+            btn.classList.toggle('text-blue-400', btn.dataset.sort === sortBy);
+            btn.classList.toggle('text-gray-400', btn.dataset.sort !== sortBy);
+        });
+        loadClip(0);
+    }
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+        // Ignore if typing in input
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+        switch(e.key) {
+            case '1': selectAction('attack'); break;
+            case '2': selectAction('riposte'); break;
+            case '3': selectAction('counter_attack'); break;
+            case '4': selectAction('remise'); break;
+            case 'l': case 'L': selectDirection('left'); break;
+            case 'r': case 'R': selectDirection('right'); break;
+            case 'a': case 'A': acceptSuggestion(); break;
+            case 'Enter': e.preventDefault(); confirmLabel(); break;
+            case 's': case 'S': skipClip(); break;
+            case 'u': case 'U': undoLast(); break;
+            case 'ArrowLeft': navigate(-1); break;
+            case 'ArrowRight': navigate(1); break;
+            case 'n': case 'N': jumpToNext(); break;
+        }
+    });
+
+    // Initialize
+    loadClip(0);
+    setInterval(updateStats, 10000);  // Refresh stats every 10s
+    </script>
+</body>
+</html>

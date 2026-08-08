@@ -1,0 +1,407 @@
+{
+  "summary": {
+    "video_path": "data/raw/usaf_7Amgqc5HJR0.mp4",
+    "final_score": "연속 분석",
+    "total_touches": 0,
+    "match_duration": "3:48",
+    "total_frames_analyzed": 2282,
+    "analysis_time_sec": 52.9,
+    "weapon": "epee",
+    "bout_type": "de",
+    "gender": null,
+    "age_group": null
+  },
+  "touches": [],
+  "left_fencer": {
+    "name": "Left Fencer",
+    "club": "",
+    "total_touches_scored": 0,
+    "total_touches_conceded": 0,
+    "most_common_action": null,
+    "most_common_action_pct": 0,
+    "action_distribution": []
+  },
+  "right_fencer": {
+    "name": "Right Fencer",
+    "club": "",
+    "total_touches_scored": 0,
+    "total_touches_conceded": 0,
+    "most_common_action": null,
+    "most_common_action_pct": 0,
+    "action_distribution": []
+  },
+  "fencer_profile": {
+    "left": {
+      "fencer_side": "left",
+      "total_bouts": 0,
+      "total_touches": 0,
+      "parry_rate": 0.0,
+      "parry_success_to_riposte": 0.0,
+      "weaknesses": [
+        "앞무릎 각도 평균이 높음 — 런지 깊이 부족 가능성",
+        "공격 성공률 0%로 낮음",
+        "방어 성공률 0%로 낮음"
+      ],
+      "strengths": [],
+      "recommendations": [
+        "런지 시 앞무릎 90-120도 유지 연습",
+        "거리 관리 개선 — 적절한 거리에서 공격 시작",
+        "빠라드 타이밍 연습 필요"
+      ],
+      "joint_angle_stats": {
+        "avg_hip_angle": 158.9,
+        "avg_front_knee": 173.3,
+        "avg_rear_knee": 165.6,
+        "avg_trunk_lean": 5.6,
+        "avg_arm_extension": 0.751
+      }
+    },
+    "right": {
+      "fencer_side": "right",
+      "total_bouts": 0,
+      "total_touches": 0,
+      "parry_rate": 0.0,
+      "parry_success_to_riposte": 0.0,
+      "weaknesses": [
+        "앞무릎 각도 평균이 높음 — 런지 깊이 부족 가능성",
+        "공격 성공률 0%로 낮음",
+        "방어 성공률 0%로 낮음"
+      ],
+      "strengths": [],
+      "recommendations": [
+        "런지 시 앞무릎 90-120도 유지 연습",
+        "거리 관리 개선 — 적절한 거리에서 공격 시작",
+        "빠라드 타이밍 연습 필요"
+      ],
+      "joint_angle_stats": {
+        "avg_hip_angle": 161.4,
+        "avg_front_knee": 166.5,
+        "avg_rear_knee": 162.8,
+        "avg_trunk_lean": 6.3,
+        "avg_arm_extension": 0.674
+      }
+    }
+  },
+  "exchanges": [
+    {
+      "exchange_number": 1,
+      "start_time": "0:32",
+      "end_time": "0:33",
+      "start_frame": 975,
+      "end_frame": 1014,
+      "event_type": "failed_attack",
+      "event_type_ko": "실패한 공격",
+      "duration_sec": 1.3,
+      "min_distance_bh": 2.67,
+      "footwork_left": "unknown",
+      "footwork_right": "advance"
+    },
+    {
+      "exchange_number": 2,
+      "start_time": "0:37",
+      "end_time": "0:38",
+      "start_frame": 1122,
+      "end_frame": 1152,
+      "event_type": "failed_attack",
+      "event_type_ko": "실패한 공격",
+      "duration_sec": 1.0,
+      "min_distance_bh": 2.64,
+      "footwork_left": "stationary",
+      "footwork_right": "stationary"
+    },
+    {
+      "exchange_number": 3,
+      "start_time": "0:42",
+      "end_time": "0:43",
+      "start_frame": 1263,
+      "end_frame": 1290,
+      "event_type": "failed_attack",
+      "event_type_ko": "실패한 공격",
+      "duration_sec": 0.9,
+      "min_distance_bh": 0.75,
+      "footwork_left": "fleche",
+      "footwork_right": "stationary"
+    },
+    {
+      "exchange_number": 4,
+      "start_time": "0:44",
+      "end_time": "0:45",
+      "start_frame": 1341,
+      "end_frame": 1365,
+      "event_type": "successful_defense",
+      "event_type_ko": "방어 성공",
+      "duration_sec": 0.8,
+      "min_distance_bh": 0.96,
+      "footwork_left": "retreat",
+      "footwork_right": "stationary",
+      "parry_left": true
+    },
+    {
+      "exchange_number": 5,
+      "start_time": "0:45",
+      "end_time": "0:47",
+      "start_frame": 1365,
+      "end_frame": 1416,
+      "event_type": "failed_attack",
+      "event_type_ko": "실패한 공격",
+      "duration_sec": 1.7,
+      "min_distance_bh": 1.65,
+      "footwork_left": "advance",
+      "footwork_right": "stationary"
+    },
+    {
+      "exchange_number": 6,
+      "start_time": "0:48",
+      "end_time": "0:49",
+      "start_frame": 1467,
+      "end_frame": 1497,
+      "event_type": "failed_attack",
+      "event_type_ko": "실패한 공격",
+      "duration_sec": 1.0,
+      "min_distance_bh": 1.33,
+      "footwork_left": "fleche",
+      "footwork_right": "lunge"
+    },
+    {
+      "exchange_number": 7,
+      "start_time": "0:57",
+      "end_time": "0:58",
+      "start_frame": 1725,
+      "end_frame": 1743,
+      "event_type": "failed_attack",
+      "event_type_ko": "실패한 공격",
+      "duration_sec": 0.6,
+      "min_distance_bh": 0.9,
+      "footwork_left": "fleche",
+      "footwork_right": "retreat"
+    },
+    {
+      "exchange_number": 8,
+      "start_time": "1:05",
+      "end_time": "1:36",
+      "start_frame": 1968,
+      "end_frame": 2886,
+      "event_type": "failed_attack",
+      "event_type_ko": "실패한 공격",
+      "duration_sec": 30.6,
+      "min_distance_bh": 1.05,
+      "footwork_left": "fleche",
+      "footwork_right": "advance"
+    },
+    {
+      "exchange_number": 9,
+      "start_time": "1:38",
+      "end_time": "1:42",
+      "start_frame": 2946,
+      "end_frame": 3063,
+      "event_type": "successful_defense",
+      "event_type_ko": "방어 성공",
+      "duration_sec": 3.9,
+      "min_distance_bh": 2.7,
+      "footwork_left": "unknown",
+      "footwork_right": "unknown",
+      "parry_right": true
+    },
+    {
+      "exchange_number": 10,
+      "start_time": "1:43",
+      "end_time": "1:44",
+      "start_frame": 3108,
+      "end_frame": 3138,
+      "event_type": "successful_defense",
+      "event_type_ko": "방어 성공",
+      "duration_sec": 1.0,
+      "min_distance_bh": 3.89,
+      "footwork_left": "advance",
+      "footwork_right": "stationary",
+      "parry_left": true
+    },
+    {
+      "exchange_number": 11,
+      "start_time": "1:48",
+      "end_time": "1:49",
+      "start_frame": 3261,
+      "end_frame": 3285,
+      "event_type": "successful_defense",
+      "event_type_ko": "방어 성공",
+      "duration_sec": 0.8,
+      "min_distance_bh": 2.32,
+      "footwork_left": "fleche",
+      "footwork_right": "fleche",
+      "parry_right": true
+    },
+    {
+      "exchange_number": 12,
+      "start_time": "1:57",
+      "end_time": "1:58",
+      "start_frame": 3516,
+      "end_frame": 3537,
+      "event_type": "successful_defense",
+      "event_type_ko": "방어 성공",
+      "duration_sec": 0.7,
+      "min_distance_bh": 3.17,
+      "footwork_left": "fleche",
+      "footwork_right": "fleche",
+      "parry_left": true
+    },
+    {
+      "exchange_number": 13,
+      "start_time": "2:44",
+      "end_time": "2:45",
+      "start_frame": 4944,
+      "end_frame": 4965,
+      "event_type": "failed_attack",
+      "event_type_ko": "실패한 공격",
+      "duration_sec": 0.7,
+      "min_distance_bh": 2.67,
+      "footwork_left": "fleche",
+      "footwork_right": "retreat"
+    },
+    {
+      "exchange_number": 14,
+      "start_time": "2:48",
+      "end_time": "2:49",
+      "start_frame": 5055,
+      "end_frame": 5082,
+      "event_type": "failed_attack",
+      "event_type_ko": "실패한 공격",
+      "duration_sec": 0.9,
+      "min_distance_bh": 1.92,
+      "footwork_left": "stationary",
+      "footwork_right": "stationary"
+    },
+    {
+      "exchange_number": 15,
+      "start_time": "3:29",
+      "end_time": "3:30",
+      "start_frame": 6273,
+      "end_frame": 6306,
+      "event_type": "failed_attack",
+      "event_type_ko": "실패한 공격",
+      "duration_sec": 1.1,
+      "min_distance_bh": 4.16,
+      "footwork_left": "stationary",
+      "footwork_right": "stationary"
+    },
+    {
+      "exchange_number": 16,
+      "start_time": "3:45",
+      "end_time": "3:45",
+      "start_frame": 6750,
+      "end_frame": 6768,
+      "event_type": "failed_attack",
+      "event_type_ko": "실패한 공격",
+      "duration_sec": 0.6,
+      "min_distance_bh": 2.36,
+      "footwork_left": "stationary",
+      "footwork_right": "stationary"
+    }
+  ],
+  "continuous_summary": {
+    "total_exchanges": 16,
+    "type_distribution": {
+      "failed_attack": 11,
+      "successful_defense": 5
+    },
+    "my_fencer": {
+      "side": "left",
+      "attacks_attempted": 9,
+      "attacks_succeeded": 0,
+      "attacks_failed": 9,
+      "defenses_attempted": 1,
+      "defenses_succeeded": 0,
+      "attack_success_rate": 0.0,
+      "defense_success_rate": 0.0,
+      "narratives": [
+        "프레임 421-430: 공격 실패 (거리 0.75 BH)",
+        "프레임 455-472: 공격 실패 (거리 1.65 BH)",
+        "프레임 489-499: 공격 실패 (거리 1.33 BH)",
+        "프레임 575-581: 공격 실패 (거리 0.90 BH)",
+        "프레임 656-962: 공격 실패 (거리 1.05 BH)",
+        "프레임 1648-1655: 공격 실패 (거리 2.67 BH)"
+      ]
+    }
+  },
+  "insights": [
+    {
+      "category": "exchange_summary",
+      "target": "both",
+      "message": "총 16회 교환 감지",
+      "severity": "info",
+      "evidence": "실패 공격 11회, 방어 성공 5회, 상호 후퇴 0회"
+    },
+    {
+      "category": "attack_analysis",
+      "target": "left",
+      "message": "왼쪽 선수 공격 성공률: 0% (0/9)",
+      "severity": "warning",
+      "evidence": "공격 시도 9회 중 0회 성공"
+    },
+    {
+      "category": "defense_analysis",
+      "target": "left",
+      "message": "왼쪽 선수 방어 성공률: 0% (0/1)",
+      "severity": "warning",
+      "evidence": "방어 시도 1회 중 0회 성공"
+    },
+    {
+      "category": "weakness",
+      "target": "left",
+      "message": "앞무릎 각도 평균이 높음 — 런지 깊이 부족 가능성",
+      "severity": "warning",
+      "evidence": ""
+    },
+    {
+      "category": "weakness",
+      "target": "left",
+      "message": "공격 성공률 0%로 낮음",
+      "severity": "warning",
+      "evidence": ""
+    },
+    {
+      "category": "weakness",
+      "target": "left",
+      "message": "방어 성공률 0%로 낮음",
+      "severity": "warning",
+      "evidence": ""
+    },
+    {
+      "category": "weakness",
+      "target": "right",
+      "message": "앞무릎 각도 평균이 높음 — 런지 깊이 부족 가능성",
+      "severity": "warning",
+      "evidence": ""
+    },
+    {
+      "category": "weakness",
+      "target": "right",
+      "message": "공격 성공률 0%로 낮음",
+      "severity": "warning",
+      "evidence": ""
+    },
+    {
+      "category": "weakness",
+      "target": "right",
+      "message": "방어 성공률 0%로 낮음",
+      "severity": "warning",
+      "evidence": ""
+    }
+  ],
+  "warnings": [
+    {
+      "type": "continuous_only",
+      "message": "이 리포트는 연속 포즈 분석 결과입니다. 득점 정보(OCR/LED)가 포함되지 않아 공격 성공률이 정확하지 않을 수 있습니다.",
+      "severity": "info"
+    }
+  ],
+  "meta": {
+    "phase": 6,
+    "pose_model": "YOLO11-Pose",
+    "action_model": null,
+    "pose_enabled": true,
+    "action_enabled": false,
+    "confidence_threshold": 0.0,
+    "source_type": "tv_broadcast",
+    "analysis_mode": "continuous_only"
+  }
+}

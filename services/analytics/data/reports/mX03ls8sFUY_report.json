@@ -1,0 +1,82 @@
+{
+  "summary": {
+    "video_path": "data/raw/usaf_mX03ls8sFUY.mp4",
+    "final_score": "0-2",
+    "total_touches": 1,
+    "match_duration": "2:31",
+    "total_frames_analyzed": 8240,
+    "analysis_time_sec": 111.5,
+    "weapon": "sabre",
+    "bout_type": "de",
+    "gender": "women",
+    "age_group": "unknown"
+  },
+  "touches": [
+    {
+      "touch_number": 1,
+      "frame": 4530,
+      "video_timestamp": "2:31",
+      "match_time": "2:5",
+      "scorer": "right",
+      "score_after": "0-2",
+      "action_scorer": "unknown",
+      "action_confidence": 0.0,
+      "action_opponent": "unknown",
+      "opponent_confidence": 0.0,
+      "description": "Touch 1: Right scores (0-2)"
+    }
+  ],
+  "left_fencer": {
+    "side": "left",
+    "name": "Left",
+    "club": "",
+    "total_touches_scored": 0,
+    "total_touches_conceded": 1,
+    "action_distribution": [],
+    "most_common_action": "unknown",
+    "most_common_action_pct": 0.0
+  },
+  "right_fencer": {
+    "side": "right",
+    "name": "Right",
+    "club": "",
+    "total_touches_scored": 1,
+    "total_touches_conceded": 0,
+    "action_distribution": [],
+    "most_common_action": "unknown",
+    "most_common_action_pct": 0.0
+  },
+  "insights": [
+    {
+      "category": "score_flow",
+      "target": "Right",
+      "message": "Right won 0-2 (Left 0.0% vs Right 100.0% scoring rate)",
+      "severity": "info",
+      "evidence": "Left: 0 touches scored, Right: 1 touches scored"
+    },
+    {
+      "category": "analysis_mode",
+      "target": "system",
+      "message": "This analysis uses TV overlay OCR only. Action classification (attack/riposte/counter) is not available in broadcast OCR mode.",
+      "severity": "info",
+      "evidence": "OCR-based score tracking from TV broadcast overlay"
+    }
+  ],
+  "warnings": [
+    {
+      "type": "video_truncated",
+      "message": "Video appears truncated. Final score 0-2 did not reach expected 15 points.",
+      "severity": "warning"
+    }
+  ],
+  "meta": {
+    "phase": 5,
+    "pose_model": null,
+    "action_model": null,
+    "pose_enabled": false,
+    "action_enabled": false,
+    "confidence_threshold": 0.0,
+    "source_type": "tv_broadcast",
+    "analysis_mode": "ocr_only"
+  }
+}

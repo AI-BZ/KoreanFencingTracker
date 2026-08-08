@@ -1,0 +1,34 @@
+# Vendor (external reference code - do not commit)
+vendor/
+
+# Data directories (large files)
+data/raw/
+data/clips/
+data/labeled/
+data/facts/
+data/uploads/
+
+# Model files (large binaries)
+*.pkl
+*.pt
+*.pth
+*.onnx
+*.safetensors
+ml/models/videomae-fencing-v1/
+!ml/models/.gitkeep
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
