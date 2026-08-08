@@ -6,6 +6,7 @@ Port: 76
 """
 
 import json
+import os
 import sys
 import uuid
 import time
@@ -73,10 +74,24 @@ app.add_middleware(
 # disable template caching to work around it until Jinja2 ships a fix.
 app.mount("/static", StaticFiles(directory=str(_BASE_DIR / "static")), name="static")
 
-# Serve raw video files for in-report playback (only if directory exists)
+# Raw source videos.
+#
+# data/raw holds broadcast footage downloaded from third parties (USA Fencing
+# YouTube uploads among them). Re-hosting and serving those publicly copies and
+# publicly distributes someone else's work, and some of the bouts are junior and
+# cadet events, so the fencers can be minors. The mount is therefore off unless
+# SERVE_RAW_VIDEOS is explicitly turned on for local work.
+#
+# With it off, report pages fall back to linking the original YouTube video, a
+# path the template already supports, so the analysis itself still renders.
 _raw_video_dir = _BASE_DIR / "data" / "raw"
-if _raw_video_dir.exists():
+SERVE_RAW_VIDEOS = os.getenv("SERVE_RAW_VIDEOS", "").strip().lower() in ("1", "true", "yes")
+if SERVE_RAW_VIDEOS and _raw_video_dir.exists():
     app.mount("/videos", StaticFiles(directory=str(_raw_video_dir)), name="videos")
+    _logger.warning(
+        "SERVE_RAW_VIDEOS is on: /videos serves third-party footage publicly. "
+        "Keep this off in production."
+    )
 _cache_size = 0 if sys.version_info >= (3, 14) else 400
 _jinja_env = jinja2.Environment(
     loader=jinja2.FileSystemLoader(str(_BASE_DIR / "templates")),
@@ -428,10 +443,12 @@ async def report_page(request: Request, job_id: str):
     _enrich_report_stats(report_dict)
     prepare_report_view(report_dict)
 
-    # Resolve video for playback
+    # Resolve video for playback. The file being on disk is not enough: unless
+    # SERVE_RAW_VIDEOS is on there is no /videos mount to play it from, and
+    # pointing at it anyway renders a dead player instead of the YouTube link.
     video_filename = None
     video_path = report_dict.get("meta", {}).get("video_path") or ""
-    if video_path:
+    if SERVE_RAW_VIDEOS and video_path:
         vf = Path(video_path).name
         if (_raw_video_dir / vf).exists():
             video_filename = vf
@@ -662,20 +679,22 @@ async def saved_report_page(request: Request, video_id: str):
     _enrich_report_stats(report_dict)
     prepare_report_view(report_dict)
 
-    # Resolve video filename for in-report playback
+    # Resolve video filename for in-report playback. Gated on SERVE_RAW_VIDEOS
+    # for the same reason as the saved-report view above.
     video_filename = None
     video_path = report_dict.get("meta", {}).get("video_path") or ""
-    if video_path:
-        vf = Path(video_path).name
-        if (_raw_video_dir / vf).exists():
-            video_filename = vf
-    if not video_filename:
-        # Convention: {stem}_continuous_report → {stem}.mp4
-        stem = video_id.replace("_continuous_report", "").replace("_report", "")
-        for ext in (".mp4", ".mkv", ".webm"):
-            if (_raw_video_dir / f"{stem}{ext}").exists():
-                video_filename = f"{stem}{ext}"
-                break
+    if SERVE_RAW_VIDEOS:
+        if video_path:
+            vf = Path(video_path).name
+            if (_raw_video_dir / vf).exists():
+                video_filename = vf
+        if not video_filename:
+            # Convention: {stem}_continuous_report → {stem}.mp4
+            stem = video_id.replace("_continuous_report", "").replace("_report", "")
+            for ext in (".mp4", ".mkv", ".webm"):
+                if (_raw_video_dir / f"{stem}{ext}").exists():
+                    video_filename = f"{stem}{ext}"
+                    break
 
     # Extract YouTube URL for TV broadcast reports with no local video
     youtube_url = None
