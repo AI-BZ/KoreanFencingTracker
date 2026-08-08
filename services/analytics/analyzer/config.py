@@ -335,3 +335,27 @@ FOOTWORK_USE_RATIO_BASED_HIP_DROP = True   # use ratio-based hip drop (True) vs 
 
 # --- Scoring frame tolerance (OCR delay compensation) ---
 SCORING_FRAME_TOLERANCE_SEC = 2.0  # seconds: OCR score change delay tolerance
+
+# --- Touch clip anchoring (real touch vs delayed OCR score change) ---
+# Measured on the foil bout (22/22 touches): the OCR score change lags the end of
+# the pose engagement that produced the touch by a MEDIAN of +2.8s (range
+# 0.6-4.6s), never negative. Anchoring a clip on the OCR score-change frame
+# therefore lands the window on the post-touch reset/recovery, not the touch.
+# So each OCR touch is matched back to the *preceding* pose exchange, and the clip
+# is anchored on that exchange's real-touch frame (min_distance_frame).
+#
+# EXCHANGE_MATCH_DELAY_SEC: how far after an exchange end an OCR touch may arrive
+# and still be attributed to that exchange. Set to 4.0 = median 2.8s + margin.
+# (Covers most touches; the few with >4s lag fall back to the low-confidence path.)
+# Replaces the old ±2s TOLERANCE_FRAMES window that only matched 5/22 touches.
+EXCHANGE_MATCH_DELAY_SEC = 4.0
+
+# PHRASE_MAX_LEAD_SEC: lead-in cap on the clip. Continuous analysis can produce
+# degenerate exchanges up to ~36s long; without a cap the clip start would run far
+# ahead of the touch. Clamp the start to at most this many seconds before the end.
+PHRASE_MAX_LEAD_SEC = 8.0
+
+# OCR_TOUCH_DELAY_MEDIAN_SEC: measured median OCR-vs-touch lag. Used as the lead-in
+# for the fallback window when no preceding exchange can be matched (low confidence,
+# real-touch position unknown so we anchor the clip END on the OCR frame itself).
+OCR_TOUCH_DELAY_MEDIAN_SEC = 2.8

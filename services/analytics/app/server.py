@@ -29,6 +29,7 @@ from app.credits import CreditManager, SubscriptionTier
 from app.demo import generate_demo_report, generate_demo_de_report
 from app.i18n.manager import i18n
 from app.gallery import get_demo_reports, extract_youtube_id
+from app.report_renderer import prepare_report_view, build_timeline
 
 _logger = logging.getLogger(__name__)
 _BASE_DIR = Path(__file__).resolve().parent.parent
@@ -425,6 +426,7 @@ async def report_page(request: Request, job_id: str):
 
     # Enrich with aggregated stats if needed
     _enrich_report_stats(report_dict)
+    prepare_report_view(report_dict)
 
     # Resolve video for playback
     video_filename = None
@@ -444,6 +446,7 @@ async def report_page(request: Request, job_id: str):
         **_i18n_context(request),
         "report": report_dict,
         "report_json": json.dumps(report_dict, ensure_ascii=False),
+        "timeline": build_timeline(report_dict),
         "job_id": job_id,
         "report_id": job_id,
         "mock_mode": mock_mode,
@@ -657,6 +660,7 @@ async def saved_report_page(request: Request, video_id: str):
 
     # Enrich fencer_profile with aggregated distance/footwork stats
     _enrich_report_stats(report_dict)
+    prepare_report_view(report_dict)
 
     # Resolve video filename for in-report playback
     video_filename = None
@@ -684,6 +688,7 @@ async def saved_report_page(request: Request, video_id: str):
         **_i18n_context(request),
         "report": report_dict,
         "report_json": json.dumps(report_dict, ensure_ascii=False),
+        "timeline": build_timeline(report_dict),
         "job_id": f"saved-{video_id}",
         "report_id": video_id,
         "video_filename": video_filename,
@@ -729,56 +734,41 @@ def _compute_touch_clip_bounds(
     clock_events: list,
     fps: float = 30.0,
 ) -> tuple:
-    """Compute optimal clip start/end for a touch frame.
+    """Compute clip start/end anchored on the REAL touch, not the OCR score change.
 
-    Priority:
-    1. Nearest exchange whose range covers the touch → exchange start .. touch + 0.5s
-    2. Most recent allez clock event → allez frame .. touch + 0.5s
-    3. Fallback: touch - 3s .. touch + 0.5s (asymmetric)
+    Thin wrapper over :func:`analyzer.touch_matching.compute_touch_clip_bounds` so
+    the clip window and the report's attack success/failure verdict are derived
+    from the same touch→exchange match.
     """
-    TOLERANCE_FRAMES = int(2.0 * fps)
-    POST_TOUCH_BUFFER = int(0.5 * fps)
-    FALLBACK_BEFORE = int(3.0 * fps)
-    MIN_CLIP_FRAMES = int(1.5 * fps)
+    from analyzer.touch_matching import compute_touch_clip_bounds
 
-    clip_end = touch_frame + POST_TOUCH_BUFFER
+    return compute_touch_clip_bounds(
+        touch_frame=touch_frame,
+        exchanges=exchanges,
+        clock_events=clock_events,
+        fps=fps,
+    )
 
-    # 1) Exchange matching: find exchange whose range covers the touch
-    # Allow OCR touch frames that arrive slightly before exchange start
-    # (OCR detects score change a few frames before pose analysis sees the exchange)
-    TOLERANCE_BEFORE = int(0.5 * fps)
-    best_exchange = None
-    best_dist = float("inf")
-    for ex in exchanges:
-        ef = ex.get("end_frame", 0)
-        sf = ex.get("start_frame", 0)
-        if sf - TOLERANCE_BEFORE <= touch_frame <= ef + TOLERANCE_FRAMES:
-            d = abs(ef - touch_frame)
-            if d < best_dist:
-                best_dist = d
-                best_exchange = ex
 
-    if best_exchange:
-        clip_start = best_exchange["start_frame"]
-        if clip_end - clip_start < MIN_CLIP_FRAMES:
-            clip_start = clip_end - MIN_CLIP_FRAMES
-        return (max(0, clip_start), clip_end)
+@app.get("/api/analytics/clips/{report_id}/status")
+async def get_clips_status(report_id: str):
+    """List which overlay clips are already cached for a report.
 
-    # 2) Clock event: most recent allez within 10 seconds
-    if clock_events:
-        recent_allez = None
-        for ce in clock_events:
-            if ce.get("event") == "allez" and ce.get("frame", 0) < touch_frame:
-                if touch_frame - ce["frame"] < int(10 * fps):
-                    recent_allez = ce
-        if recent_allez:
-            clip_start = recent_allez["frame"]
-            if clip_end - clip_start < MIN_CLIP_FRAMES:
-                clip_start = clip_end - MIN_CLIP_FRAMES
-            return (max(0, clip_start), clip_end)
+    Lets the report page distinguish instant playback (cached) from first-time
+    generation (~1 min of YOLO pose overlay) before the user clicks play.
+    """
+    import re as _re
 
-    # 3) Fallback: asymmetric padding (3s before, 0.5s after)
-    return (max(0, touch_frame - FALLBACK_BEFORE), clip_end)
+    clips_dir = _BASE_DIR / "data" / "clips" / "overlay" / report_id
+    cached: Dict[str, list] = {"touch": [], "exchange": []}
+    if clips_dir.exists():
+        for p in clips_dir.glob("*.mp4"):
+            m = _re.match(r"^(touch|exchange)_(\d+)\.mp4$", p.name)
+            if m and p.stat().st_size > 1000:
+                cached[m.group(1)].append(int(m.group(2)))
+    cached["touch"].sort()
+    cached["exchange"].sort()
+    return JSONResponse({"report_id": report_id, "cached": cached})
 
 
 @app.get("/api/analytics/clips/{report_id}/{event_type}/{event_number}")
@@ -916,9 +906,29 @@ async def generate_all_clips(
     def _generate_clips():
         try:
             from ml.clip_overlay import ClipOverlayGenerator
-            gen = ClipOverlayGenerator()
+
+            # Anchor each touch on its real-touch frame so batch clips match the
+            # on-demand endpoint (same padding, same bounds → identical cache).
+            meta_fps = report_dict.get("meta", {}).get("fps", 30)
+            exchanges = report_dict.get("exchanges", [])
+            clock_events = report_dict.get("clock_events", [])
+            touch_bounds = {}
+            for t in report_dict.get("touches", []):
+                tn = t.get("touch_number")
+                frame = t.get("frame")
+                if tn is None or frame is None:
+                    continue
+                touch_bounds[tn] = _compute_touch_clip_bounds(
+                    touch_frame=frame,
+                    exchanges=exchanges,
+                    clock_events=clock_events,
+                    fps=meta_fps,
+                )
+
+            gen = ClipOverlayGenerator(pad_before=0.5, pad_after=0.0)
             gen.generate_clips_for_report(
-                video_path, report_dict, str(clips_dir), touches_only=touches_only,
+                video_path, report_dict, str(clips_dir),
+                touches_only=touches_only, touch_bounds=touch_bounds,
             )
             _logger.info("Batch clip generation completed for %s", report_id)
         except Exception as e:

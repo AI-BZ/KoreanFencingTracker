@@ -5,13 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Fencing Clip Labeling Tool</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Shared design tokens. This page does not extend base.html, so it also does
+         not inherit base's tailwind.config — use the stock palette here only. -->
+    <link rel="stylesheet" href="/static/css/variables.css?v=20260806">
     <style>
         .kbd { @apply px-2 py-1 bg-gray-200 rounded text-sm font-mono border border-gray-300; }
         .label-btn { @apply px-4 py-2 rounded font-semibold transition-all duration-150; }
         .label-btn:hover { @apply scale-105; }
         .label-btn.selected { @apply ring-4 ring-blue-400 scale-105; }
-        .action-btn { @apply bg-indigo-100 text-indigo-800 hover:bg-indigo-200; }
-        .action-btn.selected { @apply bg-indigo-600 text-white; }
+        .action-btn { @apply bg-blue-100 text-blue-800 hover:bg-blue-200; }
+        .action-btn.selected { @apply bg-blue-600 text-white; }
         .dir-btn { @apply bg-emerald-100 text-emerald-800 hover:bg-emerald-200; }
         .dir-btn.selected { @apply bg-emerald-600 text-white; }
         .stat-chip { @apply px-3 py-1 rounded-full text-sm font-medium; }
@@ -19,7 +22,7 @@
         .pose-box { @apply bg-sky-950 border border-sky-700 rounded-lg p-4; }
         .pose-metric { @apply flex justify-between items-center py-1 border-b border-sky-800; }
         .pose-metric:last-child { @apply border-b-0; }
-        .progress-bar { transition: width 0.3s ease; }
+        /* No width transition: the bar is repainted on clip change, not animated. */
         .zone-badge { @apply px-2 py-0.5 rounded text-xs font-bold uppercase; }
         .zone-out { @apply bg-green-900 text-green-300; }
         .zone-adv-lunge { @apply bg-yellow-900 text-yellow-300; }
@@ -100,7 +103,7 @@
                     <div class="pose-metric">
                         <span class="text-sky-400 text-sm">L Footwork</span>
                         <div class="flex items-center gap-2">
-                            <span id="pose-fw-left" class="footwork-badge bg-indigo-900 text-indigo-300">--</span>
+                            <span id="pose-fw-left" class="footwork-badge bg-blue-900 text-blue-300">--</span>
                             <span id="pose-fw-left-conf" class="text-xs text-gray-500">--</span>
                         </div>
                     </div>
@@ -109,7 +112,7 @@
                     <div class="pose-metric">
                         <span class="text-sky-400 text-sm">R Footwork</span>
                         <div class="flex items-center gap-2">
-                            <span id="pose-fw-right" class="footwork-badge bg-indigo-900 text-indigo-300">--</span>
+                            <span id="pose-fw-right" class="footwork-badge bg-blue-900 text-blue-300">--</span>
                             <span id="pose-fw-right-conf" class="text-xs text-gray-500">--</span>
                         </div>
                     </div>
@@ -202,8 +205,8 @@
                 <div class="bg-gray-800 rounded-lg p-3">
                     <div class="text-sm text-gray-400 mb-2">Progress</div>
                     <div id="stats-grid" class="grid grid-cols-4 gap-2 text-center text-xs">
-                        <div class="stat-chip bg-indigo-900 text-indigo-200">ATK: <span id="stat-atk">0</span></div>
-                        <div class="stat-chip bg-purple-900 text-purple-200">RIP: <span id="stat-rip">0</span></div>
+                        <div class="stat-chip bg-blue-900 text-blue-200">ATK: <span id="stat-atk">0</span></div>
+                        <div class="stat-chip bg-rose-900 text-rose-200">RIP: <span id="stat-rip">0</span></div>
                         <div class="stat-chip bg-cyan-900 text-cyan-200">CA: <span id="stat-ca">0</span></div>
                         <div class="stat-chip bg-orange-900 text-orange-200">REM: <span id="stat-rem">0</span></div>
                     </div>

@@ -271,88 +271,146 @@ class TestPadSeconds:
 # ---------------------------------------------------------------------------
 
 class TestComputeTouchClipBounds:
-    """Test the _compute_touch_clip_bounds() helper from server.py."""
+    """Test the _compute_touch_clip_bounds() helper from server.py.
+
+    New behavior (real-touch anchoring): the OCR score change lags the actual
+    touch by a measured median of ~2.8s, so the clip is anchored on the preceding
+    exchange's min_distance_frame (real touch), not the delayed OCR score frame.
+
+    fps=30 constants: DELAY=120, FORWARD_TOL=15, POST_TOUCH_BUFFER=9,
+    MAX_LEAD=240, FALLBACK_LEAD=84, MIN_CLIP=45.
+    """
 
     def _call(self, **kwargs):
         from app.server import _compute_touch_clip_bounds
         return _compute_touch_clip_bounds(**kwargs)
 
-    def test_touch_exchange_matching(self):
-        """Touch near exchange end → clip starts at exchange start."""
+    def test_delayed_touch_matches_preceding_exchange(self):
+        """(a) A touch delayed ~2.8s matches the preceding exchange, and the clip
+        END lands on min_distance_frame (real touch), before the OCR score frame."""
+        exchanges = [
+            {"start_frame": 4000, "end_frame": 4100,
+             "min_distance_frame": 4090, "exchange_number": 15},
+        ]
+        touch = 4100 + int(2.8 * 30)  # 4184: score change 2.8s after exchange end
+        start, end = self._call(
+            touch_frame=touch, exchanges=exchanges, clock_events=[], fps=30.0,
+        )
+        # END anchored on real touch (min_distance_frame + 0.3s buffer), NOT touch
+        assert end == 4090 + 9
+        assert end < touch, "clip must end at real touch, before delayed OCR frame"
+        # START at exchange start
+        assert start == 4000
+
+    def test_no_matching_exchange_fallback(self):
+        """(b) No exchange within the delay window → fallback [touch-2.8s .. touch]."""
+        exchanges = [
+            {"start_frame": 900, "end_frame": 1000,
+             "min_distance_frame": 990, "exchange_number": 1},
+        ]
+        # Touch 1000 frames (33s) after the only exchange → no match
+        start, end = self._call(
+            touch_frame=2000, exchanges=exchanges, clock_events=[], fps=30.0,
+        )
+        assert end == 2000                 # anchored on the OCR frame (low confidence)
+        assert start == 2000 - int(2.8 * 30)  # median-delay lead-in
+
+    def test_lead_in_cap_clamps_long_exchange(self):
+        """(c) Degenerate long (~36s) exchange → start clamped to END - 8s."""
+        exchanges = [
+            {"start_frame": 0, "end_frame": 1080,          # 36s @30fps
+             "min_distance_frame": 1070, "exchange_number": 1},
+        ]
+        touch = 1080 + 30  # 1s delay
+        start, end = self._call(
+            touch_frame=touch, exchanges=exchanges, clock_events=[], fps=30.0,
+        )
+        assert end == 1070 + 9
+        # lead-in capped at PHRASE_MAX_LEAD_SEC (8s = 240 frames)
+        assert end - start == int(8.0 * 30)
+        assert start == end - int(8.0 * 30)
+
+    def test_match_delay_boundary(self):
+        """(d) Touch exactly at the 4s delay boundary matches; just beyond falls back."""
+        exchanges = [
+            {"start_frame": 4900, "end_frame": 5000,
+             "min_distance_frame": 4990, "exchange_number": 1},
+        ]
+        # Exactly at boundary (gap == 4.0s) → match
+        start_in, end_in = self._call(
+            touch_frame=5000 + int(4.0 * 30), exchanges=exchanges,
+            clock_events=[], fps=30.0,
+        )
+        assert start_in == 4900
+        assert end_in == 4990 + 9
+        # One frame beyond → no match → fallback
+        touch_out = 5000 + int(4.0 * 30) + 1
+        start_out, end_out = self._call(
+            touch_frame=touch_out, exchanges=exchanges, clock_events=[], fps=30.0,
+        )
+        assert end_out == touch_out
+        assert start_out == touch_out - int(2.8 * 30)
+
+    def test_clock_event_preferred_as_start(self):
+        """Matched exchange + recent allez → allez frame becomes the clip start."""
+        exchanges = [
+            {"start_frame": 6000, "end_frame": 6100,
+             "min_distance_frame": 6090, "exchange_number": 1},
+        ]
+        clock_events = [
+            {"frame": 6050, "event": "allez", "time": "2:10"},
+            {"frame": 6200, "event": "allez", "time": "2:05"},  # after end → ignored
+        ]
+        start, end = self._call(
+            touch_frame=6150, exchanges=exchanges,
+            clock_events=clock_events, fps=30.0,
+        )
+        assert start == 6050          # allez preferred over exchange start (6000)
+        assert end == 6090 + 9
+
+    def test_asymmetric_fallback_no_data(self):
+        """No exchanges, no clock events → [touch-2.8s .. touch]."""
+        start, end = self._call(
+            touch_frame=1000, exchanges=[], clock_events=[], fps=30.0,
+        )
+        assert start == 1000 - int(2.8 * 30)
+        assert end == 1000
+
+    def test_min_clip_length_enforced(self):
+        """When the anchored window is very short, ensure minimum clip length."""
+        exchanges = [
+            {"start_frame": 998, "end_frame": 1000,
+             "min_distance_frame": 999, "exchange_number": 1},
+        ]
+        start, end = self._call(
+            touch_frame=1010, exchanges=exchanges, clock_events=[], fps=30.0,
+        )
+        assert end - start >= int(1.5 * 30)
+
+    def test_exchange_without_min_distance_frame_uses_end(self):
+        """Legacy exchange dict lacking min_distance_frame → END = exchange end."""
         exchanges = [
             {"start_frame": 4239, "end_frame": 4347, "exchange_number": 15},
         ]
         start, end = self._call(
             touch_frame=4350, exchanges=exchanges, clock_events=[], fps=30.0,
         )
-        # Should use exchange start_frame (4239), not touch - 3s
         assert start == 4239
-        # end = touch + 0.5s = 4350 + 15 = 4365
-        assert end == 4365
+        assert end == 4347  # falls back to exchange end (no real-touch anchor)
 
-    def test_clock_event_fallback(self):
-        """No matching exchange, recent allez → allez frame as start."""
-        clock_events = [
-            {"frame": 6500, "event": "allez", "time": "2:10"},
-        ]
-        start, end = self._call(
-            touch_frame=6750, exchanges=[], clock_events=clock_events, fps=30.0,
-        )
-        assert start == 6500
-        assert end == 6750 + 15  # 0.5s after touch
-
-    def test_asymmetric_fallback_no_data(self):
-        """No exchanges, no clock events → 3s before, 0.5s after."""
-        start, end = self._call(
-            touch_frame=1000, exchanges=[], clock_events=[], fps=30.0,
-        )
-        assert start == 1000 - 90  # 3.0 * 30
-        assert end == 1000 + 15     # 0.5 * 30
-
-    def test_min_clip_length_enforced(self):
-        """When exchange is very short, ensure minimum clip length."""
+    def test_pose_end_slightly_after_touch_still_matches(self):
+        """Pose exchange end a few frames after the OCR touch → forward tolerance."""
         exchanges = [
-            {"start_frame": 998, "end_frame": 1000, "exchange_number": 1},
+            {"start_frame": 15900, "end_frame": 15954,
+             "min_distance_frame": 15948, "exchange_number": 4},
         ]
+        touch = 15950  # 4 frames before the pose exchange end (within 0.5s tol)
         start, end = self._call(
-            touch_frame=1000, exchanges=exchanges, clock_events=[], fps=30.0,
+            touch_frame=touch, exchanges=exchanges, clock_events=[], fps=30.0,
         )
-        clip_end = 1000 + 15  # POST_TOUCH_BUFFER
-        min_clip = int(1.5 * 30)  # 45 frames
-        # exchange start=998, clip_end=1015 → length=17 < 45 → start adjusted
-        assert end - start >= min_clip
-
-    def test_ocr_frame_before_exchange_matches(self):
-        """OCR touch frame a few frames before exchange start → still matches."""
-        # Simulates the common case where OCR detects score change
-        # slightly before the exchange start_frame.
-        exchanges = [
-            {"start_frame": 15954, "end_frame": 16100, "exchange_number": 4},
-        ]
-        # Touch at 15950, 4 frames before exchange start (within 0.5s tolerance)
-        start, end = self._call(
-            touch_frame=15950, exchanges=exchanges, clock_events=[], fps=30.0,
-        )
-        # Exchange matched (NOT fallback 3s before = 15950 - 90 = 15860)
-        fallback_start = 15950 - int(3.0 * 30)
-        assert start != fallback_start, "Should not fall back to 3s padding"
-        assert end == 15950 + 15  # POST_TOUCH_BUFFER
-        # MIN_CLIP_FRAMES enforced: clip_end(15965) - exchange_start(15954) = 11 < 45
-        # → start adjusted to clip_end - min_clip = 15965 - 45 = 15920
-        assert end - start >= int(1.5 * 30)
-
-    def test_ocr_frame_far_before_exchange_no_match(self):
-        """OCR touch frame far before exchange start → no match, falls back."""
-        exchanges = [
-            {"start_frame": 16000, "end_frame": 16100, "exchange_number": 1},
-        ]
-        # Touch at 15900, 100 frames (3.3s) before exchange start → too far
-        start, end = self._call(
-            touch_frame=15900, exchanges=exchanges, clock_events=[], fps=30.0,
-        )
-        # Should fall back to asymmetric padding (3s before, 0.5s after)
-        assert start == 15900 - int(3.0 * 30)
-        assert end == 15900 + 15
+        # Matched (NOT the fallback lead-in of touch - 2.8s)
+        assert start == 15900
+        assert end == 15948 + 9
 
 
 # ---------------------------------------------------------------------------

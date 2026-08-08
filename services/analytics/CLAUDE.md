@@ -156,22 +156,33 @@ PYTHONPATH=. .venv/bin/python3 -m uvicorn app.server:app --host 0.0.0.0 --port 9
 ### 🔴 프로덕션 배포 절차 (PRODUCTION DEPLOYMENT)
 데모 영상 분석 후 갤러리에 추가할 때는 **즉시 프로덕션 배포**까지 완료해야 함.
 
+프로덕션 서버는 **launchd**가 관리한다 (`com.fencingmind.analytics`, KeepAlive=true).
+터미널에서 `uvicorn ... &`로 직접 띄우지 말 것 — 그 프로세스는 띄운 셸/세션이
+끝나면 SIGTERM으로 함께 죽어서 502가 난다 (2026-08-06 실제 발생).
+
 ```bash
-# 1. 프로덕션 서버 재시작 (코드 변경 반영)
-kill $(lsof -ti:9076) 2>/dev/null
-cd /Users/gyejinpark/Documents/GitHub/FencingMind-analytics/services/analytics
-PYTHONPATH=. .venv/bin/python3 -m uvicorn app.server:app --host 0.0.0.0 --port 9076 &
+# 1. 프로덕션 재시작 (코드 변경 반영)
+launchctl kickstart -k gui/$(id -u)/com.fencingmind.analytics
 
 # 2. 확인
-curl -s -o /dev/null -w "%{http_code}" http://localhost:9076/gallery  # → 200
-curl -s http://localhost:9076/gallery | grep "새로_추가한_리포트_ID"     # → 존재 확인
+curl -s -o /dev/null -w "%{http_code}\n" http://localhost:9076/gallery   # → 200
+curl -s http://localhost:9076/gallery | grep "새로_추가한_리포트_ID"        # → 존재 확인
+curl -s -o /dev/null -w "%{http_code}\n" https://analytics.fencingmind.ai/gallery  # → 200
 ```
 
 **규칙:**
-- 데모 영상 분석 완료 시: `gallery.py` 수정 + `data/reports/` JSON 추가 → **프로덕션 서버 재시작**까지 한 번에 완료
+- 데모 영상 분석 완료 시: `gallery.py` 수정 + `data/reports/` JSON 추가 → **프로덕션 재시작**까지 한 번에 완료
 - 프로덕션 포트: **9076** (개발: 76)
 - 프로덕션 URL: `https://analytics.fencingmind.ai/gallery`
 - 프로덕션은 개발과 같은 디렉토리(`services/analytics/`)에서 실행됨 — 코드 변경이 재시작만으로 반영됨
+- launchd 정의: `~/Library/LaunchAgents/com.fencingmind.analytics.plist` → `~/opt/fencingmind/scripts/start-analytics.sh`
+- 로그: `~/Library/Logs/FencingMind/analytics-server.{log,error.log}`
+- 상태 확인: `launchctl list | grep fencingmind.analytics` (2번째 열이 마지막 종료 코드)
+- ⚠️ **PATH 주의**: launchd는 `/usr/bin:/bin:/usr/sbin:/sbin`만 넘겨준다. 클립 생성이
+  `ffmpeg`/`ffprobe`를 셸로 호출하므로 기동 스크립트에서 `/opt/homebrew/bin`을
+  PATH에 넣어줘야 한다. 빠지면 서버는 정상인데 클립만
+  `Clip generation failed: [Errno 2] No such file or directory: 'ffmpeg'`로 실패한다
+  (2026-08-06 실제 발생). 기동 스크립트는 저장소 밖(`~/opt/...`)에 있으니 재설치 시 주의.
 
 ---
 

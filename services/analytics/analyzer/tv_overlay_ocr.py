@@ -106,6 +106,26 @@ class TVTouchEvent:
         return asdict(self)
 
 
+def _valid_clock_text(text: str) -> bool:
+    """Validate an OCR'd match clock reading: "M:SS", "MM:SS" or bare seconds.
+
+    A fencing scoreboard clock always shows two seconds digits, so a reading
+    like "2:3" or "2:" means the OCR dropped a digit — the true value cannot be
+    recovered, so it must be rejected rather than stored as a broken time.
+    """
+    if ":" in text:
+        parts = text.split(":")
+        return (
+            len(parts) == 2
+            and parts[0].isdigit() and 1 <= len(parts[0]) <= 2
+            and parts[1].isdigit() and len(parts[1]) == 2
+            and int(parts[1]) < 60
+        )
+    if text.isdigit():
+        return 0 <= int(text) <= 180  # 3 minutes max
+    return False
+
+
 # ── TVOverlayOCR ────────────────────────────────────────────
 
 class TVOverlayOCR:
@@ -392,16 +412,8 @@ class TVOverlayOCR:
 
             if not text:
                 return None
-
-            # Validate time format: "M:SS", "MM:SS", or just seconds "SS"
-            if ":" in text:
-                parts = text.split(":")
-                if len(parts) == 2 and all(p.isdigit() for p in parts if p):
-                    return text
-            elif text.isdigit():
-                sec = int(text)
-                if 0 <= sec <= 180:  # 3 minutes max
-                    return text
+            if _valid_clock_text(text):
+                return text
             return None
         except Exception:
             return None

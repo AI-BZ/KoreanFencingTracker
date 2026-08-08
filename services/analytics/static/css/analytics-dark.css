@@ -1,43 +1,46 @@
 /* FencingMind Analytics - Dark Theme */
 /* Extracted from data.fencingmind.ai dark-theme.css (Tailwind-safe: no resets, no .container) */
 
+/* Legacy variable names kept so existing rules below need no edits; every value
+   now resolves through the shared --fm-* tokens in variables.css, which must be
+   loaded first. Change a color there, not here. */
 :root {
     /* Dark Theme Colors */
-    --bg-primary: #0a0a0f;
-    --bg-secondary: #12121a;
-    --bg-tertiary: #1a1a25;
-    --bg-card: rgba(18, 18, 26, 0.85);
-    --bg-card-hover: rgba(26, 26, 37, 0.9);
+    --bg-primary: var(--fm-bg-primary);
+    --bg-secondary: var(--fm-bg-secondary);
+    --bg-tertiary: var(--fm-bg-tertiary);
+    --bg-card: var(--fm-bg-card);
+    --bg-card-hover: var(--fm-bg-card-hover);
 
     /* Accent Colors - Korean Flag inspired */
-    --accent-primary: #c9302c;
-    --accent-secondary: #1e3a8a;
-    --accent-gold: #d4a574;
-    --accent-silver: #9ca3af;
-    --accent-bronze: #cd7f32;
+    --accent-primary: var(--fm-accent-primary);
+    --accent-secondary: var(--fm-accent-secondary);
+    --accent-gold: var(--fm-medal-gold);
+    --accent-silver: var(--fm-medal-silver);
+    --accent-bronze: var(--fm-medal-bronze);
 
     /* Text Colors */
-    --text-primary: #ffffff;
-    --text-secondary: #b4b4c4;
-    --text-muted: #6b6b7b;
-    --text-accent: #c9302c;
+    --text-primary: var(--fm-text-primary);
+    --text-secondary: var(--fm-text-secondary);
+    --text-muted: var(--fm-text-muted);
+    --text-accent: var(--fm-text-accent);
 
     /* Border & Effects */
-    --border-color: rgba(255, 255, 255, 0.08);
-    --border-light: rgba(255, 255, 255, 0.15);
-    --glow-primary: rgba(201, 48, 44, 0.3);
-    --glow-secondary: rgba(30, 58, 138, 0.3);
+    --border-color: var(--fm-border);
+    --border-light: var(--fm-border-light);
+    --glow-primary: var(--fm-glow-primary);
+    --glow-secondary: var(--fm-glow-secondary);
 
     /* Shadows */
-    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
-    --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.4);
-    --shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.5);
+    --shadow-sm: var(--fm-shadow-sm);
+    --shadow-md: var(--fm-shadow-md);
+    --shadow-lg: var(--fm-shadow-lg);
 
     /* Status Colors */
-    --success-color: #10b981;
-    --warning-color: #f59e0b;
-    --danger-color: #ef4444;
-    --info-color: #3b82f6;
+    --success-color: var(--fm-success);
+    --warning-color: var(--fm-warning);
+    --danger-color: var(--fm-danger);
+    --info-color: var(--fm-info);
 }
 
 /* Parallax Background */
@@ -92,14 +95,6 @@
     background: var(--bg-card-hover);
     border-color: var(--border-light);
     box-shadow: var(--shadow-md);
-}
-
-/* Logo gradient text */
-.logo-gradient {
-    background: linear-gradient(135deg, var(--text-primary), var(--accent-gold));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
 }
 
 /* Language Switcher */

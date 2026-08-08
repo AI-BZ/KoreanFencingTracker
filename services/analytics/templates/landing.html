@@ -7,7 +7,7 @@
 <section class="relative overflow-hidden">
     <div class="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 lg:py-28">
         <div class="text-center">
-            <h1 class="text-4xl sm:text-5xl lg:text-6xl font-bold text-white leading-tight">
+            <h1 class="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white leading-tight">
                 {% set lines = (t('landing.hero_title') if t else 'AI로 펜싱 경기를\n분석하세요').split('\n') %}
                 {{ lines[0] }}<br>{{ lines[1] if lines|length > 1 else '' }}
             </h1>
@@ -42,18 +42,18 @@
                               d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
                     </svg>
                 </div>
-                <div class="inline-flex items-center justify-center w-8 h-8 bg-brand-600 text-white text-sm font-bold rounded-full mb-3">1</div>
+                <div class="fm-num inline-flex items-center justify-center w-8 h-8 bg-brand-600 text-white text-sm font-bold rounded-full mb-3">1</div>
                 <h3 class="text-lg font-semibold text-white mb-2">{{ t('landing.step1_title') if t else '영상 업로드' }}</h3>
                 <p class="text-gray-400 text-sm">{{ t('landing.step1_desc') if t else '펜싱 경기 영상을 업로드하세요. 코치 촬영, 학부모 촬영 모두 지원합니다.' }}</p>
             </div>
             <div class="text-center glass-card p-8">
-                <div class="w-16 h-16 mx-auto bg-purple-500/10 rounded-2xl flex items-center justify-center mb-4 border border-purple-500/20">
-                    <svg class="w-8 h-8 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div class="w-16 h-16 mx-auto bg-blue-500/10 rounded-2xl flex items-center justify-center mb-4 border border-blue-500/20">
+                    <svg class="w-8 h-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                               d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
                     </svg>
                 </div>
-                <div class="inline-flex items-center justify-center w-8 h-8 bg-purple-600 text-white text-sm font-bold rounded-full mb-3">2</div>
+                <div class="fm-num inline-flex items-center justify-center w-8 h-8 bg-taeguk-blue text-white text-sm font-bold rounded-full mb-3">2</div>
                 <h3 class="text-lg font-semibold text-white mb-2">{{ t('landing.step2_title') if t else 'AI 분석' }}</h3>
                 <p class="text-gray-400 text-sm">{{ t('landing.step2_desc') if t else 'YOLO11-Pose와 VideoMAE가 선수 동작을 프레임 단위로 분석합니다.' }}</p>
             </div>
@@ -64,7 +64,7 @@
                               d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                     </svg>
                 </div>
-                <div class="inline-flex items-center justify-center w-8 h-8 bg-green-600 text-white text-sm font-bold rounded-full mb-3">3</div>
+                <div class="fm-num inline-flex items-center justify-center w-8 h-8 bg-green-600 text-white text-sm font-bold rounded-full mb-3">3</div>
                 <h3 class="text-lg font-semibold text-white mb-2">{{ t('landing.step3_title') if t else '코칭 리포트' }}</h3>
                 <p class="text-gray-400 text-sm">{{ t('landing.step3_desc') if t else '터치별 분석, 동작 통계, 전략 제안이 포함된 리포트를 받으세요.' }}</p>
             </div>
@@ -89,8 +89,8 @@
                 <p class="text-sm text-gray-400">{{ t('landing.feat_pose_desc') if t else 'YOLO11-Pose로 17개 관절을 실시간 추적. 자세와 풋워크를 정밀 분석합니다.' }}</p>
             </div>
             <div class="glass-card p-6">
-                <div class="w-10 h-10 bg-purple-500/10 rounded-xl flex items-center justify-center mb-4 border border-purple-500/20">
-                    <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div class="w-10 h-10 bg-blue-500/10 rounded-xl flex items-center justify-center mb-4 border border-blue-500/20">
+                    <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                               d="M13 10V3L4 14h7v7l9-11h-7z"/>
                     </svg>
@@ -135,7 +135,7 @@
             <a href="/report/saved/{{ r.id }}" class="glass-card p-6 block group">
                 <div class="flex items-center justify-between mb-3">
                     <span class="weapon-badge-{{ r.weapon }} inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase">{{ r.weapon }}</span>
-                    <span class="text-2xl font-bold text-white">{{ r.score }}</span>
+                    <span class="fm-num text-2xl font-bold text-white">{{ r.score }}</span>
                 </div>
                 <h3 class="font-semibold text-white text-sm mb-1 group-hover:text-brand-400 transition-colors">{{ r.title }}</h3>
                 <div class="flex gap-4 text-xs text-gray-500 mt-2">
