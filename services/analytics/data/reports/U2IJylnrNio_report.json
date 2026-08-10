@@ -1,0 +1,245 @@
+{
+  "summary": {
+    "video_path": "data/raw/usaf_U2IJylnrNio.mp4",
+    "final_score": "10-4",
+    "total_touches": 13,
+    "match_duration": "7:09",
+    "total_frames_analyzed": 14494,
+    "analysis_time_sec": 228.8,
+    "weapon": "sabre",
+    "bout_type": "de",
+    "gender": "women",
+    "age_group": "y10"
+  },
+  "touches": [
+    {
+      "touch_number": 1,
+      "frame": 2850,
+      "video_timestamp": "1:35",
+      "match_time": "3:00",
+      "scorer": "left",
+      "score_after": "1-0",
+      "action_scorer": "unknown",
+      "action_confidence": 0.0,
+      "action_opponent": "unknown",
+      "opponent_confidence": 0.0,
+      "description": "Touch 1: Left scores (1-0)"
+    },
+    {
+      "touch_number": 2,
+      "frame": 3150,
+      "video_timestamp": "1:45",
+      "match_time": "3:00",
+      "scorer": "right",
+      "score_after": "1-1",
+      "action_scorer": "unknown",
+      "action_confidence": 0.0,
+      "action_opponent": "unknown",
+      "opponent_confidence": 0.0,
+      "description": "Touch 2: Right scores (1-1)"
+    },
+    {
+      "touch_number": 3,
+      "frame": 3420,
+      "video_timestamp": "1:54",
+      "match_time": "3:00",
+      "scorer": "right",
+      "score_after": "1-2",
+      "action_scorer": "unknown",
+      "action_confidence": 0.0,
+      "action_opponent": "unknown",
+      "opponent_confidence": 0.0,
+      "description": "Touch 3: Right scores (1-2)"
+    },
+    {
+      "touch_number": 4,
+      "frame": 3690,
+      "video_timestamp": "2:03",
+      "match_time": "3:00",
+      "scorer": "left",
+      "score_after": "2-2",
+      "action_scorer": "unknown",
+      "action_confidence": 0.0,
+      "action_opponent": "unknown",
+      "opponent_confidence": 0.0,
+      "description": "Touch 4: Left scores (2-2)"
+    },
+    {
+      "touch_number": 5,
+      "frame": 6240,
+      "video_timestamp": "3:28",
+      "match_time": "3:00",
+      "scorer": "left",
+      "score_after": "3-2",
+      "action_scorer": "unknown",
+      "action_confidence": 0.0,
+      "action_opponent": "unknown",
+      "opponent_confidence": 0.0,
+      "description": "Touch 5: Left scores (3-2)"
+    },
+    {
+      "touch_number": 6,
+      "frame": 6600,
+      "video_timestamp": "3:40",
+      "match_time": "3:00",
+      "scorer": "left",
+      "score_after": "4-2",
+      "action_scorer": "unknown",
+      "action_confidence": 0.0,
+      "action_opponent": "unknown",
+      "opponent_confidence": 0.0,
+      "description": "Touch 6: Left scores (4-2)"
+    },
+    {
+      "touch_number": 7,
+      "frame": 7080,
+      "video_timestamp": "3:56",
+      "match_time": "3:56",
+      "scorer": "left",
+      "score_after": "5-2",
+      "action_scorer": "unknown",
+      "action_confidence": 0.0,
+      "action_opponent": "unknown",
+      "opponent_confidence": 0.0,
+      "description": "Touch 7: Left scores (5-2)"
+    },
+    {
+      "touch_number": 8,
+      "frame": 9600,
+      "video_timestamp": "5:20",
+      "match_time": "3:00",
+      "scorer": "right",
+      "score_after": "5-3",
+      "action_scorer": "unknown",
+      "action_confidence": 0.0,
+      "action_opponent": "unknown",
+      "opponent_confidence": 0.0,
+      "description": "Touch 8: Right scores (5-3)"
+    },
+    {
+      "touch_number": 9,
+      "frame": 9750,
+      "video_timestamp": "5:25",
+      "match_time": "3:00",
+      "scorer": "left",
+      "score_after": "6-3",
+      "action_scorer": "unknown",
+      "action_confidence": 0.0,
+      "action_opponent": "unknown",
+      "opponent_confidence": 0.0,
+      "description": "Touch 9: Left scores (6-3)"
+    },
+    {
+      "touch_number": 10,
+      "frame": 11220,
+      "video_timestamp": "6:14",
+      "match_time": "3:00",
+      "scorer": "left",
+      "score_after": "7-4",
+      "action_scorer": "unknown",
+      "action_confidence": 0.0,
+      "action_opponent": "unknown",
+      "opponent_confidence": 0.0,
+      "description": "Touch 10: Left scores (7-4)"
+    },
+    {
+      "touch_number": 11,
+      "frame": 11670,
+      "video_timestamp": "6:29",
+      "match_time": "3:00",
+      "scorer": "left",
+      "score_after": "8-4",
+      "action_scorer": "unknown",
+      "action_confidence": 0.0,
+      "action_opponent": "unknown",
+      "opponent_confidence": 0.0,
+      "description": "Touch 11: Left scores (8-4)"
+    },
+    {
+      "touch_number": 12,
+      "frame": 12150,
+      "video_timestamp": "6:45",
+      "match_time": "3:00",
+      "scorer": "left",
+      "score_after": "9-4",
+      "action_scorer": "unknown",
+      "action_confidence": 0.0,
+      "action_opponent": "unknown",
+      "opponent_confidence": 0.0,
+      "description": "Touch 12: Left scores (9-4)"
+    },
+    {
+      "touch_number": 13,
+      "frame": 12870,
+      "video_timestamp": "7:09",
+      "match_time": "3:00",
+      "scorer": "left",
+      "score_after": "10-4",
+      "action_scorer": "unknown",
+      "action_confidence": 0.0,
+      "action_opponent": "unknown",
+      "opponent_confidence": 0.0,
+      "description": "Touch 13: Left scores (10-4)"
+    }
+  ],
+  "left_fencer": {
+    "side": "left",
+    "name": "Left",
+    "club": "",
+    "total_touches_scored": 10,
+    "total_touches_conceded": 3,
+    "action_distribution": [],
+    "most_common_action": "unknown",
+    "most_common_action_pct": 0.0
+  },
+  "right_fencer": {
+    "side": "right",
+    "name": "Right",
+    "club": "",
+    "total_touches_scored": 3,
+    "total_touches_conceded": 10,
+    "action_distribution": [],
+    "most_common_action": "unknown",
+    "most_common_action_pct": 0.0
+  },
+  "insights": [
+    {
+      "category": "score_flow",
+      "target": "Left",
+      "message": "Left won 10-4 (Left 76.9% vs Right 23.1% scoring rate)",
+      "severity": "info",
+      "evidence": "Left: 10 touches scored, Right: 3 touches scored"
+    },
+    {
+      "category": "momentum",
+      "target": "Left",
+      "message": "Left had a 5-touch scoring run starting at touch 9",
+      "severity": "warning",
+      "evidence": "Consecutive 5 touches without opponent scoring"
+    },
+    {
+      "category": "analysis_mode",
+      "target": "system",
+      "message": "This analysis uses TV overlay OCR only. Action classification (attack/riposte/counter) is not available in broadcast OCR mode.",
+      "severity": "info",
+      "evidence": "OCR-based score tracking from TV broadcast overlay"
+    }
+  ],
+  "warnings": [
+    {
+      "type": "video_truncated",
+      "message": "Video appears truncated. Final score 10-4 did not reach expected 15 points.",
+      "severity": "warning"
+    }
+  ],
+  "meta": {
+    "phase": 5,
+    "pose_model": null,
+    "action_model": null,
+    "pose_enabled": false,
+    "action_enabled": false,
+    "confidence_threshold": 0.0,
+    "source_type": "tv_broadcast",
+    "analysis_mode": "ocr_only"
+  }
+}

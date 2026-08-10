@@ -1,0 +1,253 @@
+/* FencingMind Analytics - Dark Theme */
+/* Extracted from data.fencingmind.ai dark-theme.css (Tailwind-safe: no resets, no .container) */
+
+/* Legacy variable names kept so existing rules below need no edits; every value
+   now resolves through the shared --fm-* tokens in variables.css, which must be
+   loaded first. Change a color there, not here. */
+:root {
+    /* Dark Theme Colors */
+    --bg-primary: var(--fm-bg-primary);
+    --bg-secondary: var(--fm-bg-secondary);
+    --bg-tertiary: var(--fm-bg-tertiary);
+    --bg-card: var(--fm-bg-card);
+    --bg-card-hover: var(--fm-bg-card-hover);
+
+    /* Accent Colors - Korean Flag inspired */
+    --accent-primary: var(--fm-accent-primary);
+    --accent-secondary: var(--fm-accent-secondary);
+    --accent-gold: var(--fm-medal-gold);
+    --accent-silver: var(--fm-medal-silver);
+    --accent-bronze: var(--fm-medal-bronze);
+
+    /* Text Colors */
+    --text-primary: var(--fm-text-primary);
+    --text-secondary: var(--fm-text-secondary);
+    --text-muted: var(--fm-text-muted);
+    --text-accent: var(--fm-text-accent);
+
+    /* Border & Effects */
+    --border-color: var(--fm-border);
+    --border-light: var(--fm-border-light);
+    --glow-primary: var(--fm-glow-primary);
+    --glow-secondary: var(--fm-glow-secondary);
+
+    /* Shadows */
+    --shadow-sm: var(--fm-shadow-sm);
+    --shadow-md: var(--fm-shadow-md);
+    --shadow-lg: var(--fm-shadow-lg);
+
+    /* Status Colors */
+    --success-color: var(--fm-success);
+    --warning-color: var(--fm-warning);
+    --danger-color: var(--fm-danger);
+    --info-color: var(--fm-info);
+}
+
+/* Parallax Background */
+.parallax-bg {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -2;
+    background-image: url('/static/images/fencer-bg.png');
+    background-size: cover;
+    background-position: center top;
+    background-repeat: no-repeat;
+    will-change: background-position-y;
+}
+
+.parallax-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+        180deg,
+        rgba(10, 10, 15, 0.75) 0%,
+        rgba(10, 10, 15, 0.85) 30%,
+        rgba(10, 10, 15, 0.92) 60%,
+        rgba(10, 10, 15, 0.98) 100%
+    );
+}
+
+/* Glassmorphism Navbar */
+.dark-navbar {
+    background: rgba(10, 10, 15, 0.95);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border-color);
+}
+
+/* Glass Card */
+.glass-card {
+    background: var(--bg-card);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--border-color);
+    border-radius: 1rem;
+    transition: all 0.3s ease;
+}
+
+.glass-card:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--border-light);
+    box-shadow: var(--shadow-md);
+}
+
+/* Language Switcher */
+.lang-switcher {
+    display: flex;
+    gap: 4px;
+    padding: 2px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.lang-btn {
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+
+.lang-btn:hover {
+    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.lang-btn.active {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.1);
+}
+
+/* Dark nav links */
+.dark-nav-link {
+    color: var(--text-secondary);
+    transition: all 0.3s ease;
+    border: 1px solid transparent;
+}
+
+.dark-nav-link:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.05);
+    border-color: var(--border-light);
+}
+
+.dark-nav-link.active {
+    color: var(--accent-primary);
+    background: rgba(201, 48, 44, 0.1);
+}
+
+/* Dark footer */
+.dark-footer {
+    background: rgba(10, 10, 15, 0.95);
+    border-top: 1px solid var(--border-color);
+    color: var(--text-muted);
+}
+
+.dark-footer a {
+    color: var(--text-secondary);
+    transition: color 0.2s ease;
+}
+
+.dark-footer a:hover {
+    color: var(--accent-primary);
+}
+
+/* Gallery weapon badges */
+.weapon-badge-foil {
+    background: rgba(59, 130, 246, 0.15);
+    color: #60a5fa;
+    border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.weapon-badge-epee {
+    background: rgba(139, 92, 246, 0.15);
+    color: #a78bfa;
+    border: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+.weapon-badge-sabre {
+    background: rgba(251, 146, 60, 0.15);
+    color: #fb923c;
+    border: 1px solid rgba(251, 146, 60, 0.3);
+}
+
+/* Dark select/input overrides */
+.dark-select {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+}
+
+.dark-select:focus {
+    border-color: var(--accent-primary);
+    outline: none;
+    box-shadow: 0 0 0 2px var(--glow-primary);
+}
+
+.dark-select option {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+/* Dark drop zone */
+.dark-drop-zone {
+    border-color: var(--border-light);
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.dark-drop-zone:hover {
+    border-color: var(--accent-primary);
+    background: rgba(201, 48, 44, 0.05);
+}
+
+.dark-drop-zone.drag-over {
+    border-color: var(--accent-primary);
+    background: rgba(201, 48, 44, 0.1);
+    transform: scale(1.01);
+}
+
+/* Dark table */
+.dark-table thead {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.dark-table th {
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.dark-table td {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.dark-table tbody tr:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+/* Credit gradient card override */
+.credit-card-dark {
+    background: linear-gradient(135deg, var(--accent-primary), #8b1a17);
+}
+
+/* Print overrides */
+@media print {
+    .parallax-bg, .parallax-overlay, .dark-navbar, .dark-footer {
+        display: none !important;
+    }
+    body {
+        background: white !important;
+        color: #111 !important;
+    }
+    .glass-card {
+        background: white !important;
+        border: 1px solid #ddd !important;
+    }
+}

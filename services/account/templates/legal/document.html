@@ -1,0 +1,253 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - FencingMind{% endblock %}
+
+{% block head %}
+<style>
+.legal-container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem;
+}
+
+.legal-header {
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.legal-header h1 {
+    font-size: 1.75rem;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+}
+
+.legal-meta {
+    display: flex;
+    gap: 1.5rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.legal-meta span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.legal-body {
+    background: var(--bg-card);
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-md);
+    padding: 2rem 2.5rem;
+    line-height: 1.8;
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+}
+
+.legal-body h1 {
+    font-size: 1.5rem;
+    color: var(--text-primary);
+    margin: 0 0 1rem 0;
+    padding-bottom: 0.75rem;
+    border-bottom: 2px solid var(--accent-primary);
+}
+
+.legal-body h2 {
+    font-size: 1.15rem;
+    color: var(--text-primary);
+    margin: 2rem 0 0.75rem 0;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.legal-body h2:first-of-type {
+    border-top: none;
+    padding-top: 0;
+}
+
+.legal-body h3 {
+    font-size: 1.05rem;
+    color: var(--text-secondary);
+    margin: 1.5rem 0 0.5rem 0;
+}
+
+.legal-body p {
+    margin: 0.5rem 0;
+}
+
+.legal-body strong {
+    color: var(--text-primary);
+}
+
+.legal-body table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+    font-size: 0.88rem;
+}
+
+.legal-body table th,
+.legal-body table td {
+    border: 1px solid var(--border-color);
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+}
+
+.legal-body table th {
+    background: var(--bg-tertiary);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.legal-body table td {
+    color: var(--text-secondary);
+}
+
+.legal-body ul,
+.legal-body ol {
+    margin: 0.5rem 0;
+    padding-left: 1.5rem;
+}
+
+.legal-body li {
+    margin: 0.25rem 0;
+}
+
+.legal-back {
+    display: inline-block;
+    margin-top: 2rem;
+    color: var(--accent-gold);
+    text-decoration: none;
+    font-size: 0.9rem;
+}
+
+.legal-back:hover {
+    text-decoration: underline;
+}
+
+@media (max-width: 640px) {
+    .legal-container {
+        padding: 1rem;
+    }
+    .legal-body {
+        padding: 1.5rem 1rem;
+    }
+    .legal-meta {
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+    .legal-body table {
+        font-size: 0.8rem;
+    }
+    .legal-body table th,
+    .legal-body table td {
+        padding: 0.35rem 0.5rem;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="legal-container">
+    <div class="legal-header">
+        <h1>{{ title }}</h1>
+        <div class="legal-meta">
+            <span>{{ i18n.account.legal.version_label|default('버전') }}: {{ version }}</span>
+            <span>{{ i18n.account.legal.effective_date_label|default('시행일') }}: {{ effective_date }}</span>
+        </div>
+    </div>
+
+    <div class="legal-body" id="legalContent">
+        <!-- Rendered from markdown -->
+    </div>
+
+    <a href="javascript:history.back()" class="legal-back">&larr; {{ i18n.account.legal.back|default('돌아가기') }}</a>
+</div>
+
+<script>
+// Simple markdown to HTML renderer
+(function() {
+    const raw = {{ content | tojson }};
+    const container = document.getElementById('legalContent');
+
+    function renderMarkdown(text) {
+        let html = text;
+
+        // Escape HTML
+        html = html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+        // Re-enable anchor tags (for #overseas etc.)
+        html = html.replace(/&lt;a id="([^"]*)"&gt;&lt;\/a&gt;/g, '<a id="$1"></a>');
+
+        // Tables
+        html = html.replace(/^(\|.+\|)\n(\|[-| :]+\|)\n((?:\|.+\|\n?)*)/gm, function(match, header, separator, body) {
+            const headers = header.split('|').filter(c => c.trim());
+            const rows = body.trim().split('\n').filter(r => r.trim());
+
+            let table = '<table><thead><tr>';
+            headers.forEach(h => { table += '<th>' + h.trim() + '</th>'; });
+            table += '</tr></thead><tbody>';
+
+            rows.forEach(row => {
+                const cells = row.split('|').filter(c => c.trim());
+                table += '<tr>';
+                cells.forEach(c => { table += '<td>' + c.trim() + '</td>'; });
+                table += '</tr>';
+            });
+
+            table += '</tbody></table>';
+            return table;
+        });
+
+        // Headers
+        html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+        html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+        html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+
+        // Bold
+        html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+
+        // Italic
+        html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+
+        // Unordered list items
+        html = html.replace(/^(\s*)- (.+)$/gm, function(match, indent, content) {
+            return '<li>' + content + '</li>';
+        });
+
+        // Wrap consecutive <li> items in <ul>
+        html = html.replace(/((?:<li>.*<\/li>\n?)+)/g, '<ul>$1</ul>');
+
+        // Paragraphs: lines that are not already wrapped
+        const lines = html.split('\n');
+        let result = [];
+        let inBlock = false;
+
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            const trimmed = line.trim();
+
+            if (trimmed.startsWith('<h') || trimmed.startsWith('<table') ||
+                trimmed.startsWith('<ul') || trimmed.startsWith('<li') ||
+                trimmed.startsWith('</') || trimmed.startsWith('<a ') ||
+                trimmed === '') {
+                result.push(line);
+            } else {
+                // Check if it's a numbered list item (e.g., "1. text")
+                if (/^\d+\.\s/.test(trimmed)) {
+                    result.push('<p>' + line + '</p>');
+                } else {
+                    result.push('<p>' + line + '</p>');
+                }
+            }
+        }
+
+        return result.join('\n');
+    }
+
+    container.innerHTML = renderMarkdown(raw);
+})();
+</script>
+{% endblock %}

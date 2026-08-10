@@ -21,6 +21,10 @@
 - API 구독: $99~999/월 (이용량별)
 - 데이터 라이선스: $5,000~50,000/년 (B2B)
 
+## ⚠️ Auth 엔드포인트 이동 안내
+auth 관련 엔드포인트(로그인, 회원가입, 인증, 프로필)는 **account.fencingmind.ai** (port 70)로 이동되었습니다.
+이 서비스에서는 `shared_core.auth.jwt`로 JWT 검증만 수행합니다.
+
 ---
 
 ## 폴더 구조
@@ -557,6 +561,80 @@ Second DE: 64강 (일부) → 32강 → 16강 → 8강 → 준결승 → 결승
 - **금지 패턴** (Impeccable 디텍터 기준): gradient-text, 카드 3px+ 컬러 border-left, width/max-height/padding transition, 오프셋 0 halo 그림자, 다색 그라데이션 CTA
 - **검증**: `node ~/.claude/skills/impeccable/scripts/detect.mjs --json <파일>` (2026-07-31 기준 24→1건, 잔여 1건은 동명이인 아코디언 max-height 의도적 유지)
 - **크리틱 원본**: `.impeccable/critique/2026-07-30T04-12-33Z__services-data-core-pages.md` (26/40)
+
+---
+
+## 🎨 UI 디자인 규칙 (필수)
+
+**⚠️ 적용 범위**: 아래는 모노레포 공통 `shared-ui` 기준 규칙이다. data 서비스는 위 "디자인 시스템 방향 (2026-07-31 확정)"이 우선하며, 언어별 라이트 테마를 실제로 운영 중이므로 "다크 모드만" 항목은 data 서비스에 적용되지 않는다.
+
+**📖 반드시 참조:** `packages/shared-ui/DESIGN_SYSTEM.md`
+
+### 필수 CSS 임포트
+```html
+<link rel="stylesheet" href="/packages/shared-ui/styles/variables.css">
+<link rel="stylesheet" href="/packages/shared-ui/styles/base.css">
+<link rel="stylesheet" href="/packages/shared-ui/styles/components.css">
+```
+
+### 핵심 규칙
+| 규칙 | 설명 |
+|------|------|
+| 🔴 **다크 모드만** | 라이트 모드 UI 금지 |
+| 🔴 **CSS 변수 사용** | `--fm-*` 변수 필수 (하드코딩 색상 금지) |
+| 🔴 **컴포넌트 클래스** | `fm-btn`, `fm-card`, `fm-input` 등 사용 |
+| 🔴 **배경 구조** | `fm-parallax-bg` + `fm-parallax-overlay` |
+
+### 색상 팔레트 (태극기 컬러)
+```css
+--fm-accent-primary: #c9302c;    /* 빨강 - Primary CTA */
+--fm-accent-secondary: #1e3a8a;  /* 파랑 - Secondary */
+--fm-bg-card: rgba(18, 18, 26, 0.85);  /* 글래스 카드 */
+```
+
+### 랭킹 테이블 예시
+```html
+<div class="fm-card">
+    <div class="fm-card-header">
+        <h3 class="fm-card-title">남자 플뢰레 랭킹</h3>
+    </div>
+    <div class="fm-table-container">
+        <table class="fm-table">
+            <thead>
+                <tr>
+                    <th>순위</th>
+                    <th>선수</th>
+                    <th>소속</th>
+                    <th>점수</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><span class="fm-badge fm-badge-gold">1</span></td>
+                    <td>홍길동</td>
+                    <td>최병철펜싱클럽</td>
+                    <td>2,450</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+```
+
+### 대회 카드 예시
+```html
+<div class="fm-card">
+    <div class="fm-card-header">
+        <h3 class="fm-card-title">2025 회장배 전국대회</h3>
+        <span class="fm-badge fm-badge-info">진행 중</span>
+    </div>
+    <div class="fm-card-body">
+        <p class="fm-text-secondary">2025.01.15 ~ 2025.01.17</p>
+        <p class="fm-text-secondary">장소: 태릉선수촌</p>
+        <button class="fm-btn fm-btn-primary">결과 보기</button>
+    </div>
+</div>
+```
 
 ---
 

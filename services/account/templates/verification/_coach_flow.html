@@ -1,0 +1,130 @@
+<!-- Coach Verification Flow: 선수 검색 + Claim -->
+<div class="verification-methods">
+    <h2>코치 인증 - 선수 데이터 연결</h2>
+    <p class="flow-desc">본인의 선수 데이터를 검색하여 계정에 연결합니다.</p>
+
+    <div class="coach-search-section">
+        <div class="form-group">
+            <label for="coachSearchName">선수 이름 검색</label>
+            <input type="text" id="coachSearchName" placeholder="본인 이름 입력" value="{{ member.full_name or '' }}">
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label for="coachSearchBirth">출생연도</label>
+                <input type="number" id="coachSearchBirth" placeholder="예: 1985">
+            </div>
+            <div class="form-group">
+                <label for="coachSearchTeam">소속팀</label>
+                <input type="text" id="coachSearchTeam" placeholder="클럽/학교명">
+            </div>
+        </div>
+        <button class="upload-btn" id="coachSearchBtn" onclick="searchPlayerForCoach()">선수 검색</button>
+
+        <div id="coachSearchResults" style="margin-top:1rem;display:none;"></div>
+        <div class="upload-result" id="coachClaimResult" style="display:none;"></div>
+    </div>
+</div>
+
+<!-- Existing claims -->
+{% if player_claims %}
+<div class="verification-history">
+    <h2>선수 Claim 내역</h2>
+    <table class="history-table">
+        <thead>
+            <tr><th>선수 ID</th><th>상태</th><th>매칭 점수</th><th>날짜</th></tr>
+        </thead>
+        <tbody>
+            {% for pc in player_claims %}
+            <tr>
+                <td>#{{ pc.player_id }}</td>
+                <td>
+                    {% if pc.status == 'approved' %}<span class="badge badge-success">승인</span>
+                    {% elif pc.status == 'rejected' %}<span class="badge badge-danger">거부</span>
+                    {% else %}<span class="badge badge-secondary">대기</span>{% endif %}
+                </td>
+                <td>{{ (pc.confidence_score * 100)|round(1) if pc.confidence_score else '-' }}%</td>
+                <td>{{ pc.created_at[:10] if pc.created_at else '-' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<style>
+.flow-desc { color: var(--text-secondary); margin-bottom: 1.5rem; }
+.coach-search-section { margin-top: 1rem; }
+.form-group { margin-bottom: 1rem; }
+.form-group label { display: block; font-weight: 600; margin-bottom: 0.25rem; font-size: 0.9rem; }
+.form-group input { width: 100%; padding: 0.75rem; border: 1px solid var(--border-light); border-radius: 8px; font-size: 0.95rem; background: var(--bg-tertiary); color: var(--text-primary); }
+.form-group input:focus { outline: none; border-color: var(--accent-primary); box-shadow: 0 0 0 3px var(--glow-primary); }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.player-card { border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+.player-card .info { font-size: 0.9rem; }
+.player-card .info .name { font-weight: 600; }
+.player-card .info .meta { color: var(--text-muted); font-size: 0.8rem; }
+.claim-btn { padding: 6px 16px; background: linear-gradient(135deg, var(--accent-primary), #a02320); color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85rem; }
+.claim-btn:hover { box-shadow: 0 4px 12px var(--glow-primary); }
+</style>
+
+<script>
+async function searchPlayerForCoach() {
+    const name = document.getElementById('coachSearchName').value.trim();
+    if (name.length < 2) return alert('이름을 2자 이상 입력하세요');
+
+    const birth = document.getElementById('coachSearchBirth').value;
+    const team = document.getElementById('coachSearchTeam').value;
+    let url = `/account/verification/player-search?name=${encodeURIComponent(name)}`;
+    if (birth) url += `&birth_year=${birth}`;
+    if (team) url += `&team=${encodeURIComponent(team)}`;
+
+    const resultsDiv = document.getElementById('coachSearchResults');
+    resultsDiv.style.display = 'block';
+    resultsDiv.innerHTML = '<p>검색 중...</p>';
+
+    try {
+        const resp = await fetch(url);
+        const data = await resp.json();
+        if (!data.candidates || data.candidates.length === 0) {
+            resultsDiv.innerHTML = '<p style="color:#718096;">검색 결과가 없습니다.</p>';
+            return;
+        }
+        resultsDiv.innerHTML = data.candidates.map(c => `
+            <div class="player-card">
+                <div class="info">
+                    <div class="name">${c.name} (ID: ${c.player_id})</div>
+                    <div class="meta">${c.team_name || '-'} | ${c.birth_year || '-'}년 | 매칭: ${(c.confidence * 100).toFixed(0)}%</div>
+                </div>
+                <button class="claim-btn" onclick="claimPlayer(${c.player_id})">Claim</button>
+            </div>
+        `).join('');
+    } catch (e) {
+        resultsDiv.innerHTML = '<p style="color:#e53e3e;">검색 오류가 발생했습니다.</p>';
+    }
+}
+
+async function claimPlayer(playerId) {
+    const result = document.getElementById('coachClaimResult');
+    try {
+        const resp = await fetch('/account/verification/player-claim', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ player_id: playerId }),
+        });
+        const data = await resp.json();
+        result.style.display = 'block';
+        if (resp.ok) {
+            result.className = 'upload-result success';
+            result.innerHTML = `<strong>${data.message}</strong>`;
+            setTimeout(() => location.reload(), 2000);
+        } else {
+            result.className = 'upload-result error';
+            result.textContent = data.detail || '오류가 발생했습니다';
+        }
+    } catch (e) {
+        result.style.display = 'block';
+        result.className = 'upload-result error';
+        result.textContent = '네트워크 오류가 발생했습니다';
+    }
+}
+</script>

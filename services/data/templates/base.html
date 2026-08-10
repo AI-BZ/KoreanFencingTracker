@@ -124,7 +124,7 @@
                 <input type="text" id="global-search" aria-label="{{ _t('선수 또는 팀 검색...') }}" placeholder="{{ _t('선수 또는 팀 검색...') }}">
             </div>
             <div class="auth-nav" id="authNav">
-                <a href="https://account.fencingmind.ai/auth/login?redirect_url={{ request.url | urlencode }}" class="auth-btn login-btn" id="loginBtn" onclick="localStorage.setItem('fencingmind_login_redirect', window.location.href)">{{ _t('로그인') }}</a>
+                <a href="https://account.fencingmind.ai/auth/login?redirect={{ request.url | urlencode }}" class="auth-btn login-btn" id="loginBtn" onclick="localStorage.setItem('fencingmind_login_redirect', window.location.href)">{{ _t('로그인') }}</a>
             </div>
             <!-- Language Switcher (desktop) -->
             <div class="lang-switcher">
@@ -201,6 +201,10 @@
         <div class="container">
             <p>FencingMind Tracker &copy; 2024-<span id="footer-year">2026</span></p>
             <p>{{ _t("데이터 출처") }}: <a href="https://fencing.sports.or.kr" target="_blank">KFF</a></p>
+            <p class="footer-legal">
+                <a href="https://account.fencingmind.ai/legal/terms">{{ _t("이용약관") }}</a> |
+                <a href="https://account.fencingmind.ai/legal/privacy">{{ _t("개인정보처리방침") }}</a>
+            </p>
             <p class="footer-disclaimer">{{ _t("본 서비스의 데이터는 자동 수집(스크래핑) 기반이며, 공식 기록과 다를 수 있습니다. 참고용으로만 활용해 주세요. 오류 발견 시 제보해 주시면 확인 후 수정하겠습니다.") }}</p>
         </div>
     </footer>
@@ -242,7 +246,7 @@
         updateParallax();
     })();
 
-    // 로그인 상태 확인 (자체 /auth/me 사용 - 쿠키 기반 JWT 검증)
+    // 로그인 상태 확인 (data 서비스의 /auth/me shim 사용 - shared_core JWT 로컬 디코드)
     document.addEventListener('DOMContentLoaded', async function() {
         try {
             const controller = new AbortController();

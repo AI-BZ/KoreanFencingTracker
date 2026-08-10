@@ -1,0 +1,228 @@
+<!-- Parent Verification Flow: 학부모 인증 (자녀 선수 매칭) -->
+<div class="verification-methods">
+    <h2>학부모 인증</h2>
+    <p class="flow-desc">자녀(선수)의 정보를 입력하면 AI가 교차검증하고, 관리자가 최종 승인합니다.</p>
+
+    <div class="parent-form-section">
+        <form id="parentClaimForm">
+            <div class="form-group">
+                <label for="childName">자녀 이름 <span class="required">*</span></label>
+                <input type="text" id="childName" name="child_name" required minlength="2" placeholder="선수 이름 입력">
+                <div class="search-results" id="childSearchResults" style="display:none;"></div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="childBirthYear">출생연도</label>
+                    <input type="number" id="childBirthYear" name="child_birth_year" min="1990" max="2025" placeholder="예: 2012">
+                </div>
+                <div class="form-group">
+                    <label for="childGender">성별</label>
+                    <select id="childGender" name="child_gender">
+                        <option value="">선택 안함</option>
+                        <option value="M">남자</option>
+                        <option value="F">여자</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="childTeam">소속팀</label>
+                <input type="text" id="childTeam" name="child_team_name" placeholder="선수의 소속 클럽/학교">
+            </div>
+
+            <div class="form-group">
+                <label for="relationshipType">관계 <span class="required">*</span></label>
+                <select id="relationshipType" name="relationship_type" required>
+                    <option value="father">부</option>
+                    <option value="mother">모</option>
+                    <option value="legal_guardian">법정대리인</option>
+                    <option value="grandparent">조부모</option>
+                    <option value="other">기타</option>
+                </select>
+            </div>
+
+            <button type="submit" class="upload-btn" id="parentSubmitBtn">
+                학부모 인증 요청하기
+            </button>
+        </form>
+
+        <div class="upload-result" id="parentResult" style="display: none;"></div>
+    </div>
+</div>
+
+<!-- Existing parent claims -->
+{% if parent_claims %}
+<div class="verification-history">
+    <h2>학부모 인증 내역</h2>
+    <table class="history-table">
+        <thead>
+            <tr>
+                <th>자녀 이름</th>
+                <th>관계</th>
+                <th>상태</th>
+                <th>AI 신뢰도</th>
+                <th>날짜</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for pc in parent_claims %}
+            <tr>
+                <td>{{ pc.child_name }} {% if pc.child_birth_year %}({{ pc.child_birth_year }}){% endif %}</td>
+                <td>
+                    {% if pc.relationship_type == 'father' %}부
+                    {% elif pc.relationship_type == 'mother' %}모
+                    {% elif pc.relationship_type == 'legal_guardian' %}법정대리인
+                    {% elif pc.relationship_type == 'grandparent' %}조부모
+                    {% else %}기타{% endif %}
+                </td>
+                <td>
+                    {% if pc.status == 'approved' %}
+                    <span class="badge badge-success">승인</span>
+                    {% elif pc.status == 'rejected' %}
+                    <span class="badge badge-danger">거부</span>
+                    {% elif pc.status == 'ai_reviewed' %}
+                    <span class="badge badge-warning">검토 중</span>
+                    {% else %}
+                    <span class="badge badge-secondary">대기</span>
+                    {% endif %}
+                </td>
+                <td>{{ (pc.ai_confidence * 100)|round(1) if pc.ai_confidence else '-' }}%</td>
+                <td>{{ pc.created_at[:10] if pc.created_at else '-' }}</td>
+            </tr>
+            {% if pc.reviewer_notes and pc.status == 'rejected' %}
+            <tr class="rejection-reason">
+                <td colspan="5">거부 사유: {{ pc.reviewer_notes }}</td>
+            </tr>
+            {% endif %}
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<style>
+.flow-desc { color: var(--text-secondary); margin-bottom: 1.5rem; }
+.parent-form-section { margin-top: 1rem; }
+.form-group { margin-bottom: 1rem; }
+.form-group label { display: block; font-weight: 600; margin-bottom: 0.25rem; font-size: 0.9rem; }
+.form-group input, .form-group select {
+    width: 100%; padding: 0.75rem; border: 1px solid var(--border-light); border-radius: 8px;
+    font-size: 0.95rem; background: var(--bg-tertiary); color: var(--text-primary);
+}
+.form-group input:focus, .form-group select:focus { outline: none; border-color: var(--accent-primary); box-shadow: 0 0 0 3px var(--glow-primary); }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.required { color: var(--danger-color); }
+.search-results {
+    border: 1px solid var(--border-color); border-radius: 8px; margin-top: 4px;
+    max-height: 200px; overflow-y: auto; background: var(--bg-secondary);
+}
+.search-result-item {
+    padding: 8px 12px; border-bottom: 1px solid var(--border-color); cursor: pointer; font-size: 0.85rem;
+}
+.search-result-item:hover { background: rgba(255,255,255,0.05); }
+.search-result-item .name { font-weight: 600; }
+.search-result-item .meta { color: var(--text-muted); font-size: 0.8rem; }
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const childNameInput = document.getElementById('childName');
+    const searchResults = document.getElementById('childSearchResults');
+    let searchTimeout;
+
+    // Real-time search as user types
+    childNameInput.addEventListener('input', function() {
+        clearTimeout(searchTimeout);
+        const name = this.value.trim();
+        if (name.length < 2) { searchResults.style.display = 'none'; return; }
+
+        searchTimeout = setTimeout(async () => {
+            const birthYear = document.getElementById('childBirthYear').value;
+            const team = document.getElementById('childTeam').value;
+            let url = `/account/verification/parent-claim/search-child?name=${encodeURIComponent(name)}`;
+            if (birthYear) url += `&birth_year=${birthYear}`;
+            if (team) url += `&team=${encodeURIComponent(team)}`;
+
+            try {
+                const resp = await fetch(url);
+                const data = await resp.json();
+                if (data.candidates && data.candidates.length > 0) {
+                    searchResults.innerHTML = data.candidates.map(c => `
+                        <div class="search-result-item" data-name="${c.name}" data-birth="${c.birth_year || ''}" data-team="${c.team_name || ''}">
+                            <div class="name">${c.name}</div>
+                            <div class="meta">${c.team_name || '-'} | ${c.birth_year || '-'}년 | ${c.gender === 'M' ? '남' : c.gender === 'F' ? '여' : '-'} | 대회 ${c.competition_count || 0}회</div>
+                        </div>
+                    `).join('');
+                    searchResults.style.display = 'block';
+
+                    // Click to select
+                    searchResults.querySelectorAll('.search-result-item').forEach(item => {
+                        item.addEventListener('click', () => {
+                            childNameInput.value = item.dataset.name;
+                            if (item.dataset.birth) document.getElementById('childBirthYear').value = item.dataset.birth;
+                            if (item.dataset.team) document.getElementById('childTeam').value = item.dataset.team;
+                            searchResults.style.display = 'none';
+                        });
+                    });
+                } else {
+                    searchResults.innerHTML = '<div class="search-result-item"><div class="meta">검색 결과 없음</div></div>';
+                    searchResults.style.display = 'block';
+                }
+            } catch (e) {
+                searchResults.style.display = 'none';
+            }
+        }, 300);
+    });
+
+    // Hide results on click outside
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('#childName') && !e.target.closest('#childSearchResults')) {
+            searchResults.style.display = 'none';
+        }
+    });
+
+    // Submit form
+    document.getElementById('parentClaimForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const btn = document.getElementById('parentSubmitBtn');
+        const result = document.getElementById('parentResult');
+        btn.disabled = true;
+        btn.textContent = 'AI 분석 중...';
+
+        const payload = {
+            child_name: document.getElementById('childName').value.trim(),
+            child_birth_year: document.getElementById('childBirthYear').value ? parseInt(document.getElementById('childBirthYear').value) : null,
+            child_team_name: document.getElementById('childTeam').value.trim() || null,
+            child_gender: document.getElementById('childGender').value || null,
+            relationship_type: document.getElementById('relationshipType').value,
+        };
+
+        try {
+            const resp = await fetch('/account/verification/parent-claim', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const data = await resp.json();
+            result.style.display = 'block';
+
+            if (resp.ok) {
+                result.className = 'upload-result success';
+                result.innerHTML = `<strong>${data.message}</strong><br>AI 신뢰도: ${(data.ai_confidence * 100).toFixed(1)}%`;
+                setTimeout(() => location.reload(), 2000);
+            } else {
+                result.className = 'upload-result error';
+                result.textContent = data.detail || '오류가 발생했습니다';
+            }
+        } catch (error) {
+            result.style.display = 'block';
+            result.className = 'upload-result error';
+            result.textContent = '네트워크 오류가 발생했습니다';
+        }
+
+        btn.disabled = false;
+        btn.textContent = '학부모 인증 요청하기';
+    });
+});
+</script>

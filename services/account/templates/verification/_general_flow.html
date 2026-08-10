@@ -1,0 +1,25 @@
+<!-- General Flow: 안내 메시지 -->
+<div class="general-notice">
+    <div class="notice-icon">ℹ️</div>
+    <h2>인증 안내</h2>
+    <p>현재 회원 유형(<strong>{{ member.member_type }}</strong>)에 맞는 인증 방법이 없습니다.</p>
+    <p>프로필에서 회원 유형을 변경한 후 인증을 진행해주세요:</p>
+    <ul>
+        <li><strong>선수</strong> — 이미지 인증 (마스크/도복 사진)</li>
+        <li><strong>학부모</strong> — 자녀 선수 매칭 인증</li>
+        <li><strong>코치</strong> — 선수 데이터 연결</li>
+        <li><strong>감독/관장</strong> — 조직 소유권 인증 (사업자등록증)</li>
+    </ul>
+    <a href="/account/me" class="upload-btn" style="display:inline-block;text-align:center;text-decoration:none;margin-top:1rem;">
+        프로필 수정하기
+    </a>
+</div>
+
+<style>
+.general-notice { text-align: center; padding: 2rem 1rem; }
+.general-notice .notice-icon { font-size: 3rem; margin-bottom: 1rem; }
+.general-notice h2 { font-size: 1.2rem; margin-bottom: 1rem; }
+.general-notice p { color: var(--text-secondary); margin-bottom: 0.5rem; }
+.general-notice ul { text-align: left; max-width: 400px; margin: 1rem auto; color: var(--text-secondary); }
+.general-notice ul li { margin-bottom: 0.5rem; }
+</style>

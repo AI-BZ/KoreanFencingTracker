@@ -123,6 +123,7 @@ class LanguageMiddleware(BaseHTTPMiddleware):
             value=lang,
             max_age=365 * 24 * 60 * 60,  # 1 year
             httponly=False,
+            secure=True,
             samesite='lax'
         )
 

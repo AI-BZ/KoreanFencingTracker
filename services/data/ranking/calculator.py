@@ -10,7 +10,6 @@ FIE + USA Fencing 방식을 참고한 랭킹 시스템
 """
 import json
 import re
-import warnings
 from datetime import datetime, date
 from typing import List, Dict
 from dataclasses import dataclass
@@ -551,37 +550,10 @@ class RankingCalculator:
     Supabase에서 로드한 데이터 딕셔너리를 전달하세요.
     """
 
-    def __init__(self, data_file: str = None):
+    def __init__(self):
         self.results: List[PlayerResult] = []
         self.data = None
         self.org_age_lookup: Dict[str, str] = {}
-
-        if data_file:
-            warnings.warn(
-                "data_file 파라미터는 deprecated입니다. "
-                "load_from_data()를 사용하세요. (CLI 전용으로만 유지)",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            self.load_data(data_file)
-
-    def load_data(self, data_file: str):
-        """[DEPRECATED / CLI 전용] JSON 파일에서 데이터 로드
-
-        ⚠️ 서버 런타임에서는 사용 금지 — load_from_data()를 사용하세요.
-        이 메서드는 CLI(main())에서 오프라인 랭킹 계산 용도로만 유지됩니다.
-        """
-        warnings.warn(
-            "load_data()는 deprecated입니다. "
-            "서버에서는 load_from_data()를 사용하세요.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        with open(data_file, "r", encoding="utf-8") as f:
-            self.data = json.load(f)
-
-        self._extract_results()
-        logger.info(f"[CLI] JSON 데이터 로드 완료: {len(self.results)}개 결과")
 
     def load_from_data(self, data: dict, org_age_lookup: dict = None):
         """Supabase 캐시 데이터에서 로드 (서버 런타임 전용)

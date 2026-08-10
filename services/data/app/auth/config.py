@@ -9,7 +9,12 @@ from pydantic_settings import SettingsConfigDict
 from functools import lru_cache
 
 # === 공유 설정 re-export ===
-from shared_core.auth.config import SharedAuthSettings
+from shared_core.auth.config import SharedAuthSettings, get_shared_auth_settings
+from shared_core.auth.oauth.providers import (
+    OAUTH_PROVIDERS,
+    get_available_providers,
+    get_promotional_providers,
+)
 
 
 class AuthSettings(SharedAuthSettings):

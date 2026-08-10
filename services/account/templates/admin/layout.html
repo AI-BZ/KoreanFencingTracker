@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="{{ lang|default('ko') }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}{{ i18n.admin.nav.home|default('관리자') }}{% endblock %} - FencingMind Admin</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-dark: #1d4ed8;
+            --primary-light: #dbeafe;
+            --danger: #dc2626;
+            --danger-light: #fef2f2;
+            --success: #16a34a;
+            --success-light: #f0fdf4;
+            --warning: #d97706;
+            --warning-light: #fffbeb;
+            --gray-50: #f9fafb;
+            --gray-100: #f3f4f6;
+            --gray-200: #e5e7eb;
+            --gray-300: #d1d5db;
+            --gray-400: #9ca3af;
+            --gray-500: #6b7280;
+            --gray-600: #4b5563;
+            --gray-700: #374151;
+            --gray-800: #1f2937;
+            --gray-900: #111827;
+            --sidebar-w: 220px;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif;
+            background: var(--gray-50);
+            color: var(--gray-800);
+            line-height: 1.5;
+            min-height: 100vh;
+        }
+        a { color: var(--primary); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+
+        /* ===== Top Nav ===== */
+        .admin-topnav {
+            background: var(--gray-900);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            height: 52px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .admin-topnav .brand {
+            font-weight: 700;
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #fff;
+        }
+        .admin-topnav .brand:hover { text-decoration: none; }
+        .admin-topnav .brand span { color: var(--primary-light); font-size: 0.75rem; }
+        .admin-topnav .user-info {
+            font-size: 0.85rem;
+            color: var(--gray-300);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .admin-topnav .user-info a { color: var(--gray-300); font-size: 0.8rem; }
+        .admin-topnav .user-info a:hover { color: #fff; }
+
+        /* ===== Tab Nav ===== */
+        .admin-tabs {
+            background: #fff;
+            border-bottom: 1px solid var(--gray-200);
+            display: flex;
+            align-items: center;
+            gap: 0;
+            padding: 0 24px;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        .admin-tabs a {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 12px 16px;
+            font-size: 0.875rem;
+            color: var(--gray-500);
+            border-bottom: 2px solid transparent;
+            white-space: nowrap;
+            transition: color 0.15s, border-color 0.15s;
+        }
+        .admin-tabs a:hover {
+            color: var(--gray-800);
+            text-decoration: none;
+        }
+        .admin-tabs a.active {
+            color: var(--primary);
+            border-bottom-color: var(--primary);
+            font-weight: 600;
+        }
+        .admin-tabs .badge {
+            background: var(--danger);
+            color: #fff;
+            font-size: 0.7rem;
+            padding: 1px 6px;
+            border-radius: 10px;
+            font-weight: 600;
+            min-width: 18px;
+            text-align: center;
+        }
+
+        /* ===== Main Content ===== */
+        .admin-main {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        /* ===== Utility Classes ===== */
+        .card {
+            background: #fff;
+            border: 1px solid var(--gray-200);
+            border-radius: 8px;
+            padding: 20px;
+        }
+        .card-header {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--gray-800);
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--gray-100);
+        }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+        .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 16px;
+            border: 1px solid var(--gray-300);
+            border-radius: 6px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            background: #fff;
+            color: var(--gray-700);
+            transition: all 0.15s;
+        }
+        .btn:hover { background: var(--gray-50); text-decoration: none; }
+        .btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+        .btn-primary:hover { background: var(--primary-dark); }
+        .btn-danger { background: var(--danger); color: #fff; border-color: var(--danger); }
+        .btn-danger:hover { background: #b91c1c; }
+        .btn-success { background: var(--success); color: #fff; border-color: var(--success); }
+        .btn-success:hover { background: #15803d; }
+        .btn-sm { padding: 4px 10px; font-size: 0.8rem; }
+
+        .status-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .status-active, .status-approved { background: var(--success-light); color: var(--success); }
+        .status-pending { background: var(--warning-light); color: var(--warning); }
+        .status-rejected, .status-suspended { background: var(--danger-light); color: var(--danger); }
+        .status-auto_verified { background: var(--primary-light); color: var(--primary); }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.875rem;
+        }
+        table th {
+            text-align: left;
+            padding: 10px 12px;
+            background: var(--gray-50);
+            color: var(--gray-600);
+            font-weight: 600;
+            font-size: 0.8rem;
+            border-bottom: 1px solid var(--gray-200);
+        }
+        table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--gray-100);
+            color: var(--gray-700);
+        }
+        table tr:hover td { background: var(--gray-50); }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 4px;
+            margin-top: 20px;
+        }
+        .pagination a, .pagination span {
+            padding: 6px 12px;
+            border: 1px solid var(--gray-200);
+            border-radius: 4px;
+            font-size: 0.85rem;
+            color: var(--gray-600);
+        }
+        .pagination a:hover { background: var(--gray-50); text-decoration: none; }
+        .pagination .current { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+        .search-bar {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+        .search-bar input, .search-bar select {
+            padding: 8px 12px;
+            border: 1px solid var(--gray-300);
+            border-radius: 6px;
+            font-size: 0.85rem;
+            background: #fff;
+        }
+        .search-bar input { flex: 1; min-width: 200px; }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--gray-400);
+            font-size: 0.9rem;
+        }
+
+        .kpi-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--gray-900);
+            line-height: 1.2;
+        }
+        .kpi-label {
+            font-size: 0.8rem;
+            color: var(--gray-500);
+            margin-top: 4px;
+        }
+        .kpi-delta {
+            font-size: 0.75rem;
+            margin-top: 4px;
+        }
+        .kpi-delta.up { color: var(--success); }
+        .kpi-delta.down { color: var(--danger); }
+
+        /* Flash messages */
+        .flash {
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin-bottom: 16px;
+            font-size: 0.85rem;
+        }
+        .flash-success { background: var(--success-light); color: var(--success); border: 1px solid #bbf7d0; }
+        .flash-error { background: var(--danger-light); color: var(--danger); border: 1px solid #fecaca; }
+        .flash-warning { background: var(--warning-light); color: var(--warning); border: 1px solid #fde68a; }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .grid-4 { grid-template-columns: repeat(2, 1fr); }
+            .grid-3 { grid-template-columns: 1fr; }
+            .grid-2 { grid-template-columns: 1fr; }
+            .admin-main { padding: 16px; }
+            .admin-tabs { padding: 0 12px; }
+            .admin-tabs a { padding: 10px 12px; font-size: 0.8rem; }
+        }
+        {% block extra_css %}{% endblock %}
+    </style>
+</head>
+<body>
+    <!-- Top Navigation -->
+    <nav class="admin-topnav">
+        <a href="/account/admin/dashboard" class="brand">
+            {{ i18n.admin.nav.brand|default('FencingMind') }} <span>{{ i18n.admin.nav.brand_label|default('Admin') }}</span>
+        </a>
+        <div class="user-info">
+            {% if admin %}
+                {{ admin.full_name or admin.email }}
+                ({{ admin.admin_role or 'admin' }})
+                {% if admin._cf_access_only %}
+                    <span style="font-size:0.7rem; color:var(--primary-light);">CF Access</span>
+                {% else %}
+                    <a href="/auth/logout">{{ i18n.common.nav.logout|default('로그아웃') }}</a>
+                {% endif %}
+            {% endif %}
+        </div>
+    </nav>
+
+    <!-- Tab Navigation -->
+    <nav class="admin-tabs">
+        <a href="/account/admin/dashboard" class="{% if active_tab == 'home' %}active{% endif %}">{{ i18n.admin.nav.home|default('홈') }}</a>
+        <a href="/account/admin/members" class="{% if active_tab == 'members' %}active{% endif %}">{{ i18n.admin.nav.members|default('회원') }}</a>
+        <a href="/account/admin/approvals" class="{% if active_tab == 'approvals' %}active{% endif %}">
+            {{ i18n.admin.nav.approvals|default('승인') }}
+            {% if pending_count is defined and pending_count > 0 %}
+                <span class="badge">{{ pending_count }}</span>
+            {% endif %}
+        </a>
+        <a href="/account/admin/dashboard?tab=account" class="{% if active_tab == 'account' %}active{% endif %}">ACC</a>
+        <a href="/account/admin/dashboard?tab=data" class="{% if active_tab == 'data' %}active{% endif %}">DATA</a>
+        <a href="/account/admin/dashboard?tab=club" class="{% if active_tab == 'club' %}active{% endif %}">CLUB</a>
+        <a href="/account/admin/logs" class="{% if active_tab == 'logs' %}active{% endif %}">{{ i18n.admin.nav.logs|default('로그') }}</a>
+        <a href="/account/admin/settings" class="{% if active_tab == 'settings' %}active{% endif %}">{{ i18n.admin.nav.settings|default('설정') }}</a>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="admin-main">
+        {% if flash_message %}
+            <div class="flash flash-{{ flash_type or 'success' }}">{{ flash_message }}</div>
+        {% endif %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>

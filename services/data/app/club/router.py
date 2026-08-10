@@ -29,8 +29,17 @@ from .models import (
     DashboardAlert,
     CheckInRequest,
     CheckInResponse,
+    AttendanceRecord,
     AttendanceType,
     CheckinMethod,
+    FeeType,
+    FeeStatus,
+    FeeCreate,
+    FeeConfirm,
+    FeeResponse,
+    ClubMemberCreate,
+    ClubMemberUpdate,
+    ClubMemberResponse,
     LessonType,
     LessonStatus,
     ParticipantStatus,
@@ -443,6 +452,428 @@ async def get_member_detail(
         **member_data,
         "player_profile": player_profile
     }
+
+
+@router.post("/members", response_model=ClubMemberResponse)
+async def create_member(
+    member_data: ClubMemberCreate,
+    member: ClubMemberContext = Depends(require_staff)
+):
+    """
+    회원 추가
+
+    - staff 이상 권한 필요
+    - 같은 조직에 동일 이메일 중복 불가
+    """
+    supabase = get_supabase_client()
+    org_id = member.organization_id
+
+    # 이메일 중복 체크
+    existing = supabase.table("members").select("id").eq(
+        "organization_id", org_id
+    ).eq("email", member_data.email).execute()
+
+    if existing.data:
+        raise HTTPException(status_code=400, detail="이미 등록된 이메일입니다")
+
+    insert_data = {
+        "full_name": member_data.full_name,
+        "display_name": member_data.full_name,
+        "email": member_data.email,
+        "phone": member_data.phone,
+        "birth_date": member_data.birth_date.isoformat() if member_data.birth_date else None,
+        "organization_id": org_id,
+        "club_role": member_data.club_role.value,
+        "member_status": "active",
+        "member_type": "player",
+        "enrollment_date": (
+            member_data.enrollment_date.isoformat()
+            if member_data.enrollment_date
+            else date.today().isoformat()
+        ),
+        "notes": member_data.notes,
+    }
+
+    if member_data.player_id is not None:
+        insert_data["player_id"] = member_data.player_id
+
+    response = supabase.table("members").insert(insert_data).execute()
+
+    if not response.data:
+        raise HTTPException(status_code=500, detail="회원 등록 실패")
+
+    m = response.data[0]
+
+    return ClubMemberResponse(
+        id=m["id"],
+        full_name=m["full_name"],
+        email=m["email"],
+        phone=m.get("phone"),
+        birth_date=date.fromisoformat(m["birth_date"]) if m.get("birth_date") else None,
+        club_role=m["club_role"],
+        member_status=m.get("member_status", "active"),
+        enrollment_date=date.fromisoformat(m["enrollment_date"]) if m.get("enrollment_date") else None,
+        notes=m.get("notes"),
+        player_id=m.get("player_id"),
+        created_at=datetime.fromisoformat(m["created_at"]),
+    )
+
+
+@router.put("/members/{member_id}", response_model=ClubMemberResponse)
+async def update_member(
+    member_id: str,
+    update_data: ClubMemberUpdate,
+    member: ClubMemberContext = Depends(require_staff)
+):
+    """
+    회원 정보 수정 (역할/상태 등)
+
+    - staff 이상 권한 필요
+    - 같은 조직의 회원만 수정 가능
+    """
+    supabase = get_supabase_client()
+    org_id = member.organization_id
+
+    # 대상 회원이 같은 조직 소속인지 확인
+    check = supabase.table("members").select("id").eq(
+        "id", member_id
+    ).eq("organization_id", org_id).single().execute()
+
+    if not check.data:
+        raise HTTPException(status_code=404, detail="회원을 찾을 수 없습니다")
+
+    # 업데이트할 필드 추출
+    update_fields = {}
+    if update_data.full_name is not None:
+        update_fields["full_name"] = update_data.full_name
+        update_fields["display_name"] = update_data.full_name
+    if update_data.phone is not None:
+        update_fields["phone"] = update_data.phone
+    if update_data.club_role is not None:
+        update_fields["club_role"] = update_data.club_role.value
+    if update_data.member_status is not None:
+        update_fields["member_status"] = update_data.member_status.value
+    if update_data.notes is not None:
+        update_fields["notes"] = update_data.notes
+    if update_data.player_id is not None:
+        update_fields["player_id"] = update_data.player_id
+
+    if not update_fields:
+        raise HTTPException(status_code=400, detail="수정할 내용이 없습니다")
+
+    response = supabase.table("members").update(update_fields).eq(
+        "id", member_id
+    ).execute()
+
+    if not response.data:
+        raise HTTPException(status_code=500, detail="회원 수정 실패")
+
+    m = response.data[0]
+
+    return ClubMemberResponse(
+        id=m["id"],
+        full_name=m["full_name"],
+        email=m["email"],
+        phone=m.get("phone"),
+        birth_date=date.fromisoformat(m["birth_date"]) if m.get("birth_date") else None,
+        club_role=m["club_role"],
+        member_status=m.get("member_status", "active"),
+        enrollment_date=date.fromisoformat(m["enrollment_date"]) if m.get("enrollment_date") else None,
+        notes=m.get("notes"),
+        player_id=m.get("player_id"),
+        created_at=datetime.fromisoformat(m["created_at"]),
+    )
+
+
+# =============================================
+# 출석 리포트
+# =============================================
+
+@router.get("/attendance/report")
+async def get_attendance_report(
+    from_date: date = Query(..., description="시작일"),
+    to_date: date = Query(..., description="종료일"),
+    member_id_filter: Optional[str] = Query(None, description="특정 회원 필터"),
+    member: ClubMemberContext = Depends(require_staff)
+):
+    """
+    출석 리포트 (기간별)
+
+    - staff 이상 권한 필요
+    - 기간 내 일별 출석 현황, 회원별 출석 통계 반환
+    """
+    supabase = get_supabase_client()
+    org_id = member.organization_id
+
+    query = supabase.table("attendance").select(
+        "id, member_id, check_in_at, check_out_at, attendance_type, "
+        "checkin_method, notes, "
+        "members!attendance_member_id_fkey(full_name)"
+    ).eq("organization_id", org_id).gte(
+        "check_in_at", f"{from_date.isoformat()}T00:00:00"
+    ).lte(
+        "check_in_at", f"{to_date.isoformat()}T23:59:59"
+    )
+
+    if member_id_filter:
+        query = query.eq("member_id", member_id_filter)
+
+    response = query.order("check_in_at", desc=True).execute()
+
+    records = []
+    member_stats: dict = {}
+
+    for r in (response.data or []):
+        member_info = r.get("members", {}) or {}
+        m_name = member_info.get("full_name", "Unknown")
+        m_id = r["member_id"]
+
+        # 출석 시간 계산
+        duration = None
+        if r.get("check_out_at") and r.get("check_in_at"):
+            try:
+                cin = datetime.fromisoformat(r["check_in_at"])
+                cout = datetime.fromisoformat(r["check_out_at"])
+                duration = int((cout - cin).total_seconds() / 60)
+            except (ValueError, TypeError):
+                pass
+
+        records.append(AttendanceRecord(
+            id=r["id"],
+            member_id=m_id,
+            member_name=m_name,
+            check_in_at=datetime.fromisoformat(r["check_in_at"]),
+            check_out_at=(
+                datetime.fromisoformat(r["check_out_at"])
+                if r.get("check_out_at") else None
+            ),
+            attendance_type=AttendanceType(r.get("attendance_type", "regular")),
+            checkin_method=CheckinMethod(r.get("checkin_method", "manual")),
+            duration_minutes=duration,
+        ))
+
+        # 회원별 통계 집계
+        if m_id not in member_stats:
+            member_stats[m_id] = {
+                "member_id": m_id,
+                "member_name": m_name,
+                "total_days": 0,
+                "regular_count": 0,
+                "lesson_count": 0,
+                "dates": set(),
+            }
+        member_stats[m_id]["dates"].add(r["check_in_at"][:10])
+        atype = r.get("attendance_type", "regular")
+        if atype == "regular":
+            member_stats[m_id]["regular_count"] += 1
+        elif atype == "lesson":
+            member_stats[m_id]["lesson_count"] += 1
+
+    # 일수 계산
+    total_period_days = (to_date - from_date).days + 1
+    unique_members = len(member_stats)
+
+    by_member = []
+    for ms in member_stats.values():
+        days = len(ms["dates"])
+        by_member.append({
+            "member_id": ms["member_id"],
+            "member_name": ms["member_name"],
+            "total_days": days,
+            "regular_count": ms["regular_count"],
+            "lesson_count": ms["lesson_count"],
+            "attendance_rate": round(days / total_period_days * 100, 1) if total_period_days > 0 else 0,
+        })
+
+    by_member.sort(key=lambda x: x["total_days"], reverse=True)
+
+    return {
+        "period": f"{from_date.isoformat()} ~ {to_date.isoformat()}",
+        "total_records": len(records),
+        "total_period_days": total_period_days,
+        "unique_members": unique_members,
+        "avg_daily_attendance": round(len(records) / total_period_days, 1) if total_period_days > 0 else 0,
+        "records": [r.model_dump() for r in records],
+        "by_member": by_member,
+    }
+
+
+# =============================================
+# 비용 관리 (Fees)
+# =============================================
+
+@router.get("/fees")
+async def list_fees(
+    status_filter: Optional[str] = Query(None, alias="status", description="상태 필터 (pending/paid/overdue/waived)"),
+    fee_type: Optional[str] = Query(None, description="유형 필터"),
+    member_id_filter: Optional[str] = Query(None, alias="member_id", description="특정 회원 필터"),
+    from_date: Optional[date] = Query(None, description="시작일"),
+    to_date: Optional[date] = Query(None, description="종료일"),
+    limit: int = Query(50, le=200),
+    member: ClubMemberContext = Depends(require_staff)
+):
+    """
+    비용 목록 조회
+
+    - staff 이상 권한 필요
+    - 다양한 필터 옵션 지원
+    """
+    supabase = get_supabase_client()
+    org_id = member.organization_id
+
+    query = supabase.table("fees").select(
+        "id, member_id, fee_type, amount, description, status, "
+        "due_date, paid_at, payment_method, period_start, period_end, "
+        "members!fees_member_id_fkey(full_name)"
+    ).eq("organization_id", org_id)
+
+    if status_filter:
+        query = query.eq("status", status_filter)
+    if fee_type:
+        query = query.eq("fee_type", fee_type)
+    if member_id_filter:
+        query = query.eq("member_id", member_id_filter)
+    if from_date:
+        query = query.gte("due_date", from_date.isoformat())
+    if to_date:
+        query = query.lte("due_date", to_date.isoformat())
+
+    response = query.order("due_date", desc=True).limit(limit).execute()
+
+    fees = []
+    for fee in (response.data or []):
+        member_info = fee.get("members", {}) or {}
+        fees.append(FeeResponse(
+            id=fee["id"],
+            member_id=fee["member_id"],
+            member_name=member_info.get("full_name", "Unknown"),
+            fee_type=FeeType(fee["fee_type"]),
+            amount=fee["amount"],
+            description=fee.get("description"),
+            status=FeeStatus(fee["status"]),
+            due_date=date.fromisoformat(fee["due_date"]) if fee.get("due_date") else None,
+            paid_at=datetime.fromisoformat(fee["paid_at"]) if fee.get("paid_at") else None,
+            payment_method=fee.get("payment_method"),
+            period_start=date.fromisoformat(fee["period_start"]) if fee.get("period_start") else None,
+            period_end=date.fromisoformat(fee["period_end"]) if fee.get("period_end") else None,
+        ))
+
+    # 요약 통계
+    total_amount = sum(f.amount for f in fees)
+    paid_amount = sum(f.amount for f in fees if f.status == FeeStatus.paid)
+    pending_amount = sum(f.amount for f in fees if f.status == FeeStatus.pending)
+    overdue_amount = sum(f.amount for f in fees if f.status == FeeStatus.overdue)
+
+    return {
+        "total": len(fees),
+        "summary": {
+            "total_amount": total_amount,
+            "paid_amount": paid_amount,
+            "pending_amount": pending_amount,
+            "overdue_amount": overdue_amount,
+        },
+        "fees": [f.model_dump() for f in fees],
+    }
+
+
+@router.post("/fees", response_model=FeeResponse)
+async def create_fee(
+    fee_data: FeeCreate,
+    member: ClubMemberContext = Depends(require_staff)
+):
+    """
+    비용 생성
+
+    - staff 이상 권한 필요
+    - 특정 회원에 대한 비용 기록 생성
+    """
+    supabase = get_supabase_client()
+    org_id = member.organization_id
+
+    # 대상 회원이 같은 조직 소속인지 확인
+    member_check = supabase.table("members").select(
+        "id, full_name"
+    ).eq("id", fee_data.member_id).eq(
+        "organization_id", org_id
+    ).single().execute()
+
+    if not member_check.data:
+        raise HTTPException(status_code=404, detail="회원을 찾을 수 없습니다")
+
+    insert_data = {
+        "member_id": fee_data.member_id,
+        "organization_id": org_id,
+        "fee_type": fee_data.fee_type.value,
+        "amount": fee_data.amount,
+        "description": fee_data.description,
+        "status": FeeStatus.pending.value,
+        "due_date": fee_data.due_date.isoformat() if fee_data.due_date else None,
+        "period_start": fee_data.period_start.isoformat() if fee_data.period_start else None,
+        "period_end": fee_data.period_end.isoformat() if fee_data.period_end else None,
+    }
+
+    response = supabase.table("fees").insert(insert_data).execute()
+
+    if not response.data:
+        raise HTTPException(status_code=500, detail="비용 생성 실패")
+
+    fee = response.data[0]
+    target_name = member_check.data["full_name"]
+
+    return FeeResponse(
+        id=fee["id"],
+        member_id=fee["member_id"],
+        member_name=target_name,
+        fee_type=FeeType(fee["fee_type"]),
+        amount=fee["amount"],
+        description=fee.get("description"),
+        status=FeeStatus(fee["status"]),
+        due_date=date.fromisoformat(fee["due_date"]) if fee.get("due_date") else None,
+        paid_at=None,
+        payment_method=None,
+        period_start=date.fromisoformat(fee["period_start"]) if fee.get("period_start") else None,
+        period_end=date.fromisoformat(fee["period_end"]) if fee.get("period_end") else None,
+    )
+
+
+@router.put("/fees/{fee_id}/pay")
+async def pay_fee(
+    fee_id: str,
+    confirm_data: FeeConfirm,
+    member: ClubMemberContext = Depends(require_staff)
+):
+    """
+    비용 납부 확인
+
+    - staff 이상 권한 필요
+    - 결제 방법과 참조번호 기록
+    """
+    supabase = get_supabase_client()
+    org_id = member.organization_id
+
+    # 비용이 해당 조직 소속인지 확인
+    check = supabase.table("fees").select("id, status").eq(
+        "id", fee_id
+    ).eq("organization_id", org_id).single().execute()
+
+    if not check.data:
+        raise HTTPException(status_code=404, detail="비용 정보를 찾을 수 없습니다")
+
+    if check.data["status"] == "paid":
+        raise HTTPException(status_code=400, detail="이미 납부 완료된 비용입니다")
+
+    response = supabase.table("fees").update({
+        "status": FeeStatus.paid.value,
+        "paid_at": datetime.now().isoformat(),
+        "payment_method": confirm_data.payment_method,
+        "payment_reference": confirm_data.payment_reference,
+        "confirmed_by": member.member_id,
+    }).eq("id", fee_id).execute()
+
+    if not response.data:
+        raise HTTPException(status_code=500, detail="납부 확인 실패")
+
+    return {"success": True, "message": "납부가 확인되었습니다", "fee_id": fee_id}
 
 
 # =============================================

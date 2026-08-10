@@ -1,0 +1,1202 @@
+{% extends "base.html" %}
+
+{% block title %}분석 리포트 - FencingMind Analytics{% endblock %}
+
+{% set action_ko = {
+    'attack': '공격 (attack)',
+    'riposte': '리포스트 (riposte)',
+    'counter_attack': '카운터어택 (counter-attack)',
+    'remise': '르미즈 (remise)',
+    'parry': '파리 (parry)',
+    'lunge': '런지 (lunge)',
+    'fleche': '플레쉬 (fleche)',
+} %}
+
+{% set left_name = report.left_fencer.name | default('Left') %}
+{% set right_name = report.right_fencer.name | default('Right') %}
+{% set left_club = report.left_fencer.club | default('') %}
+{% set right_club = report.right_fencer.club | default('') %}
+
+{% block content %}
+<div class="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+    {% if mock_mode or (job_id and job_id.startswith('demo')) %}
+    <div class="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 mb-6">
+        <div class="flex items-start gap-3">
+            <svg class="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <div class="flex-1">
+                <p class="text-sm text-amber-400 mb-2">
+                    <span class="font-semibold">데모 모드</span> — 실제 AI 분석이 아닌 샘플 데이터입니다.
+                </p>
+                <div class="flex flex-wrap gap-2">
+                    <a href="/gallery"
+                       class="inline-flex items-center px-3 py-1 bg-amber-500/15 text-amber-400 rounded-full text-xs font-medium hover:bg-amber-500/25 transition-colors">
+                        {{ t('nav.gallery') if t else '데모 갤러리' }}
+                    </a>
+                    <a href="/upload"
+                       class="inline-flex items-center px-3 py-1 bg-brand-600 text-white rounded-full text-xs font-medium hover:bg-brand-500 transition-colors">
+                        {{ t('report.start_analysis') if t else '실제 분석 시작' }} &rarr;
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- 2-Panel Layout -->
+    <div class="flex flex-col lg:flex-row lg:gap-8">
+
+    <!-- LEFT PANEL: Video + Clip Player -->
+    <div class="w-full lg:w-[440px] lg:flex-shrink-0 sticky top-16 lg:top-20 self-start max-h-[60vh] lg:max-h-[calc(100vh-6rem)] overflow-y-auto space-y-4 mb-4 lg:mb-0 report-left-panel z-10">
+
+    <!-- Video Player (if source video available) -->
+    {% if video_filename %}
+    <div class="glass-card p-2">
+        <video id="main-video" controls class="w-full rounded-lg bg-black" preload="metadata">
+            <source src="/videos/{{ video_filename }}" type="video/mp4">
+        </video>
+    </div>
+    {% elif youtube_url %}
+    <!-- YouTube Source Link (TV broadcast reports) -->
+    <div class="glass-card p-4">
+        <a href="{{ youtube_url }}" target="_blank" rel="noopener noreferrer"
+           class="flex items-center gap-3 text-gray-300 hover:text-white transition-colors group">
+            <div class="flex-shrink-0 w-10 h-10 bg-red-600/20 rounded-xl flex items-center justify-center border border-red-500/20 group-hover:bg-red-600/30 transition-colors">
+                <svg class="w-5 h-5 text-red-400" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                </svg>
+            </div>
+            <div class="flex-1 min-w-0">
+                <p class="text-sm font-medium">{{ t('report.youtube_source') if t else '원본 영상 보기 (YouTube)' }}</p>
+                <p class="text-xs text-gray-500 truncate">{{ youtube_url }}</p>
+            </div>
+            <svg class="w-4 h-4 text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+            </svg>
+        </a>
+    </div>
+    {% endif %}
+
+    <!-- Inline Clip Player (hidden until an event row is clicked) -->
+    <div id="clip-player-container" class="glass-card p-4 hidden">
+        <div class="flex justify-between items-center mb-3">
+            <h3 id="clip-title" class="text-lg font-semibold text-white">오버레이 클립</h3>
+            <button id="clip-close" class="text-gray-400 hover:text-white text-xl">&times;</button>
+        </div>
+        <video id="clip-video" controls autoplay class="w-full rounded-lg">
+            <source id="clip-source" type="video/mp4">
+        </video>
+        <div id="clip-loading" class="py-3 hidden">
+            <div class="flex items-start gap-3">
+                <svg class="w-5 h-5 text-brand-400 animate-spin flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                </svg>
+                <div class="flex-1 min-w-0">
+                    <p id="clip-loading-title" class="text-sm text-gray-200">클립 불러오는 중...</p>
+                    <p id="clip-loading-sub" class="text-xs text-gray-500 mt-0.5"></p>
+                </div>
+            </div>
+            <div id="clip-progress-track" class="mt-3 h-1.5 bg-white/10 rounded-full overflow-hidden hidden">
+                <div id="clip-progress-bar" class="h-full bg-brand-500 rounded-full transition-all duration-1000" style="width: 0%"></div>
+            </div>
+        </div>
+        <p id="clip-error" class="text-center text-red-400 py-4 hidden"></p>
+    </div>
+
+    </div>
+    <!-- END LEFT PANEL -->
+
+    <!-- RIGHT PANEL: Analysis Content -->
+    <div class="flex-1 min-w-0">
+
+    <!-- Match Summary Header -->
+    <div class="glass-card p-8 mb-8">
+        <div class="flex flex-col lg:flex-row items-center justify-between gap-6">
+            <div class="flex items-center gap-8">
+                <!-- Score Display -->
+                <div class="flex items-center gap-4">
+                    <div class="text-center">
+                        <p class="text-sm font-semibold text-blue-400 mb-1">{{ left_name }}</p>
+                        {% if left_club %}
+                        <p class="text-[10px] text-blue-400 mb-1">{{ left_club }}</p>
+                        {% endif %}
+                        <p class="text-5xl font-bold text-blue-400 fm-num">{{ report.summary.final_score.split('-')[0] }}</p>
+                    </div>
+                    <span class="text-3xl font-light text-gray-600">:</span>
+                    <div class="text-center">
+                        <p class="text-sm font-semibold text-red-400 mb-1">{{ right_name }}</p>
+                        {% if right_club %}
+                        <p class="text-[10px] text-red-400 mb-1">{{ right_club }}</p>
+                        {% endif %}
+                        <p class="text-5xl font-bold text-red-400 fm-num">{{ report.summary.final_score.split('-')[1] }}</p>
+                    </div>
+                </div>
+
+                <!-- Match Info -->
+                <div class="flex flex-wrap gap-3">
+                    {% if report.summary.weapon %}
+                    <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium
+                                 {% if report.summary.weapon == 'foil' %}weapon-badge-foil
+                                 {% elif report.summary.weapon == 'epee' %}weapon-badge-epee
+                                 {% elif report.summary.weapon == 'sabre' %}weapon-badge-sabre
+                                 {% endif %}">
+                        {% if report.summary.weapon == 'foil' %}플뢰레
+                        {% elif report.summary.weapon == 'epee' %}에페
+                        {% elif report.summary.weapon == 'sabre' %}사브르
+                        {% endif %}
+                    </span>
+                    {% endif %}
+                    {% if report.summary.bout_type and report.summary.bout_type != 'unknown' %}
+                    <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-white/10 text-gray-300">
+                        {% if report.summary.bout_type == 'pool' %}예선 (Pool)
+                        {% elif report.summary.bout_type == 'de' %}본선 (DE)
+                        {% else %}{{ report.summary.bout_type }}
+                        {% endif %}
+                    </span>
+                    {% endif %}
+                    {% if report.summary.gender is defined and report.summary.gender and report.summary.gender != 'unknown' %}
+                    <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-white/10 text-gray-300">
+                        {% if report.summary.gender == 'men' %}남자 (Men)
+                        {% elif report.summary.gender == 'women' %}여자 (Women)
+                        {% else %}{{ report.summary.gender }}
+                        {% endif %}
+                    </span>
+                    {% endif %}
+                    {% if report.summary.age_group is defined and report.summary.age_group and report.summary.age_group != 'unknown' %}
+                    <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-teal-500/15 text-teal-400">
+                        {{ report.summary.age_group | upper }}
+                    </span>
+                    {% endif %}
+                    {% if report.summary.match_duration %}
+                    <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-white/10 text-gray-300">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        <span class="fm-num">{{ report.summary.match_duration }}</span>
+                    </span>
+                    {% endif %}
+                    <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-white/10 text-gray-300">
+                        터치 {{ report.summary.total_touches }}회
+                    </span>
+                </div>
+            </div>
+
+            <!-- Analysis Metadata -->
+            <div class="text-right text-xs text-gray-500 space-y-1">
+                <p>Phase {{ report.meta.phase }} Analysis</p>
+                <p>Pose: {{ report.meta.pose_model }}</p>
+                <p>Action: {{ report.meta.action_model }}</p>
+                {% if report.meta.source_type %}
+                <p>Source: {{ report.meta.source_type }}</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Key Metrics Bar -->
+        <div class="mt-6 pt-5 border-t border-white/10">
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div class="text-center">
+                    <p class="text-2xl font-bold text-white fm-num">{{ report.summary.total_touches }}</p>
+                    <p class="text-xs text-gray-500 mt-0.5">총 터치</p>
+                </div>
+                <div class="text-center">
+                    <p class="text-2xl font-bold text-white fm-num">{{ report.summary.match_duration }}</p>
+                    <p class="text-xs text-gray-500 mt-0.5">경기 시간</p>
+                </div>
+                <div class="text-center">
+                    <p class="text-2xl font-bold text-white"><span class="fm-num">{{ "%.1f" | format(report.summary.analysis_time_sec) }}</span>초</p>
+                    <p class="text-xs text-gray-500 mt-0.5">AI 분석 시간</p>
+                </div>
+                <div class="text-center">
+                    <p class="text-2xl font-bold text-white fm-num">{{ "{:,}".format(report.summary.total_frames_analyzed) }}</p>
+                    <p class="text-xs text-gray-500 mt-0.5">분석 프레임 수</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Unified Match Timeline (scoring touches + non-scoring exchanges, chronological) -->
+    {% set event_badges = {
+        'failed_attack': {'label': '공격 실패', 'bg': 'bg-red-500/10', 'text': 'text-red-400', 'border': 'border-red-500/20'},
+        'successful_defense': {'label': '방어 성공', 'bg': 'bg-green-500/10', 'text': 'text-green-400', 'border': 'border-green-500/20'},
+        'mutual_retreat': {'label': '상호 후퇴', 'bg': 'bg-white/10', 'text': 'text-gray-400', 'border': 'border-white/10'},
+        'off_target': {'label': '비유효면', 'bg': 'bg-yellow-500/10', 'text': 'text-yellow-400', 'border': 'border-yellow-500/20'},
+        'missed_entirely': {'label': '빗나감', 'bg': 'bg-orange-500/10', 'text': 'text-orange-400', 'border': 'border-orange-500/20'},
+        'unknown_exchange': {'label': '분류 미정', 'bg': 'bg-white/5', 'text': 'text-gray-500', 'border': 'border-white/10'},
+    } %}
+    {% if timeline is defined and timeline %}
+    {% set touch_count = report.touches | length %}
+    {% set ns_count = timeline | length - touch_count %}
+    <div class="glass-card p-6 mb-8">
+        <div class="flex items-baseline justify-between flex-wrap gap-2 mb-1">
+            <h2 class="text-lg font-bold text-white">경기 타임라인</h2>
+            <p class="text-[11px] text-gray-500">
+                시간: <span class="text-gray-300 font-mono">2:53</span> = 경기 잔여 시간
+                &middot; <span class="text-gray-600 font-mono">▶ 3:18</span> = 영상 위치
+            </p>
+        </div>
+        <p class="text-xs text-gray-500 mb-4">항목을 누르면 왼쪽 플레이어에서 AI 포즈 오버레이 클립이 재생됩니다.</p>
+
+        {% if ns_count > 0 %}
+        <!-- Summary stat chips -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+            <div class="bg-white/5 rounded-xl p-3 text-center">
+                <p class="text-xl font-bold text-gray-200 fm-num">{{ timeline | length }}</p>
+                <p class="text-xs text-gray-500">전체 이벤트</p>
+            </div>
+            <div class="bg-emerald-500/10 rounded-xl p-3 text-center">
+                <p class="text-xl font-bold text-emerald-400 fm-num">{{ touch_count }}</p>
+                <p class="text-xs text-emerald-400">득점</p>
+            </div>
+            <div class="bg-white/5 rounded-xl p-3 text-center">
+                <p class="text-xl font-bold text-gray-300 fm-num">{{ ns_count }}</p>
+                <p class="text-xs text-gray-500">비득점 교전</p>
+            </div>
+            {% if report.continuous_summary is defined and report.continuous_summary and report.continuous_summary.type_distribution %}
+            <div class="bg-green-500/10 rounded-xl p-3 text-center">
+                <p class="text-xl font-bold text-green-400 fm-num">{{ report.continuous_summary.type_distribution.get('successful_defense', 0) }}</p>
+                <p class="text-xs text-green-400">방어 성공</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Per-fencer exchange stats -->
+        {% if report.continuous_summary is defined and report.continuous_summary and report.continuous_summary.fencer_stats %}
+        {% set fstats = report.continuous_summary.fencer_stats %}
+        <div class="grid grid-cols-2 gap-3 mb-4">
+            <div class="bg-blue-500/10 border border-blue-500/15 rounded-xl p-3">
+                <p class="text-xs font-semibold text-blue-400 mb-1">{{ left_name }} (왼쪽)</p>
+                <div class="flex gap-4 text-sm">
+                    <span class="text-blue-400">공격 <strong>{{ fstats.left.attacks }}</strong>회</span>
+                    <span class="text-blue-400">방어 <strong>{{ fstats.left.defenses }}</strong>회</span>
+                </div>
+            </div>
+            <div class="bg-red-500/10 border border-red-500/15 rounded-xl p-3">
+                <p class="text-xs font-semibold text-red-400 mb-1">{{ right_name }} (오른쪽)</p>
+                <div class="flex gap-4 text-sm">
+                    <span class="text-red-400">공격 <strong>{{ fstats.right.attacks }}</strong>회</span>
+                    <span class="text-red-400">방어 <strong>{{ fstats.right.defenses }}</strong>회</span>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Filter tabs -->
+        <div class="flex border-b border-white/10 mb-4" id="event-tabs">
+            <button class="event-tab active px-4 py-2 text-sm font-semibold border-b-2 border-brand-500 text-brand-400" data-filter="all">
+                전체 <span class="text-xs font-normal text-gray-500 ml-1">{{ timeline | length }}</span>
+            </button>
+            <button class="event-tab px-4 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-gray-300" data-filter="touch">
+                득점 <span class="text-xs font-normal text-gray-500 ml-1">{{ touch_count }}</span>
+            </button>
+            <button class="event-tab px-4 py-2 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-gray-300" data-filter="exchange">
+                비득점 교전 <span class="text-xs font-normal text-gray-500 ml-1">{{ ns_count }}</span>
+            </button>
+        </div>
+        {% endif %}
+
+        <!-- Event list -->
+        <div class="space-y-2 max-h-[70vh] overflow-y-auto pr-1" id="timeline-list">
+            {% for ev in timeline %}
+            {% if ev.kind == 'touch' %}
+            {% set touch = ev.touch %}
+            {% set mex = ev.exchange %}
+            {% set scorer_name = left_name if touch.scorer == 'left' else right_name %}
+            {% set attacker_name = left_name if touch.attacker_side == 'left' else right_name %}
+            {% set playable = report_id is defined and report_id and touch.frame is defined %}
+            <div class="timeline-row flex items-center gap-3 p-3 rounded-xl border transition-colors {% if playable %}cursor-pointer{% endif %}
+                        {% if touch.scorer == 'left' %}bg-blue-500/10 border-blue-500/15 hover:bg-blue-500/20{% else %}bg-red-500/10 border-red-500/15 hover:bg-red-500/20{% endif %}"
+                 data-kind="touch"
+                 {% if playable %}data-clip-type="touch" data-clip-number="{{ touch.touch_number }}"
+                 data-clip-label="득점 {{ touch.score_after }} — {{ scorer_name }}"{% endif %}>
+                <div class="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0
+                            {% if touch.scorer == 'left' %}bg-blue-500{% else %}bg-red-500{% endif %}">
+                    <span class="text-[11px] font-bold text-white fm-num">{{ touch.score_after }}</span>
+                </div>
+                <div class="flex-shrink-0 w-16 text-right">
+                    <span class="block text-sm font-mono text-gray-200"
+                          title="{% if touch.match_time_estimated %}경기 잔여 시간 — 시계 OCR이 초를 부분 인식해 앞뒤 터치로 보정한 추정값{% else %}경기 잔여 시간{% endif %}">{% if touch.match_time_estimated %}~{% endif %}{{ touch.match_time }}</span>
+                    <span class="block text-[10px] font-mono text-gray-600" title="영상 재생 위치">▶ {{ touch.video_timestamp }}</span>
+                </div>
+                <div class="flex-1 min-w-0 text-sm leading-snug">
+                    {% if touch.attack_outcome is defined and touch.attack_outcome == 'attack_success' %}
+                        <span class="font-semibold {% if touch.scorer == 'left' %}text-blue-400{% else %}text-red-400{% endif %}">{{ scorer_name }}</span>
+                        {% if touch.estimated_badge %}<span class="align-middle px-1.5 py-0.5 rounded border border-gray-600 text-gray-400 text-[10px] font-medium" title="{{ touch.estimated_badge_title }}">{{ touch.estimated_badge }}</span>{% endif %}
+                        <span class="text-gray-300">공격 성공 →</span>
+                        <span class="text-emerald-400 font-semibold">득점</span>
+                    {% elif touch.attack_outcome is defined and touch.attack_outcome == 'attack_failed' %}
+                        <span class="font-semibold {% if touch.attacker_side == 'left' %}text-blue-400{% else %}text-red-400{% endif %}">{{ attacker_name }}</span>
+                        {% if touch.estimated_badge %}<span class="align-middle px-1.5 py-0.5 rounded border border-gray-600 text-gray-400 text-[10px] font-medium" title="{{ touch.estimated_badge_title }}">{{ touch.estimated_badge }}</span>{% endif %}
+                        <span class="text-gray-400">공격 실패 →</span>
+                        <span class="font-semibold {% if touch.scorer == 'left' %}text-blue-400{% else %}text-red-400{% endif %}">{{ scorer_name }}</span>
+                        <span class="text-gray-300">방어 성공 후</span>
+                        <span class="text-emerald-400 font-semibold">득점</span>
+                    {% elif touch.attack_outcome is defined and touch.attack_outcome == 'no_priority_call' %}
+                        <span class="font-semibold {% if touch.scorer == 'left' %}text-blue-400{% else %}text-red-400{% endif %}">{{ scorer_name }}</span>
+                        <span class="text-emerald-400 font-semibold">득점</span>
+                        <span class="text-gray-400 text-xs"
+                              title="유효타 램프가 한쪽만 켜진 터치입니다. 우선권은 양쪽 유효타가 동시에 인정될 때만 가리므로, 심판은 우선권을 판정하지 않고 득점을 인정했습니다.">&middot; {{ touch.attack_outcome_ko if touch.attack_outcome_ko is defined and touch.attack_outcome_ko else '단독 유효타 (우선권 판정 없음)' }}</span>
+                        <span class="block text-[10px] text-gray-600 mt-0.5">{{ touch.outcome_reason if touch.outcome_reason is defined and touch.outcome_reason else '공격을 시작한 선수는 특정하지 못했습니다' }}</span>
+                    {% else %}
+                        <span class="font-semibold {% if touch.scorer == 'left' %}text-blue-400{% else %}text-red-400{% endif %}">{{ scorer_name }}</span>
+                        <span class="text-emerald-400 font-semibold">득점</span>
+                        {% if touch.attack_outcome is defined and touch.attack_outcome == 'unclear' %}
+                        <span class="text-gray-500 text-xs">&middot; 공격/방어 과정 판별 불가</span>
+                        {% if touch.outcome_reason is defined and touch.outcome_reason %}
+                        <span class="block text-[10px] text-gray-600 mt-0.5">{{ touch.outcome_reason }}</span>
+                        {% endif %}
+                        {% endif %}
+                    {% endif %}
+                    {% if touch.lamp_label is defined and touch.lamp_label %}
+                    <span class="block text-[10px] mt-1">
+                        <span class="px-1.5 py-0.5 rounded
+                                     {% if touch.lamp_pattern == 'single_left' %}bg-blue-500/10 text-blue-400
+                                     {% elif touch.lamp_pattern == 'single_right' %}bg-red-500/10 text-red-400
+                                     {% else %}bg-white/10 text-gray-400{% endif %}"
+                              title="스코어링 박스 램프 판독 — 판정 근거가 아니라 참고 정보입니다">{{ touch.lamp_label }}</span>
+                        {% if touch.lamp_conflict_note %}
+                        <span class="text-amber-400 ml-1">{{ touch.lamp_conflict_note }}</span>
+                        {% elif touch.attack_outcome_detail_ko is defined and touch.attack_outcome_detail_ko %}
+                        <span class="text-gray-500 ml-1">{{ touch.attack_outcome_detail_ko }}</span>
+                        {% endif %}
+                        {% if touch.lamp_low_confidence and touch.lamp_confidence_pct is not none %}
+                        <span class="text-amber-400 ml-1" title="램프 판독 신뢰도가 낮아 이 램프 정보는 불확실합니다">판독 신뢰도 <span class="fm-num">{{ touch.lamp_confidence_pct }}%</span></span>
+                        {% endif %}
+                    </span>
+                    {% endif %}
+                </div>
+                <div class="hidden sm:flex items-center gap-1 flex-shrink-0 text-[10px]">
+                    {% if mex is defined and mex %}
+                    {% if mex.footwork_left is defined and mex.footwork_left %}
+                    <span class="px-1.5 py-0.5 bg-blue-500/10 text-blue-400 rounded" title="{{ left_name }} 풋워크">{{ mex.footwork_left }}</span>
+                    {% endif %}
+                    {% if mex.footwork_right is defined and mex.footwork_right %}
+                    <span class="px-1.5 py-0.5 bg-red-500/10 text-red-400 rounded" title="{{ right_name }} 풋워크">{{ mex.footwork_right }}</span>
+                    {% endif %}
+                    {% elif touch.pose_analysis is defined and touch.pose_analysis and touch.pose_analysis.footwork_scorer %}
+                    <span class="px-1.5 py-0.5 bg-white/10 text-gray-400 rounded" title="득점자 풋워크">{{ touch.pose_analysis.footwork_scorer }}</span>
+                    {% endif %}
+                    {% if touch.pose_analysis is defined and touch.pose_analysis and touch.pose_analysis.parry_detected %}
+                    <span class="px-1.5 py-0.5 bg-gold/10 text-gold rounded" title="액션 유형은 추정값입니다 (빠라드 과탐지 알려짐)">🛡빠라드 <span class="opacity-60">추정</span></span>
+                    {% endif %}
+                </div>
+                {% if playable %}
+                <button class="clip-play-btn flex-shrink-0 w-8 h-8 rounded-full bg-white/10 hover:bg-brand-500/30 flex items-center justify-center transition-colors"
+                        data-clip-type="touch" data-clip-number="{{ touch.touch_number }}"
+                        title="클립 재생">
+                    <svg class="w-3.5 h-3.5 text-gray-400" fill="currentColor" viewBox="0 0 20 20"><polygon points="6,4 16,10 6,16"/></svg>
+                </button>
+                {% endif %}
+            </div>
+            {% else %}
+            {% set ex = ev.exchange %}
+            {% set badge = event_badges.get(ex.event_type, {'label': ex.event_type_ko | default(ex.event_type), 'bg': 'bg-white/10', 'text': 'text-gray-400', 'border': 'border-white/10'}) %}
+            {% set playable = report_id is defined and report_id and ex.start_frame is defined %}
+            <div class="timeline-row flex items-center gap-3 p-3 rounded-xl border border-white/5 hover:bg-white/[0.04] transition-colors {% if playable %}cursor-pointer{% endif %}"
+                 data-kind="exchange"
+                 {% if playable %}data-clip-type="exchange" data-clip-number="{{ ex.exchange_number }}"
+                 data-clip-label="교전 — {{ ex.event_type_ko | default(badge.label) }}"{% endif %}>
+                <div class="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center flex-shrink-0">
+                    <span class="text-[9px] font-semibold text-gray-500">교전</span>
+                </div>
+                <div class="flex-shrink-0 w-16 text-right">
+                    <span class="block text-[11px] font-mono text-gray-500" title="영상 재생 위치 (비득점 교전은 경기 시계와 매칭되지 않습니다)">▶ {{ ex.start_time }}</span>
+                    {% if ex.duration_sec is defined %}
+                    <span class="block text-[10px] font-mono text-gray-600">{{ ex.duration_sec }}초</span>
+                    {% endif %}
+                </div>
+                <div class="px-2 py-0.5 rounded-full {{ badge.bg }} {{ badge.border }} border flex-shrink-0">
+                    <span class="text-xs font-semibold {{ badge.text }}">{{ ex.event_type_ko | default(badge.label) }}</span>
+                </div>
+                <div class="flex-1 min-w-0 text-sm text-gray-400 leading-snug">
+                    {% if ex.attacker is defined and ex.attacker == 'left' %}
+                        <span class="text-blue-400 font-medium">{{ left_name }}</span> 공격
+                        <span class="text-gray-500 mx-1">→</span>
+                        <span class="text-red-400">{{ right_name }}</span> 방어
+                        <span class="text-gray-600 text-xs">&middot; 득점 없음</span>
+                    {% elif ex.attacker is defined and ex.attacker == 'right' %}
+                        <span class="text-red-400 font-medium">{{ right_name }}</span> 공격
+                        <span class="text-gray-500 mx-1">→</span>
+                        <span class="text-blue-400">{{ left_name }}</span> 방어
+                        <span class="text-gray-600 text-xs">&middot; 득점 없음</span>
+                    {% elif ex.attacker is defined and ex.attacker == 'both' %}
+                        <span class="text-amber-400 font-medium">양쪽 동시 공격</span>
+                        <span class="text-gray-600 text-xs">&middot; 득점 없음</span>
+                    {% else %}
+                        <span class="text-gray-500">탐색전</span>
+                        <span class="text-gray-600 text-xs">&middot; 확실한 전진 공격 미검출</span>
+                    {% endif %}
+                </div>
+                <div class="hidden sm:flex items-center gap-1 flex-shrink-0 text-[10px]">
+                    {% if ex.footwork_left is defined and ex.footwork_left %}
+                    <span class="px-1.5 py-0.5 bg-blue-500/10 text-blue-400 rounded" title="{{ left_name }} 풋워크">{{ ex.footwork_left }}</span>
+                    {% endif %}
+                    {% if ex.footwork_right is defined and ex.footwork_right %}
+                    <span class="px-1.5 py-0.5 bg-red-500/10 text-red-400 rounded" title="{{ right_name }} 풋워크">{{ ex.footwork_right }}</span>
+                    {% endif %}
+                    {% if ex.parry_left is defined and ex.parry_left %}
+                    <span class="px-1.5 py-0.5 bg-gold/10 text-gold rounded" title="{{ left_name }} 빠라드 — 액션 유형은 추정값입니다">🛡 <span class="opacity-60">추정</span></span>
+                    {% endif %}
+                    {% if ex.parry_right is defined and ex.parry_right %}
+                    <span class="px-1.5 py-0.5 bg-gold/10 text-gold rounded" title="{{ right_name }} 빠라드 — 액션 유형은 추정값입니다">🛡 <span class="opacity-60">추정</span></span>
+                    {% endif %}
+                    {% if ex.min_distance_bh is defined %}
+                    <span class="px-1.5 py-0.5 bg-white/10 text-gray-500 rounded font-mono" title="최소 거리 (Body Height)">{{ "%.1f" | format(ex.min_distance_bh) }}BH</span>
+                    {% endif %}
+                </div>
+                {% if playable %}
+                <button class="clip-play-btn flex-shrink-0 w-8 h-8 rounded-full bg-white/10 hover:bg-brand-500/30 flex items-center justify-center transition-colors"
+                        data-clip-type="exchange" data-clip-number="{{ ex.exchange_number }}"
+                        title="클립 재생">
+                    <svg class="w-3.5 h-3.5 text-gray-400" fill="currentColor" viewBox="0 0 20 20"><polygon points="6,4 16,10 6,16"/></svg>
+                </button>
+                {% endif %}
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+        {% if ns_count > 0 %}
+        <p class="text-[10px] text-gray-600 mt-3">
+            득점으로 이어진 교전은 별도 항목 없이 해당 득점에 합쳐져 있습니다.
+            공격 성공/실패는 풋워크·스코어 기반의 확정 판정, 빠라드 등 세부 액션은 추정입니다.
+        </p>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Score Timeline -->
+    {% if report.touches %}
+    <div class="glass-card p-6 mb-8">
+        <h2 class="text-lg font-bold text-white mb-4">스코어 타임라인</h2>
+        <div class="relative" style="height: 300px;">
+            <canvas id="score-timeline-chart"></canvas>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Touch-by-Touch Detail -->
+    {% if report.touches %}
+    <div class="glass-card overflow-hidden mb-8">
+        <div class="px-6 py-4 border-b border-white/10">
+            <h2 class="text-lg font-bold text-white">터치별 상세</h2>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-white/10">
+                <thead class="bg-white/5">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">#</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">
+                            <span class="group relative cursor-help">잔여 시간
+                                <span class="invisible group-hover:visible absolute z-50 bottom-full left-0 mb-2 w-56 p-3 bg-gray-900 border border-white/10 rounded-xl text-xs text-gray-300 font-normal normal-case shadow-xl">
+                                    스코어보드 시계의 경기 잔여 시간입니다. 아래 회색(▶)은 영상 재생 위치, ~ 표시는 시계 OCR 부분 인식을 앞뒤 터치로 보정한 추정값입니다.
+                                </span>
+                            </span>
+                        </th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">득점자</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">스코어</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">공격/방어 판정</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">
+                            동작
+                            <span class="ml-1 normal-case font-normal text-[10px] text-gray-600" title="액션 유형(파라드/리포스트 등)은 오탐이 있어 확정 판정이 아닙니다">추정</span>
+                        </th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">
+                            <span class="group relative cursor-help">거리 (BH)
+                                <span class="invisible group-hover:visible absolute z-50 bottom-full left-0 mb-2 w-64 p-3 bg-gray-900 border border-white/10 rounded-xl text-xs text-gray-300 font-normal normal-case shadow-xl">
+                                    <strong class="text-white block mb-1">BH = Body Height</strong>
+                                    {{ t('report.bh_tooltip') if t else '어깨~발목 높이를 1.0BH로 기준한 상대 거리. 실제 키를 입력하면 미터 환산이 가능합니다.' }}
+                                    <span class="block mt-1.5 text-[10px] text-gray-500">
+                                        &lt;0.8 = Infighting &middot; 0.8-1.2 = Extension &middot; 1.2-1.5 = Lunge &middot; 1.5-1.8 = Advance-Lunge &middot; &gt;1.8 = Out
+                                    </span>
+                                </span>
+                            </span>
+                        </th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">풋워크</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">신뢰도</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">설명</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5">
+                    {% for touch in report.touches %}
+                    <tr class="{% if touch.scorer == 'left' %}bg-blue-500/10{% elif touch.scorer == 'right' %}bg-red-500/10{% endif %}
+                               hover:bg-white/[0.02] transition-colors">
+                        <td class="px-4 py-3 text-sm font-medium text-white fm-num">{{ touch.touch_number }}</td>
+                        <td class="px-4 py-3">
+                            <span class="block text-sm font-mono text-gray-300">{% if touch.match_time_estimated is defined and touch.match_time_estimated %}~{% endif %}{{ touch.match_time }}</span>
+                            {% if touch.video_timestamp is defined and touch.video_timestamp and touch.video_timestamp != touch.match_time %}
+                            <span class="block text-[10px] font-mono text-gray-600" title="영상 재생 위치">▶ {{ touch.video_timestamp }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-3">
+                            {% if touch.scorer == 'left' %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-500/15 text-blue-400">{{ left_name }}</span>
+                            {% elif touch.scorer == 'right' %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-500/15 text-red-400">{{ right_name }}</span>
+                            {% else %}
+                            <span class="text-sm text-gray-500">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-3 text-sm font-semibold text-white fm-num">{{ touch.score_after }}</td>
+                        <td class="px-4 py-3">
+                            {% set t_scorer_name = left_name if touch.scorer == 'left' else right_name %}
+                            {% set t_attacker_name = left_name if touch.attacker_side == 'left' else right_name %}
+                            {% if touch.attack_outcome == 'attack_success' %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">공격 성공</span>
+                            {% if touch.estimated_badge %}<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium text-gray-400 border border-gray-600" title="{{ touch.estimated_badge_title }}">{{ touch.estimated_badge }}</span>{% endif %}
+                            <span class="block text-[11px] text-gray-400 mt-1">{{ t_scorer_name }} 공격 → 득점</span>
+                            {% elif touch.attack_outcome == 'attack_failed' %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-orange-500/15 text-orange-400 border border-orange-500/20">공격 실패</span>
+                            {% if touch.estimated_badge %}<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium text-gray-400 border border-gray-600" title="{{ touch.estimated_badge_title }}">{{ touch.estimated_badge }}</span>{% endif %}
+                            <span class="block text-[11px] text-gray-400 mt-1">{{ t_attacker_name }} 공격 실패 → {{ t_scorer_name }} 방어 후 득점</span>
+                            {% elif touch.attack_outcome == 'no_priority_call' %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-white/10 text-gray-300 border border-white/15"
+                                  title="유효타 램프가 한쪽만 켜진 터치입니다. 우선권은 양쪽 유효타가 동시에 인정될 때만 가리므로, 심판은 우선권을 판정하지 않고 득점을 인정했습니다.">{{ touch.attack_outcome_ko if touch.attack_outcome_ko is defined and touch.attack_outcome_ko else '단독 유효타 (우선권 판정 없음)' }}</span>
+                            <span class="block text-[10px] text-gray-500 mt-1 max-w-[180px]">{{ touch.outcome_reason if touch.outcome_reason is defined and touch.outcome_reason else '공격을 시작한 선수는 특정하지 못했습니다' }}</span>
+                            {% else %}
+                            <span class="text-xs text-gray-500">판별 불가</span>
+                            {% if touch.outcome_reason is defined and touch.outcome_reason %}
+                            <span class="block text-[10px] text-gray-600 mt-1 max-w-[180px]">{{ touch.outcome_reason }}</span>
+                            {% endif %}
+                            {% endif %}
+                            {% if touch.lamp_label is defined and touch.lamp_label %}
+                            <span class="block text-[10px] mt-1 max-w-[180px]">
+                                <span class="px-1.5 py-0.5 rounded
+                                             {% if touch.lamp_pattern == 'single_left' %}bg-blue-500/10 text-blue-400
+                                             {% elif touch.lamp_pattern == 'single_right' %}bg-red-500/10 text-red-400
+                                             {% else %}bg-white/10 text-gray-400{% endif %}"
+                                      title="스코어링 박스 램프 판독 — 판정 근거가 아니라 참고 정보입니다">{{ touch.lamp_label }}</span>
+                                {% if touch.lamp_conflict_note %}
+                                <span class="text-amber-400">{{ touch.lamp_conflict_note }}</span>
+                                {% elif touch.attack_outcome_detail_ko is defined and touch.attack_outcome_detail_ko %}
+                                <span class="text-gray-500">{{ touch.attack_outcome_detail_ko }}</span>
+                                {% endif %}
+                                {% if touch.lamp_low_confidence and touch.lamp_confidence_pct is not none %}
+                                <span class="text-amber-400" title="램프 판독 신뢰도가 낮아 이 램프 정보는 불확실합니다">판독 신뢰도 <span class="fm-num">{{ touch.lamp_confidence_pct }}%</span></span>
+                                {% endif %}
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-3 text-sm text-gray-300">
+                            {% if touch.action_scorer and touch.action_scorer != 'unknown' %}
+                                {{ action_ko.get(touch.action_scorer, touch.action_scorer) }}
+                                <span class="text-[10px] text-gray-600">(추정)</span>
+                            {% elif touch.action_scorer == 'unknown' %}
+                                <span class="text-gray-500 italic text-xs">OCR 모드</span>
+                            {% else %}
+                                <span class="text-gray-600">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-3 text-sm">
+                            {% if touch.pose_analysis is defined and touch.pose_analysis %}
+                                {% set pa = touch.pose_analysis %}
+                                <span class="font-mono text-xs text-gray-400">{{ "%.2f" | format(pa.distance_bh) }}BH</span>
+                                {% set zone = pa.distance_zone %}
+                                <span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium
+                                    {% if zone == 'infighting' %}bg-red-500/15 text-red-400
+                                    {% elif zone == 'extension' %}bg-blue-500/15 text-blue-400
+                                    {% elif zone == 'lunge' %}bg-green-500/15 text-green-400
+                                    {% elif zone == 'advance_lunge' %}bg-amber-500/15 text-amber-400
+                                    {% elif zone == 'out_of_distance' %}bg-white/10 text-gray-500
+                                    {% else %}bg-white/10 text-gray-500{% endif %}">{{ zone }}</span>
+                                {% if pa.parry_detected %}
+                                <span class="ml-1 text-gold" title="빠라드 감지">🛡</span>
+                                {% endif %}
+                            {% else %}
+                                <span class="text-gray-600">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-3 text-sm text-gray-400">
+                            {% if touch.pose_analysis is defined and touch.pose_analysis and touch.pose_analysis.footwork_scorer %}
+                                {{ touch.pose_analysis.footwork_scorer }}
+                            {% else %}
+                                <span class="text-gray-600">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-3">
+                            {% if touch.action_confidence %}
+                            <div class="flex items-center gap-2">
+                                <div class="w-16 bg-white/15 rounded-full h-1.5">
+                                    <div class="h-1.5 rounded-full
+                                                {% if touch.action_confidence >= 0.7 %}bg-green-500
+                                                {% elif touch.action_confidence >= 0.4 %}bg-yellow-500
+                                                {% else %}bg-red-500{% endif %}"
+                                         style="width: {{ (touch.action_confidence * 100) | int }}%"></div>
+                                </div>
+                                <span class="text-xs text-gray-500">{{ "%.0f" | format(touch.action_confidence * 100) }}%</span>
+                            </div>
+                            {% else %}
+                            <span class="text-sm text-gray-500">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-3 text-sm text-gray-400 max-w-xs truncate">{{ touch.description | default('-') }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Fencer Stats (Two Columns) -->
+    {% if report.left_fencer or report.right_fencer %}
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <!-- Left Fencer -->
+        {% if report.left_fencer %}
+        <div class="glass-card p-6">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-3 h-3 rounded-full bg-blue-500"></div>
+                <h3 class="text-lg font-bold text-white">{{ left_name }}</h3>
+                {% if report.left_fencer.handedness %}
+                <span class="text-xs px-2 py-0.5 rounded-full {% if report.left_fencer.handedness == 'left' %}bg-yellow-100 text-yellow-700{% else %}bg-blue-100 text-blue-700{% endif %}">
+                    {{ '왼손잡이' if report.left_fencer.handedness == 'left' else '오른손잡이' }}
+                </span>
+                {% endif %}
+                {% if left_club %}
+                <span class="text-xs text-gray-500">{{ left_club }}</span>
+                {% endif %}
+            </div>
+            <div class="grid grid-cols-2 gap-4 mb-6">
+                <div class="bg-blue-500/10 rounded-xl p-4 text-center">
+                    <p class="text-2xl font-bold text-blue-400">{{ report.left_fencer.total_touches_scored }}</p>
+                    <p class="text-xs text-blue-400 mt-1">득점</p>
+                </div>
+                <div class="bg-white/5 rounded-xl p-4 text-center">
+                    <p class="text-2xl font-bold text-gray-300">{{ report.left_fencer.total_touches_conceded }}</p>
+                    <p class="text-xs text-gray-500 mt-1">실점</p>
+                </div>
+            </div>
+            {% if report.left_fencer.most_common_action %}
+            <p class="text-sm text-gray-400 mb-4">
+                주요 동작: <span class="font-semibold">{{ action_ko.get(report.left_fencer.most_common_action, report.left_fencer.most_common_action) }}</span>
+                ({{ "%.0f" | format(report.left_fencer.most_common_action_pct) }}%)
+            </p>
+            {% endif %}
+            {% if report.left_fencer.action_distribution %}
+            <div class="relative" style="height: 200px;">
+                <canvas id="left-action-chart"></canvas>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- Right Fencer -->
+        {% if report.right_fencer %}
+        <div class="glass-card p-6">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-3 h-3 rounded-full bg-red-500"></div>
+                <h3 class="text-lg font-bold text-white">{{ right_name }}</h3>
+                {% if report.right_fencer.handedness %}
+                <span class="text-xs px-2 py-0.5 rounded-full {% if report.right_fencer.handedness == 'left' %}bg-yellow-100 text-yellow-700{% else %}bg-blue-100 text-blue-700{% endif %}">
+                    {{ '왼손잡이' if report.right_fencer.handedness == 'left' else '오른손잡이' }}
+                </span>
+                {% endif %}
+                {% if right_club %}
+                <span class="text-xs text-gray-500">{{ right_club }}</span>
+                {% endif %}
+            </div>
+            <div class="grid grid-cols-2 gap-4 mb-6">
+                <div class="bg-red-500/10 rounded-xl p-4 text-center">
+                    <p class="text-2xl font-bold text-red-400">{{ report.right_fencer.total_touches_scored }}</p>
+                    <p class="text-xs text-red-400 mt-1">득점</p>
+                </div>
+                <div class="bg-white/5 rounded-xl p-4 text-center">
+                    <p class="text-2xl font-bold text-gray-300">{{ report.right_fencer.total_touches_conceded }}</p>
+                    <p class="text-xs text-gray-500 mt-1">실점</p>
+                </div>
+            </div>
+            {% if report.right_fencer.most_common_action %}
+            <p class="text-sm text-gray-400 mb-4">
+                주요 동작: <span class="font-semibold">{{ action_ko.get(report.right_fencer.most_common_action, report.right_fencer.most_common_action) }}</span>
+                ({{ "%.0f" | format(report.right_fencer.most_common_action_pct) }}%)
+            </p>
+            {% endif %}
+            {% if report.right_fencer.action_distribution %}
+            <div class="relative" style="height: 200px;">
+                <canvas id="right-action-chart"></canvas>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- BH Explanation + Height Converter -->
+    {% if report.fencer_profile is defined and report.fencer_profile %}
+    <div class="glass-card p-6 mb-8">
+        <div class="flex flex-col lg:flex-row gap-6">
+            <!-- BH Concept Explanation -->
+            <div class="flex-1">
+                <h3 class="text-sm font-bold text-white mb-3 flex items-center gap-2">
+                    <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    {{ t('report.bh_title') if t else '거리 단위: BH (Body Height)' }}
+                </h3>
+                <p class="text-xs text-gray-400 mb-3">
+                    {{ t('report.bh_desc') if t else '선수의 어깨에서 발목까지의 높이를 1.0 BH로 사용하는 상대 거리 단위입니다. 영상에서 실제 키를 알 수 없으므로, 선수의 체형 비율을 기준으로 거리를 측정합니다.' }}
+                </p>
+                <div class="grid grid-cols-5 gap-1.5">
+                    <div class="bg-red-500/10 border border-red-500/20 rounded-lg p-2 text-center">
+                        <p class="text-[10px] font-bold text-red-400">Infighting</p>
+                        <p class="text-[10px] text-gray-500">&lt;0.8 BH</p>
+                    </div>
+                    <div class="bg-blue-500/10 border border-blue-500/20 rounded-lg p-2 text-center">
+                        <p class="text-[10px] font-bold text-blue-400">Extension</p>
+                        <p class="text-[10px] text-gray-500">0.8-1.2</p>
+                    </div>
+                    <div class="bg-green-500/10 border border-green-500/20 rounded-lg p-2 text-center">
+                        <p class="text-[10px] font-bold text-green-400">Lunge</p>
+                        <p class="text-[10px] text-gray-500">1.2-1.5</p>
+                    </div>
+                    <div class="bg-amber-500/10 border border-amber-500/20 rounded-lg p-2 text-center">
+                        <p class="text-[10px] font-bold text-amber-400">Adv-Lunge</p>
+                        <p class="text-[10px] text-gray-500">1.5-1.8</p>
+                    </div>
+                    <div class="bg-white/5 border border-white/10 rounded-lg p-2 text-center">
+                        <p class="text-[10px] font-bold text-gray-400">Out</p>
+                        <p class="text-[10px] text-gray-500">&gt;1.8</p>
+                    </div>
+                </div>
+            </div>
+            <!-- Height → Real Distance Converter -->
+            <div class="lg:w-64 flex-shrink-0">
+                <h3 class="text-sm font-bold text-white mb-3 flex items-center gap-2">
+                    <svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+                    </svg>
+                    {{ t('report.height_converter') if t else 'BH → 실제 거리 환산' }}
+                </h3>
+                <div class="bg-white/5 rounded-xl p-4">
+                    <label class="block text-xs text-gray-400 mb-1.5">{{ t('report.enter_height') if t else '선수 키 입력 (cm)' }}</label>
+                    <div class="flex gap-2 items-center">
+                        <input type="number" id="bh-height-input" value="170" min="140" max="210" step="1"
+                               class="w-20 bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-sm text-white text-center focus:outline-none focus:border-brand-400">
+                        <span class="text-xs text-gray-500">cm</span>
+                    </div>
+                    <div id="bh-conversion-result" class="mt-3 text-xs text-gray-400">
+                        <p>1.0 BH = <span id="bh-meters" class="fm-num text-white">1.19</span> m</p>
+                        <p class="mt-1 text-[10px] text-gray-500">{{ t('report.bh_formula') if t else 'BH = 키 × 0.7 (어깨~발목 비율)' }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Pose Analysis Detail -->
+    {% if report.fencer_profile is defined and report.fencer_profile %}
+    <details class="glass-card p-6 mb-8">
+        <summary class="text-lg font-bold text-white cursor-pointer select-none">{{ t('report.pose_detail') if t else '포즈 분석 상세' }}</summary>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+            {% for side, color, name in [('left', 'blue', left_name), ('right', 'red', right_name)] %}
+            {% if report.fencer_profile[side] is defined %}
+            {% set fp = report.fencer_profile[side] %}
+            <div>
+                <div class="flex items-center gap-2 mb-4">
+                    <div class="w-3 h-3 rounded-full bg-{{ color }}-500"></div>
+                    <h4 class="font-bold text-white">{{ name }}</h4>
+                </div>
+
+                {# Joint Angle Cards #}
+                {% if fp.joint_angle_stats is defined and fp.joint_angle_stats %}
+                <div class="grid grid-cols-2 gap-3 mb-4">
+                    {% if fp.joint_angle_stats.avg_hip_angle is defined and fp.joint_angle_stats.avg_hip_angle is not none %}
+                    <div class="bg-white/5 rounded-xl p-3 text-center">
+                        <p class="text-xl font-bold text-gray-200 fm-num fm-num--semi">{{ "%.0f" | format(fp.joint_angle_stats.avg_hip_angle) }}°</p>
+                        <p class="text-[10px] text-gray-500 mt-0.5">엉덩이 각도</p>
+                    </div>
+                    {% endif %}
+                    {% if fp.joint_angle_stats.avg_front_knee is defined and fp.joint_angle_stats.avg_front_knee is not none %}
+                    <div class="bg-white/5 rounded-xl p-3 text-center">
+                        <p class="text-xl font-bold text-gray-200 fm-num fm-num--semi">{{ "%.0f" | format(fp.joint_angle_stats.avg_front_knee) }}°</p>
+                        <p class="text-[10px] text-gray-500 mt-0.5">앞무릎 각도</p>
+                    </div>
+                    {% endif %}
+                    {% if fp.joint_angle_stats.avg_trunk_lean is defined and fp.joint_angle_stats.avg_trunk_lean is not none %}
+                    <div class="bg-white/5 rounded-xl p-3 text-center">
+                        <p class="text-xl font-bold text-gray-200 fm-num fm-num--semi">{{ "%.0f" | format(fp.joint_angle_stats.avg_trunk_lean) }}°</p>
+                        <p class="text-[10px] text-gray-500 mt-0.5">상체 기울기</p>
+                    </div>
+                    {% endif %}
+                    {% if fp.joint_angle_stats.avg_arm_extension is defined and fp.joint_angle_stats.avg_arm_extension is not none %}
+                    <div class="bg-white/5 rounded-xl p-3 text-center">
+                        <p class="text-xl font-bold text-gray-200 fm-num fm-num--semi">{{ "%.0f" | format(fp.joint_angle_stats.avg_arm_extension * 100) }}%</p>
+                        <p class="text-[10px] text-gray-500 mt-0.5">팔 신전 비율</p>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                {# Distance Zone Distribution Bar #}
+                {% if fp.distance_stats is defined and fp.distance_stats and fp.distance_stats.zone_distribution %}
+                <div class="mb-4">
+                    <p class="text-xs font-semibold text-gray-400 mb-2">거리 구간별 분포</p>
+                    {% set zone_total = fp.distance_stats.zone_distribution.values() | sum %}
+                    {% for zone, count in fp.distance_stats.zone_distribution.items() %}
+                    {% set pct = (count / zone_total * 100) | int if zone_total > 0 else 0 %}
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="text-[10px] text-gray-500 w-24 text-right">{{ zone }}</span>
+                        <div class="flex-1 bg-white/10 rounded-full h-2">
+                            <div class="h-2 rounded-full
+                                {% if zone == 'infighting' %}bg-red-400
+                                {% elif zone == 'extension' %}bg-blue-400
+                                {% elif zone == 'lunge' %}bg-green-400
+                                {% elif zone == 'advance_lunge' %}bg-amber-400
+                                {% else %}bg-gray-400{% endif %}"
+                                 style="width: {{ pct }}%"></div>
+                        </div>
+                        <span class="text-[10px] text-gray-500 w-8">{{ count }}</span>
+                        {% if fp.distance_stats.zone_success_rate is defined and zone in fp.distance_stats.zone_success_rate %}
+                        <span class="text-[10px] text-gray-500 w-10 fm-num fm-num--semi">{{ "%.0f" | format(fp.distance_stats.zone_success_rate[zone] * 100) }}%</span>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                {# Footwork Distribution Bar #}
+                {% if fp.footwork_stats is defined and fp.footwork_stats and fp.footwork_stats.type_distribution %}
+                <div class="mb-4">
+                    <p class="text-xs font-semibold text-gray-400 mb-2">풋워크 분포</p>
+                    {% set fw_total = fp.footwork_stats.type_distribution.values() | sum %}
+                    {% for fw, count in fp.footwork_stats.type_distribution.items() %}
+                    {% set pct = (count / fw_total * 100) | int if fw_total > 0 else 0 %}
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="text-[10px] text-gray-500 w-24 text-right">{{ fw }}</span>
+                        <div class="flex-1 bg-white/10 rounded-full h-2">
+                            <div class="h-2 rounded-full bg-{{ color }}-400" style="width: {{ pct }}%"></div>
+                        </div>
+                        <span class="text-[10px] text-gray-500 w-8">{{ count }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                {# Strengths & Weaknesses #}
+                {% if fp.strengths is defined and fp.strengths %}
+                <div class="mb-3">
+                    <p class="text-xs font-semibold text-green-400 mb-1">강점</p>
+                    {% for s in fp.strengths %}
+                    <div class="flex items-start gap-2 mb-1">
+                        <span class="text-green-500 text-xs mt-0.5">+</span>
+                        <span class="text-xs text-gray-300">{{ s }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% if fp.weaknesses is defined and fp.weaknesses %}
+                <div>
+                    <p class="text-xs font-semibold text-amber-400 mb-1">약점</p>
+                    {% for w in fp.weaknesses %}
+                    <div class="flex items-start gap-2 mb-1">
+                        <span class="text-amber-400 text-xs mt-0.5">-</span>
+                        <span class="text-xs text-gray-300">{{ w }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+    </details>
+    {% endif %}
+
+    <!-- Analysis Warnings -->
+    {% if report.warnings is defined and report.warnings %}
+    {% set has_error = report.warnings | selectattr('severity', 'equalto', 'error') | list | length > 0 %}
+    <div class="{% if has_error %}bg-red-500/10 border border-red-500/20{% else %}bg-amber-500/10 border border-amber-500/20{% endif %} rounded-2xl p-6 mb-8">
+        <h2 class="text-lg font-bold {% if has_error %}text-red-400{% else %}text-amber-400{% endif %} mb-4">
+            {% if has_error %}분석 신뢰 불가{% else %}분석 경고{% endif %}
+        </h2>
+        <div class="space-y-3">
+            {% for w in report.warnings %}
+            {% set is_error = w.severity == 'error' %}
+            <div class="flex items-start gap-3">
+                <svg class="w-5 h-5 {% if is_error %}text-red-400{% else %}text-amber-400{% endif %} flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                </svg>
+                <span class="text-sm {% if is_error %}text-red-400{% else %}text-amber-400{% endif %}">{{ w.message }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Coaching Insights -->
+    {% if report.insights %}
+    <div class="glass-card p-6 mb-8">
+        <h2 class="text-lg font-bold text-white mb-4">코칭 인사이트</h2>
+        <div class="space-y-4">
+            {% for insight in report.insights %}
+            <div class="flex gap-4 p-4 rounded-xl
+                        {% if insight.severity == 'warning' %}bg-yellow-500/10 border border-yellow-500/20
+                        {% elif insight.severity == 'suggestion' %}bg-green-500/10 border border-green-500/20
+                        {% else %}bg-blue-500/10 border border-blue-500/20{% endif %}">
+                <div class="flex-shrink-0 mt-0.5">
+                    {% if insight.severity == 'warning' %}
+                    <svg class="w-5 h-5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                    </svg>
+                    {% elif insight.severity == 'suggestion' %}
+                    <svg class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                    </svg>
+                    {% else %}
+                    <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    {% endif %}
+                </div>
+                <div class="flex-1">
+                    <p class="text-sm font-medium
+                              {% if insight.severity == 'warning' %}text-yellow-400
+                              {% elif insight.severity == 'suggestion' %}text-green-400
+                              {% else %}text-blue-400{% endif %}">
+                        {{ insight.message }}
+                    </p>
+                    <p class="text-xs mt-1
+                              {% if insight.severity == 'warning' %}text-yellow-400
+                              {% elif insight.severity == 'suggestion' %}text-green-400
+                              {% else %}text-blue-400{% endif %}">
+                        {{ insight.evidence }}
+                    </p>
+                    <span class="inline-block mt-2 text-xs px-2 py-0.5 rounded bg-black/30
+                                 {% if insight.severity == 'warning' %}text-yellow-400
+                                 {% elif insight.severity == 'suggestion' %}text-green-400
+                                 {% else %}text-blue-400{% endif %}">
+                        {% if insight.target == 'both' or insight.target == '전체' %}전체
+                        {% else %}{{ insight.target }}{% endif %}
+                        &middot; {{ insight.category }}
+                    </span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Action Buttons -->
+    <div class="flex flex-wrap gap-3 justify-center">
+        <button onclick="window.print()"
+                class="px-5 py-2.5 bg-brand-600 text-white text-sm font-medium rounded-lg
+                       hover:bg-brand-500 transition-colors flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            </svg>
+            PDF 다운로드
+        </button>
+        <button id="share-btn"
+                class="px-5 py-2.5 bg-white/10 text-gray-300 text-sm font-medium rounded-lg border border-white/10
+                       hover:bg-white/15 transition-colors flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/>
+            </svg>
+            공유 링크 생성
+        </button>
+        <a href="/dashboard"
+           class="px-5 py-2.5 bg-white/10 text-gray-300 text-sm font-medium rounded-lg border border-white/10
+                  hover:bg-white/15 transition-colors flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M11 17l-5-5m0 0l5-5m-5 5h12"/>
+            </svg>
+            목록으로
+        </a>
+    </div>
+
+    </div>
+    <!-- END RIGHT PANEL -->
+
+    </div>
+    <!-- END 2-Panel Layout -->
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const REPORT_DATA = {{ report_json | safe }};
+</script>
+<script src="/static/js/report.js"></script>
+<script>
+    // Timeline filter tabs (one list, filtered by event kind)
+    document.querySelectorAll('.event-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.event-tab').forEach(t => {
+                t.classList.remove('active', 'border-brand-500', 'text-brand-400');
+                t.classList.add('border-transparent', 'text-gray-500');
+            });
+            tab.classList.add('active', 'border-brand-500', 'text-brand-400');
+            tab.classList.remove('border-transparent', 'text-gray-500');
+            const filter = tab.dataset.filter;
+            document.querySelectorAll('#timeline-list .timeline-row').forEach(row => {
+                row.classList.toggle('hidden', filter !== 'all' && row.dataset.kind !== filter);
+            });
+        });
+    });
+
+    // ---- Clip playback (inline left panel) ----
+    const CLIP_REPORT_ID = {{ (report_id | tojson) if report_id is defined and report_id else 'null' }};
+    const cachedClips = new Set();
+    let clipTimer = null;
+
+    function markCachedRows() {
+        document.querySelectorAll('[data-clip-type]').forEach(el => {
+            const key = el.dataset.clipType + ':' + el.dataset.clipNumber;
+            if (!cachedClips.has(key)) return;
+            const icon = el.querySelector('.clip-play-btn svg') || (el.classList.contains('clip-play-btn') ? el.querySelector('svg') : null);
+            if (icon) {
+                icon.classList.remove('text-gray-400', 'text-gray-500');
+                icon.classList.add('text-emerald-400');
+            }
+            if (el.classList.contains('clip-play-btn')) el.title = '클립 준비됨 — 즉시 재생';
+        });
+    }
+
+    // Prefetch which clips are already generated → those play instantly.
+    if (CLIP_REPORT_ID) {
+        fetch(`/api/analytics/clips/${CLIP_REPORT_ID}/status`)
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+                if (!data || !data.cached) return;
+                (data.cached.touch || []).forEach(n => cachedClips.add('touch:' + n));
+                (data.cached.exchange || []).forEach(n => cachedClips.add('exchange:' + n));
+                markCachedRows();
+            })
+            .catch(() => {});
+    }
+
+    async function playClip(type, number, label) {
+        if (!CLIP_REPORT_ID) return;
+        const url = `/api/analytics/clips/${CLIP_REPORT_ID}/${type}/${number}`;
+        const key = type + ':' + number;
+        const isCached = cachedClips.has(key);
+
+        const container = document.getElementById('clip-player-container');
+        const video = document.getElementById('clip-video');
+        const source = document.getElementById('clip-source');
+        const loading = document.getElementById('clip-loading');
+        const loadingTitle = document.getElementById('clip-loading-title');
+        const loadingSub = document.getElementById('clip-loading-sub');
+        const progressTrack = document.getElementById('clip-progress-track');
+        const progressBar = document.getElementById('clip-progress-bar');
+        const error = document.getElementById('clip-error');
+        const title = document.getElementById('clip-title');
+
+        title.textContent = label || (type === 'touch' ? `득점 장면 #${number}` : `교전 장면 #${number}`);
+
+        container.classList.remove('hidden');
+        video.classList.add('hidden');
+        loading.classList.remove('hidden');
+        error.classList.add('hidden');
+        if (clipTimer) { clearInterval(clipTimer); clipTimer = null; }
+
+        if (isCached) {
+            loadingTitle.textContent = '클립 불러오는 중...';
+            loadingSub.textContent = '이미 생성된 클립 — 곧 재생됩니다.';
+            progressTrack.classList.add('hidden');
+        } else {
+            loadingTitle.textContent = 'AI 포즈 오버레이 클립을 처음 생성하고 있습니다';
+            progressTrack.classList.remove('hidden');
+            progressBar.style.width = '3%';
+            const startedAt = Date.now();
+            const expectedSec = 60;
+            const tick = () => {
+                const elapsed = Math.round((Date.now() - startedAt) / 1000);
+                loadingSub.textContent = `약 1분 소요 · ${elapsed}초 경과 — 한 번 생성된 클립은 다음부터 즉시 재생됩니다.`;
+                progressBar.style.width = Math.min(95, 3 + (elapsed / expectedSec) * 92) + '%';
+            };
+            tick();
+            clipTimer = setInterval(tick, 1000);
+        }
+
+        container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+        try {
+            const resp = await fetch(url);
+            if (!resp.ok) {
+                let detail;
+                try { detail = (await resp.json()).detail; } catch (_) {}
+                throw new Error(detail || `클립 생성 실패 (${resp.status})`);
+            }
+
+            const blob = await resp.blob();
+            const blobUrl = URL.createObjectURL(blob);
+            source.src = blobUrl;
+            video.load();
+
+            video.oncanplay = () => {
+                if (clipTimer) { clearInterval(clipTimer); clipTimer = null; }
+                loading.classList.add('hidden');
+                video.classList.remove('hidden');
+                video.play();
+                cachedClips.add(key);
+                markCachedRows();
+            };
+
+            video.onerror = () => {
+                if (clipTimer) { clearInterval(clipTimer); clipTimer = null; }
+                loading.classList.add('hidden');
+                error.textContent = '클립을 재생할 수 없습니다.';
+                error.classList.remove('hidden');
+                URL.revokeObjectURL(blobUrl);
+            };
+        } catch (e) {
+            if (clipTimer) { clearInterval(clipTimer); clipTimer = null; }
+            loading.classList.add('hidden');
+            error.textContent = e.message || '클립을 불러올 수 없습니다.';
+            error.classList.remove('hidden');
+        }
+    }
+
+    // Whole timeline row is clickable; the ▶ button works too.
+    document.querySelectorAll('.timeline-row[data-clip-type]').forEach(row => {
+        row.addEventListener('click', () => {
+            playClip(row.dataset.clipType, row.dataset.clipNumber, row.dataset.clipLabel);
+        });
+    });
+    document.querySelectorAll('.clip-play-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const label = btn.closest('[data-clip-label]')?.dataset.clipLabel;
+            playClip(btn.dataset.clipType, btn.dataset.clipNumber, label);
+        });
+    });
+
+    // Close inline clip player
+    document.getElementById('clip-close')?.addEventListener('click', () => {
+        const container = document.getElementById('clip-player-container');
+        const video = document.getElementById('clip-video');
+        container.classList.add('hidden');
+        video.pause();
+        if (clipTimer) { clearInterval(clipTimer); clipTimer = null; }
+    });
+
+    // BH → meters converter
+    const bhInput = document.getElementById('bh-height-input');
+    const bhMeters = document.getElementById('bh-meters');
+    if (bhInput && bhMeters) {
+        function updateBhConversion() {
+            const heightCm = parseFloat(bhInput.value) || 170;
+            const bhM = (heightCm * 0.7) / 100;
+            bhMeters.textContent = bhM.toFixed(2);
+        }
+        bhInput.addEventListener('input', updateBhConversion);
+        updateBhConversion();
+    }
+</script>
+{% endblock %}
