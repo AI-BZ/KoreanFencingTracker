@@ -2,18 +2,335 @@
 
 {# Weapon name translation macro - uses 'lang' from template context #}
 {% macro translate_weapon(weapon) -%}
-{% if lang == 'en' -%}
-{% if weapon == '플러레' or weapon == 'foil' %}Foil{% elif weapon == '에뻬' or weapon == 'epee' %}Epee{% elif weapon == '사브르' or weapon == 'sabre' %}Sabre{% else %}{{ weapon }}{% endif %}
-{%- else -%}
-{{ weapon }}
-{%- endif %}
+{% if weapon == 'foil' %}{{ i18n.common.weapons.foil|default('Foil') }}{% elif weapon == 'epee' %}{{ i18n.common.weapons.epee|default('Epee') }}{% elif weapon == 'sabre' %}{{ i18n.common.weapons.sabre|default('Sabre') }}{% else %}{{ weapon }}{% endif %}
 {%- endmacro %}
 
-{% block title %}{{ player.name }} - Korean Fencing Tracker{% endblock %}
+{# Legend for the .result-place notation (8/57, P3, medals) #}
+{% macro place_legend() -%}
+<span class="fm-help-wrap">
+    <button type="button" class="fm-help" aria-expanded="false"
+            aria-label="{{ _t('순위 표기 설명 보기') }}"
+            onclick="fmToggleHelp(this, event)">?</button>
+    <div class="fm-help-popup" role="tooltip">
+        <strong>{{ _t("순위 표기 안내") }}</strong>
+        <p>{{ _t("8/57 = 최종 순위 / 총 참가 인원") }}</p>
+        <p>{{ _t("P3 = 예선 풀에서 탈락 (풀 내 순위)") }}</p>
+        <p>{{ _t("🥇🥈🥉 = 1·2·3위") }}</p>
+    </div>
+</span>
+{%- endmacro %}
+
+{% block title %}{{ tr_player(player.name) }} - Korean Fencing Tracker{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="/static/css/components.css">
-<link rel="stylesheet" href="/static/css/fencinglab.css">
+<link rel="stylesheet" href="/static/css/fencinglab.css?v=20260603">
+<style>
+    /* Selection-points gate CTA: distinct secondary (blue) treatment so the
+       guest summary doesn't end on two identical red login walls. Solid fill
+       keeps white-on-blue contrast ~8.6:1. Two-class + theme selectors and
+       !important are required to override components.css .gate-cta-btn
+       (red, !important in light theme). */
+    .gate-cta-btn.gate-cta-btn--soft {
+        background: var(--fm-accent-secondary, #1e3a8a) !important;
+        color: #ffffff !important;
+        box-shadow: 0 2px 12px rgba(30, 58, 138, 0.22) !important;
+    }
+    [data-theme="light"] .gate-cta-btn.gate-cta-btn--soft {
+        background: var(--fm-accent-secondary, #1e3a8a) !important;
+        box-shadow: 0 2px 12px rgba(30, 58, 138, 0.16) !important;
+    }
+    .gate-cta-btn.gate-cta-btn--soft:hover,
+    [data-theme="light"] .gate-cta-btn.gate-cta-btn--soft:hover {
+        background: var(--fm-accent-secondary-hover, #172e6e) !important;
+    }
+    /* Rating legend row: the "?" trigger sits on the as-of line but outside
+       .rating-date, whose opacity:0.7 would otherwise wash out the popup. */
+    .rating-date-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 10px;
+    }
+    .rating-date-row .rating-date {
+        margin-top: 0;
+    }
+    /* .player-header is a saturated gradient with white text in both themes,
+       so the token-based .fm-help colors would be too low-contrast here. */
+    .player-header .fm-help,
+    [data-theme="light"] .player-header .fm-help {
+        background: rgba(255, 255, 255, 0.22);
+        color: #ffffff;
+    }
+    .player-header .fm-help:hover,
+    .player-header .fm-help[aria-expanded="true"],
+    [data-theme="light"] .player-header .fm-help:hover,
+    [data-theme="light"] .player-header .fm-help[aria-expanded="true"] {
+        background: rgba(255, 255, 255, 0.4);
+        color: #ffffff;
+    }
+    .player-header .fm-help:focus-visible {
+        outline-color: #ffffff;
+    }
+    /* Section headings that carry a legend trigger */
+    .heading-with-help {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    /* ===== Scoreboard numerals =====
+       The condensed display face is latin-only, so it is applied by selector
+       to elements whose content is guaranteed numeric/latin (rank, points,
+       rating grade, hero stats). Mixed-script elements get a .fm-num span
+       around the figure instead. Condensed reads narrow, so sizes step up
+       slightly; tracking stays positive (never the -0.02em body tracking). */
+    .rank-number,
+    .points-value,
+    .rating-value,
+    .hero-stat-value {
+        font-family: var(--fm-font-display);
+        letter-spacing: 0.01em;
+        font-variant-numeric: lining-nums;
+    }
+    .points-value,
+    .rating-value {
+        font-weight: 700;
+    }
+    /* .result-place also carries the "진행 중" Korean label, which must stay
+       in the body face; the numeric/medal variants take the display face. */
+    .result-place:not(.in-progress) {
+        font-family: var(--fm-font-display);
+        letter-spacing: 0.01em;
+        font-variant-numeric: lining-nums;
+    }
+    /* Size bumps compensate for the condensed face and are desktop-only:
+       components.css and mobile-ux.css shrink these below 768px, and those
+       rules have equal specificity but load earlier, so an unscoped bump here
+       would override the responsive sizes. */
+    @media (min-width: 769px) {
+        .rank-number { font-size: 1.5rem; }
+        .points-value { font-size: 1.3rem; }
+        .rating-value { font-size: 1.7rem; }
+        .hero-stat-value { font-size: 2rem; }
+        .result-place:not(.in-progress) { font-size: 1.25rem; }
+        .result-place.pool-eliminated { font-size: 0.9rem; }
+    }
+    /* "/ 118명": only the count is wrapped in .fm-num, the counter word stays
+       in the body face. */
+    .rank-total .fm-num {
+        font-size: 1.05em;
+    }
+    /* Unit label next to the points figure */
+    .points-label {
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        font-weight: 600;
+    }
+
+    /* ===== Phosphor inline icons =====
+       Matches the markup convention already used on index.html (Phosphor
+       regular, filled paths, viewBox 0 0 256 256). Declared here as a local
+       fallback because no shared .fm-icon rule exists yet; the values are the
+       intended shared ones, so a later global rule is a no-op. */
+    .fm-icon {
+        width: 1em;
+        height: 1em;
+        flex-shrink: 0;
+        fill: currentColor;
+        vertical-align: -0.125em;
+    }
+    /* Toggles: the existing accordion CSS rotates the wrapping span by 180deg
+       on .expanded, which now turns the caret instead of a text glyph. */
+    .disambiguation-toggle,
+    .result-expand-icon,
+    .pool-bouts-toggle-icon {
+        display: inline-flex;
+        align-items: center;
+    }
+    /* components.css hard-codes the toggle to rgba(255,255,255,0.6), which is
+       ~1.1:1 on the light theme's #f5f5f7 accordion — the caret was invisible
+       there. Inheriting the header colour tracks both themes (~6.8:1 light). */
+    .disambiguation-toggle {
+        color: inherit;
+        opacity: 1;
+    }
+    /* The verified tick is white on #4caf50 (2.6:1 measured) — below the 3:1
+       floor for a graphical object. Darkening the disc to #2e7d32 takes it to
+       ~5:1 while keeping the same semantic green. */
+    .verified-badge {
+        background: #2e7d32;
+    }
+
+    /* ===== Radius scale =====
+       Three steps only: sm for controls and in-card surfaces, md for cards and
+       panels, pill for chips. Several of these are 10px/15px/20px in
+       components.css, which reads as an unintentional mix at small sizes. */
+    .player-header,
+    .access-gate,
+    .access-gate .gate-overlay,
+    .ranking-card {
+        border-radius: var(--fm-radius-md, 12px);
+    }
+    .rating-badge,
+    .team-history-section,
+    .disambiguation-section,
+    .access-gate .gate-cta-btn {
+        border-radius: var(--fm-radius-sm, 8px);
+    }
+    .player-header .disambiguation-badge,
+    .team-history-item,
+    .disambiguation-count,
+    .other-profile-link,
+    .result-place {
+        border-radius: var(--fm-radius-pill, 999px);
+    }
+    .tabs {
+        border-radius: var(--fm-radius-md, 12px) var(--fm-radius-md, 12px) 0 0;
+    }
+    /* .tabs sets overflow-x:auto below 768px, which cancels the overflow:hidden
+       clipping that rounds the active tab on desktop. Round the end tabs
+       directly so the strip keeps the container's corners on mobile. */
+    .tabs .tab-btn:first-child {
+        border-top-left-radius: var(--fm-radius-md, 12px);
+    }
+    .tabs .tab-btn:last-child {
+        border-top-right-radius: var(--fm-radius-md, 12px);
+    }
+
+    /* ===== Player header alignment =====
+       The name line mixes a 2rem heading, a small romanised name chip, a 40px
+       round follow button and a badge. Without a flex context they align on
+       the text baseline and the button hangs low. */
+    .player-header .player-name {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px 10px;
+    }
+    .player-header .player-name .name-en,
+    .player-header .player-name .follow-btn,
+    .player-header .disambiguation-badge {
+        margin-left: 0;
+    }
+    /* Equal rhythm between the header's stacked blocks */
+    .player-header .international-links,
+    .player-header .team-history-section,
+    .player-header .disambiguation-section,
+    .player-header .rating-display,
+    .player-header .player-ranking-section {
+        margin-top: 16px;
+    }
+    .player-header .player-team {
+        margin-bottom: 0;
+    }
+    /* Club name (0.85rem) and its date range (0.75rem) share a baseline
+       instead of being centred against each other. */
+    .team-history-item {
+        align-items: baseline;
+    }
+
+    /* ===== Ranking card =====
+       "#30 / 118명" and "148.8 pts" each pair a large figure with a small
+       label; baseline alignment keeps the small text sitting on the figure's
+       baseline rather than floating at its optical centre. */
+    .ranking-card-summary {
+        column-gap: 14px;
+    }
+    .ranking-position,
+    .ranking-points {
+        display: flex;
+        align-items: baseline;
+        gap: 4px;
+    }
+    .ranking-points {
+        justify-content: flex-end;
+    }
+
+    /* ===== Rating badge =====
+       components.css turns .rating-display into a column below 768px, and
+       because the flex default is align-items:stretch each badge grew to the
+       full 326px viewport width. Keep the desktop square proportion, one step
+       smaller, and let the badges sit side by side. */
+    .rating-display {
+        align-items: flex-start;
+    }
+    @media (max-width: 768px) {
+        .player-header .rating-display {
+            flex-direction: row;
+            flex-wrap: wrap;
+            align-items: flex-start;
+            gap: 10px;
+        }
+        .player-header .rating-display .rating-badge {
+            flex: 0 0 auto;
+            width: 96px;
+            min-height: 96px;
+            padding: 12px 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+        }
+        .player-header .rating-display .rating-weapon {
+            line-height: 1.2;
+        }
+    }
+
+    /* ===== Access gate =====
+       .gate-overlay was absolutely positioned inside an overflow:hidden
+       .access-gate sized by .blurred-content, so any overlay taller than the
+       preview (heading + three checklist rows + CTA on a narrow screen) had
+       its top and bottom clipped. Stacking both children in one grid cell
+       makes the taller of the two set the height, so nothing is cut. */
+    .access-gate {
+        display: grid;
+        align-items: stretch;
+    }
+    .access-gate > .blurred-content,
+    .access-gate > .gate-overlay {
+        grid-area: 1 / 1;
+        min-width: 0;
+    }
+    .access-gate > .gate-overlay {
+        position: relative;
+        inset: auto;
+        background: rgba(10, 10, 16, 0.72);
+    }
+    .access-gate .gate-cta-btn {
+        white-space: nowrap;
+    }
+    /* The light-theme gradient starts fully transparent, which left the
+       overlay heading unreadable over the blurred preview once the overlay was
+       no longer taller than its text. Start opaque enough for 4.5:1 at the
+       top edge (#191f28 on ~white). */
+    [data-theme="light"] .access-gate .gate-overlay {
+        background: linear-gradient(to bottom,
+            rgba(255, 255, 255, 0.92) 0%,
+            rgba(255, 255, 255, 0.99) 40%) !important;
+    }
+    [data-theme="light"] .access-gate .gate-feature-list p {
+        color: #191f28;
+    }
+    [data-theme="light"] .access-gate .gate-feature-list ul li {
+        color: #4e5968;
+    }
+    @media (max-width: 480px) {
+        .access-gate .gate-overlay {
+            padding: 1.25rem 1rem;
+            gap: 10px;
+        }
+        /* The overlay's own gap already separates the list from the CTA */
+        .access-gate .gate-feature-list {
+            max-width: 100%;
+            margin-bottom: 0;
+        }
+        .access-gate .gate-cta-btn {
+            padding: 12px 18px;
+            font-size: 0.9rem;
+        }
+    }
+</style>
 {% endblock %}
 
 {% block content %}
@@ -21,16 +338,28 @@
     <nav class="breadcrumb">
         <a href="/">{{ i18n.common.nav.home|default('Home') }}</a> &gt;
         <a href="/search">{{ i18n.common.home.player_search|default('Player Search') }}</a> &gt;
-        <span>{{ player.name }}</span>
+        <span>{{ tr_player(player.name) }}</span>
     </nav>
 
     <!-- Player Header -->
     <div class="player-header">
         <div class="player-name">
+            {% if lang != 'ko' %}
+            {{ tr_player(player.name) }}
+            {% if tr_player(player.name) != player.name %}
+            <span class="name-en">{{ player.name }}</span>
+            {% endif %}
+            {% else %}
             {{ player.name }}
             {% if player.name_en %}
             <span class="name-en">{{ player.name_en }}</span>
             {% endif %}
+            {% endif %}
+            <button class="follow-btn" id="followBtn" data-player="{{ player.name }}"
+                    onclick="toggleFollow('{{ player.name|replace("'", "\\'") }}')"
+                    title="{{ _t('팔로우') }}">
+                <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
+            </button>
             {% if player.has_disambiguation %}
             <span class="disambiguation-badge">{{ i18n.common.player.same_name_notice|default('Multiple athletes with this name') }}</span>
             {% endif %}
@@ -41,20 +370,26 @@
         <div class="international-links">
             {% if player.fie_id %}
             <a href="https://fie.org/athletes/{{ player.fie_id }}" target="_blank" class="external-link fie-link">
-                <span class="link-icon">🌍</span> FIE Profile
-                {% if player.name_en_verified %}<span class="verified-badge">✓</span>{% endif %}
+                <span class="link-icon"><svg class="fm-icon" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M128,24h0A104,104,0,1,0,232,128,104.12,104.12,0,0,0,128,24Zm88,104a87.61,87.61,0,0,1-3.33,24H174.16a157.44,157.44,0,0,0,0-48h38.51A87.61,87.61,0,0,1,216,128ZM102,168H154a115.11,115.11,0,0,1-26,45A115.27,115.27,0,0,1,102,168Zm-3.9-16a140.84,140.84,0,0,1,0-48h59.88a140.84,140.84,0,0,1,0,48ZM40,128a87.61,87.61,0,0,1,3.33-24H81.84a157.44,157.44,0,0,0,0,48H43.33A87.61,87.61,0,0,1,40,128ZM154,88H102a115.11,115.11,0,0,1,26-45A115.27,115.27,0,0,1,154,88Zm52.33,0H170.71a135.28,135.28,0,0,0-22.3-45.6A88.29,88.29,0,0,1,206.37,88ZM107.59,42.4A135.28,135.28,0,0,0,85.29,88H49.63A88.29,88.29,0,0,1,107.59,42.4ZM49.63,168H85.29a135.28,135.28,0,0,0,22.3,45.6A88.29,88.29,0,0,1,49.63,168Zm98.78,45.6a135.28,135.28,0,0,0,22.3-45.6h35.66A88.29,88.29,0,0,1,148.41,213.6Z"/></svg></span> FIE Profile
+                {% if player.name_en_verified %}<span class="verified-badge"><svg class="fm-icon" viewBox="0 0 256 256" role="img" aria-label="{{ _t('영문명 확인됨') }}"><path d="M232.49,80.49l-128,128a12,12,0,0,1-17,0l-56-56a12,12,0,1,1,17-17L96,183,215.51,63.51a12,12,0,0,1,17,17Z"/></svg></span>{% endif %}
             </a>
             {% endif %}
             {% if player.fencingtracker_id %}
             <a href="https://fencingtracker.com/p/{{ player.fencingtracker_id }}" target="_blank" class="external-link ft-link">
-                <span class="link-icon">📊</span> FencingTracker
-                {% if player.name_en_verified %}<span class="verified-badge">✓</span>{% endif %}
+                <span class="link-icon"><svg class="fm-icon" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M224,200h-8V40a8,8,0,0,0-8-8H152a8,8,0,0,0-8,8V80H96a8,8,0,0,0-8,8v40H48a8,8,0,0,0-8,8v64H32a8,8,0,0,0,0,16H224a8,8,0,0,0,0-16ZM160,48h40V200H160ZM104,96h40V200H104ZM56,144H88v56H56Z"/></svg></span> FencingTracker
+                {% if player.name_en_verified %}<span class="verified-badge"><svg class="fm-icon" viewBox="0 0 256 256" role="img" aria-label="{{ _t('영문명 확인됨') }}"><path d="M232.49,80.49l-128,128a12,12,0,0,1-17,0l-56-56a12,12,0,1,1,17-17L96,183,215.51,63.51a12,12,0,0,1,17,17Z"/></svg></span>{% endif %}
             </a>
             {% endif %}
         </div>
         {% endif %}
 
-        <div class="player-team">{{ player.current_team if player.current_team else '-' }}</div>
+        <div class="player-team">
+            {% if player.current_team %}
+            <a href="/search?q={{ player.current_team|urlencode }}" class="team-link">{{ tr_team(player.current_team) }}</a>
+            {% else %}
+            -
+            {% endif %}
+        </div>
 
         <!-- Team History (소속 변경 이력) -->
         {% if player.team_history and player.team_history|length > 1 %}
@@ -63,7 +398,7 @@
             <div class="team-history-list">
                 {% for t in player.team_history %}
                 <span class="team-history-item">
-                    {{ t.team }}
+                    <a href="/search?q={{ t.team|urlencode }}" class="team-link">{{ t.team_en if t.team_en and lang != 'ko' else tr_team(t.team) }}</a>
                     <span class="dates">({{ t.first_seen[:7] }}~{{ t.last_seen[:7] }})</span>
                 </span>
                 {% endfor %}
@@ -76,17 +411,17 @@
         <div class="disambiguation-section accordion">
             <div class="disambiguation-header" onclick="toggleDisambiguation(this)">
                 <div class="disambiguation-title">
-                    <span class="disambiguation-icon">👥</span>
+                    <span class="disambiguation-icon"><svg class="fm-icon" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M117.25,157.92a60,60,0,1,0-66.5,0A95.83,95.83,0,0,0,3.53,195.63a8,8,0,1,0,13.4,8.74,80,80,0,0,1,134.14,0,8,8,0,0,0,13.4-8.74A95.83,95.83,0,0,0,117.25,157.92ZM40,108a44,44,0,1,1,44,44A44.05,44.05,0,0,1,40,108Zm210.14,98.7a8,8,0,0,1-11.07-2.33A79.83,79.83,0,0,0,172,168a8,8,0,0,1,0-16,44,44,0,1,0-16.34-84.87,8,8,0,1,1-5.94-14.85,60,60,0,0,1,55.53,105.64,95.83,95.83,0,0,1,47.22,37.71A8,8,0,0,1,250.14,206.7Z"/></svg></span>
                     {{ i18n.common.player.other_profiles|default('Other Athletes with Same Name') }}
                     <span class="disambiguation-count">({{ player.other_profiles|length }})</span>
                 </div>
-                <span class="disambiguation-toggle">▼</span>
+                <span class="disambiguation-toggle"><svg class="fm-icon" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg></span>
             </div>
             <div class="disambiguation-content">
                 <div class="other-profiles-list">
                     {% for p in player.other_profiles %}
                     <a href="/player/{{ player.name }}?id={{ p.player_id }}" class="other-profile-link">
-                        {{ p.current_team or p.teams|join(', ') }}
+                        {% if p.current_team %}{{ tr_team(p.current_team) }}{% elif p.teams %}{% for t in p.teams %}{{ tr_team(t) }}{% if not loop.last %}, {% endif %}{% endfor %}{% else %}-{% endif %}
                         <span class="profile-count">({{ p.competition_count }} {{ i18n.common.player.entries|default('entries') }})</span>
                     </a>
                     {% endfor %}
@@ -109,7 +444,99 @@
             </div>
             {% endfor %}
         </div>
-        <div class="rating-date">as of {{ today }}</div>
+        <div class="rating-date-row">
+            <span class="rating-date" id="ratingAsOf" data-asof-date="{{ today }}">{{ today }}</span>
+            <span class="fm-help-wrap">
+                <button type="button" class="fm-help" aria-expanded="false"
+                        aria-label="{{ _t('레이팅 설명 보기') }}"
+                        onclick="fmToggleHelp(this, event)">?</button>
+                <div class="fm-help-popup" role="tooltip">
+                    <strong>{{ _t("레이팅이란?") }}</strong>
+                    <p>{{ _t("최근 시즌 최고 성적 등급과 시즌 연도를 조합한 표기입니다") }}</p>
+                    <p>{{ _t("A: 우승 · B: 준우승 · C: 4강 · D: 8강 · E: 16강 · U: 해당 없음") }}</p>
+                    <p>{{ _t("예: A26 = 2026 시즌 우승") }}</p>
+                </div>
+            </span>
+        </div>
+        <script>
+        (function() {
+            var el = document.getElementById('ratingAsOf');
+            if (!el) return;
+            var raw = el.getAttribute('data-asof-date');
+            var d = new Date(raw);
+            if (isNaN(d.getTime())) { el.textContent = 'as of ' + raw; return; }
+            var lang = '{{ lang|default("ko") }}';
+            var localeMap = { ko: 'ko-KR', en: 'en-US', ja: 'ja-JP', fr: 'fr-FR', it: 'it-IT', zh: 'zh-CN', tr: 'tr-TR' };
+            var locale = localeMap[lang] || 'ko-KR';
+            var ds = new Intl.DateTimeFormat(locale, { year: 'numeric', month: 'long', day: 'numeric' }).format(d);
+            var out;
+            if (lang === 'ko') out = ds + ' 기준';
+            else if (lang === 'ja') out = ds + ' 現在';
+            else if (lang === 'zh') out = '截至 ' + ds;
+            else out = 'as of ' + ds;
+            el.textContent = out;
+        })();
+        </script>
+
+        <!-- FencingLab Ranking Info -->
+        {% if player.rankings_info %}
+        <div class="player-ranking-section">
+            <div class="ranking-cards">
+                {% for rk in player.rankings_info %}
+                <div class="ranking-card" {% if player.rankings_info|length > 1 %}onclick="this.classList.toggle('expanded')"{% else %}class="ranking-card expanded"{% endif %}>
+                    <div class="ranking-card-summary">
+                        <div class="ranking-position">
+                            <span class="rank-number">#{{ rk.rank }}</span>
+                            <span class="rank-total">/ <span class="fm-num fm-num--semi">{{ rk.total }}</span>{{ _t("명") }}</span>
+                        </div>
+                        <div class="ranking-category">
+                            <span class="ranking-year">{{ rk.year }}</span>
+                            {% if rk.is_nt %}{{ _t("국가대표 선발전") }} {% endif %}
+                            {% if rk.gender == '여' %}{{ _t("여자") }}{% elif rk.gender == '남' %}{{ _t("남자") }}{% endif %}
+                            {{ translate_weapon(rk.weapon) }}
+                            {% set _age_labels = {'E1': _t('초1-2'), 'E2': _t('초3-4'), 'E3': _t('초5-6'), 'MS': _t('중등'), 'HS': _t('고등'), 'UNI': _t('대학'), 'SR': _t('일반')} %}
+                            {% set _cat_labels = {'Pro': _t('전문'), 'Club': _t('동호인')} %}
+                            {% if not rk.is_nt %}{{ _age_labels.get(rk.age_group, rk.age_group_name) }}{% endif %}
+                            {% if rk.category_name and not rk.is_nt %}({{ _cat_labels.get(rk.category_name, rk.category_name) }}){% endif %}
+                        </div>
+                        <div class="ranking-points">
+                            <span class="points-value">{{ "%.1f"|format(rk.points) }}</span>
+                            <span class="points-label">pts</span>
+                        </div>
+                    </div>
+                    <div class="ranking-card-details">
+                        <div class="ranking-detail-header">
+                            <span>{{ _t("포인트 산출 내역") }} (Best {{ rk.best_results|length }})</span>
+                            <span class="ranking-detail-help" onclick="event.stopPropagation(); this.nextElementSibling.classList.toggle('show')">?</span>
+                            <div class="ranking-help-popup" onclick="event.stopPropagation()">
+                                <div class="ranking-help-content">
+                                    <strong>{{ _t("랭킹 포인트 산출 기준") }}</strong>
+                                    <p>{{ _t("기본 포인트") }}: {{ _t("참가자 수로 결정") }}<br>
+                                    128{{ _t("명") }}+=1200, 64+=1000, 32+=800, 16+=500</p>
+                                    <p>{{ _t("최종 포인트") }} = {{ _t("기본") }} × {{ _t("순위비율") }} × {{ _t("연령가중치") }}</p>
+                                    <p>{{ _t("상위 대회 가중합산") }}: ×1.0, ×0.7, ×0.5, ×0.3</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="ranking-breakdown-list">
+                            {% set weights = [1.0, 0.7, 0.5, 0.3] %}
+                            {% for br in rk.best_results %}
+                            <div class="ranking-breakdown-item">
+                                <div class="breakdown-rank">{{ br.rank }}{{ _t("위") }}{% if br.sub_rank_age %} <span class="sub-rank-tag">({{ _t(br.sub_rank_age) }} {{ br.total_in_group }}{{ _t("명") }})</span>{% endif %}</div>
+                                <div class="breakdown-comp">{{ tr_comp(br.competition) }}</div>
+                                <div class="breakdown-pts">
+                                    {{ br.points }}pts
+                                    <span class="breakdown-weight">×{{ weights[loop.index0] if loop.index0 < weights|length else 0.1 }}</span>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
     </div>
 
     <!-- Tab Navigation -->
@@ -130,44 +557,101 @@
 
     <!-- Summary Tab -->
     <div id="tab-summary" class="tab-content active">
-        <!-- Rating History -->
-        <div class="stat-card-large">
-            <h4>{{ i18n.common.player.rating_history|default('Rating History') }}</h4>
-            <table class="podium-table">
-                <thead>
-                    <tr>
-                        <th>Rating</th>
-                        <th>Weapon</th>
-                        <th>Date</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for history in player.rating_history %}
-                    <tr>
-                        <td><strong>{{ history.rating }}</strong></td>
-                        <td>{{ translate_weapon(history.weapon) }}</td>
-                        <td>{{ history.date }}</td>
-                    </tr>
-                    {% else %}
-                    <tr>
-                        <td colspan="3" style="text-align: center; color: var(--text-light);">{{ i18n.common.player.no_rating_history|default('No rating history') }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+        {% if access_level == "guest" %}
+        <!-- Guest: 최근 3건 실제 데이터 노출 + 나머지 blur -->
+        <div class="guest-preview-section">
+            {% set in_progress_records = player.records|selectattr('is_in_progress', 'defined')|selectattr('is_in_progress')|list %}
+            {% if in_progress_records|length > 0 %}
+            <div class="info-notice">
+                {{ _t("진행 중인 대회") }} {{ in_progress_records|length }}{{ _t("건의 결과가 포함되어 있습니다. 대회 종료 후 최종 데이터가 업데이트됩니다.") }}
+            </div>
+            {% endif %}
+            <h4 class="heading-with-help">{{ _t("최근 대회 성적") }} {{ place_legend() }}</h4>
+            {% for record in player.records[:3] %}
+            <div class="result-card" style="pointer-events: auto;">
+                <div class="result-card-header">
+                    <div class="result-info">
+                        <div class="result-date">{{ record.competition_date }}</div>
+                        <div class="result-tournament">{{ tr_comp(record.competition_name) }}</div>
+                        <div class="result-event">{{ tr_event(record.event_name) }}</div>
+                    </div>
+                    <div class="result-stats">
+                        <div class="result-place {% if record.is_in_progress %}in-progress{% elif record.eliminated_in_pool %}pool-eliminated{% elif record.rank == 1 %}gold{% elif record.rank == 2 %}silver{% elif record.rank == 3 %}bronze{% endif %}">
+                            {% if record.is_in_progress %}{{ _t("진행 중") }}{% elif record.eliminated_in_pool %}P{{ record.pool_rank or '' }}{% elif record.rank == 1 %}🥇{% elif record.rank == 2 %}🥈{% elif record.rank == 3 %}🥉{% else %}{{ record.rank or '-' }}{% endif %}
+                            {% if record.total_participants and not record.is_in_progress %}/{{ record.total_participants }}{% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <p class="no-data-message">{{ i18n.common.player.no_records|default('No match records') }}</p>
+            {% endfor %}
+        </div>
+        <div class="access-gate">
+            <div class="blurred-content">
+                <div class="hero-stats-bar">
+                    <div class="hero-stat-card"><div class="hero-stat-value">{{ player.total_records }}</div><div class="hero-stat-label">Competitions</div></div>
+                    <div class="hero-stat-card"><div class="hero-stat-value">63.2%</div><div class="hero-stat-label">Win Rate</div></div>
+                    <div class="hero-stat-card">
+                        <div class="hero-stat-value hero-medals-inline">
+                            <span class="hero-medal gold">3</span>
+                            <span class="hero-medal silver">2</span>
+                            <span class="hero-medal bronze">5</span>
+                        </div>
+                        <div class="hero-stat-label">Medals</div>
+                    </div>
+                    <div class="hero-stat-card"><div class="hero-stat-value">1248</div><div class="hero-stat-label">Rating</div></div>
+                </div>
+            </div>
+            <div class="gate-overlay">
+                <p class="gate-preview-text">{{ _t("로그인하면 전체 통계, 메달 분석, 무기별 성적을 확인할 수 있습니다.") }}</p>
+                <a href="{{ login_url }}" class="gate-cta-btn" onclick="localStorage.setItem('fencingmind_login_redirect', window.location.href)">{{ _t("로그인하고 전체 통계 보기") }}</a>
+            </div>
+        </div>
+        {% else %}
+        <!-- In-progress competition notice -->
+        {% set in_progress_records = player.records|selectattr('is_in_progress', 'defined')|selectattr('is_in_progress')|list %}
+        {% if in_progress_records|length > 0 %}
+        <div class="info-notice">
+            {{ _t("진행 중인 대회") }} {{ in_progress_records|length }}{{ _t("건의 결과가 포함되어 있습니다. 대회 종료 후 최종 데이터가 업데이트됩니다.") }}
+        </div>
+        {% endif %}
+        <!-- Section 1: Hero Stats Bar -->
+        <div class="hero-stats-bar">
+            <div class="hero-stat-card">
+                <div class="hero-stat-value">{{ player.total_records }}</div>
+                <div class="hero-stat-label">Competitions</div>
+            </div>
+            <div class="hero-stat-card">
+                <div class="hero-stat-value">{{ player.bout_stats.win_rate }}%</div>
+                <div class="hero-stat-label">Win Rate</div>
+            </div>
+            <div class="hero-stat-card">
+                <div class="hero-stat-value hero-medals-inline">
+                    <span class="hero-medal gold">{{ player.stats.medals.gold }}</span>
+                    <span class="hero-medal silver">{{ player.stats.medals.silver }}</span>
+                    <span class="hero-medal bronze">{{ player.stats.medals.bronze }}</span>
+                </div>
+                <div class="hero-stat-label">Medals</div>
+            </div>
+            <div class="hero-stat-card">
+                {% set first_rating = player.ratings.values()|list %}
+                <div class="hero-stat-value">{{ first_rating[0].current if first_rating else 'U' }}</div>
+                <div class="hero-stat-label">Rating</div>
+            </div>
         </div>
 
-        <!-- Podium Finishes -->
-        <div class="stat-card-large">
-            <h4>{{ i18n.common.player.podium_finishes|default('Podium Finishes') }}</h4>
+        <!-- Section 2: Medal Dashboard (클릭 가능) -->
+        <div class="stat-card-large medal-dashboard">
+            <h4>Medal Dashboard</h4>
             <table class="podium-table">
                 <thead>
                     <tr>
-                        <th class="season-cell">{{ i18n.common.filters.season|default('Season') }}</th>
+                        <th class="season-cell">Season</th>
                         <th>🥇</th>
                         <th>🥈</th>
                         <th>🥉</th>
-                        <th>{{ i18n.common.player.top8|default('Top 8') }}</th>
+                        <th>Top 8</th>
                         <th>Total</th>
                     </tr>
                 </thead>
@@ -175,15 +659,36 @@
                     {% for season, stats in player.podium_by_season.items() %}
                     <tr>
                         <td class="season-cell">{{ season }}</td>
-                        <td>{{ stats.gold }}</td>
-                        <td>{{ stats.silver }}</td>
-                        <td>{{ stats.bronze }}</td>
-                        <td>{{ stats.top8 }}</td>
+                        <td>
+                            {% if stats.gold > 0 %}
+                            <span class="medal-count clickable" onclick="toggleMedalDetail('{{ season }}', 1)">{{ stats.gold }}</span>
+                            {% else %}0{% endif %}
+                        </td>
+                        <td>
+                            {% if stats.silver > 0 %}
+                            <span class="medal-count clickable" onclick="toggleMedalDetail('{{ season }}', 2)">{{ stats.silver }}</span>
+                            {% else %}0{% endif %}
+                        </td>
+                        <td>
+                            {% if stats.bronze > 0 %}
+                            <span class="medal-count clickable" onclick="toggleMedalDetail('{{ season }}', 3)">{{ stats.bronze }}</span>
+                            {% else %}0{% endif %}
+                        </td>
+                        <td>
+                            {% if stats.top8 > 0 %}
+                            <span class="medal-count clickable" onclick="toggleMedalDetail('{{ season }}', 8)">{{ stats.top8 }}</span>
+                            {% else %}0{% endif %}
+                        </td>
                         <td>{{ stats.total }}</td>
+                    </tr>
+                    <tr class="medal-detail-row" id="medal-detail-{{ season }}" style="display: none;">
+                        <td colspan="6">
+                            <div class="medal-detail-panel"></div>
+                        </td>
                     </tr>
                     {% endfor %}
                     <tr class="total-row">
-                        <td class="season-cell">{{ i18n.common.player.all_time|default('All Time') }}</td>
+                        <td class="season-cell">All Time</td>
                         <td>{{ player.stats.medals.gold }}</td>
                         <td>{{ player.stats.medals.silver }}</td>
                         <td>{{ player.stats.medals.bronze }}</td>
@@ -194,34 +699,311 @@
             </table>
         </div>
 
-        <!-- Upcoming/Recent Registrations -->
-        {% if player.upcoming_events %}
-        <div class="stat-card-large">
-            <h4>{{ i18n.common.player.upcoming_events|default('Upcoming Events') }}</h4>
-            <table class="podium-table">
-                <thead>
-                    <tr>
-                        <th>Date</th>
-                        <th>Tournament</th>
-                        <th>Event Strength</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for event in player.upcoming_events %}
-                    <tr>
-                        <td>{{ event.date }}</td>
-                        <td>{{ event.tournament }}</td>
-                        <td>{{ event.strength }}</td>
-                    </tr>
+        <!-- Section 3: Performance Overview (최근 단계별 승률 바) -->
+        <div class="stat-card-large performance-overview">
+            <h4>Performance by Stage <span class="period-badge">{{ player.recent_period_label }} ({{ player.recent_event_count }} events)</span></h4>
+            <div class="performance-bars">
+                {% set rs = player.recent_round_stats %}
+                {% set stages = [
+                    ("Pool", rs.pool),
+                    ("~32", rs.t32_and_below),
+                    ("16", rs.t16),
+                    ("QF", rs.t8),
+                    ("SF", rs.semifinal),
+                    ("Final", rs.final)
+                ] %}
+                {% for label, st in stages %}
+                {% set total = st.wins + st.losses %}
+                {% if total > 0 %}
+                <div class="perf-bar-row">
+                    <div class="perf-bar-label">{{ label }}</div>
+                    <div class="perf-bar-track">
+                        <div class="perf-bar-fill {% if st.rate >= 70 %}high{% elif st.rate >= 50 %}mid{% else %}low{% endif %}" style="width: {{ st.rate }}%"></div>
+                    </div>
+                    <div class="perf-bar-stat">{{ st.rate }}% <span class="perf-bar-detail">({{ st.wins }}W/{{ st.losses }}L)</span></div>
+                </div>
+                {% endif %}
+                {% endfor %}
+                {% if player.recent_event_count == 0 %}
+                <p class="no-data-message">No recent data available</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Section 4: Rank Progression Chart (deferred until Chart.js loads) -->
+        {% if player.chart_data and player.chart_data|length >= 2 %}
+        <div class="stat-card-large rank-chart-section" id="rankProgressionSection" style="display:none;">
+            <h4>Rank Progression</h4>
+            <div style="position: relative; height: 200px; width: 100%;">
+                <canvas id="rankProgressionChart"></canvas>
+            </div>
+        </div>
+        <script>
+        window._rankChartData = {{ player.chart_data | tojson }};
+        window._initRankChart = function() {
+            var chartData = window._rankChartData;
+            if (!chartData || chartData.length < 2 || typeof Chart === 'undefined') return;
+            var section = document.getElementById('rankProgressionSection');
+            var ctx = document.getElementById('rankProgressionChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: chartData.map(function(d) { return d.label; }),
+                    datasets: [{
+                        label: 'Rank',
+                        data: chartData.map(function(d) { return d.rank; }),
+                        borderColor: '#1a5f7a',
+                        backgroundColor: 'rgba(26, 95, 122, 0.1)',
+                        fill: true,
+                        tension: 0.3,
+                        pointBackgroundColor: chartData.map(function(d) {
+                            if (d.rank === 1) return '#FFD700';
+                            if (d.rank === 2) return '#C0C0C0';
+                            if (d.rank === 3) return '#CD7F32';
+                            return '#1a5f7a';
+                        }),
+                        pointRadius: 5,
+                        pointHoverRadius: 7
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                title: function(items) {
+                                    var d = chartData[items[0].dataIndex];
+                                    return d.label;
+                                },
+                                label: function(item) {
+                                    var d = chartData[item.dataIndex];
+                                    return 'Rank: ' + d.rank + '/' + d.total;
+                                },
+                                afterLabel: function(item) {
+                                    var d = chartData[item.dataIndex];
+                                    var lines = [];
+                                    if (d.event) lines.push(d.event);
+                                    if (d.date) lines.push(d.date);
+                                    return lines;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            reverse: true,
+                            beginAtZero: false,
+                            min: 1,
+                            title: { display: true, text: 'Rank' },
+                            ticks: { stepSize: 1, precision: 0 }
+                        },
+                        x: {
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 30,
+                                font: { size: 10 }
+                            }
+                        }
+                    }
+                }
+            });
+            if (section) section.style.display = '';
+        };
+        // Defer until Chart.js is loaded
+        if (typeof Chart !== 'undefined') {
+            window._initRankChart();
+        } else {
+            document.addEventListener('DOMContentLoaded', function() {
+                setTimeout(window._initRankChart, 100);
+            });
+        }
+        </script>
+        {% endif %}
+
+        <!-- Section 5: Quick Insights -->
+        <div class="stat-card-large quick-insights">
+            <h4>Quick Insights</h4>
+            <div class="insights-grid">
+                {% if player.tough_opponents|length > 0 %}
+                <div class="insight-item">
+                    <div class="insight-title">Must Beat</div>
+                    {% for opponent in player.tough_opponents %}
+                    <div class="rival-row">
+                        <a href="/player/{{ opponent.name }}" class="rival-name">{{ opponent.name }}</a>
+                        <span class="rival-record negative">
+                            {{ opponent.wins }}W - {{ opponent.losses }}L
+                        </span>
+                    </div>
                     {% endfor %}
-                </tbody>
-            </table>
+                </div>
+                {% endif %}
+                {% if player.rating_history|length > 0 %}
+                <div class="insight-item">
+                    <div class="insight-title">Recent Ratings</div>
+                    {% for history in player.rating_history[:5] %}
+                    <div class="rating-row">
+                        <span class="rating-badge-sm">{{ history.rating }}</span>
+                        <span class="rating-weapon-sm">{{ translate_weapon(history.weapon) }}</span>
+                        <span class="rating-date-sm">{{ history.date }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+    {% endif %}{# end guest/member gate for summary #}
+
+        <!-- 선발 포인트 카드 -->
+        {% if player.selection_points %}
+        <div class="selection-points-card">
+            <h4>{{ _t("선발 포인트") }}</h4>
+
+            {# 선발포인트 내용 매크로 #}
+            {% macro sel_section(data, label, year_label, year_val, link_path) %}
+            <div class="sel-card-section">
+                <div class="sel-card-header">
+                    <span class="sel-card-title">{{ label }} ({{ year_val }}{{ year_label }})</span>
+                    <span class="sel-card-rank-badge">{{ data.rank }}<small>/{{ data.total_participants }}</small></span>
+                </div>
+                <table class="sel-breakdown-table">
+                    <thead>
+                        <tr>
+                            <th>{{ _t("대회") }}</th>
+                            <th class="sel-pts-col">{{ _t("순위") }}</th>
+                            <th class="sel-pts-col">{{ _t("포인트") }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in data.breakdown %}
+                        <tr>
+                            <td>{{ item.comp_label }}</td>
+                            <td class="sel-pts-col">{{ item.rank }}{{ _t("위") }}</td>
+                            <td class="sel-pts-col"><strong>{{ item.points|int }}{{ _t("점") }}</strong></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr class="sel-total-row">
+                            <td>{{ _t("합계") }}</td>
+                            <td></td>
+                            <td class="sel-pts-col"><strong>{{ data.total_points|int }}{{ _t("점") }}</strong></td>
+                        </tr>
+                    </tfoot>
+                </table>
+                <a href="/{{ lang|default('ko') }}/selection/{{ link_path }}?year={{ year_val }}&weapon={{ data.weapon }}&gender={{ data.gender }}" class="sel-card-link">{{ _t("전체 순위 보기 →") }}</a>
+            </div>
+            {% endmacro %}
+
+            {% if access_level == "guest" %}
+            {# guest: 블러 + 로그인 CTA #}
+            <div class="access-gate">
+                <div class="blurred-content">
+                    {% if player.selection_points.kkumnamu %}
+                    {% set kk = player.selection_points.kkumnamu %}
+                    {{ sel_section(kk, _t("꿈나무"), _t("학년도"), kk.school_year, "kkumnamu") }}
+                    {% endif %}
+                    {% if player.selection_points.national_team %}
+                    {% set nt = player.selection_points.national_team %}
+                    {{ sel_section(nt, _t("청소년 대표 선발"), _t("시즌"), nt.season_year, "national-team") }}
+                    {% endif %}
+                </div>
+                <div class="gate-overlay">
+                    <p>{{ _t("선발 포인트 순위와 상세 내역을 확인하려면 로그인하세요.") }}</p>
+                    <a href="{{ login_url }}" class="gate-cta-btn gate-cta-btn--soft" onclick="localStorage.setItem('fencingmind_login_redirect', window.location.href)">{{ _t("로그인하고 선발 포인트 보기") }}</a>
+                </div>
+            </div>
+            {% else %}
+            {# member/verified: 전체 공개 #}
+            {% if player.selection_points.kkumnamu %}
+            {% set kk = player.selection_points.kkumnamu %}
+            {{ sel_section(kk, _t("꿈나무"), _t("학년도"), kk.school_year, "kkumnamu") }}
+            {% endif %}
+            {% if player.selection_points.national_team %}
+            {% set nt = player.selection_points.national_team %}
+            {{ sel_section(nt, _t("청소년 대표 선발"), _t("시즌"), nt.season_year, "national-team") }}
+            {% endif %}
+            {% endif %}
         </div>
         {% endif %}
     </div>
 
+    <!-- Medal Detail JavaScript -->
+    <script>
+    (function() {
+        var recordsSummary = {{ player.records_summary | tojson }};
+
+        window.toggleMedalDetail = function(season, rank) {
+            var rowId = 'medal-detail-' + season;
+            var row = document.getElementById(rowId);
+            if (!row) return;
+
+            var panel = row.querySelector('.medal-detail-panel');
+            var isVisible = row.style.display !== 'none';
+
+            // 다른 열린 패널 모두 닫기
+            document.querySelectorAll('.medal-detail-row').forEach(function(r) {
+                r.style.display = 'none';
+            });
+
+            if (isVisible) return; // 이미 열려있으면 닫기만
+
+            // rank에 맞는 records 필터링
+            var filtered = recordsSummary.filter(function(r) {
+                if (String(r.year) !== String(season)) return false;
+                if (rank === 8) return r.rank && r.rank > 3 && r.rank <= 8;
+                return r.rank === rank;
+            });
+
+            if (filtered.length === 0) {
+                panel.innerHTML = '<div class="medal-detail-empty">No records found</div>';
+            } else {
+                var html = '<ul class="medal-detail-list">';
+                filtered.forEach(function(r, i) {
+                    var rankLabel = r.rank === 1 ? 'Winner' : r.rank === 2 ? 'Runner-up' : r.rank === 3 ? 'Bronze' : 'Top ' + r.rank;
+                    var link = r.sub_event_cd ? '/event/' + r.event_cd + '/' + r.sub_event_cd : '#';
+                    html += '<li><a href="' + link + '">' + _tr_comp(r.competition_name) + ' - ' + _tr_event(r.event_name) + '</a> <span class="medal-rank-label">' + rankLabel + '</span></li>';
+                });
+                html += '</ul>';
+                panel.innerHTML = html;
+            }
+
+            row.style.display = 'table-row';
+        };
+    })();
+    </script>
+
     <!-- History Tab -->
     <div id="tab-history" class="tab-content">
+        {% if access_level == "guest" %}
+        <div class="access-gate">
+            <div class="blurred-content">
+                <table class="records-table" style="width:100%;">
+                    <thead><tr><th>{{ _t("날짜") }}</th><th>{{ _t("대회") }}</th><th>{{ _t("종목") }}</th><th>{{ _t("순위") }}</th></tr></thead>
+                    <tbody>
+                        <tr><td>2025-11-07</td><td>{{ _t("전국남녀종목별선수권대회") }}</td><td>{{ _t("남자 플뢰레 일반부") }}</td><td>{{ _t("8강") }}</td></tr>
+                        <tr><td>2025-10-24</td><td>{{ _t("회장배 전국펜싱대회") }}</td><td>{{ _t("남자 플뢰레 중등부") }}</td><td>{{ _t("16강") }}</td></tr>
+                        <tr><td>2025-09-06</td><td>{{ _t("전국체전 최종선발전") }}</td><td>{{ _t("남자 플뢰레") }}</td><td>{{ _t("4강") }}</td></tr>
+                        <tr><td>2025-07-19</td><td>{{ _t("전국소년체전") }}</td><td>{{ _t("남자 플뢰레") }}</td><td>{{ _t("우승") }}</td></tr>
+                        <tr><td>2025-04-19</td><td>{{ _t("제44회 대한펜싱협회장배") }}</td><td>{{ _t("남자 플뢰레 중등부") }}</td><td>{{ _t("준우승") }}</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="gate-overlay">
+                <div class="gate-feature-list">
+                    <p>{{ _t("가입하면 확인할 수 있는 정보:") }}</p>
+                    <ul>
+                        <li>{{ _t("전체 대회 참가 이력") }}</li>
+                        <li>{{ _t("연도별/무기별 성적 필터") }}</li>
+                        <li>{{ _t("상세 경기 결과 (Pool/DE)") }}</li>
+                    </ul>
+                </div>
+                <a href="{{ login_url }}" class="gate-cta-btn" onclick="localStorage.setItem('fencingmind_login_redirect', window.location.href)">{{ _t("로그인하여 전체 보기") }}</a>
+            </div>
+        </div>
+        {% else %}
         <!-- Filters -->
         <div class="history-filters">
             <select id="filter-season">
@@ -243,85 +1025,129 @@
             </select>
             <button class="btn btn-primary" onclick="filterHistory()">{{ i18n.common.search.button|default('Search') }}</button>
             <button class="btn btn-secondary print-btn" onclick="printCertificate()">
-                <span class="print-icon">🖨️</span> Print Certificate
+                <span class="print-icon"><svg class="fm-icon" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M214.67,72H200V40a8,8,0,0,0-8-8H64a8,8,0,0,0-8,8V72H41.33C27.36,72,16,82.77,16,96v80a8,8,0,0,0,8,8H56v32a8,8,0,0,0,8,8H192a8,8,0,0,0,8-8V184h32a8,8,0,0,0,8-8V96C240,82.77,228.64,72,214.67,72ZM72,48H184V72H72ZM184,208H72V160H184Zm40-40H200V152a8,8,0,0,0-8-8H64a8,8,0,0,0-8,8v16H32V96c0-4.41,4.19-8,9.33-8H214.67c5.14,0,9.33,3.59,9.33,8Zm-24-52a12,12,0,1,1-12-12A12,12,0,0,1,200,116Z"/></svg></span> Print Certificate
             </button>
         </div>
 
         <!-- Results List -->
         <div class="history-section">
-            <h4>{{ i18n.common.player.match_results|default('Match Results') }}</h4>
+            <h4 class="heading-with-help">{{ i18n.common.player.match_results|default('Match Results') }} {{ place_legend() }}</h4>
 
             {% for record in player.records %}
             <div class="result-card" data-year="{{ record.year }}" data-weapon="{{ record.weapon }}" data-rank="{{ record.rank }}">
                 <div class="result-card-header" onclick="toggleResultDetail(this)">
                     <div class="result-info">
                         <div class="result-date">{{ record.competition_date }}</div>
-                        <div class="result-tournament">{{ record.competition_name }}</div>
-                        <div class="result-event">{{ record.event_name }}</div>
+                        <div class="result-tournament">{{ tr_comp(record.competition_name) }}</div>
+                        <div class="result-event">{{ tr_event(record.event_name) }}</div>
                     </div>
                     <div class="result-stats">
-                        <div class="result-place {% if record.rank == 1 %}gold{% elif record.rank == 2 %}silver{% elif record.rank == 3 %}bronze{% endif %}">
-                            {% if record.rank == 1 %}🥇{% elif record.rank == 2 %}🥈{% elif record.rank == 3 %}🥉{% else %}{{ record.rank or '-' }}{% endif %}
-                            {% if record.total_participants %}/{{ record.total_participants }}{% endif %}
+                        <div class="result-place {% if record.is_in_progress %}in-progress{% elif record.eliminated_in_pool %}pool-eliminated{% elif record.rank == 1 %}gold{% elif record.rank == 2 %}silver{% elif record.rank == 3 %}bronze{% endif %}">
+                            {% if record.is_in_progress %}{{ _t("진행 중") }}{% elif record.eliminated_in_pool %}P{{ record.pool_rank or '' }}{% elif record.rank == 1 %}🥇{% elif record.rank == 2 %}🥈{% elif record.rank == 3 %}🥉{% else %}{{ record.rank or '-' }}{% endif %}
+                            {% if record.total_participants and not record.is_in_progress %}/{{ record.total_participants }}{% endif %}
                         </div>
                         {% if record.rating_earned %}
                         <div class="result-rating">{{ record.rating_earned }}</div>
                         {% endif %}
-                        <span class="result-expand-icon">▼</span>
+                        <span class="result-expand-icon"><svg class="fm-icon" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg></span>
                     </div>
                 </div>
                 <div class="result-card-detail">
                     <!-- Pool Results -->
                     {% if record.pool_results %}
-                    <div class="detail-section">
-                        <h5><span class="section-icon">📋</span> Pool {{ record.pool_number or '' }}</h5>
-                        <div class="pool-summary">
-                            <span class="pool-summary-item">{{ i18n.common.player.pool_rank|default('Rank') }}: <strong>{{ record.pool_rank or '-' }}</strong></span>
-                            <span class="pool-summary-item">{{ i18n.common.player.pool_record|default('Record') }}: <strong>{{ record.pool_wins or 0 }}{{ i18n.common.table.wins|default('W') }} {{ record.pool_losses or 0 }}{{ i18n.common.table.losses|default('L') }}</strong></span>
-                            <span class="pool-summary-item">{{ i18n.common.player.win_rate|default('Win Rate') }}: <strong>{{ record.win_rate or '-' }}</strong></span>
-                            <span class="pool-summary-item">{{ i18n.common.player.pool_indicator|default('Indicator') }}: <strong>{% if record.indicator > 0 %}+{% endif %}{{ record.indicator or 0 }}</strong></span>
-                        </div>
-                        <div class="bout-detail-list">
-                            {% for bout in record.pool_bouts %}
-                            <div class="bout-detail-item">
-                                <div class="bout-opponent">
-                                    <div class="bout-opponent-name">vs {{ bout.opponent_name }}</div>
-                                    <div class="bout-opponent-team">{{ bout.opponent_team }}</div>
+                    <div class="detail-section pool-section">
+                        <h5><span class="section-icon"><svg class="fm-icon" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M224,200h-8V40a8,8,0,0,0-8-8H152a8,8,0,0,0-8,8V80H96a8,8,0,0,0-8,8v40H48a8,8,0,0,0-8,8v64H32a8,8,0,0,0,0,16H224a8,8,0,0,0,0-16ZM160,48h40V200H160ZM104,96h40V200H104ZM56,144H88v56H56Z"/></svg></span> Pool {{ i18n.common.player.results|default('Results') }}</h5>
+                        <div class="pool-stats-grid">
+                            <div class="pool-stat-card">
+                                <div class="pool-stat-value">
+                                    {% if record.pool_rank %}{{ record.pool_rank }}{% if record.pool_total %}<span class="pool-stat-total">/{{ record.pool_total }}</span>{% endif %}{% else %}-{% endif %}
                                 </div>
-                                <div class="bout-detail-score">{{ bout.my_score }} - {{ bout.opponent_score }}</div>
-                                <div class="bout-detail-result {% if bout.result == 'V' %}v{% else %}d{% endif %}">
-                                    {% if bout.result == 'V' %}✅ V{% else %}❌ D{% endif %}
+                                <div class="pool-stat-label">{{ i18n.common.player.pool_rank|default('Rank') }}</div>
+                            </div>
+                            <div class="pool-stat-card">
+                                <div class="pool-stat-value">
+                                    <span class="pool-wins">{{ record.pool_wins or 0 }}{{ i18n.common.table.wins|default('W') }}</span>
+                                    <span class="pool-losses">{{ record.pool_losses or 0 }}{{ i18n.common.table.losses|default('L') }}</span>
+                                </div>
+                                <div class="pool-stat-label">{{ i18n.common.player.pool_record|default('Record') }}</div>
+                            </div>
+                            <div class="pool-stat-card">
+                                <div class="pool-stat-value {% if record.pool_vm and record.pool_vm >= 50 %}positive{% elif record.pool_vm and record.pool_vm < 50 %}negative{% endif %}">
+                                    {% if record.pool_vm is not none %}{{ record.pool_vm }}%{% else %}-{% endif %}
+                                </div>
+                                <div class="pool-stat-label">V/M</div>
+                            </div>
+                            <div class="pool-stat-card">
+                                <div class="pool-stat-value {% if record.indicator and record.indicator > 0 %}positive{% elif record.indicator and record.indicator < 0 %}negative{% endif %}">
+                                    {% if record.indicator > 0 %}+{% endif %}{{ record.indicator or 0 }}
+                                </div>
+                                <div class="pool-stat-label">{{ i18n.common.player.pool_indicator|default('Indicator') }}</div>
+                            </div>
+                        </div>
+                        {% if record.touches_scored or record.touches_received %}
+                        <div class="pool-touches-info">
+                            <span class="touches-detail">{{ i18n.common.player.touches_scored|default('TS') }}: {{ record.touches_scored or 0 }}</span>
+                            <span class="touches-detail">{{ i18n.common.player.touches_received|default('TR') }}: {{ record.touches_received or 0 }}</span>
+                        </div>
+                        {% endif %}
+
+                        <!-- Pool Bouts (expandable) -->
+                        {% if record.pool_bouts %}
+                        <div class="pool-bouts-accordion">
+                            <div class="pool-bouts-header" onclick="togglePoolBouts(this)">
+                                <span class="pool-bouts-toggle-icon"><svg class="fm-icon" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg></span>
+                                <span>{{ i18n.common.player.view_bouts|default('View Individual Bouts') }} ({{ record.pool_bouts|length }})</span>
+                            </div>
+                            <div class="pool-bouts-content">
+                                <div class="bout-detail-list">
+                                    {% for bout in record.pool_bouts %}
+                                    <div class="bout-detail-item">
+                                        <div class="bout-opponent">
+                                            <div class="bout-opponent-name">vs <a href="/player/{{ bout.opponent_name|urlencode }}?team={{ bout.opponent_team|urlencode }}" class="player-link">{{ bout.opponent_name }}</a> <a href="/player/{{ player.name|urlencode }}/h2h/{{ bout.opponent_name|urlencode }}" class="h2h-link" title="Head-to-Head">H2H</a></div>
+                                            <div class="bout-opponent-team"><a href="/search?q={{ bout.opponent_team|urlencode }}" class="team-link">{{ bout.opponent_team }}</a></div>
+                                        </div>
+                                        <div class="bout-detail-score">{{ bout.my_score }} - {{ bout.opponent_score }}</div>
+                                        <div class="bout-detail-result {% if bout.result == 'V' %}v{% else %}d{% endif %}">
+                                            {% if bout.result == 'V' %}<svg class="fm-icon" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M173.66,98.34a8,8,0,0,1,0,11.32l-56,56a8,8,0,0,1-11.32,0l-24-24a8,8,0,0,1,11.32-11.32L112,148.69l50.34-50.35A8,8,0,0,1,173.66,98.34ZM232,128A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128Z"/></svg> V{% else %}<svg class="fm-icon" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M165.66,101.66,139.31,128l26.35,26.34a8,8,0,0,1-11.32,11.32L128,139.31l-26.34,26.35a8,8,0,0,1-11.32-11.32L116.69,128,90.34,101.66a8,8,0,0,1,11.32-11.32L128,116.69l26.34-26.35a8,8,0,0,1,11.32,11.32ZM232,128A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128Z"/></svg> D{% endif %}
+                                        </div>
+                                    </div>
+                                    {% endfor %}
                                 </div>
                             </div>
-                            {% endfor %}
                         </div>
+                        {% endif %}
                     </div>
                     {% endif %}
 
                     <!-- Tournament Results -->
                     {% if record.tournament_results %}
                     <div class="detail-section">
-                        <h5><span class="section-icon">🏆</span> Direct Elimination</h5>
+                        <h5><span class="section-icon"><svg class="fm-icon" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M232,64H208V48a8,8,0,0,0-8-8H56a8,8,0,0,0-8,8V64H24A16,16,0,0,0,8,80V96a40,40,0,0,0,40,40h3.65A80.13,80.13,0,0,0,120,191.61V216H96a8,8,0,0,0,0,16h64a8,8,0,0,0,0-16H136V191.58c31.94-3.23,58.44-25.64,68.08-55.58H208a40,40,0,0,0,40-40V80A16,16,0,0,0,232,64ZM48,120A24,24,0,0,1,24,96V80H48v32q0,4,.39,8Zm144-8.9c0,35.52-29,64.64-64,64.9a64,64,0,0,1-64-64V56H192ZM232,96a24,24,0,0,1-24,24h-.5a81.81,81.81,0,0,0,.5-8.9V80h24Z"/></svg></span> Direct Elimination</h5>
                         <div class="tournament-progress">
                             {% for round in record.tournament_path %}
-                            <span class="progress-step {% if round.completed %}completed{% endif %} {% if round.current %}current{% endif %}">
-                                {{ round.name }}
+                            <span class="progress-step {% if round.completed %}completed{% endif %} {% if round.current %}current{% endif %} {% if round.is_bye %}bye{% endif %}">
+                                {{ round.name }}{% if round.is_bye %}<small>({{ _t("부전승") }})</small>{% endif %}
                             </span>
                             {% if not loop.last %}<span class="progress-arrow">→</span>{% endif %}
                             {% endfor %}
                         </div>
                         <div class="bout-detail-list">
                             {% for bout in record.tournament_bouts %}
-                            <div class="bout-detail-item">
-                                <span style="min-width: 60px; color: var(--primary-color); font-weight: 500;">{{ bout.round_name }}</span>
+                            <div class="bout-detail-item {% if bout.is_bye %}bye-bout{% endif %}">
+                                <span style="min-width: 60px; color: var(--primary-color); font-weight: 500;">{{ bout.round_name }}{% if bout.de_phase == 'qualifying' %}<small class="de-phase-label qualifying">{{ _t("예선") }}</small>{% endif %}</span>
                                 <div class="bout-opponent">
-                                    <div class="bout-opponent-name">vs {{ bout.opponent_name }}</div>
-                                    <div class="bout-opponent-team">{{ bout.opponent_team }}</div>
+                                    <div class="bout-opponent-name">{% if bout.is_bye %}{{ _t("부전승") }}{% else %}vs <a href="/player/{{ bout.opponent_name|urlencode }}?team={{ bout.opponent_team|urlencode }}" class="player-link">{{ bout.opponent_name }}</a> <a href="/player/{{ player.name|urlencode }}/h2h/{{ bout.opponent_name|urlencode }}" class="h2h-link" title="Head-to-Head">H2H</a>{% endif %}</div>
+                                    <div class="bout-opponent-team">{% if bout.opponent_team %}<a href="/search?q={{ bout.opponent_team|urlencode }}" class="team-link">{{ bout.opponent_team }}</a>{% endif %}</div>
                                 </div>
+                                {% if bout.is_bye %}
+                                <div class="bout-detail-score">-</div>
+                                <div class="bout-detail-result bye"><svg class="fm-icon" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M232,104a8,8,0,0,0,8-8V64a16,16,0,0,0-16-16H32A16,16,0,0,0,16,64V96a8,8,0,0,0,8,8,24,24,0,0,1,0,48,8,8,0,0,0-8,8v32a16,16,0,0,0,16,16H224a16,16,0,0,0,16-16V160a8,8,0,0,0-8-8,24,24,0,0,1,0-48ZM32,167.2a40,40,0,0,0,0-78.4V64H88V192H32Zm192,0V192H104V64H224V88.8a40,40,0,0,0,0,78.4Z"/></svg> BYE</div>
+                                {% else %}
                                 <div class="bout-detail-score">{{ bout.my_score }} - {{ bout.opponent_score }}</div>
                                 <div class="bout-detail-result {% if bout.result == 'V' %}v{% else %}d{% endif %}">
-                                    {% if bout.result == 'V' %}✅ V{% else %}❌ D{% endif %}
+                                    {% if bout.result == 'V' %}<svg class="fm-icon" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M173.66,98.34a8,8,0,0,1,0,11.32l-56,56a8,8,0,0,1-11.32,0l-24-24a8,8,0,0,1,11.32-11.32L112,148.69l50.34-50.35A8,8,0,0,1,173.66,98.34ZM232,128A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128Z"/></svg> V{% else %}<svg class="fm-icon" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M165.66,101.66,139.31,128l26.35,26.34a8,8,0,0,1-11.32,11.32L128,139.31l-26.34,26.35a8,8,0,0,1-11.32-11.32L116.69,128,90.34,101.66a8,8,0,0,1,11.32-11.32L128,116.69l26.34-26.35a8,8,0,0,1,11.32,11.32ZM232,128A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128Z"/></svg> D{% endif %}
                                 </div>
+                                {% endif %}
                             </div>
                             {% endfor %}
                         </div>
@@ -333,10 +1159,45 @@
             <div class="empty">{{ i18n.common.player.no_records|default('No match records') }}</div>
             {% endfor %}
         </div>
+        {% endif %}{# end guest gate for history #}
     </div>
 
     <!-- Strength Tab -->
     <div id="tab-strength" class="tab-content">
+        {% if access_level == "guest" %}
+        <div class="access-gate">
+            <div class="blurred-content">
+                <div style="padding:1.5rem;">
+                    <h4 style="margin-bottom:1rem;">{{ _t("라운드별 성적") }}</h4>
+                    <div style="display:flex;gap:1rem;flex-wrap:wrap;">
+                        <div class="stat-card" style="flex:1;min-width:120px;padding:1rem;text-align:center;">
+                            <div style="font-size:1.5rem;font-weight:700;">72.4%</div>
+                            <div style="font-size:0.85rem;color:var(--text-light);">{{ _t("Pool 승률") }}</div>
+                        </div>
+                        <div class="stat-card" style="flex:1;min-width:120px;padding:1rem;text-align:center;">
+                            <div style="font-size:1.5rem;font-weight:700;">58.3%</div>
+                            <div style="font-size:0.85rem;color:var(--text-light);">{{ _t("DE 승률") }}</div>
+                        </div>
+                        <div class="stat-card" style="flex:1;min-width:120px;padding:1rem;text-align:center;">
+                            <div style="font-size:1.5rem;font-weight:700;">4.2</div>
+                            <div style="font-size:0.85rem;color:var(--text-light);">{{ _t("평균 실점") }}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="gate-overlay">
+                <div class="gate-feature-list">
+                    <p>{{ _t("가입 후 이용 가능한 분석:") }}</p>
+                    <ul>
+                        <li>{{ _t("상대 전적 (Head-to-Head)") }}</li>
+                        <li>{{ _t("라운드별 성과 분석") }}</li>
+                        <li>{{ _t("무기별 통계") }}</li>
+                    </ul>
+                </div>
+                <a href="{{ login_url }}" class="gate-cta-btn" onclick="localStorage.setItem('fencingmind_login_redirect', window.location.href)">{{ _t("로그인하여 전체 보기") }}</a>
+            </div>
+        </div>
+        {% else %}
         <!-- Overview Stats -->
         <div class="strength-overview">
             <div class="strength-card">
@@ -357,29 +1218,148 @@
             </div>
         </div>
 
-        <!-- Win Rate by Stage -->
+        <!-- Win Rate by Stage (Detailed) -->
         <div class="stat-card-large">
             <h4>{{ i18n.common.player.win_rate_by_stage|default('Win Rate by Stage') }}</h4>
-            <div class="strength-overview" style="margin-bottom: 0">
-                <div class="strength-card">
-                    <div class="strength-value">{{ player.stage_stats.pool_rate }}%</div>
-                    <div class="strength-label">Pool</div>
-                    <small style="color: var(--text-light)">{{ player.stage_stats.pool_wins }}{{ i18n.common.table.wins|default('W') }} {{ player.stage_stats.pool_losses }}{{ i18n.common.table.losses|default('L') }}</small>
+
+            <!-- Year Filter Pills -->
+            {% set available_years = player.available_years|default([]) %}
+            {% set selected_years = player.selected_years|default([]) %}
+            {% if available_years|length > 0 %}
+            <div class="year-filter-pills" id="strengthYearFilter">
+                {% for year in available_years %}
+                <button type="button" class="year-pill{% if year in selected_years %} active{% endif %}" data-year="{{ year }}">{{ year }}</button>
+                {% endfor %}
+            </div>
+            <script>
+            (function() {
+                const pills = document.querySelectorAll('#strengthYearFilter .year-pill');
+                pills.forEach(function(pill) {
+                    pill.addEventListener('click', function() {
+                        pill.classList.toggle('active');
+                        var selected = [];
+                        document.querySelectorAll('#strengthYearFilter .year-pill.active').forEach(function(p) {
+                            selected.push(p.dataset.year);
+                        });
+                        var url = new URL(window.location.href);
+                        if (selected.length > 0) {
+                            url.searchParams.set('strength_years', selected.join(','));
+                        } else {
+                            url.searchParams.delete('strength_years');
+                        }
+                        url.searchParams.delete('strength_start');
+                        url.searchParams.delete('strength_end');
+                        url.searchParams.set('tab', 'strength');
+                        window.location.href = url.toString();
+                    });
+                });
+            })();
+            </script>
+            {% endif %}
+
+            <div class="stage-winrate-container" id="stageWinrateContainer">
+                {# Macro for rate class #}
+                {% macro rate_class(rate) %}{% if rate >= 70 %}rate-high{% elif rate >= 40 %}rate-mid{% else %}rate-low{% endif %}{% endmacro %}
+
+                <!-- Pool -->
+                {% if player.round_stats.pool.wins > 0 or player.round_stats.pool.losses > 0 %}
+                {% set pool_total = player.round_stats.pool.wins + player.round_stats.pool.losses %}
+                <div class="stage-winrate-row">
+                    <div class="stage-label">Pool <span class="stage-count">{{ pool_total }}{{ _t("회") }}</span></div>
+                    <div class="stage-bar-container">
+                        <div class="stage-bar {{ rate_class(player.round_stats.pool.rate) }}" style="width: {{ player.round_stats.pool.rate }}%"></div>
+                    </div>
+                    <div class="stage-stats">
+                        <span class="stage-rate">{{ player.round_stats.pool.rate }}%</span>
+                        <span class="stage-record">({{ player.round_stats.pool.wins }}{{ i18n.common.table.wins|default('W') }} {{ player.round_stats.pool.losses }}{{ i18n.common.table.losses|default('L') }})</span>
+                    </div>
                 </div>
-                <div class="strength-card">
-                    <div class="strength-value">{{ player.stage_stats.de_rate }}%</div>
-                    <div class="strength-label">{{ i18n.common.player.de_stage|default('DE (Main)') }}</div>
-                    <small style="color: var(--text-light)">{{ player.stage_stats.de_wins }}{{ i18n.common.table.wins|default('W') }} {{ player.stage_stats.de_losses }}{{ i18n.common.table.losses|default('L') }}</small>
+                {% endif %}
+
+                <!-- ~32강 (32강 이하) -->
+                {% if player.round_stats.t32_and_below.wins > 0 or player.round_stats.t32_and_below.losses > 0 %}
+                {% set t32_total = player.round_stats.t32_and_below.wins + player.round_stats.t32_and_below.losses %}
+                <div class="stage-winrate-row">
+                    <div class="stage-label">~32{{ i18n.common.player.round|default('R') }} <span class="stage-count">{{ t32_total }}{{ _t("회") }}</span></div>
+                    <div class="stage-bar-container">
+                        <div class="stage-bar {{ rate_class(player.round_stats.t32_and_below.rate) }}" style="width: {{ player.round_stats.t32_and_below.rate }}%"></div>
+                    </div>
+                    <div class="stage-stats">
+                        <span class="stage-rate">{{ player.round_stats.t32_and_below.rate }}%</span>
+                        <span class="stage-record">({{ player.round_stats.t32_and_below.wins }}{{ i18n.common.table.wins|default('W') }} {{ player.round_stats.t32_and_below.losses }}{{ i18n.common.table.losses|default('L') }})</span>
+                    </div>
                 </div>
-                <div class="strength-card">
-                    <div class="strength-value">{{ player.stage_stats.final_rate }}%</div>
-                    <div class="strength-label">{{ i18n.common.player.finals|default('Finals') }}</div>
-                    <small style="color: var(--text-light)">{{ player.stage_stats.final_wins }}{{ i18n.common.table.wins|default('W') }} {{ player.stage_stats.final_losses }}{{ i18n.common.table.losses|default('L') }}</small>
+                {% endif %}
+
+                <!-- 16강 -->
+                {% if player.round_stats.t16.wins > 0 or player.round_stats.t16.losses > 0 %}
+                {% set t16_total = player.round_stats.t16.wins + player.round_stats.t16.losses %}
+                <div class="stage-winrate-row">
+                    <div class="stage-label">16{{ i18n.common.player.round|default('R') }} <span class="stage-count">{{ t16_total }}{{ _t("회") }}</span></div>
+                    <div class="stage-bar-container">
+                        <div class="stage-bar {{ rate_class(player.round_stats.t16.rate) }}" style="width: {{ player.round_stats.t16.rate }}%"></div>
+                    </div>
+                    <div class="stage-stats">
+                        <span class="stage-rate">{{ player.round_stats.t16.rate }}%</span>
+                        <span class="stage-record">({{ player.round_stats.t16.wins }}{{ i18n.common.table.wins|default('W') }} {{ player.round_stats.t16.losses }}{{ i18n.common.table.losses|default('L') }})</span>
+                    </div>
                 </div>
+                {% endif %}
+
+                <!-- 8강 -->
+                {% if player.round_stats.t8.wins > 0 or player.round_stats.t8.losses > 0 %}
+                {% set t8_total = player.round_stats.t8.wins + player.round_stats.t8.losses %}
+                <div class="stage-winrate-row">
+                    <div class="stage-label">8{{ i18n.common.player.round|default('R') }} <span class="stage-count">{{ t8_total }}{{ _t("회") }}</span></div>
+                    <div class="stage-bar-container">
+                        <div class="stage-bar {{ rate_class(player.round_stats.t8.rate) }}" style="width: {{ player.round_stats.t8.rate }}%"></div>
+                    </div>
+                    <div class="stage-stats">
+                        <span class="stage-rate">{{ player.round_stats.t8.rate }}%</span>
+                        <span class="stage-record">({{ player.round_stats.t8.wins }}{{ i18n.common.table.wins|default('W') }} {{ player.round_stats.t8.losses }}{{ i18n.common.table.losses|default('L') }})</span>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- 4강 (준결승) -->
+                {% if player.round_stats.semifinal.wins > 0 or player.round_stats.semifinal.losses > 0 %}
+                {% set sf_total = player.round_stats.semifinal.wins + player.round_stats.semifinal.losses %}
+                <div class="stage-winrate-row">
+                    <div class="stage-label">{{ i18n.common.player.semifinal|default('SF') }} <span class="stage-count">{{ sf_total }}{{ _t("회") }}</span></div>
+                    <div class="stage-bar-container">
+                        <div class="stage-bar {{ rate_class(player.round_stats.semifinal.rate) }}" style="width: {{ player.round_stats.semifinal.rate }}%"></div>
+                    </div>
+                    <div class="stage-stats">
+                        <span class="stage-rate">{{ player.round_stats.semifinal.rate }}%</span>
+                        <span class="stage-record">({{ player.round_stats.semifinal.wins }}{{ i18n.common.table.wins|default('W') }} {{ player.round_stats.semifinal.losses }}{{ i18n.common.table.losses|default('L') }})</span>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- 결승 -->
+                {% if player.round_stats.final.wins > 0 or player.round_stats.final.losses > 0 %}
+                {% set final_total = player.round_stats.final.wins + player.round_stats.final.losses %}
+                <div class="stage-winrate-row">
+                    <div class="stage-label">{{ i18n.common.player.final_round|default('Final') }} <span class="stage-count">{{ final_total }}{{ _t("회") }}</span></div>
+                    <div class="stage-bar-container">
+                        <div class="stage-bar final-bar" style="width: {{ player.round_stats.final.rate }}%"></div>
+                    </div>
+                    <div class="stage-stats">
+                        <span class="stage-rate">{{ player.round_stats.final.rate }}%</span>
+                        <span class="stage-record">({{ player.round_stats.final.wins }}{{ i18n.common.table.wins|default('W') }} {{ player.round_stats.final.losses }}{{ i18n.common.table.losses|default('L') }})</span>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- No data message -->
+                {% if not (player.round_stats.pool.wins > 0 or player.round_stats.pool.losses > 0 or player.round_stats.t32_and_below.wins > 0 or player.round_stats.t32_and_below.losses > 0 or player.round_stats.t16.wins > 0 or player.round_stats.t16.losses > 0 or player.round_stats.t8.wins > 0 or player.round_stats.t8.losses > 0 or player.round_stats.semifinal.wins > 0 or player.round_stats.semifinal.losses > 0 or player.round_stats.final.wins > 0 or player.round_stats.final.losses > 0) %}
+                <p class="no-data-message">{{ i18n.common.player.no_stage_data|default('No detailed stage data available') }}</p>
+                {% endif %}
             </div>
         </div>
 
         <!-- Head to Head Records -->
+        {% if access_level == "verified" %}
         <div class="stat-card-large">
             <h4>{{ i18n.common.player.head_to_head|default('Head-to-Head Records') }}</h4>
             <table class="opponent-table">
@@ -395,8 +1375,8 @@
                 <tbody>
                     {% for opponent in player.head_to_head %}
                     <tr class="opponent-row" onclick="toggleOpponentDetail(this)">
-                        <td><strong>{{ opponent.name }}</strong></td>
-                        <td>{{ opponent.team }}</td>
+                        <td><strong><a href="/player/{{ opponent.name|urlencode }}?team={{ opponent.team|urlencode }}" class="player-link" onclick="event.stopPropagation()">{{ tr_player(opponent.name) }}</a></strong> <a href="/player/{{ player.name|urlencode }}/h2h/{{ opponent.name|urlencode }}" class="h2h-link" onclick="event.stopPropagation()" title="Head-to-Head">H2H</a></td>
+                        <td><a href="/search?q={{ opponent.team|urlencode }}" class="team-link" onclick="event.stopPropagation()">{{ tr_team(opponent.team) }}</a></td>
                         <td class="record-cell">{{ opponent.wins }}-{{ opponent.losses }}</td>
                         <td class="winrate-cell">
                             {{ opponent.win_rate }}%
@@ -406,9 +1386,9 @@
                         </td>
                         <td>
                             {% if opponent.last_result == 'V' %}
-                            <span style="color: var(--success-color)">✅ {{ opponent.last_score }}</span>
+                            <span style="color: var(--success-color)"><svg class="fm-icon" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M173.66,98.34a8,8,0,0,1,0,11.32l-56,56a8,8,0,0,1-11.32,0l-24-24a8,8,0,0,1,11.32-11.32L112,148.69l50.34-50.35A8,8,0,0,1,173.66,98.34ZM232,128A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128Z"/></svg> {{ opponent.last_score }}</span>
                             {% else %}
-                            <span style="color: var(--danger-color)">❌ {{ opponent.last_score }}</span>
+                            <span style="color: var(--danger-color)"><svg class="fm-icon" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M165.66,101.66,139.31,128l26.35,26.34a8,8,0,0,1-11.32,11.32L128,139.31l-26.34,26.35a8,8,0,0,1-11.32-11.32L116.69,128,90.34,101.66a8,8,0,0,1,11.32-11.32L128,116.69l26.34-26.35a8,8,0,0,1,11.32,11.32ZM232,128A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128Z"/></svg> {{ opponent.last_score }}</span>
                             {% endif %}
                         </td>
                     </tr>
@@ -422,7 +1402,7 @@
                                     <span style="flex: 1">{{ match.tournament }}</span>
                                     <span style="min-width: 60px; font-weight: bold">{{ match.score }}</span>
                                     <span style="min-width: 40px">
-                                        {% if match.result == 'V' %}✅{% else %}❌{% endif %}
+                                        {% if match.result == 'V' %}<span style="color: var(--success-color)"><svg class="fm-icon" viewBox="0 0 256 256" role="img" aria-label="V"><path d="M173.66,98.34a8,8,0,0,1,0,11.32l-56,56a8,8,0,0,1-11.32,0l-24-24a8,8,0,0,1,11.32-11.32L112,148.69l50.34-50.35A8,8,0,0,1,173.66,98.34ZM232,128A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128Z"/></svg></span>{% else %}<span style="color: var(--danger-color)"><svg class="fm-icon" viewBox="0 0 256 256" role="img" aria-label="D"><path d="M165.66,101.66,139.31,128l26.35,26.34a8,8,0,0,1-11.32,11.32L128,139.31l-26.34,26.35a8,8,0,0,1-11.32-11.32L116.69,128,90.34,101.66a8,8,0,0,1,11.32-11.32L128,116.69l26.34-26.35a8,8,0,0,1,11.32,11.32ZM232,128A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128Z"/></svg></span>{% endif %}
                                     </span>
                                 </div>
                                 {% endfor %}
@@ -437,15 +1417,65 @@
                 </tbody>
             </table>
         </div>
+        {% else %}
+        <div class="access-gate" style="margin-top: 1.5rem;">
+            <div class="blurred-content">
+                <div class="stat-card-large" style="min-height: 120px;">
+                    <h4>{{ i18n.common.player.head_to_head|default('Head-to-Head Records') }}</h4>
+                    <p style="color: var(--text-light);">Opponent records data</p>
+                </div>
+            </div>
+            <div class="gate-overlay">
+                <p>{{ _t("선수 인증하면 상대 전적을 볼 수 있습니다") }}</p>
+                <a href="{{ verify_url }}" class="gate-cta-btn">{{ _t("선수 인증하기") }}</a>
+            </div>
+        </div>
+        {% endif %}{# end verified gate for H2H #}
+        {% endif %}{# end guest gate for strength #}
     </div>
 
     <!-- Analysis Tab (FencingLab) -->
     <div id="tab-analysis" class="tab-content">
+        {% if access_level == "verified" %}
         <div class="analysis-container" id="analysis-content">
             <div class="analysis-loading">
                 <p>{{ i18n.common.player.loading_analysis|default('Loading analysis data...') }}</p>
             </div>
         </div>
+        {% elif access_level == "member" %}
+        <div class="access-gate">
+            <div class="blurred-content">
+                <div class="stat-card-large" style="min-height: 200px;">
+                    <h4>FencingLab Analysis</h4>
+                    <p style="color: var(--text-light);">Advanced analytics data</p>
+                </div>
+            </div>
+            <div class="gate-overlay">
+                <p>{{ _t("선수 인증하면 FencingLab 분석을 이용할 수 있습니다") }}</p>
+                <a href="{{ verify_url }}" class="gate-cta-btn">{{ _t("선수 인증하기") }}</a>
+            </div>
+        </div>
+        {% else %}
+        <div class="access-gate">
+            <div class="blurred-content">
+                <div class="stat-card-large" style="min-height: 200px;">
+                    <h4>FencingLab Analysis</h4>
+                    <p style="color: var(--text-light);">Advanced analytics data</p>
+                </div>
+            </div>
+            <div class="gate-overlay">
+                <div class="gate-feature-list">
+                    <p>{{ _t("프리미엄 분석 기능:") }}</p>
+                    <ul>
+                        <li>{{ _t("AI 기반 경기 분석") }}</li>
+                        <li>{{ _t("FencingLab 전술 리포트") }}</li>
+                        <li>{{ _t("성장 추세 그래프") }}</li>
+                    </ul>
+                </div>
+                <a href="{{ login_url }}" class="gate-cta-btn" onclick="localStorage.setItem('fencingmind_login_redirect', window.location.href)">{{ _t("로그인하여 전체 보기") }}</a>
+            </div>
+        </div>
+        {% endif %}
     </div>
 </div>
 
@@ -483,7 +1513,7 @@ window.i18n = {
     }
 };
 </script>
-<script src="/static/js/fencinglab.js?v=20250108b"></script>
+<script src="/static/js/fencinglab.js?v=20260603"></script>
 <script>
 // Tab switching
 document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -494,6 +1524,21 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
         document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
     });
 });
+
+// Restore active tab from URL param
+(function() {
+    const tabParam = new URLSearchParams(window.location.search).get('tab');
+    if (tabParam) {
+        const tabBtn = document.querySelector('.tab-btn[data-tab="' + tabParam + '"]');
+        const tabContent = document.getElementById('tab-' + tabParam);
+        if (tabBtn && tabContent) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            tabBtn.classList.add('active');
+            tabContent.classList.add('active');
+        }
+    }
+})();
 
 // Toggle result detail
 function toggleResultDetail(header) {
@@ -511,6 +1556,12 @@ function toggleDisambiguation(header) {
 function toggleOpponentDetail(row) {
     const detail = row.nextElementSibling;
     detail.classList.toggle('expanded');
+}
+
+// Toggle pool bouts accordion
+function togglePoolBouts(header) {
+    const accordion = header.parentElement;
+    accordion.classList.toggle('expanded');
 }
 
 // Filter history
@@ -624,6 +1675,65 @@ document.querySelector('[data-tab="analysis"]').addEventListener('click', async 
                 </p>
             </div>
         `;
+    }
+});
+
+// Strength Date Filter Functions
+function applyStrengthFilter() {
+    const startYear = document.getElementById('strengthStartYear').value;
+    const startMonth = document.getElementById('strengthStartMonth').value;
+    const endYear = document.getElementById('strengthEndYear').value;
+    const endMonth = document.getElementById('strengthEndMonth').value;
+
+    const startDate = `${startYear}-${startMonth}`;
+    const endDate = `${endYear}-${endMonth}`;
+
+    // Update display text
+    const displayText = `${startYear}.${startMonth}~${endYear}.${endMonth}`;
+    document.getElementById('filterPeriodDisplay').textContent = displayText;
+
+    // Reload page with filter parameters
+    const url = new URL(window.location.href);
+    url.searchParams.set('strength_start', startDate);
+    url.searchParams.set('strength_end', endDate);
+    window.location.href = url.toString();
+}
+
+function resetStrengthFilter() {
+    const url = new URL(window.location.href);
+    url.searchParams.delete('strength_start');
+    url.searchParams.delete('strength_end');
+    window.location.href = url.toString();
+}
+
+// Initialize filter values from URL params on page load
+document.addEventListener('DOMContentLoaded', function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const strengthStart = urlParams.get('strength_start');
+    const strengthEnd = urlParams.get('strength_end');
+
+    if (strengthStart) {
+        const [startYear, startMonth] = strengthStart.split('-');
+        const startYearSelect = document.getElementById('strengthStartYear');
+        const startMonthSelect = document.getElementById('strengthStartMonth');
+        if (startYearSelect) startYearSelect.value = startYear;
+        if (startMonthSelect) startMonthSelect.value = startMonth;
+    }
+
+    if (strengthEnd) {
+        const [endYear, endMonth] = strengthEnd.split('-');
+        const endYearSelect = document.getElementById('strengthEndYear');
+        const endMonthSelect = document.getElementById('strengthEndMonth');
+        if (endYearSelect) endYearSelect.value = endYear;
+        if (endMonthSelect) endMonthSelect.value = endMonth;
+    }
+
+    // Update display if filters are applied
+    if (strengthStart && strengthEnd) {
+        const displayEl = document.getElementById('filterPeriodDisplay');
+        if (displayEl) {
+            displayEl.textContent = `${strengthStart.replace('-', '.')}~${strengthEnd.replace('-', '.')}`;
+        }
     }
 });
 </script>

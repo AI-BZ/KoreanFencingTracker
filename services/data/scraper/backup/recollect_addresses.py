@@ -5,12 +5,11 @@
 """
 import asyncio
 import json
-import os
 import re
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 from loguru import logger
 from playwright.async_api import async_playwright
 from dotenv import load_dotenv
@@ -167,7 +166,7 @@ class NaverMapCollector:
                     team["address_status"] = "unknown"
                     team["address_error"] = "네이버맵에서도 찾을 수 없음 - 주소 미상"
                     self.results["unknown"].append(team)
-                    logger.warning(f"  ✗ 미발견 → 주소 미상 처리")
+                    logger.warning("  ✗ 미발견 → 주소 미상 처리")
 
                 # 요청 간 딜레이
                 await asyncio.sleep(1.5)

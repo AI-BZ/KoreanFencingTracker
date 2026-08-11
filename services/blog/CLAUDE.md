@@ -62,8 +62,58 @@ python -m uvicorn api.server:app --host 0.0.0.0 --port 75
 
 ---
 
+## 인증 연동
+- **회원가입/로그인**: account.fencingmind.ai (port 70)에서 처리
+- **JWT 검증**: `from shared_core.auth.jwt import get_current_member`
+- **역할 확인**: `from shared_core.auth.dependencies import require_auth`
+- **회원 관리 API 직접 구현 금지** — account 서비스만 담당
+
 ## Git 브랜치 규칙
 - 이 서비스의 코드는 `feature/blog/*` 브랜치에서만 수정
+
+---
+
+## 🎨 UI 디자인 규칙 (필수)
+
+**📖 반드시 참조:** `packages/shared-ui/DESIGN_SYSTEM.md`
+
+### 필수 CSS 임포트
+```html
+<link rel="stylesheet" href="/packages/shared-ui/styles/variables.css">
+<link rel="stylesheet" href="/packages/shared-ui/styles/base.css">
+<link rel="stylesheet" href="/packages/shared-ui/styles/components.css">
+```
+
+### 핵심 규칙
+| 규칙 | 설명 |
+|------|------|
+| 🔴 **다크 모드만** | 라이트 모드 UI 금지 |
+| 🔴 **CSS 변수 사용** | `--fm-*` 변수 필수 (하드코딩 색상 금지) |
+| 🔴 **컴포넌트 클래스** | `fm-btn`, `fm-card`, `fm-input` 등 사용 |
+| 🔴 **배경 구조** | `fm-parallax-bg` + `fm-parallax-overlay` |
+
+### 색상 팔레트 (태극기 컬러)
+```css
+--fm-accent-primary: #c9302c;    /* 빨강 - Primary CTA */
+--fm-accent-secondary: #1e3a8a;  /* 파랑 - Secondary */
+--fm-bg-card: rgba(18, 18, 26, 0.85);  /* 글래스 카드 */
+```
+
+### 아티클 카드 예시
+```html
+<article class="fm-card">
+    <img src="..." alt="썸네일" class="fm-card-image">
+    <div class="fm-card-body">
+        <span class="fm-badge fm-badge-info">기술 가이드</span>
+        <h3 class="fm-card-title">플뢰레 공격 기술 분석</h3>
+        <p class="fm-text-secondary">기술의 핵심 포인트와 연습 방법...</p>
+        <div class="fm-flex fm-justify-between fm-items-center">
+            <span class="fm-text-xs">2025.01.10</span>
+            <button class="fm-btn fm-btn-ghost fm-btn-sm">더 읽기</button>
+        </div>
+    </div>
+</article>
+```
 
 ---
 

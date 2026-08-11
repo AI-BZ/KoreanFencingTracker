@@ -7,7 +7,6 @@ Korean Fencing Tracker - FastAPI 웹 서버
 데이터 파이프라인: 4단계 검증 시스템
 """
 import os
-import json
 import re
 from contextlib import asynccontextmanager
 from datetime import date, datetime
@@ -16,6 +15,7 @@ from pathlib import Path
 from collections import defaultdict
 
 from fastapi import FastAPI, Query, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
@@ -43,69 +43,127 @@ except ImportError:
 from ranking.calculator import (
     RankingCalculator,
     AGE_GROUP_CODES,
-    AGE_GROUP_NAMES_KR,
-    LEGACY_AGE_GROUP_MAP,
     CATEGORY_CODES,
     CATEGORY_APPLICABLE_AGE_GROUPS,
     classify_competition_level,
 )
+from ranking.selection_points import (
+    SelectionPointCalculator,
+    WEAPON_NAMES_KR as SELECTION_WEAPON_NAMES_KR,
+    KKUMNAMU_COMP_PATTERNS,
+    NATIONAL_TEAM_COMP_PATTERNS,
+)
+from ranking.team_ranking import (
+    calculate_competition_team_rankings,
+    calculate_season_team_rankings,
+    classify_team_category,
+)
 
 # 선수 식별 시스템
-from app.player_identity import PlayerIdentityResolver, PlayerProfile as IdentityProfile
+from app.player_identity import PlayerIdentityResolver, is_team_event
+
+# 조직 유형 분류 (org_type audit)
+from app.organization_identity import detect_org_type
 
 # DE 대진표 정규화 및 순위 계산
-from app.bracket_utils import normalize_bracket_data, NormalizedBracket, compute_full_final_rankings
+from app.bracket_utils import normalize_bracket_data, compute_full_final_rankings
+from app.de_transforms import (
+    _normalize_de_bracket_for_api,
+    _reconstruct_bouts_from_duplicated_bbr,
+    _dedup_keep_highest_round,
+    _get_full_bouts_from_de_bracket,
+    _normalize_bout_data,
+    _build_rank_chart_data,
+    _extract_bout_player_info,
+    compute_dual_de_final_rankings,
+    transform_de_bracket,
+    _is_de_final_complete,
+    _ROUND_PROGRESSION,
+    _ROUND_RANK,
+)
 
-# i18n 다국어 지원 시스템
-from app.i18n import (
-    i18n,
-    get_translator,
-    LanguageMiddleware,
-    create_language_context,
+# 풀 종합 순위 계산기
+from app.pool_calculator import calculate_pool_total_ranking, enrich_with_advancement_status
+
+# i18n 다국어 지원 시스템 (shared_core 인프라 + 서비스 고유 번역기)
+from shared_core.i18n import (
     SUPPORTED_LANGUAGES,
     DEFAULT_LANGUAGE,
-    LANGUAGE_NAMES
+    LANGUAGE_NAMES,
+    LANG_THEME_MAP,
+    DEFAULT_THEME,
+    LanguageMiddleware,
+    create_shared_i18n,
+)
+from app.i18n import (
+    make_auto_translator,
+    get_js_translations,
+    translate_event_name,
+    translate_competition_name,
+    translate_venue_name,
+    get_js_competition_names,
 )
 
 # 다국어 번역 서비스 (DB 콘텐츠 번역)
-from app.translation_service import get_translation_service
+from app.translation_service import get_translation_service, TranslationService
+
+# 학년 추정기
+from app.grade_estimator import GradeEstimator
+
+# 전역 번역 서비스 인스턴스
+_translation_service: TranslationService = None
+
+def get_ts() -> TranslationService:
+    """Get or create translation service singleton."""
+    global _translation_service
+    if _translation_service is None:
+        _translation_service = get_translation_service()
+    return _translation_service
 
 
-def _normalize_de_bracket_for_api(de_bracket: Dict) -> Dict:
-    """
-    API 응답용 DE 브라켓 정규화
+def _event_sort_key(event_name: str) -> tuple:
+    """이벤트 정렬 키: (무기순서, 성별순서, 나이그룹순서, 단체전여부, 이름)"""
+    from ranking.calculator import extract_weapon, extract_gender
 
-    원본 구조를 유지하면서 bouts_by_round만 리매핑
-    (bracket_size에 맞지 않는 라운드를 올바른 라운드로 변환)
-    """
-    if not de_bracket:
-        return de_bracket
+    # 무기 순서: 플뢰레 → 에페 → 사브르
+    weapon_order = {"foil": 0, "epee": 1, "sabre": 2}
+    weapon = extract_weapon(event_name)
+    w = weapon_order.get(weapon, 9)
 
-    # normalize_bracket_data 호출하여 리매핑 수행
-    normalized = normalize_bracket_data(de_bracket)
+    # 성별 순서: 여 → 남
+    gender = extract_gender(event_name)
+    g = 0 if gender == "여" else 1
 
-    # 원본 구조 복사
-    result = dict(de_bracket)
+    # 나이그룹 순서: 초등 → 중학 → 고등 → 일반
+    age_order = 9
+    if "초등" in event_name or "초학" in event_name:
+        age_order = 0
+    elif any(k in event_name for k in ("중등", "중학", "여중", "남중")):
+        age_order = 1
+    elif any(k in event_name for k in ("고등", "고학", "여고", "남고")):
+        age_order = 2
+    elif any(k in event_name for k in ("대학", "일반", "실업")):
+        age_order = 3
 
-    # 정규화된 값으로 교체
-    result['bracket_size'] = normalized.bracket_size
-    result['participant_count'] = normalized.participant_count
-    result['starting_round'] = normalized.starting_round
-    result['rounds'] = normalized.rounds
+    # 단체전은 개인전 뒤로
+    is_team = 1 if "단체" in event_name else 0
 
-    # bouts_by_round 교체 (리매핑된 버전)
-    result['bouts_by_round'] = {
-        round_name: [bout.to_dict() for bout in bouts]
-        for round_name, bouts in normalized.bouts_by_round.items()
-    }
+    return (w, g, age_order, is_team, event_name)
 
-    # bouts도 교체 (리매핑된 버전)
-    result['bouts'] = [bout.to_dict() for bout in normalized.bouts]
 
-    return result
+# Auth - account 서비스로의 리다이렉트 shim + 로컬 JWT 검증
+from shared_core.auth.jwt import get_current_member
+from app.auth.router import router as auth_router
 
-# Auth 모듈
-from app.auth.router import router as auth_router, get_current_member
+# 접근 제어 (게스트 게이팅)
+from app.access_control import (
+    get_access_level,
+    blur_ranking_entries,
+    blur_search_result_for_guest,
+    can_access_fencinglab,
+    apply_player_data_gate,
+    RANKINGS_HIDDEN_TOP_N,
+)
 
 
 # 글로벌 연령 그룹 정렬 순서 (FIE 표준)
@@ -142,14 +200,26 @@ def get_matching_legacy_codes(fie_code: str) -> list:
     """FIE 코드에 매칭되는 레거시 코드 목록 반환"""
     return FIE_TO_LEGACY_MAP.get(fie_code, [fie_code])
 
-# 환경변수 로드
-load_dotenv()
+# 환경변수 로드 (모노레포 루트에서 실행 시에도 services/data/.env를 찾도록)
+_env_path = Path(__file__).parent.parent / ".env"
+load_dotenv(_env_path)
 
 # 프로젝트 루트
 PROJECT_ROOT = Path(__file__).parent.parent
-DATA_DIR = PROJECT_ROOT / "data"
 STATIC_DIR = PROJECT_ROOT / "static"
 TEMPLATES_DIR = PROJECT_ROOT / "templates"
+
+# 스케줄러 (자동 스크래핑)
+try:
+    from scheduler.scheduler import get_scheduler
+    SCHEDULER_AVAILABLE = True
+except ImportError:
+    SCHEDULER_AVAILABLE = False
+    logger.warning("scheduler 패키지를 찾을 수 없음. 자동 스크래핑 비활성화.")
+
+# 스케줄러 활성화 여부 (환경변수로 제어)
+ENABLE_SCHEDULER = os.getenv("ENABLE_SCHEDULER", "false").lower() == "true"
+
 
 # Lifespan context manager (FastAPI 0.109+)
 @asynccontextmanager
@@ -160,17 +230,38 @@ async def lifespan(app: FastAPI):
         - Supabase 데이터 로드
         - 선수 인덱스 구축
         - 랭킹 계산기 초기화
+        - 스케줄러 시작 (ENABLE_SCHEDULER=true 시)
 
     Shutdown:
+        - 스케줄러 종료
         - 정리 작업
     """
     # Startup
     load_data()
     logger.info("✅ 서버 시작 완료 - Supabase 데이터 소스 사용 중")
 
+    # 스케줄러 시작
+    scheduler = None
+    if SCHEDULER_AVAILABLE and ENABLE_SCHEDULER:
+        try:
+            scheduler = get_scheduler()
+            scheduler.start()
+            logger.info("📅 자동 스크래핑 스케줄러 시작됨")
+        except Exception as e:
+            logger.error(f"스케줄러 시작 실패: {e}")
+    elif not ENABLE_SCHEDULER:
+        logger.info("📅 스케줄러 비활성화 (ENABLE_SCHEDULER=true로 활성화)")
+
     yield
 
     # Shutdown
+    if scheduler:
+        try:
+            scheduler.stop()
+            logger.info("📅 스케줄러 종료됨")
+        except Exception as e:
+            logger.error(f"스케줄러 종료 오류: {e}")
+
     logger.info("서버 종료됨")
 
 # FastAPI 앱
@@ -181,27 +272,65 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# CORS 미들웨어 (서브도메인 간 API 호출 허용)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://account.fencingmind.ai",
+        "https://club.fencingmind.ai",
+        "https://community.fencingmind.ai",
+        "https://shop.fencingmind.ai",
+        "https://blog.fencingmind.ai",
+        "https://analytics.fencingmind.ai",
+        "http://localhost:70",  # account dev
+        "http://localhost:72",  # club dev
+        "http://localhost:73",  # community dev
+        "http://localhost:74",  # shop dev
+        "http://localhost:75",  # blog dev
+        "http://localhost:76",  # analytics dev
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # 정적 파일 및 템플릿
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
-# i18n 미들웨어 추가
-app.add_middleware(LanguageMiddleware)
+# Jinja2 custom filters
+templates.env.filters['tr_event'] = lambda name, lang: translate_event_name(name, lang)
+templates.env.filters['tr_comp'] = lambda name, lang: translate_competition_name(name, lang)
 
-# Auth 라우터 등록
+# i18n 미들웨어 추가 (shared_core: 공유 번역 + 서비스별 번역 deep merge, 테마 자동 결정)
+_service_i18n = create_shared_i18n(
+    extra_dirs=[Path(__file__).parent / "i18n" / "translations"]
+)
+app.add_middleware(LanguageMiddleware, i18n=_service_i18n)
+
+# Auth 리다이렉트 shim (기존 템플릿 호환성)
 app.include_router(auth_router)
 
 
 # 데이터 저장소 (메모리 캐시)
 _data_cache: Dict[str, Any] = {}
 _player_index: Dict[str, List[Dict]] = {}  # 선수별 전적 인덱스
+_competition_player_cache: Dict[str, List[Dict]] = {}  # 대회별 선수 인덱스 (자동완성용)
 _filter_options: Dict[str, Set] = {}  # 필터 옵션 캐시
 _ranking_calculator: Optional[RankingCalculator] = None  # 랭킹 계산기
 _supabase_client: Optional["Client"] = None  # Supabase 클라이언트
 _data_source: str = "supabase"  # 현재 데이터 소스 (Supabase 전용)
+_matches_count: int = 0  # 총 경기(bout) 수 — 기동 시 1회 집계 (/api/status 히어로 스탯용)
 _identity_resolver: Optional[PlayerIdentityResolver] = None  # 선수 식별 시스템
 _fencinglab_analyzer = None  # FencingLab 분석기 (지연 로딩)
+_org_region_cache: Dict[str, Dict[str, str]] = {}  # 조직명 → {province, city}
+_org_age_group_lookup: Dict[str, str] = {}  # 조직명 → 나이그룹 (국가대표 서브랭킹용)
+_org_translation_cache: Dict[str, str] = {}  # 조직명(한국어) → 영문명 캐시
+_player_translation_cache: Dict[str, str] = {}  # 선수명(한국어) → 영문명 캐시
 _quality_monitor: Optional["DataQualityMonitor"] = None  # 데이터 품질 모니터
+_grade_estimator = None  # 학년 추정기
+_selection_calculator: Optional[SelectionPointCalculator] = None  # 선발 포인트 계산기
+_team_event_index: Dict[str, List[Dict]] = {}  # 조직명 → 단체전 결과 목록
 
 
 # ==================== Pydantic Models ====================
@@ -228,6 +357,7 @@ class RankingEntry(BaseModel):
     silver: int
     bronze: int
     best_results: List[Dict] = []
+    blurred: bool = False  # guest용 블러 처리 플래그
 
 
 class RankingResponse(BaseModel):
@@ -240,6 +370,7 @@ class RankingResponse(BaseModel):
     category_name: Optional[str] = None
     total: int
     rankings: List[RankingEntry]
+    hidden_top: int = 0  # guest에게 숨겨진 상위 N명 (0이면 전체 공개)
 
 
 class EventSummary(BaseModel):
@@ -277,6 +408,11 @@ class PlayerProfile(BaseModel):
     stats: Dict[str, Any]
 
 
+class EnglishNameUpdate(BaseModel):
+    """영문명 수정 요청"""
+    english_name: str
+
+
 class CompetitionSummary(BaseModel):
     event_cd: str
     name: str
@@ -289,6 +425,20 @@ class CompetitionSummary(BaseModel):
 
 
 # ==================== i18n Helper Functions ====================
+
+def _translate_grade(grade: str, lang: str) -> str:
+    """학년 표기 번역 (예: '1학년' → 'Year 1')"""
+    if lang == 'ko' or not grade:
+        return grade
+    import re
+    m = re.match(r'(\d+)학년', grade)
+    if m:
+        return f"Year {m.group(1)}"
+    if grade == '미확인':
+        return {'en': 'Unknown', 'ja': '未確認', 'zh': '未确认',
+                'fr': 'Inconnu', 'it': 'Sconosciuto', 'tr': 'Bilinmiyor'}.get(lang, grade)
+    return grade
+
 
 def get_i18n_template_context(request: Request, lang: str = None) -> Dict[str, Any]:
     """
@@ -307,12 +457,41 @@ def get_i18n_template_context(request: Request, lang: str = None) -> Dict[str, A
     if lang not in SUPPORTED_LANGUAGES:
         lang = DEFAULT_LANGUAGE
 
+    # shared_core 미들웨어가 설정한 theme 사용
+    theme = getattr(request.state, 'theme', LANG_THEME_MAP.get(lang, DEFAULT_THEME))
+
+    # shared_core 미들웨어가 설정한 t, i18n_data 사용
+    t_func = getattr(request.state, 't', None)
+    i18n_data = getattr(request.state, 'i18n_data', None)
+
+    if t_func is None:
+        from shared_core.i18n import get_translator
+        t_func = get_translator(lang)
+    if i18n_data is None:
+        i18n_data = _service_i18n.get_for_template(lang)
+
+    # alternate_urls 계산 (shared_core 미들웨어에 없으므로 직접)
+    alternate_urls = getattr(request.state, 'alternate_urls', None)
+    if alternate_urls is None:
+        from app.i18n.middleware import get_alternate_urls
+        alternate_urls = get_alternate_urls(request, lang)
+
     return {
         'lang': lang,
-        't': get_translator(lang),
+        'theme': theme,
+        't': t_func,
         'supported_langs': SUPPORTED_LANGUAGES,
-        'alternate_urls': getattr(request.state, 'alternate_urls', {}),
-        'i18n': i18n.get_for_template(lang),
+        'lang_names': LANGUAGE_NAMES,
+        'alternate_urls': alternate_urls,
+        'i18n': i18n_data,
+        '_t': make_auto_translator(lang),
+        '_js_t': get_js_translations(lang),
+        'tr_event': lambda name: translate_event_name(name, lang),
+        'tr_comp': lambda name: translate_competition_name(name, lang),
+        'tr_team': lambda name: get_localized_org_name_sync(name, lang) if name else '',
+        'tr_player': lambda name: get_localized_player_name_sync(name, lang) if name else '',
+        'tr_grade': lambda grade: _translate_grade(grade, lang),
+        '_js_comp_names': get_js_competition_names(lang, [c.get('competition', {}).get('name', '') for c in get_competitions()]) if lang != 'ko' else {},
     }
 
 
@@ -345,7 +524,7 @@ def get_localized_name(record: Dict, lang: str, name_field: str = "name") -> str
 
 def localize_player_data(player: Dict, lang: str) -> Dict:
     """
-    선수 데이터에 display_name 필드 추가.
+    선수 데이터에 display_name, display_team 필드 추가.
 
     Args:
         player: 선수 데이터 (player_name, team_name, translations 포함)
@@ -357,11 +536,71 @@ def localize_player_data(player: Dict, lang: str) -> Dict:
     result = dict(player)
     result['display_name'] = get_localized_name(player, lang, 'player_name')
 
-    # 팀명도 번역 (organization의 translations 사용)
-    # team_name은 직접 번역하지 않고 원본 유지 (org는 별도 처리 필요)
-    result['display_team'] = player.get('team_name', '')
+    # 팀명 번역: 캐시 → TranslationService fallback
+    team_name = player.get('team_name', '')
+    if lang == 'ko' or not team_name:
+        result['display_team'] = team_name
+    else:
+        result['display_team'] = get_localized_org_name_sync(team_name, lang)
 
     return result
+
+
+def get_localized_org_name_sync(org_name: str, lang: str) -> str:
+    """
+    동기식 조직명 번역 (캐시 → TranslationService fallback).
+
+    API 엔드포인트가 아닌 데이터 가공 레이어에서 사용.
+    """
+    if lang == 'ko' or not org_name:
+        return org_name
+
+    # 1. 인메모리 캐시 확인
+    cached = _org_translation_cache.get(org_name)
+    if cached:
+        return cached
+
+    # 2. TranslationService로 번역 생성
+    ts = get_ts()
+    translation = ts.translate_organization_name(org_name)
+    en_name = translation.get('en', {}).get('name', '')
+    if en_name:
+        _org_translation_cache[org_name] = en_name
+        return en_name
+
+    return org_name
+
+
+def get_localized_player_name_sync(player_name: str, lang: str) -> str:
+    """
+    동기식 선수명 번역 (캐시 → TranslationService fallback).
+
+    우선순위: ko 원본 → 캐시(DB 번역) → TranslationService 자동 로마자 → 원본
+    """
+    if lang == 'ko' or not player_name:
+        return player_name
+
+    # 이미 라틴 문자(영문) 이름이면 변환 불필요
+    if all(c.isascii() or c in ' -' for c in player_name):
+        return player_name
+
+    # 1. 인메모리 캐시 확인
+    cached = _player_translation_cache.get(player_name)
+    if cached:
+        return cached
+
+    # 2. TranslationService로 로마자 변환
+    try:
+        ts = get_ts()
+        translation = ts.translate_player_name(player_name)
+        en_name = translation.get('en', {}).get('name', '')
+        if en_name:
+            _player_translation_cache[player_name] = en_name
+            return en_name
+    except Exception as e:
+        logger.debug(f"선수명 번역 실패 ({player_name}): {e}")
+
+    return player_name
 
 
 async def get_localized_player_name(supabase: "Client", player_name: str, lang: str) -> str:
@@ -418,6 +657,433 @@ async def get_localized_org_name(supabase: "Client", org_name: str, lang: str) -
         logger.warning(f"Failed to get translation for {org_name}: {e}")
 
     return org_name
+
+
+# ==================== Organization Region Helpers ====================
+
+# 광역시/도 → 2~3글자 단축명
+_PROVINCE_SHORT = {
+    "서울특별시": "서울", "부산광역시": "부산", "대구광역시": "대구",
+    "인천광역시": "인천", "광주광역시": "광주", "대전광역시": "대전",
+    "울산광역시": "울산", "세종특별자치시": "세종",
+    "경기도": "경기", "강원도": "강원", "강원특별자치도": "강원",
+    "충청북도": "충북", "충청남도": "충남",
+    "전라북도": "전북", "전북특별자치도": "전북",
+    "전라남도": "전남", "경상북도": "경북", "경상남도": "경남",
+    "제주특별자치도": "제주",
+}
+
+# 광역시 목록 (시/군/구 생략 대상)
+_METRO_CITIES = {"서울", "부산", "대구", "인천", "광주", "대전", "울산", "세종"}
+
+
+def _normalize_province(raw: str) -> str:
+    """광역시/도명을 단축형으로 변환"""
+    if not raw:
+        return ""
+    raw = raw.strip()
+    if raw in _PROVINCE_SHORT:
+        return _PROVINCE_SHORT[raw]
+    # 이미 단축형이면 그대로
+    if raw in _METRO_CITIES or raw in ("경기", "충북", "충남", "전북", "전남", "경북", "경남", "강원", "제주"):
+        return raw
+    return raw
+
+
+def _extract_city_from_address(road_address: str, province_short: str) -> str:
+    """도로명주소에서 시/군 추출 (광역시는 생략)"""
+    if not road_address or province_short in _METRO_CITIES:
+        return ""
+    # 주소 토큰 분리: "경기도 성남시 수정구 ..." → ["경기도", "성남시", ...]
+    tokens = road_address.strip().split()
+    if len(tokens) < 2:
+        return ""
+    # 두 번째 토큰이 시/군 (예: "성남시", "춘천시", "계룡시")
+    city_token = tokens[1]
+    # "시" "군" 접미사 제거
+    for suffix in ("시", "군"):
+        if city_token.endswith(suffix) and len(city_token) > 1:
+            return city_token[:-1]
+    return city_token
+
+
+def build_org_region_cache() -> Dict[str, Dict[str, str]]:
+    """organizations 테이블에서 조직명→지역 매핑 빌드"""
+    global _org_region_cache
+    if not _supabase_client:
+        return {}
+
+    try:
+        result = _supabase_client.table("organizations").select(
+            "name, province, road_address, org_type"
+        ).execute()
+
+        cache = {}
+        for org in (result.data or []):
+            name = org.get("name", "")
+            if not name:
+                continue
+            province_raw = org.get("province", "") or ""
+            province = _normalize_province(province_raw)
+            city = _extract_city_from_address(
+                org.get("road_address", "") or "", province
+            )
+            org_type = org.get("org_type", "") or ""
+            entry = {}
+            if province:
+                entry["province"] = province
+                entry["city"] = city
+            if org_type:
+                entry["org_type"] = org_type
+            if entry:
+                cache[name] = entry
+
+        _org_region_cache = cache
+        logger.info(f"조직 지역 캐시 빌드: {len(cache)}개")
+        return cache
+    except Exception as e:
+        logger.error(f"조직 지역 캐시 빌드 실패: {e}")
+        return {}
+
+
+def build_org_age_group_lookup():
+    """_org_region_cache에서 org_type → 나이그룹 매핑 구축 (국가대표 서브랭킹용)"""
+    global _org_age_group_lookup
+    ORG_TYPE_TO_AGE = {
+        'elementary': 'E3',
+        'middle': 'MS',
+        'high': 'HS',
+        'university': 'UNI',
+        'professional': 'SR',
+        'association': 'SR',
+        'international_school': 'HS',
+    }
+    lookup = {}
+    for name, info in _org_region_cache.items():
+        org_type = info.get('org_type', '')
+        age = ORG_TYPE_TO_AGE.get(org_type)
+        if age:
+            lookup[name] = age
+    _org_age_group_lookup = lookup
+    logger.info(f"조직→나이그룹 매핑 빌드: {len(lookup)}개")
+
+
+def audit_org_types():
+    """서버 시작 시 org_type 감사: 캐시의 org_type vs 분류 로직 비교, 불일치 로그"""
+    logger.info(f"org_type 감사 시작 (캐시 {len(_org_region_cache)}건)...")
+    if not _org_region_cache:
+        logger.warning("org_type 감사 건너뜀: _org_region_cache 비어있음")
+        return
+
+    # OrganizationType enum value → DB style string
+    _ORG_TYPE_TO_STR = {
+        "C": "club", "E": "elementary", "M": "middle", "H": "high",
+        "V": "university", "A": "professional", "N": "national", "X": "unknown",
+    }
+    # DB에는 association/international_school이 별도 타입으로 존재
+    # 분류 로직에서는 national/high로 매핑되므로 동치로 간주
+    _EQUIVALENT_TYPES = {"association": "national", "international_school": "high"}
+
+    mismatches = []
+    errors = []
+    for name, info in _org_region_cache.items():
+        cached_type = info.get("org_type", "")
+        if not cached_type:
+            continue
+
+        try:
+            detected = detect_org_type(name)
+            detected_str = _ORG_TYPE_TO_STR.get(detected.value, detected.value)
+        except Exception as e:
+            errors.append({"name": name, "error": str(e)})
+            continue
+
+        # detected=unknown은 자동분류 불가일 뿐 DB 오류가 아님 → 건너뜀
+        if detected_str == "unknown":
+            continue
+
+        # 동치 타입 정규화 후 비교
+        normalized_cached = _EQUIVALENT_TYPES.get(cached_type, cached_type)
+        if normalized_cached != detected_str:
+            mismatches.append({
+                "name": name,
+                "cached": cached_type,
+                "detected": detected_str,
+            })
+
+    if errors:
+        logger.error(f"org_type 감사 중 오류 {len(errors)}건:")
+        for e in errors[:5]:
+            logger.error(f"  {e['name']}: {e['error']}")
+
+    if mismatches:
+        logger.warning(
+            f"⚠️ org_type 불일치 {len(mismatches)}건 발견 (캐시 vs 분류 로직):"
+        )
+        for m in mismatches[:20]:  # 상위 20건만 로그
+            logger.warning(
+                f"  {m['name']}: DB={m['cached']} → should be {m['detected']}"
+            )
+        if len(mismatches) > 20:
+            logger.warning(f"  ... 외 {len(mismatches) - 20}건")
+    else:
+        logger.info("✅ org_type 감사 통과: 불일치 0건")
+
+
+def build_org_translation_cache():
+    """organizations 테이블의 translations에서 조직명→영문명 캐시 빌드"""
+    global _org_translation_cache
+    if not _supabase_client:
+        return
+
+    try:
+        result = _supabase_client.table("organizations").select(
+            "name, translations"
+        ).execute()
+
+        cache = {}
+        for org in (result.data or []):
+            name = org.get("name", "")
+            translations = org.get("translations")
+            if not name or not isinstance(translations, dict):
+                continue
+            en_data = translations.get("en", {})
+            if isinstance(en_data, dict) and en_data.get("name"):
+                cache[name] = en_data["name"]
+
+        _org_translation_cache = cache
+        logger.info(f"조직 번역 캐시 빌드: {len(cache)}개")
+    except Exception as e:
+        logger.error(f"조직 번역 캐시 빌드 실패: {e}")
+
+
+def build_player_translation_cache():
+    """players 테이블의 translations에서 선수명→영문명 캐시 빌드"""
+    global _player_translation_cache
+    if not _supabase_client:
+        return
+
+    try:
+        result = _supabase_client.table("players").select(
+            "player_name, translations"
+        ).execute()
+
+        cache = {}
+        for player in (result.data or []):
+            name = player.get("player_name", "")
+            translations = player.get("translations")
+            if not name or not isinstance(translations, dict):
+                continue
+            en_data = translations.get("en", {})
+            if isinstance(en_data, dict) and en_data.get("name"):
+                cache[name] = en_data["name"]
+
+        _player_translation_cache = cache
+        logger.info(f"선수 번역 캐시 빌드: {len(cache)}개")
+    except Exception as e:
+        logger.error(f"선수 번역 캐시 빌드 실패: {e}")
+
+
+def get_team_region_display(team_name: str) -> str:
+    """팀명에 대한 지역 표시 문자열 반환 (예: '서울', '경기 성남')"""
+    info = _org_region_cache.get(team_name)
+    if not info:
+        return ""
+    province = info.get("province", "")
+    city = info.get("city", "")
+    if city:
+        return f"{province} {city}"
+    return province
+
+
+def _school_type_code(level: str) -> str:
+    """GradeEstimator의 school_level → 표시 코드 변환"""
+    if level == "middle":
+        return "M"
+    elif level == "high":
+        return "H"
+    elif level and level.startswith("elem"):
+        return "E"
+    return "P"  # 일반부/대학부/기타
+
+
+def build_player_region_grade_summary(
+    participants: list,
+    event_name: str,
+) -> dict:
+    """참가선수의 지역별+학년별 분포 요약 생성
+
+    Returns:
+        {
+            school_type: "M"|"H"|"E"|"P",
+            total: {count, grades: {"3G": n, "2G": n, "1G": n, "?": n}},
+            by_province: {
+                prov: {
+                    count, grades: {...},
+                    cities: {city: {count, grades: {...}}}
+                }
+            }
+        }
+    """
+    from app.grade_estimator import GradeEstimator
+
+    level = GradeEstimator.parse_school_level(event_name)
+    school_type = _school_type_code(level)
+
+    total_grades: Dict[str, int] = {}
+    by_province: Dict[str, dict] = {}
+
+    for p in (participants or []):
+        grade_num = p.get("grade_num")
+        grade_key = f"{grade_num}G" if grade_num else "?"
+
+        # 전체 합계
+        total_grades[grade_key] = total_grades.get(grade_key, 0) + 1
+
+        # 지역별
+        team = (p.get("team") or "").strip()
+        info = _org_region_cache.get(team, {})
+        prov = info.get("province", "")
+        city = info.get("city", "")
+
+        if not prov:
+            prov = "미확인"
+
+        if prov not in by_province:
+            by_province[prov] = {"count": 0, "grades": {}, "cities": {}}
+        by_province[prov]["count"] += 1
+        by_province[prov]["grades"][grade_key] = \
+            by_province[prov]["grades"].get(grade_key, 0) + 1
+
+        if city:
+            cities = by_province[prov]["cities"]
+            if city not in cities:
+                cities[city] = {"count": 0, "grades": {}}
+            cities[city]["count"] += 1
+            cities[city]["grades"][grade_key] = \
+                cities[city]["grades"].get(grade_key, 0) + 1
+
+    return {
+        "school_type": school_type,
+        "total": {"count": len(participants or []), "grades": total_grades},
+        "by_province": by_province,
+    }
+
+
+def build_competition_stats(comp: dict) -> dict:
+    """대회 전체 통계 생성 (모든 이벤트의 participants 집계)
+
+    Returns:
+        {
+            total_players: int,
+            total_teams: int,
+            by_school: {school_type: {count, grades}},
+            by_province: {prov: {count, grades, cities: {city: {count, grades}}}},
+            by_weapon: {weapon: [{category, count}]}
+        }
+    """
+    from app.grade_estimator import GradeEstimator
+
+    seen_players = set()  # (name, team) 중복 제거
+    all_teams = set()
+    by_school: Dict[str, Dict[str, int]] = {}  # school_type → grades
+    by_province: Dict[str, dict] = {}
+    by_weapon: Dict[str, list] = {}
+    by_org_type: Dict[str, int] = {}  # org_type → player count
+
+    # 이벤트명에서 카테고리 추출 (예: "남중", "여고", "남일반")
+    def _parse_event_category(ename: str) -> str:
+        gender = "남" if re.search(r'남[중고초일]|남자', ename) else \
+                 "여" if re.search(r'여[중고초일]|여자', ename) else ""
+        level = GradeEstimator.parse_school_level(ename)
+        if level == "middle":
+            return f"{gender}중"
+        elif level == "high":
+            return f"{gender}고"
+        elif level and level.startswith("elem"):
+            return f"{gender}초"
+        return f"{gender}일반"
+
+    for event in comp.get("events", []):
+        participants = event.get("participants")
+        if not participants:
+            continue
+
+        event_name = event.get("name", "")
+        weapon = event.get("weapon", "")
+        level = GradeEstimator.parse_school_level(event_name)
+        school_type = _school_type_code(level)
+        category = _parse_event_category(event_name)
+
+        # 무기별 카테고리 집계
+        if weapon:
+            if weapon not in by_weapon:
+                by_weapon[weapon] = {}
+            cat_map = by_weapon[weapon]
+
+        event_count = 0
+        for p in participants:
+            name = (p.get("name") or "").strip()
+            team = (p.get("team") or "").strip()
+            key = (name, team)
+            if key in seen_players:
+                continue
+            seen_players.add(key)
+            all_teams.add(team)
+            event_count += 1
+
+            grade_num = p.get("grade_num")
+            grade_key = f"{grade_num}G" if grade_num else "?"
+
+            # 학교별
+            if school_type not in by_school:
+                by_school[school_type] = {"count": 0, "grades": {}}
+            by_school[school_type]["count"] += 1
+            by_school[school_type]["grades"][grade_key] = \
+                by_school[school_type]["grades"].get(grade_key, 0) + 1
+
+            # 지역별
+            info = _org_region_cache.get(team, {})
+            prov = info.get("province", "") or "미확인"
+            city = info.get("city", "")
+
+            if prov not in by_province:
+                by_province[prov] = {"count": 0, "grades": {}, "cities": {}}
+            by_province[prov]["count"] += 1
+            by_province[prov]["grades"][grade_key] = \
+                by_province[prov]["grades"].get(grade_key, 0) + 1
+
+            if city:
+                cities = by_province[prov]["cities"]
+                if city not in cities:
+                    cities[city] = {"count": 0, "grades": {}}
+                cities[city]["count"] += 1
+                cities[city]["grades"][grade_key] = \
+                    cities[city]["grades"].get(grade_key, 0) + 1
+
+            # 소속 유형별
+            ot = info.get("org_type", "") or "기타"
+            by_org_type[ot] = by_org_type.get(ot, 0) + 1
+
+        if weapon and event_count > 0:
+            cat_map[category] = cat_map.get(category, 0) + event_count
+
+    # by_weapon을 정리: dict → list of {category, count}
+    by_weapon_list = {}
+    for w, cat_map in by_weapon.items():
+        by_weapon_list[w] = [
+            {"category": cat, "count": cnt}
+            for cat, cnt in sorted(cat_map.items(), key=lambda x: -x[1])
+        ]
+
+    return {
+        "total_players": len(seen_players),
+        "total_teams": len(all_teams),
+        "by_school": by_school,
+        "by_province": by_province,
+        "by_weapon": by_weapon_list,
+        "by_org_type": by_org_type,
+    }
 
 
 # ==================== Data Loading & Indexing ====================
@@ -516,7 +1182,9 @@ def get_event_age_group_fie(event: dict) -> str:
         event: 이벤트 딕셔너리 (age_group, name 필드 포함)
 
     Returns:
-        FIE 연령대 코드 (Y8, Y10, Y12, Y14, Cadet, Junior, Veteran, U17)
+        FIE 연령대 코드 또는 국제 연령대 코드
+        - FIE: Y8, Y10, Y12, Y14, Cadet, Junior, Veteran
+        - 국제: U9, U11, U13, U17, U20
     """
     # 1. 데이터베이스의 age_group 필드 우선
     db_age_group = event.get("age_group", "")
@@ -525,9 +1193,9 @@ def get_event_age_group_fie(event: dict) -> str:
         # 이미 FIE 코드이면 그대로 반환
         if db_age_group in ("Y8", "Y10", "Y12", "Y14", "Cadet", "Junior", "Veteran"):
             return db_age_group
-        # U17은 그대로 유지 (특수 케이스)
-        if db_age_group == "U17":
-            return "U17"
+        # 국제 연령 코드도 그대로 유지 (익산 대회 등)
+        if db_age_group in ("U9", "U11", "U13", "U17", "U20"):
+            return db_age_group
         # 레거시 코드면 FIE 코드로 변환
         fie_code = convert_to_fie_code(db_age_group)
         if fie_code != db_age_group:  # 변환 성공
@@ -538,7 +1206,7 @@ def get_event_age_group_fie(event: dict) -> str:
 
     # 추출된 코드도 FIE로 변환
     if extracted:
-        if extracted in ("Y8", "Y10", "Y12", "Y14", "Cadet", "Junior", "Veteran", "U17"):
+        if extracted in ("Y8", "Y10", "Y12", "Y14", "Cadet", "Junior", "Veteran", "U9", "U11", "U13", "U17", "U20"):
             return extracted
         return convert_to_fie_code(extracted)
 
@@ -549,12 +1217,15 @@ def matches_age_group_filter(event_age: str, filter_age: str) -> bool:
     """
     이벤트 연령대가 필터 조건과 매칭되는지 확인
 
-    특수 케이스:
-    - U17 (17세이하): Y14 필터와 Cadet 필터 양쪽에서 매칭됨
-    - 선수들은 Y14와 Cadet 카테고리에서 모두 경기 결과 반영
+    국제 연령 카테고리 매핑:
+    - U9 (9세이하) → Y8 (초등1-2)
+    - U11 (11세이하) → Y10 (초등3-4)
+    - U13 (13세이하) → Y12 (초등5-6)
+    - U17 (17세이하) → Y14, Cadet (중학생/고등학생)
+    - U20 (20세이하) → Junior (고등학생/대학생)
 
     Args:
-        event_age: 이벤트의 연령대 코드 (FIE 코드)
+        event_age: 이벤트의 연령대 코드 (FIE 코드 또는 국제 코드)
         filter_age: 사용자가 선택한 필터 연령대 (FIE 코드)
 
     Returns:
@@ -564,9 +1235,32 @@ def matches_age_group_filter(event_age: str, filter_age: str) -> bool:
     if event_age == filter_age:
         return True
 
-    # U17 특수 처리: Y14 또는 Cadet 필터에서 U17 이벤트 표시
-    if event_age == 'U17':
-        if filter_age in ('Y14', 'Cadet'):
+    # 국제 연령 카테고리 → 한국 연령 카테고리 매핑
+    international_to_korean = {
+        'U9': ['Y8'],           # 9세이하 → 초등1-2
+        'U11': ['Y10'],         # 11세이하 → 초등3-4
+        'U13': ['Y12'],         # 13세이하 → 초등5-6
+        'U17': ['Y14', 'Cadet'], # 17세이하 → 중학생/고등학생
+        'U20': ['Junior'],      # 20세이하 → 고등학생/대학생
+    }
+
+    # 이벤트가 국제 카테고리일 때, 해당하는 한국 필터와 매칭
+    if event_age in international_to_korean:
+        if filter_age in international_to_korean[event_age]:
+            return True
+
+    # 역방향: 한국 필터로 검색 시 국제 카테고리 이벤트도 포함
+    korean_to_international = {
+        'Y8': ['U9'],
+        'Y10': ['U11'],
+        'Y12': ['U13'],
+        'Y14': ['U17'],
+        'Cadet': ['U17'],
+        'Junior': ['U20'],
+    }
+
+    if filter_age in korean_to_international:
+        if event_age in korean_to_international[filter_age]:
             return True
 
     return False
@@ -588,53 +1282,126 @@ def build_player_index():
         year = int(comp_date[:4]) if comp_date else 0
 
         for event in comp.get("events", []):
-            sub_event_cd = event.get("sub_event_cd", "")
             event_name = event.get("name", "")
+
+            # 단체전 이벤트는 선수 인덱스에서 제외 (팀명이 개인 선수로 등록되는 것 방지)
+            if is_team_event(event_name):
+                continue
+
+            sub_event_cd = event.get("sub_event_cd", "")
             age_group = event.get("age_group") or extract_age_group(event_name)
 
-            # 참가자 수 계산: pool_total_ranking > de_bracket > final_rankings 순서
-            pool_ranking = event.get("pool_total_ranking", [])
+            # 참가자 수 계산 우선순위:
+            # 1. participants 리스트 (fetch_participants.py로 수집 - 가장 정확)
+            # 2. Pool 참가자 합계 (pool_rounds에서 집계)
+            # 3. pool_total_ranking 수 (자체 계산 시 전원 포함)
+            # 4. final_rankings 수 (최소 fallback)
+            pool_rounds = event.get("pool_rounds", [])
+            pool_total_ranking = event.get("pool_total_ranking", [])
             de_bracket = event.get("de_bracket", {})
             final_rankings = event.get("final_rankings", [])
+            participants_list = event.get("participants", [])
+
+            # Pool 참가자 수 계산 (각 Pool의 선수 합계)
+            pool_participants = set()
+            for pool in pool_rounds:
+                for result in pool.get("results", []):
+                    name = result.get("name", "").strip()
+                    if name:
+                        pool_participants.add(name)
+            pool_participant_count = len(pool_participants)
+
             total_participants = (
-                event.get("total_participants") or
-                len(pool_ranking) or
-                (de_bracket.get("participant_count", 0) if isinstance(de_bracket, dict) else 0) or
-                len(final_rankings)
+                len(participants_list) or  # participants 리스트 (가장 정확)
+                pool_participant_count or  # Pool 참가자 합계
+                len(pool_total_ranking) or  # 풀 종합 순위
+                len(final_rankings)  # 최종 순위 (최소 fallback)
             )
 
             # Pool 통계 맵 구축 (player_name -> {wins, losses})
-            pool_stats = {}
+            # 대소문자 무시 매칭을 위해 소문자 키도 유지
+            pool_stats = {}  # 원본 이름 -> {wins, losses}
+            pool_stats_lower = {}  # 소문자 이름 -> {wins, losses}
             pool_rounds = event.get("pool_rounds", [])
             for pool in pool_rounds:
                 for result in pool.get("results", []):
+                    # 기권 선수는 pool stats에서 제외 (FIE t.95)
+                    if result.get("is_forfeit"):
+                        continue
                     pname = result.get("name", "").strip()
                     if pname:
                         wins = result.get("wins", 0) or 0
                         losses = result.get("losses", 0) or 0
+                        pname_lower = pname.lower()
                         if pname in pool_stats:
                             pool_stats[pname]["wins"] += wins
                             pool_stats[pname]["losses"] += losses
                         else:
                             pool_stats[pname] = {"wins": wins, "losses": losses}
+                        if pname_lower in pool_stats_lower:
+                            pool_stats_lower[pname_lower]["wins"] += wins
+                            pool_stats_lower[pname_lower]["losses"] += losses
+                        else:
+                            pool_stats_lower[pname_lower] = {"wins": wins, "losses": losses}
 
             # DE 통계 맵 구축 (player_name -> {wins, losses})
-            de_stats = {}
+            # 이름 정규화를 위해 소문자 키와 원본 이름 모두 저장
+            de_stats = {}  # 원본 이름 -> {wins, losses}
+            de_stats_lower = {}  # 소문자 이름 -> {wins, losses}
             if isinstance(de_bracket, dict):
-                full_bouts = de_bracket.get("full_bouts", [])
+                full_bouts = _get_full_bouts_from_de_bracket(de_bracket)
                 for bout in full_bouts:
                     if bout.get("is_bye"):
                         continue
-                    winner = bout.get("winner_name") or bout.get("winner", {}).get("name", "")
-                    loser = bout.get("loser_name") or bout.get("loser", {}).get("name", "")
-                    if winner:
-                        winner = winner.strip()
-                        de_stats[winner] = de_stats.get(winner, {"wins": 0, "losses": 0})
-                        de_stats[winner]["wins"] += 1
+
+                    # 데이터 구조: winner_name, player1_name, player2_name 사용
+                    # loser_name 필드가 없으므로 직접 계산해야 함
+                    winner = bout.get("winner_name", "")
+                    player1 = bout.get("player1_name", "")
+                    player2 = bout.get("player2_name", "")
+
+                    # winner/loser 중첩 객체 구조도 지원 (일부 데이터용)
+                    if not winner:
+                        winner_obj = bout.get("winner", {}) or {}
+                        winner = winner_obj.get("name", "")
+
+                    if not winner or not player1 or not player2:
+                        continue
+
+                    # 패자 계산: winner가 아닌 쪽이 loser
+                    winner = winner.strip()
+                    player1 = player1.strip()
+                    player2 = player2.strip()
+
+                    if winner == player1:
+                        loser = player2
+                    elif winner == player2:
+                        loser = player1
+                    else:
+                        # winner_name이 player1/player2와 다른 경우 스킵
+                        continue
+
+                    # 승자 통계 추가
+                    winner_lower = winner.lower()
+                    de_stats[winner] = de_stats.get(winner, {"wins": 0, "losses": 0})
+                    de_stats[winner]["wins"] += 1
+                    de_stats_lower[winner_lower] = de_stats_lower.get(winner_lower, {"wins": 0, "losses": 0})
+                    de_stats_lower[winner_lower]["wins"] += 1
+
+                    # 패자 통계 추가
                     if loser:
-                        loser = loser.strip()
+                        loser_lower = loser.lower()
                         de_stats[loser] = de_stats.get(loser, {"wins": 0, "losses": 0})
                         de_stats[loser]["losses"] += 1
+                        de_stats_lower[loser_lower] = de_stats_lower.get(loser_lower, {"wins": 0, "losses": 0})
+                        de_stats_lower[loser_lower]["losses"] += 1
+
+            # pool_total_ranking에서 선수별 뿔 순위 맵 구축
+            pool_rank_map = {}
+            for ptr in pool_total_ranking:
+                ptr_name = ptr.get("name", "").strip()
+                if ptr_name:
+                    pool_rank_map[ptr_name] = ptr.get("rank")
 
             # 엘리미나시옹디렉트 (final_rankings)에서 선수 추출
             for final in event.get("final_rankings", []):
@@ -642,16 +1409,23 @@ def build_player_index():
                 if not player_name:
                     continue
 
-                # 중복 체크 (같은 대회, 같은 종목)
-                existing = [r for r in _player_index[player_name]
+                # 중복 체크 (같은 대회, 같은 종목) - 있으면 업데이트, 없으면 새로 추가
+                existing_records = [r for r in _player_index[player_name]
                            if r["competition_name"] == comp_name
                            and r["event_name"] == event_name]
-                if existing:
-                    continue  # 이미 존재하면 건너뛰기
 
-                # Pool/DE 통계 가져오기
-                player_pool = pool_stats.get(player_name, {"wins": 0, "losses": 0})
-                player_de = de_stats.get(player_name, {"wins": 0, "losses": 0})
+                # Pool/DE 통계 가져오기 (대소문자 무시 매칭)
+                player_name_lower = player_name.lower()
+                # 먼저 원본 이름으로 찾고, 없으면 소문자로 찾기
+                player_pool = pool_stats.get(player_name) or pool_stats_lower.get(player_name_lower, {"wins": 0, "losses": 0})
+                player_de = de_stats.get(player_name) or de_stats_lower.get(player_name_lower, {"wins": 0, "losses": 0})
+
+                if existing_records:
+                    # 이미 존재하면 DE 통계 업데이트
+                    for existing in existing_records:
+                        existing["de_wins"] = player_de["wins"]
+                        existing["de_losses"] = player_de["losses"]
+                    continue
 
                 # win_rate 형식: "wins/total" (Pool 기준)
                 pool_total = player_pool["wins"] + player_pool["losses"]
@@ -659,6 +1433,7 @@ def build_player_index():
 
                 record = {
                     "rank": final.get("rank"),
+                    "pool_rank": pool_rank_map.get(player_name),
                     "competition_name": comp_name,
                     "competition_date": comp_date,
                     "event_name": event_name,
@@ -680,6 +1455,67 @@ def build_player_index():
                     "total_participants": total_participants
                 }
                 _player_index[player_name].append(record)
+
+            # pool_total_ranking에만 있는 선수 추가
+            # - 진행 중 대회: is_in_progress=True (결과 미확정)
+            # - 종료된 대회: eliminated_in_pool=True (Pool 탈락)
+            final_names = {f.get("name", "").strip() for f in final_rankings if f.get("name")}
+
+            # 대회 종료 여부 판단: status가 "종료"이거나, 과거 날짜
+            comp_status = comp_info.get("status", "")
+            comp_ended = comp_status == "종료"
+            if not comp_ended and comp_date:
+                try:
+                    end_date = comp_info.get("end_date") or comp_date
+                    comp_end_dt = datetime.strptime(end_date[:10], "%Y-%m-%d")
+                    comp_ended = comp_end_dt.date() < datetime.now().date()
+                except (ValueError, TypeError):
+                    pass
+
+            for ptr in pool_total_ranking:
+                ptr_name = ptr.get("name", "").strip()
+                if not ptr_name or ptr_name in final_names:
+                    continue  # 이미 final_rankings에서 처리됨
+
+                # 중복 체크 (같은 대회, 같은 종목)
+                existing = [r for r in _player_index[ptr_name]
+                           if r["competition_name"] == comp_name
+                           and r["event_name"] == event_name]
+                if existing:
+                    continue
+
+                # Pool/DE 통계 가져오기
+                ptr_name_lower = ptr_name.lower()
+                player_pool = pool_stats.get(ptr_name) or pool_stats_lower.get(ptr_name_lower, {"wins": 0, "losses": 0})
+                player_de = de_stats.get(ptr_name) or de_stats_lower.get(ptr_name_lower, {"wins": 0, "losses": 0})
+
+                pool_total = player_pool["wins"] + player_pool["losses"]
+                win_rate = f"{player_pool['wins']}/{pool_total}" if pool_total > 0 else ""
+
+                record = {
+                    "rank": None,  # 최종 순위 미확정
+                    "pool_rank": ptr.get("rank"),
+                    "competition_name": comp_name,
+                    "competition_date": comp_date,
+                    "event_name": event_name,
+                    "weapon": event.get("weapon", ""),
+                    "gender": event.get("gender", ""),
+                    "age_group": age_group,
+                    "event_type": event.get("event_type") or "개인",
+                    "team": ptr.get("team", ""),
+                    "win_rate": win_rate,
+                    "pool_wins": player_pool["wins"],
+                    "pool_losses": player_pool["losses"],
+                    "de_wins": player_de["wins"],
+                    "de_losses": player_de["losses"],
+                    "year": year,
+                    "event_cd": comp_info.get("event_cd", ""),
+                    "sub_event_cd": sub_event_cd,
+                    "total_participants": total_participants,
+                    "is_in_progress": not comp_ended,  # 진행 중 대회만 True
+                    "eliminated_in_pool": comp_ended,  # 종료된 대회는 Pool 탈락
+                }
+                _player_index[ptr_name].append(record)
 
             # 기존 v1 구조도 지원 (하위 호환) - final_results만 사용
             event_results = comp.get("results", {}).get(sub_event_cd, {})
@@ -717,6 +1553,119 @@ def build_player_index():
     logger.info(f"선수 인덱스 구축 완료: {len(_player_index)}명")
 
 
+def build_competition_player_cache():
+    """대회별 선수 인덱스 구축 (자동완성 검색용)
+
+    각 대회의 모든 선수를 미리 인덱싱하여 자동완성 검색 속도를 향상시킴
+    """
+    global _competition_player_cache
+    _competition_player_cache = {}
+
+    for comp in _data_cache.get("competitions", []):
+        comp_info = comp.get("competition", {})
+        event_cd = comp_info.get("event_cd", "")
+        if not event_cd:
+            continue
+
+        players_seen = set()
+        players_list = []
+
+        for event in comp.get("events", []):
+            event_name = event.get("name", "")
+
+            # 단체전 이벤트는 개인 선수 캐시에서 제외
+            if is_team_event(event_name):
+                continue
+
+            sub_event_cd = event.get("sub_event_cd", "")
+
+            # Pool에서 선수 추출
+            for pool in event.get("pool_rounds", []):
+                for result in pool.get("results", []):
+                    name = result.get("name", "")
+                    team = result.get("team", "")
+                    if name:
+                        key = f"{name}|{team}|{sub_event_cd}"
+                        if key not in players_seen:
+                            players_seen.add(key)
+                            players_list.append({
+                                "name": name,
+                                "name_lower": name.lower(),
+                                "team": team,
+                                "sub_event_cd": sub_event_cd,
+                                "event_name": event_name
+                            })
+
+            # Final rankings에서도 추출
+            for ranking in event.get("final_rankings", []):
+                name = ranking.get("name", "")
+                team = ranking.get("team", "")
+                if name:
+                    key = f"{name}|{team}|{sub_event_cd}"
+                    if key not in players_seen:
+                        players_seen.add(key)
+                        players_list.append({
+                            "name": name,
+                            "name_lower": name.lower(),
+                            "team": team,
+                            "sub_event_cd": sub_event_cd,
+                            "event_name": event_name
+                        })
+
+        # 이름순 정렬
+        players_list.sort(key=lambda x: x["name"])
+        _competition_player_cache[event_cd] = players_list
+
+    logger.info(f"대회별 선수 캐시 구축 완료: {len(_competition_player_cache)}개 대회")
+
+
+def build_team_event_index():
+    """단체전 이벤트 인덱스 구축 (조직명 → 단체전 결과 목록)
+
+    단체전 final_rankings의 name 필드에는 팀명(학교/클럽명)이 저장되어 있음.
+    이를 조직(organization)별로 인덱싱하여 단체전 성적 조회에 활용.
+
+    단체전 DE 대진표 조사 결과 (Task A4):
+    - DE bracket의 bouts에는 팀 vs 팀 결과만 존재 (예: "개양중학교" vs "울산선발", 45-28)
+    - player1_name / player2_name에 조직명이 들어가며, 개별 선수 bout 데이터는 없음
+    - KFF 웹사이트 자체가 단체전의 개별 선수 경기를 제공하지 않으므로 스크래퍼도 수집 불가
+    - 따라서 현재는 final_rankings에서 팀 단위 결과(순위)만 추출하여 인덱싱
+    """
+    global _team_event_index
+    _team_event_index = defaultdict(list)
+
+    for comp in _data_cache.get("competitions", []):
+        comp_info = comp.get("competition", {})
+        comp_name = comp_info.get("name", "")
+        comp_date = comp_info.get("start_date", "")
+
+        for event in comp.get("events", []):
+            event_name = event.get("name", "")
+
+            if not is_team_event(event_name):
+                continue
+
+            weapon = event.get("weapon", "")
+            gender = event.get("gender", "")
+
+            for ranking in event.get("final_rankings", []):
+                org_name = (ranking.get("name") or "").strip()
+                if not org_name:
+                    continue
+
+                record = {
+                    "competition_name": comp_name,
+                    "date": comp_date,
+                    "event_name": event_name,
+                    "weapon": weapon,
+                    "gender": gender,
+                    "rank": ranking.get("rank"),
+                }
+                _team_event_index[org_name].append(record)
+
+    logger.info(f"단체전 인덱스 구축 완료: {len(_team_event_index)}개 조직")
+
+
 def build_filter_options():
     """필터 옵션 캐시 구축"""
     global _filter_options
@@ -734,7 +1683,7 @@ def build_filter_options():
         if comp_date:
             try:
                 _filter_options["years"].add(int(comp_date[:4]))
-            except:
+            except (ValueError, TypeError, IndexError):
                 pass
 
         for event in comp.get("events", []):
@@ -747,7 +1696,7 @@ def build_filter_options():
                 _filter_options["genders"].add(gender)
 
             event_type = event.get("event_type", "")
-            if event_type:
+            if event_type and event_type in ("개인", "단체"):
                 _filter_options["event_types"].add(event_type)
 
             # 데이터베이스 age_group 필드 우선, FIE 코드로 변환
@@ -850,15 +1799,28 @@ def load_data_from_supabase() -> bool:
                 raw_pools = raw.get("pool_rounds", [])
                 filtered_pools = _filter_pool_rounds(raw_pools)
 
-                # 참가자 수 계산: pool_total_ranking > de_bracket > final_rankings 순서로 확인
-                pool_ranking = raw.get("pool_total_ranking", [])
-                de_bracket = raw.get("de_bracket", {})
+                # 참가자 수 계산 우선순위:
+                # 1. participants 리스트 (fetch_participants.py로 수집 - 가장 정확)
+                # 2. Pool 참가자 합계 (pool_rounds에서 집계)
+                # 3. pool_total_ranking 수 (자체 계산 시 전원 포함)
+                # 4. final_rankings 수 (최소 fallback)
+                pool_total_ranking = raw.get("pool_total_ranking", [])
                 final_rankings = raw.get("final_rankings", [])
+                participants_list = raw.get("participants", [])
+
+                # Pool 참가자 수 계산 (각 Pool의 선수 합계)
+                pool_participants_set = set()
+                for pool in filtered_pools:
+                    for result in pool.get("results", []):
+                        name = result.get("name", "").strip()
+                        if name:
+                            pool_participants_set.add(name)
+                pool_participant_count = len(pool_participants_set)
 
                 total_participants = (
-                    raw.get("total_participants") or  # 명시적으로 저장된 값
-                    len(pool_ranking) or  # Pool 참가자 수 (가장 정확)
-                    de_bracket.get("participant_count", 0) or  # DE 대진표 참가자 수
+                    len(participants_list) or  # participants 리스트 (가장 정확)
+                    pool_participant_count or  # Pool 참가자 합계
+                    len(pool_total_ranking) or  # 풀 종합 순위
                     len(final_rankings)  # 최종 순위 (최소값, fallback)
                 )
 
@@ -868,15 +1830,18 @@ def load_data_from_supabase() -> bool:
                     "name": e["event_name"],
                     "weapon": e["weapon"],
                     "gender": e["gender"],
-                    "event_type": e["category"],  # category -> event_type
+                    "event_type": e["category"] if e.get("category") in ("개인", "단체") else "개인",  # category -> event_type (normalize)
                     "age_group": e["age_group"],
                     "total_participants": total_participants,
                     "pool_rounds": filtered_pools,
                     "pool_total_ranking": raw.get("pool_total_ranking", []),
                     "final_rankings": raw.get("final_rankings", []),
+                    "final_rankings_source": raw.get("final_rankings_source", ""),
                     "de_bracket": _normalize_de_bracket_for_api(raw.get("de_bracket", {})),
+                    "de_format": e.get("de_format"),
                     "de_matches": raw.get("de_matches", []),
-                    "tournament_bracket": raw.get("tournament_bracket", [])
+                    "tournament_bracket": raw.get("tournament_bracket", []),
+                    "participants": raw.get("participants", []),
                 }
                 event_list.append(event_data)
 
@@ -967,6 +1932,10 @@ def build_identity_resolver():
     global _identity_resolver
     _identity_resolver = PlayerIdentityResolver()
 
+    # 조직 지역 캐시 주입 (지역 인식 동명이인 분리)
+    if _org_region_cache:
+        _identity_resolver.set_org_region_cache(_org_region_cache)
+
     for comp_data in _data_cache.get("competitions", []):
         _identity_resolver.add_competition_data(comp_data)
 
@@ -1012,16 +1981,94 @@ def load_data():
     # 인덱스 구축
     build_filter_options()
     build_player_index()
+    build_competition_player_cache()  # 대회별 선수 캐시 (자동완성 최적화)
+    build_team_event_index()  # 단체전 조직별 결과 인덱스
+    build_org_region_cache()  # 조직→지역 캐시 (참가선수 탭 + 동명이인 지역 인식)
+    build_org_age_group_lookup()  # 조직→나이그룹 매핑 (국가대표 서브랭킹용)
     build_identity_resolver()
+    audit_org_types()  # org_type 분류 로직 vs DB 불일치 감사
+    build_org_translation_cache()  # 조직→영문명 캐시 (i18n)
+    build_player_translation_cache()  # 선수→영문명 캐시 (i18n)
+    build_matches_count()  # 총 경기 수 (히어로 스탯) — 기동 시 1회
+
+    # 학년 추정기 캐시 구축
+    global _grade_estimator
+    try:
+        ge = GradeEstimator()
+        ge.build_cache(_data_cache.get("competitions", []), None)
+        _grade_estimator = ge
+    except Exception as e:
+        logger.error(f"학년 추정기 초기화 실패: {e}")
+        _grade_estimator = None
 
     # 랭킹 계산기 초기화 (Supabase 캐시 데이터 사용)
     try:
         _ranking_calculator = RankingCalculator()
-        _ranking_calculator.load_from_data(_data_cache)
+        _ranking_calculator.load_from_data(_data_cache, org_age_lookup=_org_age_group_lookup)
         logger.info(f"✅ 랭킹 계산기 초기화 완료: {len(_ranking_calculator.results)}개 결과")
     except Exception as e:
         logger.error(f"랭킹 계산기 초기화 실패: {e}")
         _ranking_calculator = None
+
+    # 선발 포인트 계산기 초기화
+    global _selection_calculator
+    try:
+        _selection_calculator = SelectionPointCalculator(_data_cache, _grade_estimator)
+        logger.info("✅ 선발 포인트 계산기 초기화 완료")
+    except Exception as e:
+        logger.error(f"선발 포인트 계산기 초기화 실패: {e}")
+        _selection_calculator = None
+
+    # 데이터 무결성 검증 (백그라운드 스레드에서 실행 — 서버 시작을 블로킹하지 않음)
+    import threading
+
+    def _run_startup_validation():
+        try:
+            from app.data_validator import DataValidator
+            logger.info("[DataValidator] 백그라운드 검증 시작...")
+            validator = DataValidator(get_competitions(), org_cache=_org_region_cache)
+            issues = validator.validate_all()
+            errors = [i for i in issues if i.severity == "ERROR"]
+            warnings = [i for i in issues if i.severity == "WARNING"]
+
+            if errors:
+                from collections import Counter
+                rule_counts = Counter(e.rule_id for e in errors)
+                logger.error(f"[DataValidator] 데이터 오류 {len(errors)}건 발견!")
+                for rule_id, cnt in rule_counts.most_common():
+                    logger.error(f"  {rule_id}: {cnt}건")
+            if warnings:
+                logger.warning(f"[DataValidator] 데이터 경고 {len(warnings)}건")
+            if not errors and not warnings:
+                logger.info("✅ [DataValidator] 데이터 무결성 검증 통과")
+        except Exception as e:
+            logger.warning(f"[DataValidator] 검증 실행 실패: {e}")
+
+    threading.Thread(target=_run_startup_validation, daemon=True).start()
+
+
+def build_matches_count() -> int:
+    """총 경기(bout) 수 집계 — 기동 시 1회만 호출.
+
+    /api/status는 홈 첫 로드마다 호출되므로 요청 시점에 세지 않고 캐시한다.
+    실패 시 0을 유지하고 /api/status에서 해당 키를 생략한다.
+    """
+    global _matches_count
+
+    if not _supabase_client:
+        _matches_count = 0
+        return 0
+
+    try:
+        # head=True: 행 본문 없이 count만 받는다 (5만 행 전송 방지)
+        res = _supabase_client.table("matches").select("id", count="exact", head=True).execute()
+        _matches_count = int(res.count or 0)
+        logger.info(f"✅ 경기 수 집계 완료: {_matches_count:,}건")
+    except Exception as e:
+        logger.warning(f"경기 수 집계 실패 (히어로 스탯에서 생략됨): {e}")
+        _matches_count = 0
+
+    return _matches_count
 
 
 def get_competitions() -> List[Dict]:
@@ -1067,9 +2114,11 @@ async def home(request: Request, lang: str = "ko"):
         from fastapi.responses import RedirectResponse
         return RedirectResponse(url=f"/{DEFAULT_LANGUAGE}/", status_code=302)
 
+    access_level, member = await get_access_level(request)
     context = {
         "request": request,
         "title": "Korean Fencing Tracker",
+        "access_level": access_level,
         **get_i18n_template_context(request, lang)
     }
     return templates.TemplateResponse("index.html", context)
@@ -1081,7 +2130,7 @@ async def api_status():
     competitions = get_competitions()
     total_events = sum(len(c.get("events", [])) for c in competitions)
 
-    return {
+    payload = {
         "data_source": _data_source,
         "competitions": len(competitions),
         "events": total_events,
@@ -1091,13 +2140,40 @@ async def api_status():
         "meta": _data_cache.get("meta", {})
     }
 
+    # 집계 실패 시 키를 생략해 클라이언트가 마크업 폴백값을 유지하게 한다
+    if _matches_count > 0:
+        payload["matches"] = _matches_count
+
+    return payload
+
+
+async def require_admin_or_internal(request: Request):
+    """관리성 엔드포인트 접근 게이트: 내부 토큰 또는 관리자 JWT.
+
+    - 헤더 X-Internal-Token이 환경변수 INTERNAL_API_TOKEN과 일치하면 통과 (내부 호출).
+      단 INTERNAL_API_TOKEN이 미설정이면 이 경로는 비활성 (빈 값끼리 매칭 우회 방지).
+    - 그 외에는 관리자(member_type == "admin") JWT 회원만 통과.
+    - 어느 쪽도 아니면 403.
+    """
+    token_env = os.getenv("INTERNAL_API_TOKEN", "")
+    header_token = request.headers.get("X-Internal-Token", "")
+    if token_env and header_token == token_env:
+        return
+
+    member = await get_current_member(request)
+    if member and member.get("member_type") == "admin":
+        return
+
+    raise HTTPException(status_code=403, detail="관리자 권한이 필요합니다")
+
 
 @app.post("/api/data/reload")
-async def api_data_reload():
+async def api_data_reload(request: Request):
     """데이터 새로고침 API
 
     Supabase에서 최신 데이터를 다시 로드합니다.
     """
+    await require_admin_or_internal(request)
     global _data_cache, _data_source, _player_index
 
     try:
@@ -1185,17 +2261,28 @@ async def api_filters():
 
 @app.get("/api/events")
 async def api_events(
+    request: Request,
     weapon: Optional[str] = None,
     gender: Optional[str] = None,
     age_group: Optional[str] = None,
     year: Optional[int] = None,
     event_type: Optional[str] = None,
     search: Optional[str] = None,
+    lang: Optional[str] = None,
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=200)
 ):
-    """필터 기반 종목 검색 API"""
+    """필터 기반 종목 검색 API (다국어 지원)"""
     events = []
+
+    # 언어 결정: 파라미터 > request.state > 기본값
+    if lang is None:
+        lang = getattr(request.state, 'lang', DEFAULT_LANGUAGE)
+    if lang not in SUPPORTED_LANGUAGES:
+        lang = DEFAULT_LANGUAGE
+
+    # 번역 서비스
+    ts = get_ts()
 
     # National 선택 여부 확인
     is_national_filter = age_group == "National"
@@ -1213,13 +2300,14 @@ async def api_events(
         # 대회 레벨 분류
         comp_level = classify_competition_level(comp_name)
 
-        # National 필터: 국가대표 대회만 표시
+        # 대회 레벨별 필터링
+        # - National 필터(age_group=National): 국가대표 대회만 표시 (전용 필터)
+        # - 일반 필터: 모든 대회 포함 (국가대표 대회도 무기/성별 매칭 시 표시)
+        #   → "사용자 선호 우선" 원칙: 여자 에페 중학생리그 선택 시
+        #     국가대표선발대회의 여자 에페 이벤트도 함께 표시
+        is_national_comp = (comp_level == 'NATIONAL')
         if is_national_filter:
-            if comp_level != 'NATIONAL':
-                continue
-        else:
-            # 다른 필터: 국가대표 대회는 제외 (National 이벤트에서만 표시)
-            if comp_level == 'NATIONAL':
+            if not is_national_comp:
                 continue
 
         for event in comp.get("events", []):
@@ -1231,33 +2319,44 @@ async def api_events(
             if gender and event.get("gender") != gender:
                 continue
 
-            # 종목 타입 필터
-            if event_type and event.get("event_type") != event_type:
+            # 종목 타입 필터 (None이면 기본값 "개인")
+            if event_type and (event.get("event_type") or "개인") != event_type:
                 continue
 
-            # 연령대 필터 (National이 아닌 경우에만 적용)
-            # 데이터베이스 age_group 필드 우선, FIE 코드로 변환
-            # U17 (17세이하)는 Y14와 Cadet 양쪽 필터에서 표시됨
+            # 연령대 필터
+            # - National 필터(age_group=National): 나이 필터 미적용 (전체 표시)
+            # - 국가대표 대회(is_national_comp): 나이 필터 미적용 (다연령 대회)
+            # - 일반 대회: 나이 매칭 적용 (U17↔Y14/Cadet 등 양방향 매핑)
             event_age = get_event_age_group_fie(event)
-            if age_group and not is_national_filter and not matches_age_group_filter(event_age, age_group):
+            if age_group and not is_national_filter and not is_national_comp and not matches_age_group_filter(event_age, age_group):
                 continue
 
-            # 검색어 필터
+            # 검색어 필터 (원본 한국어와 번역된 영어 모두 검색)
             if search:
                 search_lower = search.lower()
-                if (search_lower not in event.get("name", "").lower() and
-                    search_lower not in comp_name.lower()):
+                event_name_ko = event.get("name", "")
+                event_name_en = ts.translate_event_name(event_name_ko) if lang != 'ko' else ""
+                comp_name_en = ts.get_localized_competition_name(comp_info, 'en') if lang != 'ko' else ""
+
+                if (search_lower not in event_name_ko.lower() and
+                    search_lower not in comp_name.lower() and
+                    search_lower not in event_name_en.lower() and
+                    search_lower not in comp_name_en.lower()):
                     continue
+
+            # 번역된 이름 사용
+            display_event_name = ts.get_localized_event_name(event, lang)
+            display_comp_name = ts.get_localized_competition_name(comp_info, lang)
 
             events.append(EventSummary(
                 event_cd=event.get("event_cd", "") or "",
                 sub_event_cd=event.get("sub_event_cd", "") or "",
-                name=event.get("name", "") or "",
+                name=display_event_name or "",
                 weapon=event.get("weapon", "") or "",
                 gender=event.get("gender", "") or "",
                 age_group=event_age or "",
                 event_type=event.get("event_type", "") or "개인",  # 기본값: 개인
-                competition_name=comp_name or "",
+                competition_name=display_comp_name or "",
                 competition_date=comp_date or "",
                 year=comp_year
             ))
@@ -1275,12 +2374,31 @@ async def api_events(
         "total": total,
         "page": page,
         "per_page": per_page,
-        "total_pages": (total + per_page - 1) // per_page
+        "total_pages": (total + per_page - 1) // per_page,
+        "lang": lang  # 현재 언어 반환
     }
+
+
+@app.get("/api/event-summary/{sub_event_cd}")
+async def api_event_summary(sub_event_cd: str):
+    """이벤트 요약 정보 (참가자 수, 상위 3명) - 내 리그 카드용 경량 API"""
+    for comp in get_competitions():
+        for event in comp.get("events", []):
+            if event.get("sub_event_cd") == sub_event_cd:
+                participants = event.get("participants", [])
+                total = len(participants) if participants else event.get("total_participants", 0)
+                fr = event.get("final_rankings", [])
+                top3 = []
+                for r in fr[:3]:
+                    top3.append({"rank": r.get("rank", ""), "name": r.get("name", ""), "team": r.get("team", "")})
+                status = "finished" if fr else ("in_progress" if total > 0 else "upcoming")
+                return {"sub_event_cd": sub_event_cd, "total_participants": total, "top3": top3, "status": status}
+    return {"sub_event_cd": sub_event_cd, "total_participants": 0, "top3": [], "status": "unknown"}
 
 
 @app.get("/api/player/{player_name}")
 async def api_player_profile(
+    request: Request,
     player_name: str,
     weapon: Optional[str] = None,
     year: Optional[int] = None
@@ -1343,17 +2461,23 @@ async def api_player_profile(
     # 날짜순 정렬 (최신순)
     filtered.sort(key=lambda x: x["competition_date"], reverse=True)
 
-    return PlayerProfile(
-        name=player_name,
-        teams=teams,
-        total_records=len(records),
-        records=[PlayerRecord(**r) for r in filtered],
-        stats=stats
-    )
+    # 접근 등급별 데이터 필터링
+    access_level, _ = await get_access_level(request)
+    profile_data = {
+        "name": player_name,
+        "teams": teams,
+        "total_records": len(records),
+        "records": [PlayerRecord(**r) for r in filtered],
+        "stats": stats,
+    }
+    profile_data = apply_player_data_gate(profile_data, access_level)
+
+    return profile_data
 
 
 @app.get("/api/players/search")
 async def api_player_search(
+    request: Request,
     q: str = Query(..., min_length=1),
     limit: int = Query(30, ge=1, le=500),
     include_history: bool = Query(False, description="Include players who were previously at the team (alumni)")
@@ -1367,6 +2491,7 @@ async def api_player_search(
     """
     q_lower = q.lower()
     matches = []
+    lang = getattr(request.state, 'lang', DEFAULT_LANGUAGE)
 
     # 선수 식별 시스템 사용
     if _identity_resolver:
@@ -1375,6 +2500,7 @@ async def api_player_search(
         for profile in search_results:
             matches.append({
                 "name": profile.name,
+                "display_name": get_localized_player_name_sync(profile.name, lang),
                 "name_en": profile.name_en,
                 "player_id": profile.player_id,
                 "teams": profile.teams,
@@ -1439,7 +2565,47 @@ async def api_player_search(
     # 기록 많은 순 정렬
     matches.sort(key=lambda x: x["record_count"], reverse=True)
 
-    return {"results": matches[:limit], "total": len(matches)}
+    # 단체전 결과 검색: 검색어와 매칭되는 조직의 단체전 결과 포함
+    team_event_results = []
+    for org_name, records in _team_event_index.items():
+        if q_lower in org_name.lower():
+            # 성별/무기별 그룹화
+            grouped: Dict[str, List[Dict]] = defaultdict(list)
+            for r in records:
+                key = f"{r['gender']}_{r['weapon']}"
+                grouped[key].append(r)
+
+            team_event_results.append({
+                "org_name": org_name,
+                "total_results": len(records),
+                "results": sorted(records, key=lambda x: x.get("date", ""), reverse=True),
+                "by_category": [
+                    {"category": k, "count": len(v)}
+                    for k, v in sorted(grouped.items())
+                ]
+            })
+    team_event_results.sort(key=lambda x: x["total_results"], reverse=True)
+
+    # 접근 등급별 필터링: guest는 소속 정보 blur + 결과 수 제한
+    access_level, _ = await get_access_level(request)
+    total_count = len(matches)
+    final_matches = matches[:limit]
+    response = {
+        "results": final_matches,
+        "total": total_count,
+        "access_level": access_level,
+        "team_events": team_event_results,
+    }
+
+    if access_level == "guest":
+        GUEST_SEARCH_LIMIT = 5
+        final_matches = [blur_search_result_for_guest(m) for m in final_matches[:GUEST_SEARCH_LIMIT]]
+        response["results"] = final_matches
+        if total_count > GUEST_SEARCH_LIMIT:
+            response["has_more"] = True
+            response["requires_login"] = True
+
+    return response
 
 
 @app.get("/api/players/by-id/{player_id}")
@@ -1540,20 +2706,277 @@ async def api_player_debug(player_id: str):
     }
 
 
+@app.get("/api/events/{sub_event_cd}/players/search")
+async def api_event_player_search(
+    sub_event_cd: str,
+    q: str = Query(None, description="선수 이름 검색어")
+):
+    """종목 내 선수 검색 - Pool, DE, 최종순위 정보 반환
+
+    Args:
+        sub_event_cd: 종목 코드 (예: "1234_001")
+        q: 선수 이름 검색어 (선택사항, 없으면 전체 선수 반환)
+
+    Returns:
+        - event_name: 종목명
+        - total_players: 검색된 선수 수
+        - players: 선수 정보 리스트
+            - name: 선수명
+            - team: 소속팀
+            - pool_number: 풀 번호
+            - pool_rank: 풀 내 순위
+            - pool_wins: 풀 승수
+            - pool_losses: 풀 패수
+            - de_rounds: 참가한 DE 라운드 목록
+            - final_rank: 최종 순위
+    """
+    competitions = get_competitions()
+
+    # 1. 모든 대회에서 해당 종목 찾기
+    target_event = None
+    event_name = ""
+
+    for comp in competitions:
+        for event in comp.get("events", []):
+            if event.get("sub_event_cd") == sub_event_cd:
+                target_event = event
+                event_name = event.get("name", "")
+                break
+        if target_event:
+            break
+
+    if not target_event:
+        raise HTTPException(status_code=404, detail="종목을 찾을 수 없습니다")
+
+    # 선수 정보를 담을 딕셔너리 (이름으로 중복 방지)
+    players_dict = {}
+
+    # 개별 Pool 결과 유효성 검증 함수 (per-pool 체크)
+    def single_pool_has_valid_results(pool: dict) -> bool:
+        """개별 Pool에 실제 경기 결과가 있는지 확인
+
+        해당 Pool 내 선수들 중 누군가의 wins 또는 losses가 0보다 크면
+        그 Pool은 실제 경기가 진행된 것으로 판단
+        """
+        results = pool.get("results", [])
+        for result in results:
+            wins = result.get("wins", 0) or 0
+            losses = result.get("losses", 0) or 0
+            if wins > 0 or losses > 0:
+                return True
+        return False
+
+    # 2. Pool에서 선수 정보 추출 (per-pool 유효성 검증)
+    pool_rounds = target_event.get("pool_rounds", [])
+
+    for pool in pool_rounds:
+        pool_num = pool.get("pool_number", 0)
+        # 해당 Pool에 실제 경기 결과가 있는지 개별 체크
+        this_pool_has_results = single_pool_has_valid_results(pool)
+
+        for result in pool.get("results", []):
+            player_name = result.get("name", "")
+            if player_name and player_name not in players_dict:
+                # pool_number(순서)는 항상 표시, pool_rank(순위)는 결과 있을 때만
+                players_dict[player_name] = {
+                    "name": player_name,
+                    "team": result.get("team", ""),
+                    "pool_number": pool_num,  # 항상 표시 (어느 풀에 배정됐는지)
+                    "pool_rank": result.get("rank") if this_pool_has_results else None,
+                    "pool_wins": result.get("wins", 0) if this_pool_has_results else None,
+                    "pool_losses": result.get("losses", 0) if this_pool_has_results else None,
+                    "de_matches": [],
+                    "final_rank": None
+                }
+
+    # 3. pool_total_ranking에서도 선수 정보 보충
+    # pool_total_ranking이 있으면 pool 결과가 유효한 것으로 간주
+    pool_total_ranking = target_event.get("pool_total_ranking", [])
+    pool_total_has_results = len(pool_total_ranking) > 0
+
+    for ranking in pool_total_ranking:
+        player_name = ranking.get("name", "")
+        if player_name and player_name not in players_dict:
+            players_dict[player_name] = {
+                "name": player_name,
+                "team": ranking.get("team", ""),
+                "pool_number": None,
+                "pool_rank": ranking.get("pool_rank"),
+                "pool_wins": ranking.get("wins", 0),
+                "pool_losses": ranking.get("losses", 0),
+                "de_matches": [],
+                "final_rank": None
+            }
+
+    # 4. DE 정보 추가 (full_bouts 배열 사용) - 상세 매치 정보 포함
+    de_bracket = target_event.get("de_bracket", {})
+    if not isinstance(de_bracket, dict):
+        de_bracket = {}
+
+    # full_bouts에서 선수 DE 정보 추출 (데이터 구조: winner_name, player1_name, player2_name)
+    # _get_full_bouts_from_de_bracket 사용으로 bouts_by_round 폴백 지원
+    full_bouts = _get_full_bouts_from_de_bracket(de_bracket)
+    if isinstance(full_bouts, list):
+        for bout in full_bouts:
+            if not isinstance(bout, dict):
+                continue
+
+            round_name = bout.get("round_name") or bout.get("round", "")
+            winner_name = bout.get("winner_name", "")
+            player1 = bout.get("player1_name", "")
+            player2 = bout.get("player2_name", "")
+            p1_score = bout.get("player1_score")
+            p2_score = bout.get("player2_score")
+            p1_team = bout.get("player1_team", "")
+            p2_team = bout.get("player2_team", "")
+            is_bye = bout.get("is_bye", False)
+
+            if is_bye or not winner_name or not player1 or not player2:
+                continue
+
+            # 패자 계산
+            winner_name = winner_name.strip()
+            player1 = player1.strip()
+            player2 = player2.strip()
+
+            if winner_name == player1:
+                loser_name = player2
+                winner_score = p1_score
+                loser_score = p2_score
+                winner_team = p1_team
+                loser_team = p2_team
+            elif winner_name == player2:
+                loser_name = player1
+                winner_score = p2_score
+                loser_score = p1_score
+                winner_team = p2_team
+                loser_team = p1_team
+            else:
+                continue
+
+            # 승자와 패자 모두 처리
+            for player_name, is_winner in [(winner_name, True), (loser_name, False)]:
+                if not player_name:
+                    continue
+
+                # 상대 선수 결정
+                opponent = loser_name if is_winner else winner_name
+                my_score = winner_score if is_winner else loser_score
+                opp_score = loser_score if is_winner else winner_score
+                player_team = winner_team if is_winner else loser_team
+
+                # 결과 판정
+                if not opponent:
+                    continue
+
+                result = "win" if is_winner else "lose"
+                score_str = f"{my_score}-{opp_score}" if my_score is not None and opp_score is not None else None
+
+                match_info = {
+                    "round": round_name,
+                    "opponent": opponent,
+                    "result": result,
+                    "score": score_str
+                }
+
+                if player_name in players_dict:
+                    existing_rounds = [m["round"] for m in players_dict[player_name]["de_matches"]]
+                    if round_name and round_name not in existing_rounds:
+                        players_dict[player_name]["de_matches"].append(match_info)
+                else:
+                    # DE에만 있는 선수 (Pool 정보 없음)
+                    players_dict[player_name] = {
+                        "name": player_name,
+                        "team": player_team or "",
+                        "pool_number": None,
+                        "pool_rank": None,
+                        "pool_wins": None,
+                        "pool_losses": None,
+                        "de_matches": [match_info] if round_name else [],
+                        "final_rank": None
+                    }
+
+    # 5. 최종 순위 추가
+    final_rankings = target_event.get("final_rankings", [])
+    for ranking in final_rankings:
+        player_name = ranking.get("name", "")
+        if player_name:
+            if player_name in players_dict:
+                players_dict[player_name]["final_rank"] = ranking.get("rank")
+            else:
+                # 최종 순위에만 있는 선수
+                players_dict[player_name] = {
+                    "name": player_name,
+                    "team": ranking.get("team", ""),
+                    "pool_number": None,
+                    "pool_rank": None,
+                    "pool_wins": None,
+                    "pool_losses": None,
+                    "de_matches": [],
+                    "final_rank": ranking.get("rank")
+                }
+
+    # 6. 리스트로 변환
+    players_info = list(players_dict.values())
+
+    # 7. 검색 필터 적용
+    if q:
+        q_lower = q.lower()
+        players_info = [p for p in players_info if q_lower in p["name"].lower()]
+
+    # 8. 정렬: 최종순위 > 풀순위 > 이름순
+    def sort_key(p):
+        final_rank = p.get("final_rank") or 9999
+        pool_rank = p.get("pool_rank") or 9999
+        return (final_rank, pool_rank, p.get("name", ""))
+
+    players_info.sort(key=sort_key)
+
+    # 결과 유효성 메타데이터 계산
+    de_bracket = target_event.get("de_bracket", {})
+    final_rankings = target_event.get("final_rankings", [])
+    has_de_results = bool(de_bracket.get("rounds")) or any(isinstance(v, list) and len(v) > 0 for k, v in de_bracket.items() if k != "rounds")
+    has_final_rankings = len(final_rankings) > 0
+
+    # 전체 이벤트에 pool 결과가 있는지 확인 (메타데이터용)
+    any_pool_has_results = any(single_pool_has_valid_results(p) for p in pool_rounds)
+
+    return {
+        "event_name": event_name,
+        "sub_event_cd": sub_event_cd,
+        "total_players": len(players_info),
+        "has_pool_results": any_pool_has_results or pool_total_has_results,
+        "has_de_results": has_de_results,
+        "has_final_rankings": has_final_rankings,
+        "players": players_info
+    }
+
+
 @app.get("/api/competitions")
 async def api_competitions(
+    request: Request,
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
     year: Optional[int] = None,
     status: Optional[str] = None,
-    search: Optional[str] = None
+    search: Optional[str] = None,
+    lang: Optional[str] = None
 ):
-    """대회 목록 API"""
+    """대회 목록 API (다국어 지원)"""
     competitions = get_competitions()
+
+    # 언어 결정
+    if lang is None:
+        lang = getattr(request.state, 'lang', DEFAULT_LANGUAGE)
+    if lang not in SUPPORTED_LANGUAGES:
+        lang = DEFAULT_LANGUAGE
+
+    ts = get_ts()
 
     filtered = []
     for comp in competitions:
         comp_info = comp.get("competition", {})
+        comp_name_ko = comp_info.get("name", "")
         comp_date = comp_info.get("start_date", "")
         comp_year = int(comp_date[:4]) if comp_date else 0
 
@@ -1565,19 +2988,24 @@ async def api_competitions(
         if status and comp_info.get("status") != status:
             continue
 
-        # 검색어 필터
+        # 검색어 필터 (한국어 + 영어 모두 검색)
         if search:
-            name = comp_info.get("name", "").lower()
-            if search.lower() not in name:
+            search_lower = search.lower()
+            comp_name_en = ts.get_localized_competition_name(comp_info, 'en') if lang != 'ko' else ""
+            if (search_lower not in comp_name_ko.lower() and
+                search_lower not in comp_name_en.lower()):
                 continue
+
+        # 번역된 이름 사용
+        display_name = ts.get_localized_competition_name(comp_info, lang)
 
         filtered.append(CompetitionSummary(
             event_cd=comp_info.get("event_cd", ""),
-            name=comp_info.get("name", ""),
+            name=display_name,
             start_date=comp_info.get("start_date"),
             end_date=comp_info.get("end_date"),
-            status=comp_info.get("status", ""),
-            location=comp_info.get("location", ""),
+            status=comp_info.get("status", "") or "",
+            location=comp_info.get("location", "") or "",  # None 방지
             event_count=len(comp.get("events", [])),
             year=comp_year
         ))
@@ -1594,7 +3022,8 @@ async def api_competitions(
         "competitions": filtered[start:end],
         "total": total,
         "page": page,
-        "per_page": per_page
+        "per_page": per_page,
+        "lang": lang
     }
 
 
@@ -1607,6 +3036,1439 @@ async def api_competition_detail(event_cd: str):
     return comp
 
 
+@app.get("/api/competition/{event_cd}/players/search")
+async def api_competition_player_search(
+    event_cd: str,
+    q: str = Query(..., min_length=1, description="선수 이름 또는 소속 검색어"),
+    search_type: str = Query("both", regex="^(name|team|both)$", description="검색 타입: name(이름만), team(소속만), both(모두)")
+):
+    """대회 내 전체 종목에서 선수 검색
+
+    Args:
+        event_cd: 대회 코드
+        q: 선수 이름 또는 소속 검색어
+        search_type: 검색 타입 (name: 이름만, team: 소속만, both: 모두)
+
+    Returns:
+        - competition_name: 대회명
+        - total_results: 검색된 결과 수
+        - results: 종목별 선수 정보 리스트
+            - event_name: 종목명
+            - sub_event_cd: 종목 코드
+            - player: 선수 정보
+                - name: 선수명
+                - team: 소속팀
+                - pool_number: 풀 번호
+                - pool_rank: 풀 내 순위 (확정된 경우만)
+                - de_rounds: 참가한 DE 라운드 목록
+                - final_rank: 최종 순위
+                - match_type: 일치 타입 (name/team)
+    """
+    comp = get_competition(event_cd)
+    if not comp:
+        raise HTTPException(status_code=404, detail="대회를 찾을 수 없습니다")
+
+    comp_info = comp.get("competition", {})
+    competition_name = comp_info.get("name", "")
+    events = comp.get("events", [])
+
+    q_lower = q.lower()
+    results = []
+
+    for event in events:
+        event_name = event.get("name", "")
+        sub_event_cd = event.get("sub_event_cd", "")
+
+        # 이 종목에서 선수 찾기
+        players_found = []
+
+        # 1. Pool에서 선수 정보 추출 (per-pool 유효성 검증)
+        pool_rounds = event.get("pool_rounds", [])
+        players_dict = {}
+
+        # 개별 Pool 결과 유효성 검증 함수
+        def single_pool_has_valid_results(pool: dict) -> bool:
+            """해당 Pool에 실제 경기 결과가 있는지 확인"""
+            results = pool.get("results", [])
+            for result in results:
+                wins = result.get("wins", 0) or 0
+                losses = result.get("losses", 0) or 0
+                if wins > 0 or losses > 0:
+                    return True
+            return False
+
+        for pool in pool_rounds:
+            pool_num = pool.get("pool_number", 0)
+            # 해당 Pool에 실제 결과가 있는지 개별 체크
+            this_pool_has_results = single_pool_has_valid_results(pool)
+
+            for result in pool.get("results", []):
+                player_name = result.get("name", "")
+                player_team = result.get("team", "")
+
+                # 검색 타입에 따른 필터링
+                name_match = player_name and q_lower in player_name.lower()
+                team_match = player_team and q_lower in player_team.lower()
+
+                should_include = False
+                match_type = None
+                if search_type == "name" and name_match:
+                    should_include = True
+                    match_type = "name"
+                elif search_type == "team" and team_match:
+                    should_include = True
+                    match_type = "team"
+                elif search_type == "both" and (name_match or team_match):
+                    should_include = True
+                    match_type = "name" if name_match else "team"
+
+                if should_include and player_name not in players_dict:
+                    players_dict[player_name] = {
+                        "name": player_name,
+                        "team": player_team,
+                        "pool_number": pool_num,  # 항상 표시 (어느 풀에 배정됐는지)
+                        "pool_rank": result.get("rank") if this_pool_has_results else None,
+                        "de_matches": [],
+                        "final_rank": None,
+                        "match_type": match_type
+                    }
+
+        # 2. pool_total_ranking에서도 보충 (있으면 pool 결과가 유효한 것)
+        pool_total_ranking = event.get("pool_total_ranking", [])
+        pool_total_has_results = len(pool_total_ranking) > 0
+
+        for ranking in pool_total_ranking:
+            player_name = ranking.get("name", "")
+            player_team = ranking.get("team", "")
+
+            # 검색 타입에 따른 필터링
+            name_match = player_name and q_lower in player_name.lower()
+            team_match = player_team and q_lower in player_team.lower()
+
+            should_include = False
+            match_type = None
+            if search_type == "name" and name_match:
+                should_include = True
+                match_type = "name"
+            elif search_type == "team" and team_match:
+                should_include = True
+                match_type = "team"
+            elif search_type == "both" and (name_match or team_match):
+                should_include = True
+                match_type = "name" if name_match else "team"
+
+            if should_include and player_name not in players_dict:
+                players_dict[player_name] = {
+                    "name": player_name,
+                    "team": player_team,
+                    "pool_number": None,
+                    "pool_rank": ranking.get("pool_rank"),
+                    "de_matches": [],
+                    "final_rank": None,
+                    "match_type": match_type
+                }
+
+        # 3. DE 정보 추가 (full_bouts 배열 사용) - 상세 매치 정보 포함
+        de_bracket = event.get("de_bracket", {})
+        if not isinstance(de_bracket, dict):
+            de_bracket = {}
+
+        # full_bouts에서 선수 DE 정보 추출 (데이터 구조: winner_name, player1_name, player2_name)
+        # _get_full_bouts_from_de_bracket 사용으로 bouts_by_round 폴백 지원
+        full_bouts = _get_full_bouts_from_de_bracket(de_bracket)
+        if isinstance(full_bouts, list):
+            for bout in full_bouts:
+                if not isinstance(bout, dict):
+                    continue
+
+                round_name = bout.get("round_name") or bout.get("round", "")
+                winner_name = bout.get("winner_name", "")
+                player1 = bout.get("player1_name", "")
+                player2 = bout.get("player2_name", "")
+                p1_score = bout.get("player1_score")
+                p2_score = bout.get("player2_score")
+                p1_team = bout.get("player1_team", "")
+                p2_team = bout.get("player2_team", "")
+                is_bye = bout.get("is_bye", False)
+
+                if is_bye or not winner_name or not player1 or not player2:
+                    continue
+
+                # 패자 계산
+                winner_name = winner_name.strip()
+                player1 = player1.strip()
+                player2 = player2.strip()
+
+                if winner_name == player1:
+                    loser_name = player2
+                    winner_score = p1_score
+                    loser_score = p2_score
+                    winner_team = p1_team
+                    loser_team = p2_team
+                elif winner_name == player2:
+                    loser_name = player1
+                    winner_score = p2_score
+                    loser_score = p1_score
+                    winner_team = p2_team
+                    loser_team = p1_team
+                else:
+                    continue
+
+                # 승자와 패자 모두 검색 대상으로 처리
+                for player_name, is_winner in [(winner_name, True), (loser_name, False)]:
+                    if not player_name or player_name.lower().find(q_lower) == -1:
+                        continue
+
+                    # 상대 선수 결정
+                    opponent = loser_name if is_winner else winner_name
+                    opponent_team = loser_team if is_winner else winner_team
+                    my_score = winner_score if is_winner else loser_score
+                    opp_score = loser_score if is_winner else winner_score
+                    player_team = winner_team if is_winner else loser_team
+
+                    # 결과 판정
+                    if not opponent:
+                        continue
+
+                    result = "win" if is_winner else "lose"
+                    score_str = f"{my_score}-{opp_score}" if my_score is not None and opp_score is not None else None
+
+                    match_info = {
+                        "round": round_name,
+                        "opponent": opponent,
+                        "result": result,
+                        "score": score_str
+                    }
+
+                    if player_name in players_dict:
+                        # 중복 라운드 체크
+                        existing_rounds = [m["round"] for m in players_dict[player_name]["de_matches"]]
+                        if round_name and round_name not in existing_rounds:
+                            players_dict[player_name]["de_matches"].append(match_info)
+                    else:
+                        players_dict[player_name] = {
+                            "name": player_name,
+                            "team": player_team or "",
+                            "pool_number": None,
+                            "pool_rank": None,
+                            "de_matches": [match_info] if round_name else [],
+                            "final_rank": None
+                        }
+
+        # 4. 최종 순위 추가
+        final_rankings = event.get("final_rankings", [])
+        for ranking in final_rankings:
+            player_name = ranking.get("name", "")
+            if player_name and player_name.lower().find(q_lower) != -1:
+                if player_name in players_dict:
+                    players_dict[player_name]["final_rank"] = ranking.get("rank")
+                else:
+                    players_dict[player_name] = {
+                        "name": player_name,
+                        "team": ranking.get("team", ""),
+                        "pool_number": None,
+                        "pool_rank": None,
+                        "de_matches": [],
+                        "final_rank": ranking.get("rank")
+                    }
+
+        # 결과에 추가
+        for player_info in players_dict.values():
+            results.append({
+                "event_name": event_name,
+                "sub_event_cd": sub_event_cd,
+                "player": player_info
+            })
+
+    # 정렬: 종목명 > 최종순위 > 풀순위 > 이름
+    def sort_key(r):
+        p = r["player"]
+        final_rank = p.get("final_rank") or 9999
+        pool_rank = p.get("pool_rank") or 9999
+        return (r["event_name"], final_rank, pool_rank, p.get("name", ""))
+
+    results.sort(key=sort_key)
+
+    return {
+        "competition_name": competition_name,
+        "event_cd": event_cd,
+        "query": q,
+        "total_results": len(results),
+        "results": results
+    }
+
+
+# ==================== Player Autocomplete & Head-to-Head APIs ====================
+
+@app.get("/api/players/autocomplete")
+async def api_players_autocomplete(
+    request: Request,
+    q: str = Query(..., min_length=1, description="검색어 (선수 이름 또는 소속)"),
+    limit: int = Query(10, ge=1, le=50, description="결과 수 제한"),
+    event_cd: Optional[str] = Query(None, description="대회 코드 (선택 - 대회 내 선수만 검색)"),
+    sub_event_cd: Optional[str] = Query(None, description="종목 코드 (선택 - 해당 종목 참가 선수만 검색)")
+):
+    """선수 자동완성 API - 드롭다운용
+
+    타이핑하면서 실시간으로 선수 목록을 보여주는 자동완성 기능.
+    "오" 입력 시 "오주원 최병철펜싱클럽", "오지훈 세종펜싱클럽" 등 표시.
+    "최병철" 입력 시 "최병철펜싱클럽" 소속 선수들 표시.
+
+    Args:
+        q: 검색어 (선수 이름 또는 소속)
+        limit: 최대 결과 수 (기본 10)
+        event_cd: 특정 대회 내 선수만 검색 (선택사항)
+        sub_event_cd: 특정 종목 내 선수만 검색 (선택사항 - 소속 검색 시 해당 이벤트 참가자만)
+
+    Returns:
+        - suggestions: 자동완성 제안 목록
+            - name: 선수명
+            - team: 현재 소속
+            - display: "선수명 소속" 형태 표시용 문자열
+            - player_id: 선수 고유 ID (있는 경우)
+    """
+    q_lower = q.lower().strip()
+    suggestions = []
+
+    if event_cd:
+        # 특정 대회 내 선수만 검색 (캐시 사용 - 최적화됨)
+        cached_players = _competition_player_cache.get(event_cd, [])
+        if cached_players:
+            # 캐시에서 빠르게 검색 (name_lower 필드 사용)
+            players_seen = set()
+
+            for player in cached_players:
+                # sub_event_cd가 지정된 경우 해당 종목 선수만 필터링
+                if sub_event_cd and player.get("sub_event_cd") != sub_event_cd:
+                    continue
+
+                # 이름 또는 소속으로 검색
+                name_match = player["name_lower"].startswith(q_lower)
+                team_match = q_lower in player.get("team", "").lower()
+
+                if name_match or team_match:
+                    key = f"{player['name']}|{player['team']}"
+                    if key not in players_seen:
+                        players_seen.add(key)
+                        suggestions.append({
+                            "name": player["name"],
+                            "team": player["team"],
+                            "display": f"{player['name']} {player['team']}" if player["team"] else player["name"],
+                            "player_id": None,
+                            "sub_event_cd": player["sub_event_cd"],
+                            "event_name": player["event_name"]
+                        })
+                        if len(suggestions) >= limit:
+                            break
+    else:
+        # 전체 선수 검색 (선수 식별 시스템 사용)
+        if _identity_resolver:
+            search_results = _identity_resolver.search_players(q, include_history=False)
+            for profile in search_results[:limit * 2]:  # 더 많이 가져와서 필터링
+                current_team = profile.current_team or (profile.teams[0] if profile.teams else "")
+
+                # 이름 또는 소속으로 검색
+                name_match = profile.name.lower().startswith(q_lower)
+                team_match = q_lower in current_team.lower()
+
+                if name_match or team_match:
+                    suggestions.append({
+                        "name": profile.name,
+                        "team": current_team,
+                        "display": f"{profile.name} {current_team}" if current_team else profile.name,
+                        "player_id": profile.player_id
+                    })
+        else:
+            # Fallback: 인덱스 검색
+            for name in _player_index.keys():
+                records = _player_index[name]
+                sorted_records = sorted(records, key=lambda x: x.get("competition_date", ""), reverse=True)
+                current_team = sorted_records[0].get("team", "") if sorted_records else ""
+
+                # 이름 또는 소속으로 검색
+                name_match = name.lower().startswith(q_lower)
+                team_match = q_lower in current_team.lower()
+
+                if name_match or team_match:
+                    suggestions.append({
+                        "name": name,
+                        "team": current_team,
+                        "display": f"{name} {current_team}" if current_team else name,
+                        "player_id": None
+                    })
+
+    # 중복 제거 및 정렬 (이름 순)
+    seen = set()
+    unique_suggestions = []
+    for s in suggestions:
+        key = s["display"]
+        if key not in seen:
+            seen.add(key)
+            unique_suggestions.append(s)
+
+    unique_suggestions.sort(key=lambda x: x["name"])
+
+    # i18n: 영문 표시 이름 추가
+    lang = getattr(request.state, 'lang', DEFAULT_LANGUAGE)
+    if lang != 'ko':
+        ts = get_translation_service()
+        for s in unique_suggestions:
+            # Translate player name
+            name_translation = ts.translate_player_name(s["name"])
+            en_name = name_translation.get("en", {}).get("name", "")
+            s["display_name"] = en_name if en_name else s["name"]
+            # Translate team name
+            team = s.get("team", "")
+            s["display_team"] = get_localized_org_name_sync(team, lang) if team else ""
+            # Update display
+            s["display"] = f"{s['display_name']} {s['display_team']}" if s["display_team"] else s["display_name"]
+
+    # Guest: 소속 정보 blur
+    access_level, _ = await get_access_level(request)
+    final_suggestions = unique_suggestions[:limit]
+    if access_level == "guest":
+        for s in final_suggestions:
+            s["team"] = None
+            s["display_team"] = None
+            s["display"] = s.get("display_name", s["name"])  # 이름만 표시
+            s["blurred"] = True
+
+    return {
+        "query": q,
+        "suggestions": final_suggestions
+    }
+
+
+@app.get("/api/players/{player_name}/head-to-head/{opponent_name}")
+async def api_head_to_head(
+    player_name: str,
+    opponent_name: str,
+    weapon: Optional[str] = Query(None, description="무기 필터"),
+    age_group: Optional[str] = Query(None, description="연령대 필터")
+):
+    """두 선수 간 상대 전적 조회
+
+    Args:
+        player_name: 선수 이름
+        opponent_name: 상대 선수 이름
+        weapon: 무기 필터 (선택)
+        age_group: 연령대 필터 (선택)
+
+    Returns:
+        - player: 선수 정보
+        - opponent: 상대 선수 정보
+        - record: 상대 전적
+            - wins: 승리 횟수
+            - losses: 패배 횟수
+            - total: 총 경기 수
+        - matches: 개별 경기 목록
+    """
+    competitions = get_competitions()
+
+    matches = []
+    wins = 0
+    losses = 0
+
+    player_lower = player_name.lower().strip()
+    opponent_lower = opponent_name.lower().strip()
+
+    for comp in competitions:
+        comp_info = comp.get("competition", {})
+        comp_name = comp_info.get("name", "")
+        comp_date = comp_info.get("start_date", "")
+
+        for event in comp.get("events", []):
+            event_name = event.get("name", "")
+            event_weapon = event.get("weapon", "")
+            event_age_group = event.get("age_group", "")
+
+            # 필터 적용
+            if weapon and weapon != event_weapon:
+                continue
+            if age_group and age_group != event_age_group:
+                continue
+
+            # Pool에서 경기 찾기
+            for pool in event.get("pool_rounds", []):
+                for bout in pool.get("bouts", []):
+                    p1 = bout.get("player1_name", "").lower()
+                    p2 = bout.get("player2_name", "").lower()
+                    winner = bout.get("winner_name", "").lower()
+
+                    if (p1 == player_lower and p2 == opponent_lower) or \
+                       (p1 == opponent_lower and p2 == player_lower):
+                        is_win = winner == player_lower
+                        if is_win:
+                            wins += 1
+                        else:
+                            losses += 1
+
+                        matches.append({
+                            "competition": comp_name,
+                            "date": comp_date,
+                            "event": event_name,
+                            "round": f"Pool {pool.get('pool_number', '')}",
+                            "player_score": bout.get("player1_score") if p1 == player_lower else bout.get("player2_score"),
+                            "opponent_score": bout.get("player2_score") if p1 == player_lower else bout.get("player1_score"),
+                            "result": "win" if is_win else "loss"
+                        })
+
+            # DE에서 경기 찾기 (데이터 구조: winner_name, player1_name, player2_name)
+            # _get_full_bouts_from_de_bracket 사용으로 bouts_by_round 폴백 지원
+            de_bracket = event.get("de_bracket", {})
+            full_bouts = _get_full_bouts_from_de_bracket(de_bracket) if isinstance(de_bracket, dict) else []
+
+            for bout in full_bouts:
+                if not isinstance(bout, dict):
+                    continue
+
+                winner_name_raw = bout.get("winner_name", "")
+                player1 = bout.get("player1_name", "")
+                player2 = bout.get("player2_name", "")
+                p1_score = bout.get("player1_score")
+                p2_score = bout.get("player2_score")
+                round_name = bout.get("round_name") or bout.get("round", "")
+                is_bye = bout.get("is_bye", False)
+
+                if is_bye or not winner_name_raw or not player1 or not player2:
+                    continue
+
+                # 패자 계산
+                winner_name_raw = winner_name_raw.strip()
+                player1 = player1.strip()
+                player2 = player2.strip()
+
+                if winner_name_raw == player1:
+                    loser_name_raw = player2
+                    winner_score = p1_score
+                    loser_score = p2_score
+                elif winner_name_raw == player2:
+                    loser_name_raw = player1
+                    winner_score = p2_score
+                    loser_score = p1_score
+                else:
+                    continue
+
+                winner_name = winner_name_raw.lower()
+                loser_name = loser_name_raw.lower()
+
+                # 승자 vs 패자로 비교
+                if (winner_name == player_lower and loser_name == opponent_lower):
+                    # 플레이어가 이김
+                    wins += 1
+                    matches.append({
+                        "competition": comp_name,
+                        "date": comp_date,
+                        "event": event_name,
+                        "round": round_name,
+                        "player_score": winner_score,
+                        "opponent_score": loser_score,
+                        "result": "win"
+                    })
+                elif (winner_name == opponent_lower and loser_name == player_lower):
+                    # 플레이어가 짐
+                    losses += 1
+                    matches.append({
+                        "competition": comp_name,
+                        "date": comp_date,
+                        "event": event_name,
+                        "round": round_name,
+                        "player_score": loser_score,
+                        "opponent_score": winner_score,
+                        "result": "loss"
+                    })
+
+    # 날짜 역순 정렬
+    matches.sort(key=lambda x: x.get("date", ""), reverse=True)
+
+    return {
+        "player": {"name": player_name},
+        "opponent": {"name": opponent_name},
+        "record": {
+            "wins": wins,
+            "losses": losses,
+            "total": wins + losses
+        },
+        "matches": matches
+    }
+
+
+@app.get("/api/events/{sub_event_cd}/de-prediction/{player_name}")
+async def api_de_prediction(
+    sub_event_cd: str,
+    player_name: str
+):
+    """DE 예측 대진표 - 선수가 만날 수 있는 잠재적 상대 목록
+
+    각 라운드에서 만날 수 있는 상대와 상대 전적을 제공.
+
+    Args:
+        sub_event_cd: 종목 코드
+        player_name: 선수 이름
+
+    Returns:
+        - player: 선수 정보
+        - current_round: 현재 진행 중인 라운드
+        - predictions: 라운드별 예측 상대
+            - round: 라운드명 (64강, 32강, 16강, 8강, 4강, 결승)
+            - potential_opponents: 잠재적 상대 목록
+                - name: 상대 이름
+                - team: 상대 소속
+                - seed: 시드 순위
+                - head_to_head: 상대 전적 {wins, losses, total}
+    """
+    # 종목 찾기
+    competitions = get_competitions()
+    target_event = None
+
+    for comp in competitions:
+        for event in comp.get("events", []):
+            if event.get("sub_event_cd") == sub_event_cd:
+                target_event = event
+                break
+        if target_event:
+            break
+
+    if not target_event:
+        raise HTTPException(status_code=404, detail="종목을 찾을 수 없습니다")
+
+    de_bracket = target_event.get("de_bracket", {})
+    if not isinstance(de_bracket, dict):
+        return {
+            "player": {"name": player_name},
+            "current_round": None,
+            "predictions": [],
+            "message": "DE 대진표가 없습니다"
+        }
+
+    # normalized_bracket 사용 (있으면)
+    normalized = target_event.get("normalized_bracket")
+    if normalized:
+        bouts_by_round = normalized.get("bouts_by_round", {})
+    else:
+        bouts_by_round = de_bracket.get("bouts_by_round", {})
+
+    # 선수 시드 찾기
+    seeding = de_bracket.get("seeding", [])
+    player_seed = None
+    player_team = ""
+    player_name_lower = player_name.lower() if player_name else ""
+
+    for s in seeding:
+        if not isinstance(s, dict):
+            continue
+        s_name = s.get("name")
+        if s_name and s_name.lower() == player_name_lower:
+            player_seed = s.get("seed")
+            player_team = s.get("team", "")
+            break
+
+    if player_seed is None:
+        # Pool ranking에서 찾기
+        pool_total = target_event.get("pool_total_ranking", [])
+        for r in pool_total:
+            if not isinstance(r, dict):
+                continue
+            r_name = r.get("name")
+            if r_name and r_name.lower() == player_name_lower:
+                player_seed = r.get("rank")
+                player_team = r.get("team", "")
+                break
+
+    # 라운드 정의
+    round_order = ["128강", "64강", "32강", "16강", "8강", "4강", "결승"]
+    bracket_size = de_bracket.get("bracket_size", 64)
+
+    # full_bouts에서 가장 이른 라운드 (이벤트 최초 라운드) 찾기
+    # _get_full_bouts_from_de_bracket 사용으로 bouts_by_round 폴백 지원
+    full_bouts = _get_full_bouts_from_de_bracket(de_bracket)
+    earliest_round_idx = len(round_order)  # 최대값으로 초기화
+    for bout in full_bouts:
+        if isinstance(bout, dict):
+            round_name = bout.get("round_name") or bout.get("round", "")
+            if round_name and round_name in round_order:
+                idx = round_order.index(round_name)
+                if idx < earliest_round_idx:
+                    earliest_round_idx = idx
+
+    # bracket_size로부터 참가자 수 추정
+    if earliest_round_idx < len(round_order):
+        # 라운드명에서 bracket_size 추정
+        first_round_name = round_order[earliest_round_idx]
+        if first_round_name == "128강":
+            participant_count = 128
+        elif first_round_name == "64강":
+            participant_count = 64
+        elif first_round_name == "32강":
+            participant_count = 32
+        elif first_round_name == "16강":
+            participant_count = 16
+        elif first_round_name == "8강":
+            participant_count = 8
+        elif first_round_name == "4강":
+            participant_count = 4
+        else:
+            participant_count = 2
+    else:
+        participant_count = de_bracket.get("participant_count", bracket_size)
+
+    # 현재 라운드 확인 및 완료된 라운드 추적
+    current_round = None
+    player_eliminated = False
+    completed_rounds = set()  # 선수가 완료한 라운드들
+    elimination_round = None  # 탈락한 라운드
+
+    # full_bouts에서 선수의 경기 기록 확인
+    # _get_full_bouts_from_de_bracket 사용으로 bouts_by_round 폴백 지원
+    full_bouts = _get_full_bouts_from_de_bracket(de_bracket)
+    for bout in full_bouts:
+        if not isinstance(bout, dict) or bout.get("is_bye"):
+            continue
+
+        winner_name_val = bout.get("winner_name", "")
+        player1 = bout.get("player1_name", "")
+        player2 = bout.get("player2_name", "")
+        round_name = bout.get("round_name") or bout.get("round", "")
+
+        if not winner_name_val or not player1 or not player2:
+            continue
+
+        player1 = player1.strip()
+        player2 = player2.strip()
+        winner_name_val = winner_name_val.strip()
+
+        # 선수가 이 경기에 참가했는지 확인
+        player_in_bout = (player1.lower() == player_name_lower or
+                         player2.lower() == player_name_lower)
+
+        if player_in_bout and round_name:
+            completed_rounds.add(round_name)
+            if winner_name_val.lower() != player_name_lower:
+                player_eliminated = True
+                elimination_round = round_name
+
+    # bouts_by_round에서도 확인 (fallback)
+    for round_name in round_order:
+        bouts = bouts_by_round.get(round_name, [])
+        for bout in bouts:
+            if isinstance(bout, dict):
+                p1 = bout.get("player1_name", "")
+                p2 = bout.get("player2_name", "")
+                winner = bout.get("winner_name", "")
+
+                if p1.lower() == player_name_lower or p2.lower() == player_name_lower:
+                    if winner:
+                        completed_rounds.add(round_name)
+                        if winner.lower() != player_name_lower:
+                            player_eliminated = True
+                            elimination_round = round_name
+                    else:
+                        current_round = round_name
+        if player_eliminated:
+            break
+
+    # 선수가 특정 라운드에 참가했다면, 그 이전 모든 라운드는 통과한 것
+    # 예: 16강 경기가 있으면 32강, 64강 등은 완료된 것으로 추정
+    if completed_rounds:
+        highest_round_idx = -1
+        for r in completed_rounds:
+            try:
+                idx = round_order.index(r)
+                if idx > highest_round_idx:
+                    highest_round_idx = idx
+            except ValueError:
+                pass
+
+        # 이벤트 최초 라운드부터 highest_round까지 모두 완료 처리
+        def get_first_round_idx(count: int) -> int:
+            if count > 64:
+                return round_order.index("128강")
+            elif count > 32:
+                return round_order.index("64강")
+            elif count > 16:
+                return round_order.index("32강")
+            elif count > 8:
+                return round_order.index("16강")
+            elif count > 4:
+                return round_order.index("8강")
+            elif count > 2:
+                return round_order.index("4강")
+            else:
+                return round_order.index("결승")
+
+        first_round_idx = get_first_round_idx(participant_count)
+        for i in range(first_round_idx, highest_round_idx + 1):
+            completed_rounds.add(round_order[i])
+
+    # 현재 라운드 결정: 완료된 라운드 다음 라운드
+    if not player_eliminated and completed_rounds:
+        for i, r in enumerate(round_order):
+            if r in completed_rounds:
+                continue
+            # 이전 라운드가 완료되었고, 이 라운드가 완료되지 않았으면 현재 라운드
+            if i > 0 and round_order[i-1] in completed_rounds:
+                current_round = r
+                break
+
+    # 예측 대진표 생성
+    predictions = []
+
+    def generate_bracket_matches(bracket_size: int) -> list:
+        """표준 토너먼트 대진표 생성 (재귀적)
+
+        Returns:
+            List of (seed_high, seed_low) tuples for first round
+            예: 64강에서 [(1,64), (32,33), (16,49), (17,48), ...]
+        """
+        if bracket_size == 2:
+            return [(1, 2)]
+
+        half = bracket_size // 2
+        half_matches = generate_bracket_matches(half)
+
+        result = []
+        for seed1, seed2 in half_matches:
+            # seed1의 상대: bracket_size + 1 - seed1
+            # seed2의 상대: bracket_size + 1 - seed2
+            result.append((seed1, bracket_size + 1 - seed1))
+            result.append((seed2, bracket_size + 1 - seed2))
+
+        return result
+
+    def get_match_index_for_seed(seed: int, matches: list) -> int:
+        """시드의 1라운드 매치 인덱스 반환 (0-indexed)"""
+        for i, (s1, s2) in enumerate(matches):
+            if seed == s1 or seed == s2:
+                return i
+        return -1
+
+    def get_potential_opponents(round_name: str, seed: int, bracket_size: int) -> List[int]:
+        """특정 라운드에서 만날 수 있는 상대 시드 목록 계산
+
+        표준 단식 토너먼트 대진표 기반 정확한 계산.
+        128-bracket과 64-bracket 모두 지원.
+
+        예시 (Seed 4, 128강 브라켓):
+        - 128강: [125] (직접 상대)
+        - 64강: [61, 68] (인접 매치)
+        - 32강: [29, 36, 100, 93] → 실제 참가자만 필터링
+        """
+        if seed is None or seed < 1 or seed > bracket_size:
+            return []
+
+        matches = generate_bracket_matches(bracket_size)
+        match_idx = get_match_index_for_seed(seed, matches)
+
+        if match_idx == -1:
+            return []
+
+        num_matches = len(matches)  # bracket_size // 2
+
+        # 1라운드 (64강/128강): 직접 상대만
+        first_round = "128강" if bracket_size == 128 else "64강"
+        if round_name == first_round:
+            s1, s2 = matches[match_idx]
+            opponent = s2 if s1 == seed else s1
+            return [opponent]
+
+        # 각 라운드별 그룹 크기 (매치 수 기준)
+        # 128-bracket: 64강=2, 32강=4, 16강=8, 8강=16, 4강=32, 결승=64
+        # 64-bracket: 32강=2, 16강=4, 8강=8, 4강=16, 결승=32
+        if bracket_size == 128:
+            round_group_sizes = {
+                "64강": 2,
+                "32강": 4,
+                "16강": 8,
+                "8강": 16,
+                "4강": 32,
+                "결승": 64,
+            }
+        else:  # 64-bracket
+            round_group_sizes = {
+                "32강": 2,
+                "16강": 4,
+                "8강": 8,
+                "4강": 16,
+                "결승": 32,
+            }
+
+        group_size = round_group_sizes.get(round_name)
+        if group_size is None:
+            return []
+
+        # 결승: 반대편 절반 전체
+        if round_name == "결승":
+            half = num_matches // 2
+            if match_idx < half:
+                start_idx, end_idx = half, num_matches
+            else:
+                start_idx, end_idx = 0, half
+        else:
+            # 그룹 시작/끝 인덱스 계산
+            group_idx = match_idx // group_size
+            start_idx = group_idx * group_size
+            end_idx = min(start_idx + group_size, num_matches)
+
+        # 해당 그룹의 시드 수집 (자기 매치 제외)
+        opponents = []
+        for i in range(start_idx, end_idx):
+            if i < len(matches) and i != match_idx:  # 자기 매치 제외
+                s1, s2 = matches[i]
+                opponents.append(s1)
+                opponents.append(s2)
+
+        return sorted(opponents)
+
+    # 시드 -> 선수 매핑
+    seed_to_player = {}
+    for s in seeding:
+        seed_to_player[s.get("seed")] = {
+            "name": s.get("name", ""),
+            "team": s.get("team", "")
+        }
+
+    # Pool total ranking에서도 시드 매핑 보충
+    pool_total = target_event.get("pool_total_ranking", [])
+    for i, r in enumerate(pool_total):
+        seed_num = r.get("rank", i + 1)
+        if seed_num not in seed_to_player or not seed_to_player[seed_num].get("name"):
+            seed_to_player[seed_num] = {
+                "name": r.get("name", ""),
+                "team": r.get("team", "")
+            }
+
+    # 이벤트 최초 라운드 결정 (참가자 수 기반)
+    # 참가자 수에 따라 시작 라운드가 달라짐
+    def get_first_round_for_count(count: int) -> str:
+        if count > 64:
+            return "128강"
+        elif count > 32:
+            return "64강"
+        elif count > 16:
+            return "32강"
+        elif count > 8:
+            return "16강"
+        elif count > 4:
+            return "8강"
+        elif count > 2:
+            return "4강"
+        else:
+            return "결승"
+
+    event_first_round = get_first_round_for_count(participant_count)
+
+    # 선수의 128강 상대가 부전승인지 확인 (seed가 participant_count 초과)
+    first_round_opponent = bracket_size + 1 - player_seed if player_seed else None
+    has_bye_in_128 = first_round_opponent and first_round_opponent > participant_count
+
+    # 라운드 이름 결정 (부전승이면 64강부터 시작)
+    if bracket_size >= 128 and has_bye_in_128:
+        # 128강에서 부전승이면 64강부터 예측 시작
+        all_round_names = ["64강", "32강", "16강", "8강", "4강", "결승"]
+    elif bracket_size >= 128:
+        all_round_names = ["128강", "64강", "32강", "16강", "8강", "4강", "결승"]
+    else:
+        all_round_names = ["64강", "32강", "16강", "8강", "4강", "결승"]
+
+    # full_bouts에서 탈락한 시드 추출 (완료된 라운드의 패자)
+    eliminated_seeds = set()
+
+    # 🔥 헬퍼 함수: 선수 이름으로 시드 찾기
+    def find_seed_by_name(name: str) -> Optional[int]:
+        if not name:
+            return None
+        name_lower = name.lower()
+        for seed_num, pinfo in seed_to_player.items():
+            pname = pinfo.get("name", "") or ""
+            if pname.lower() == name_lower:
+                return seed_num
+        return None
+
+    # 1. bouts_by_round에서 패자 추출
+    for round_name in round_order:
+        bouts = bouts_by_round.get(round_name, [])
+        for bout in bouts:
+            if isinstance(bout, dict):
+                winner_name = bout.get("winner_name", "")
+                if winner_name:
+                    # 패자 시드 찾기
+                    p1_name = bout.get("player1_name", "") or ""
+                    p2_name = bout.get("player2_name", "") or ""
+                    loser_name = p1_name if winner_name.lower() == p2_name.lower() else p2_name
+                    loser_seed = find_seed_by_name(loser_name)
+                    if loser_seed:
+                        eliminated_seeds.add(loser_seed)
+
+                # 🔥 기권 처리: is_forfeit, forfeit_player 필드 확인
+                if bout.get("is_forfeit") and bout.get("forfeit_player"):
+                    forfeit_seed = find_seed_by_name(bout.get("forfeit_player"))
+                    if forfeit_seed:
+                        eliminated_seeds.add(forfeit_seed)
+
+    # 2. 🔥 full_bouts에서도 패자/기권자 추출 (더 정확한 데이터)
+    for fb in full_bouts:
+        if isinstance(fb, dict):
+            # loser 정보가 있으면 탈락자로 추가
+            loser_info = fb.get("loser", {})
+            if loser_info:
+                loser_seed = loser_info.get("seed")
+                if loser_seed:
+                    eliminated_seeds.add(loser_seed)
+                else:
+                    # seed가 없으면 이름으로 찾기
+                    loser_name = loser_info.get("name")
+                    loser_seed = find_seed_by_name(loser_name)
+                    if loser_seed:
+                        eliminated_seeds.add(loser_seed)
+
+            # 🔥 기권 처리
+            if fb.get("is_forfeit") and fb.get("forfeit_player"):
+                forfeit_seed = find_seed_by_name(fb.get("forfeit_player"))
+                if forfeit_seed:
+                    eliminated_seeds.add(forfeit_seed)
+
+    # 3. 🔥 다음 라운드 진출자 기반 탈락자 추론 (winner_name이 null인 경기 처리)
+    # 각 라운드에서 다음 라운드에 나타나지 않는 선수를 탈락자로 추정
+    # ⚠️ 동명이인 문제 해결: 이름 대신 시드(seed) 기반으로 추적
+    def get_seeds_in_round(r_name: str) -> set:
+        """특정 라운드에 참가한 선수 시드 집합 (동명이인 구분)"""
+        seeds = set()
+        for fb in full_bouts:
+            if isinstance(fb, dict) and (fb.get("round_name") or fb.get("round", "")) == r_name:
+                p1_seed = fb.get("player1_seed")
+                p2_seed = fb.get("player2_seed")
+                if p1_seed and isinstance(p1_seed, int) and p1_seed <= participant_count:
+                    seeds.add(p1_seed)
+                if p2_seed and isinstance(p2_seed, int) and p2_seed <= participant_count:
+                    seeds.add(p2_seed)
+        return seeds
+
+    # 라운드 순서대로 탈락자 추론 (시드 기반)
+    for i, r_name in enumerate(round_order[:-1]):  # 결승 제외
+        next_round = round_order[i + 1]
+        current_seeds = get_seeds_in_round(r_name)
+        next_seeds = get_seeds_in_round(next_round)
+
+        if current_seeds and next_seeds:
+            # 현재 라운드에 있었지만 다음 라운드에 없는 시드 = 탈락자
+            eliminated_in_round = current_seeds - next_seeds
+            eliminated_seeds.update(eliminated_in_round)
+
+    # 이벤트 최초 라운드부터 시작하도록 필터링
+    try:
+        first_round_idx = all_round_names.index(event_first_round)
+        round_names = all_round_names[first_round_idx:]
+    except ValueError:
+        round_names = all_round_names
+
+    # 각 라운드별 예측 생성 (이전 라운드 상대 누적 추적)
+    previous_opponents = set()  # 이전 라운드에서 이미 표시된 상대들
+
+    for round_name in round_names:
+        # 이미 완료된 라운드는 예측에서 제외 (결과에만 표시)
+        if round_name in completed_rounds:
+            # 완료된 라운드의 상대는 previous_opponents에 추가하여 다음 라운드에서 제외
+            potential_seeds = get_potential_opponents(round_name, player_seed, bracket_size)
+            # participant_count 초과 시드 필터링 (부전승)
+            valid_seeds = [s for s in potential_seeds if s <= participant_count]
+            previous_opponents.update(valid_seeds)
+            continue
+
+        # 선수가 탈락했으면 미래 라운드 예측 중단
+        if player_eliminated and elimination_round:
+            try:
+                elim_idx = round_order.index(elimination_round)
+                curr_idx = round_order.index(round_name)
+                if curr_idx > elim_idx:
+                    break  # 탈락 라운드 이후는 예측하지 않음
+            except ValueError:
+                pass
+        potential_seeds = get_potential_opponents(round_name, player_seed, bracket_size)
+
+        # 1. 부전승 필터링: participant_count를 초과하는 시드는 존재하지 않음
+        valid_seeds = [s for s in potential_seeds if s <= participant_count]
+
+        # 2. 탈락자 필터링: 이미 경기에서 진 시드 제외
+        valid_seeds = [s for s in valid_seeds if s not in eliminated_seeds]
+
+        # 3. 이전 라운드에서 이미 표시된 상대 제외 (NEW 상대만 표시)
+        new_seeds = [s for s in valid_seeds if s not in previous_opponents]
+
+        opponents = []
+        for seed in new_seeds:
+            player_info = seed_to_player.get(seed, {})
+            opp_name = player_info.get("name")
+            opp_team = player_info.get("team", "")
+
+            # 실제 선수 정보가 없으면 스킵 (추가 bye 체크)
+            if not opp_name:
+                continue
+
+            # 상대 전적 조회 (간소화)
+            h2h = {"wins": 0, "losses": 0, "total": 0}
+            if opp_name and opp_name != f"Seed {seed}":
+                # 전적 검색 (간소화된 버전)
+                for comp in competitions:
+                    for evt in comp.get("events", []):
+                        for pool in evt.get("pool_rounds", []):
+                            for bout in pool.get("bouts", []):
+                                p1 = bout.get("player1_name", "").lower()
+                                p2 = bout.get("player2_name", "").lower()
+                                winner = bout.get("winner_name", "").lower()
+
+                                if (p1 == player_name_lower and p2 == opp_name.lower()) or \
+                                   (p1 == opp_name.lower() and p2 == player_name_lower):
+                                    h2h["total"] += 1
+                                    if winner == player_name_lower:
+                                        h2h["wins"] += 1
+                                    else:
+                                        h2h["losses"] += 1
+
+            opponents.append({
+                "name": opp_name,
+                "team": opp_team,
+                "seed": seed,
+                "head_to_head": h2h
+            })
+
+        predictions.append({
+            "round": round_name,
+            "potential_opponents": opponents,
+            "expanded_default": round_name in ["64강", "32강"]  # 32강까지 기본 펼침
+        })
+
+        # 이번 라운드의 모든 잠재적 상대를 이전 상대 목록에 추가 (다음 라운드에서 제외하기 위해)
+        # new_seeds가 아닌 valid_seeds(부전승 제외)를 추가해야 다음 라운드에서 중복 방지
+        previous_opponents.update(valid_seeds)
+
+    return {
+        "player": {
+            "name": player_name,
+            "team": player_team,
+            "seed": player_seed
+        },
+        "event_first_round": event_first_round,  # 이벤트 최초 라운드
+        "completed_rounds": list(completed_rounds),  # 완료된 라운드 목록
+        "current_round": current_round,
+        "elimination_round": elimination_round,  # 탈락한 라운드
+        "eliminated": player_eliminated,
+        "predictions": predictions
+    }
+
+
+@app.get("/api/events/{sub_event_cd}/de-results/{player_name}")
+async def api_de_results(
+    sub_event_cd: str,
+    player_name: str
+):
+    """DE 라운드별 실제 경기 결과 - 선수의 DE 경기 결과 표시
+
+    Args:
+        sub_event_cd: 종목 코드
+        player_name: 선수 이름
+
+    Returns:
+        - player: 선수 정보
+        - results: 라운드별 실제 결과
+            - round: 라운드명 (128강, 64강, 32강 등)
+            - opponent: 상대 정보 {name, team, seed}
+            - score: 점수 (예: "15-10")
+            - result: 결과 ("win" / "lose")
+    """
+    # 종목 찾기
+    competitions = get_competitions()
+    target_event = None
+    target_comp = None
+
+    for comp in competitions:
+        for event in comp.get("events", []):
+            if event.get("sub_event_cd") == sub_event_cd:
+                target_event = event
+                target_comp = comp
+                break
+        if target_event:
+            break
+
+    if not target_event:
+        raise HTTPException(status_code=404, detail="종목을 찾을 수 없습니다")
+
+    de_bracket = target_event.get("de_bracket", {})
+    if not isinstance(de_bracket, dict):
+        return {
+            "player": {"name": player_name},
+            "results": [],
+            "message": "DE 대진표가 없습니다"
+        }
+
+    # 선수 시드 및 팀 찾기
+    seeding = de_bracket.get("seeding", [])
+    player_seed = None
+    player_team = ""
+    player_name_lower = player_name.lower() if player_name else ""
+
+    for s in seeding:
+        if not isinstance(s, dict):
+            continue
+        s_name = s.get("name")
+        if s_name and s_name.lower() == player_name_lower:
+            player_seed = s.get("seed")
+            player_team = s.get("team", "")
+            break
+
+    # Pool ranking에서 찾기
+    if player_seed is None:
+        pool_total = target_event.get("pool_total_ranking", [])
+        for r in pool_total:
+            if not isinstance(r, dict):
+                continue
+            r_name = r.get("name")
+            if r_name and r_name.lower() == player_name_lower:
+                player_seed = r.get("rank")
+                player_team = r.get("team", "")
+                break
+
+    # normalized_bracket 또는 bouts_by_round 사용
+    normalized = target_event.get("normalized_bracket")
+    if normalized:
+        bouts_by_round = normalized.get("bouts_by_round", {})
+    else:
+        bouts_by_round = de_bracket.get("bouts_by_round", {})
+
+    # full_bouts에서도 라운드별 경기 추출
+    # _get_full_bouts_from_de_bracket 사용으로 bouts_by_round 폴백 지원
+    full_bouts = _get_full_bouts_from_de_bracket(de_bracket)
+
+    # 라운드 순서 정의
+    round_order_results = ["128강", "64강", "32강", "16강", "8강", "4강", "결승"]
+
+    # full_bouts에서 가장 이른 라운드 (이벤트 최초 라운드) 찾기
+    earliest_round_idx = len(round_order_results)
+    for bout in full_bouts:
+        if isinstance(bout, dict):
+            round_name = bout.get("round_name") or bout.get("round", "")
+            if round_name and round_name in round_order_results:
+                idx = round_order_results.index(round_name)
+                if idx < earliest_round_idx:
+                    earliest_round_idx = idx
+
+    # 최초 라운드에서 참가자 수 추정
+    if earliest_round_idx < len(round_order_results):
+        first_round_name = round_order_results[earliest_round_idx]
+        if first_round_name == "128강":
+            participant_count = 128
+        elif first_round_name == "64강":
+            participant_count = 64
+        elif first_round_name == "32강":
+            participant_count = 32
+        elif first_round_name == "16강":
+            participant_count = 16
+        elif first_round_name == "8강":
+            participant_count = 8
+        elif first_round_name == "4강":
+            participant_count = 4
+        else:
+            participant_count = 2
+    else:
+        participant_count = de_bracket.get("participant_count", 16)
+
+    def get_first_round_for_count(count: int) -> str:
+        """참가자 수에 따른 이벤트 최초 라운드 결정"""
+        if count > 64:
+            return "128강"
+        elif count > 32:
+            return "64강"
+        elif count > 16:
+            return "32강"
+        elif count > 8:
+            return "16강"
+        elif count > 4:
+            return "8강"
+        elif count > 2:
+            return "4강"
+        else:
+            return "결승"
+
+    event_first_round = get_first_round_for_count(participant_count)
+
+    # 라운드 순서
+    round_order = ["128강", "64강", "32강", "16강", "8강", "4강", "결승"]
+
+    results = []
+
+    # 먼저 full_bouts에서 검색
+    # 데이터 구조: winner_name, player1_name, player2_name, player1_score, player2_score
+    # loser_name 필드가 없으므로 직접 계산해야 함
+    # player_name_lower는 이미 위에서 정의됨
+
+    for bout in full_bouts:
+        if not isinstance(bout, dict):
+            continue
+
+        is_bye = bout.get("is_bye", False)
+        if is_bye:
+            continue
+
+        # 데이터 구조: winner_name, player1_name, player2_name 사용
+        bout_winner = bout.get("winner_name", "")
+        player1 = bout.get("player1_name", "")
+        player2 = bout.get("player2_name", "")
+        p1_score = bout.get("player1_score")
+        p2_score = bout.get("player2_score")
+        p1_team = bout.get("player1_team", "")
+        p2_team = bout.get("player2_team", "")
+        round_name = bout.get("round_name") or bout.get("round", "")
+
+        # winner/loser 중첩 객체 구조도 폴백으로 지원
+        if not bout_winner:
+            winner_obj = bout.get("winner", {}) or {}
+            bout_winner = winner_obj.get("name", "")
+
+        if not bout_winner or not player1 or not player2:
+            continue
+
+        # 패자 계산: winner가 아닌 쪽이 loser
+        bout_winner = bout_winner.strip()
+        player1 = player1.strip()
+        player2 = player2.strip()
+
+        if bout_winner == player1:
+            bout_loser = player2
+            winner_score = p1_score
+            loser_score = p2_score
+            winner_team = p1_team
+            loser_team = p2_team
+        elif bout_winner == player2:
+            bout_loser = player1
+            winner_score = p2_score
+            loser_score = p1_score
+            winner_team = p2_team
+            loser_team = p1_team
+        else:
+            continue
+
+        winner_lower = bout_winner.lower()
+        loser_lower = bout_loser.lower() if bout_loser else ""
+
+        # 선수가 승자인 경우
+        if winner_lower == player_name_lower:
+            opponent_name = bout_loser
+            opponent_team_val = loser_team
+            score = f"{winner_score}-{loser_score}" if winner_score is not None and loser_score is not None else "-"
+            result_type = "win"
+        # 선수가 패자인 경우
+        elif loser_lower == player_name_lower:
+            opponent_name = bout_winner
+            opponent_team_val = winner_team
+            score = f"{loser_score}-{winner_score}" if loser_score is not None and winner_score is not None else "-"
+            result_type = "lose"
+        else:
+            continue
+
+        # BYE 처리
+        if not opponent_name:
+            continue
+
+        # 상대 시드 찾기
+        opponent_seed = None
+        opponent_name_lower = opponent_name.lower() if opponent_name else ""
+        for s in seeding:
+            if not isinstance(s, dict):
+                continue
+            s_name = s.get("name")
+            if s_name and s_name.lower() == opponent_name_lower:
+                opponent_seed = s.get("seed")
+                if not opponent_team_val:
+                    opponent_team_val = s.get("team", "")
+                break
+
+        results.append({
+            "round": round_name,
+            "opponent": {
+                "name": opponent_name,
+                "team": opponent_team_val,
+                "seed": opponent_seed
+            },
+            "score": score,
+            "result": result_type
+        })
+
+    # full_bouts에서 못 찾으면 bouts_by_round에서 검색
+    if not results:
+        for round_name in round_order:
+            bouts = bouts_by_round.get(round_name, [])
+            for bout in bouts:
+                if not isinstance(bout, dict):
+                    continue
+
+                p1 = bout.get("player1_name", "")
+                p2 = bout.get("player2_name", "")
+                winner = bout.get("winner_name", "")
+
+                p1_lower = p1.lower() if p1 else ""
+                p2_lower = p2.lower() if p2 else ""
+                winner_lower = winner.lower() if winner else ""
+
+                if p1_lower == player_name_lower or p2_lower == player_name_lower:
+                    # 상대 찾기
+                    opponent_name = p2 if p1_lower == player_name_lower else p1
+                    opponent_team = bout.get("player2_team", "") if p1_lower == player_name_lower else bout.get("player1_team", "")
+
+                    # 점수 구성
+                    score1 = bout.get("player1_score")
+                    score2 = bout.get("player2_score")
+
+                    if p1_lower == player_name_lower:
+                        score = f"{score1}-{score2}" if score1 is not None and score2 is not None else "-"
+                        result_type = "win" if winner_lower == player_name_lower else "lose"
+                    else:
+                        score = f"{score2}-{score1}" if score1 is not None and score2 is not None else "-"
+                        result_type = "win" if winner_lower == player_name_lower else "lose"
+
+                    # 상대 시드 찾기
+                    opponent_seed = None
+                    opponent_name_lower = opponent_name.lower() if opponent_name else ""
+                    for s in seeding:
+                        if not isinstance(s, dict):
+                            continue
+                        s_name = s.get("name")
+                        if s_name and s_name.lower() == opponent_name_lower:
+                            opponent_seed = s.get("seed")
+                            if not opponent_team:
+                                opponent_team = s.get("team", "")
+                            break
+
+                    results.append({
+                        "round": round_name,
+                        "opponent": {
+                            "name": opponent_name,
+                            "team": opponent_team,
+                            "seed": opponent_seed
+                        },
+                        "score": score,
+                        "result": result_type
+                    })
+
+    # 라운드 순서대로 정렬
+    def round_sort_key(r):
+        try:
+            return round_order.index(r["round"])
+        except ValueError:
+            return 999
+
+    results.sort(key=round_sort_key)
+
+    return {
+        "player": {
+            "name": player_name,
+            "team": player_team,
+            "seed": player_seed
+        },
+        "event_first_round": event_first_round,  # 이벤트 최초 라운드
+        "participant_count": participant_count,  # 참가자 수
+        "results": results
+    }
+
+
 @app.get("/api/stats")
 async def api_stats():
     """통계 API"""
@@ -1617,7 +4479,7 @@ async def api_stats():
         "total_events": sum(len(c.get("events", [])) for c in competitions),
         "total_players": len(_player_index),
         "by_year": {},
-        "by_weapon": {"플러레": 0, "에뻬": 0, "사브르": 0}
+        "by_weapon": {"foil": 0, "epee": 0, "sabre": 0}
     }
 
     for comp in competitions:
@@ -1639,14 +4501,17 @@ async def api_stats():
 
 @app.get("/api/rankings")
 async def api_rankings(
-    weapon: str = Query(..., description="무기 (플러레/에뻬/사브르)"),
+    request: Request,
+    weapon: str = Query(..., description="무기 (foil/epee/sabre)"),
     gender: str = Query(..., description="성별 (남/여)"),
     age_group: str = Query(..., description="연령대 (E1/E2/E3/MS/HS/UNI/SR/NT)"),
     category: Optional[str] = Query(None, description="구분 (PRO/CLUB) - 중학교 이상만"),
-    year: Optional[int] = Query(None, description="시즌 연도"),
+    year: Optional[int] = Query(None, description="시즌 연도 (미지정시 현재 연도)"),
     lang: str = Query("ko", description="언어 코드 (ko/en)"),
     page: int = Query(1, ge=1),
-    per_page: int = Query(50, ge=1, le=200)
+    per_page: int = Query(50, ge=1, le=200),
+    excl_national: bool = Query(False, description="전국체전/소년체전 제외"),
+    excl_selection: bool = Query(False, description="선발전 제외")
 ):
     """
     랭킹 조회 API
@@ -1688,11 +4553,17 @@ async def api_rankings(
     rankings = _ranking_calculator.calculate_rankings(
         weapon=weapon,
         gender=gender,
-        age_group=age_group if not is_national_team else None,  # NT는 모든 연령대 포함
-        category=category,
+        age_group='NT' if is_national_team else age_group,  # NT는 age_group='NT'로 필터 (서브랭킹 제외)
+        category=None if is_national_team else category,  # NT는 카테고리 무시
         year=year,
-        national_team_only=is_national_team  # 국가대표 선발대회만 필터
+        national_team_only=is_national_team,  # 국가대표 선발대회만 필터
+        excl_national=excl_national,
+        excl_selection=excl_selection
     )
+
+    # 접근 등급 판별
+    access_level, _ = await get_access_level(request)
+    is_guest = access_level == "guest"
 
     # 페이지네이션
     total = len(rankings)
@@ -1711,6 +4582,13 @@ async def api_rankings(
             "Cadet": "Cadet (고등)",
             "Junior": "Junior (대학)",
             "Veteran": "Veteran (일반)",
+            "E1": "초등 1-2",
+            "E2": "초등 3-4",
+            "E3": "초등 5-6",
+            "MS": "중등",
+            "HS": "고등",
+            "UNI": "대학",
+            "SR": "일반",
         },
         "en": {
             "NT": "National Team",
@@ -1721,6 +4599,13 @@ async def api_rankings(
             "Cadet": "Cadet (Under 17)",
             "Junior": "Junior (Under 20)",
             "Veteran": "Veteran (Senior)",
+            "E1": "Elementary 1-2",
+            "E2": "Elementary 3-4",
+            "E3": "Elementary 5-6",
+            "MS": "Middle School",
+            "HS": "High School",
+            "UNI": "University",
+            "SR": "Senior",
         }
     }
 
@@ -1739,8 +4624,8 @@ async def api_rankings(
     # 선수 이름과 팀명 번역 준비
     ranking_entries = []
     for r in page_rankings:
-        # 선수 이름 번역
-        display_name = await get_localized_player_name(_supabase_client, r.player_name, lang)
+        # 선수 이름 번역 (동기식 캐시 사용)
+        display_name = get_localized_player_name_sync(r.player_name, lang)
 
         # 팀 이름들 번역
         teams_to_use = r.teams
@@ -1756,7 +4641,7 @@ async def api_rankings(
 
         display_teams = []
         for team in teams_to_use:
-            display_team = await get_localized_org_name(_supabase_client, team, lang)
+            display_team = get_localized_org_name_sync(team, lang)
             display_teams.append(display_team)
 
         ranking_entries.append(RankingEntry(
@@ -1773,6 +4658,10 @@ async def api_rankings(
             best_results=r.best_results
         ))
 
+    # guest: 상위 N위 이름·소속 블러 처리 (페이지와 무관하게 실제 순위 기준)
+    if is_guest:
+        blur_ranking_entries(ranking_entries, RANKINGS_HIDDEN_TOP_N)
+
     return RankingResponse(
         weapon=weapon,
         gender=gender,
@@ -1781,7 +4670,8 @@ async def api_rankings(
         category=category,
         category_name=category_display,
         total=total,
-        rankings=ranking_entries
+        rankings=ranking_entries,
+        hidden_top=RANKINGS_HIDDEN_TOP_N if is_guest else 0,
     )
 
 
@@ -1789,7 +4679,7 @@ async def api_rankings(
 async def api_ranking_options():
     """랭킹 필터 옵션 API"""
     return {
-        "weapons": ["플러레", "에뻬", "사브르"],
+        "weapons": ["foil", "epee", "sabre"],
         "genders": ["남", "여"],
         "age_groups": [
             {"code": "E1", "name": "초등 1-2 (U9)", "has_category": False},
@@ -1809,56 +4699,212 @@ async def api_ranking_options():
     }
 
 
+@app.get("/api/rankings/team")
+async def api_team_rankings(
+    request: Request,
+    competition_id: Optional[str] = Query(None),
+    weapon: Optional[str] = Query(None),
+    gender: Optional[str] = Query(None),
+    age_group: Optional[str] = Query(None),
+    year: Optional[int] = Query(None),
+    team_category: Optional[str] = Query(None),  # middle_school, high_school, university, club, pro
+):
+    """팀 랭킹 API (전원 합산 방식)
+
+    - competition_id 지정: 해당 대회의 팀 순위
+    - competition_id 없음: 시즌(연도) 누적 팀 랭킹
+    """
+    if competition_id:
+        comp = get_competition(competition_id)
+        if not comp:
+            raise HTTPException(status_code=404, detail="대회를 찾을 수 없습니다")
+
+        comp_info = comp.get('competition', {})
+        events_list = comp.get('events', [])
+        comp_with_events = {
+            'name': comp_info.get('name', ''),
+            'events': events_list,
+        }
+
+        rankings = calculate_competition_team_rankings(
+            competition_data=comp_with_events,
+            weapon=weapon,
+            gender=gender,
+            age_group=age_group,
+        )
+    else:
+        target_year = year or datetime.now().year
+        if not _ranking_calculator:
+            raise HTTPException(status_code=503, detail="랭킹 데이터 로딩 중")
+        rankings = calculate_season_team_rankings(
+            ranking_calculator=_ranking_calculator,
+            year=target_year,
+            weapon=weapon,
+            gender=gender,
+            age_group=age_group,
+        )
+
+    # Top-3 합산 및 1인당 평균 계산
+    enriched = []
+    for r in rankings:
+        all_pts = sorted([p['points'] for p in r.top_players], reverse=True)
+        top3_sum = round(sum(all_pts[:3]), 1)
+        avg_pts = round(r.total_points / r.member_count, 1) if r.member_count > 0 else 0.0
+        enriched.append({
+            "rank": r.rank,
+            "team": r.team_name,
+            "team_category": classify_team_category(r.team_name),
+            "total_points": r.total_points,
+            "top3_points": top3_sum,
+            "avg_points": avg_pts,
+            "individual_points": r.individual_sum,
+            "team_event_points": r.team_event_sum,
+            "event_count": r.event_count,
+            "member_count": r.member_count,
+            "top_players": r.top_players[:5],
+        })
+
+    # Filter by team category
+    if team_category and team_category != 'all':
+        enriched = [r for r in enriched if r['team_category'] == team_category]
+        for i, r in enumerate(enriched, 1):
+            r['rank'] = i
+
+    filtered_total = len(enriched)
+    enriched = enriched[:50]
+
+    return {
+        "total_teams": filtered_total,
+        "sort_options": [
+            {"key": "total_points", "label": "종합 전력", "desc": "팀 전체 실력 합산"},
+            {"key": "top3_points", "label": "최고 선수력", "desc": "상위 3명 기준"},
+            {"key": "avg_points", "label": "선수당 평균", "desc": "1인당 평균 점수"},
+        ],
+        "team_categories": [
+            {"key": "all", "label": "전체"},
+            {"key": "middle_school", "label": "중학교"},
+            {"key": "high_school", "label": "고등학교"},
+            {"key": "university", "label": "대학교"},
+            {"key": "club", "label": "클럽"},
+            {"key": "pro", "label": "실업팀"},
+        ],
+        "rankings": enriched,
+    }
+
+
 @app.get("/api/rankings/player/{player_name}")
-async def api_player_rankings(player_name: str):
-    """선수의 모든 카테고리 랭킹 조회"""
+async def api_player_rankings(request: Request, player_name: str, team: Optional[str] = Query(None)):
+    """선수의 랭킹 조회 (현재 연도, 주력 카테고리)"""
+    access_level, _ = await get_access_level(request)
+    if access_level == "guest":
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다")
+
     if not _ranking_calculator:
         raise HTTPException(status_code=503, detail="랭킹 시스템이 초기화되지 않았습니다")
 
-    # 선수의 모든 결과에서 카테고리 추출
-    player_results = [r for r in _ranking_calculator.results if r.player_name == player_name]
+    from collections import Counter
+    current_year = date.today().year
+
+    # 동명이인 구분: identity_profile 팀 기반 필터링
+    known_teams = set()
+    if _identity_resolver:
+        profiles = _identity_resolver.get_players_by_name(player_name)
+        if team:
+            for p in profiles:
+                if team in p.teams:
+                    known_teams = set(p.teams)
+                    break
+        if not known_teams and profiles:
+            known_teams = set(profiles[0].teams)
+
+    player_results = [
+        r for r in _ranking_calculator.results
+        if r.player_name == player_name
+        and r.competition_date.year == current_year
+        and (not known_teams or r.team in known_teams)
+    ]
 
     if not player_results:
         raise HTTPException(status_code=404, detail="선수를 찾을 수 없습니다")
 
-    # 유니크한 카테고리 조합 추출
-    categories = set()
-    for r in player_results:
-        key = (r.weapon, r.gender, r.age_group, r.category if r.age_group in CATEGORY_APPLICABLE_AGE_GROUPS else None)
-        categories.add(key)
-
-    # 각 카테고리별 랭킹 조회
+    # 주력 무기/성별 = 가장 많이 출전한 조합
     rankings_info = []
-    for weapon, gender, age_group, category in categories:
-        rankings = _ranking_calculator.calculate_rankings(
-            weapon=weapon,
-            gender=gender,
-            age_group=age_group,
-            category=category
-        )
+    wg_counts = Counter((r.weapon, r.gender) for r in player_results if r.weapon and r.gender)
 
-        # 해당 선수의 순위 찾기
-        for r in rankings:
-            if r.player_name == player_name:
-                rankings_info.append({
-                    "weapon": weapon,
-                    "gender": gender,
-                    "age_group": age_group,
-                    "age_group_name": AGE_GROUP_CODES.get(age_group, age_group),
-                    "category": category,
-                    "category_name": CATEGORY_CODES.get(category) if category else None,
-                    "rank": r.current_rank,
-                    "total_in_category": len(rankings),
-                    "points": r.total_points,
-                    "competitions": r.competitions_count,
-                    "gold": r.gold_count,
-                    "silver": r.silver_count,
-                    "bronze": r.bronze_count
-                })
-                break
+    if wg_counts:
+        primary_weapon, primary_gender = wg_counts.most_common(1)[0][0]
+
+        # 주력 나이그룹 결정 — NT 제외, 실제 리그 우선
+        wp_results = [r for r in player_results
+                      if r.weapon == primary_weapon and r.gender == primary_gender]
+
+        league_results = [r for r in wp_results if r.age_group not in ('NT', '')]
+        if league_results:
+            age_counts = Counter(r.age_group for r in league_results)
+            YOUTH_AGES = {'E1', 'E2', 'E3', 'MS', 'HS', 'UNI',
+                          'Y8', 'Y10', 'Y12', 'Y14', 'Cadet', 'Junior'}
+            youth_counts = {k: v for k, v in age_counts.items() if k in YOUTH_AGES}
+            if youth_counts:
+                primary_age = max(youth_counts, key=youth_counts.get)
+            else:
+                primary_age = age_counts.most_common(1)[0][0]
+        else:
+            all_year_results = [
+                r for r in _ranking_calculator.results
+                if r.player_name == player_name
+                and (not known_teams or r.team in known_teams)
+                and r.age_group not in ('NT', '')
+                and r.weapon == primary_weapon and r.gender == primary_gender
+            ]
+            if all_year_results:
+                all_year_results.sort(key=lambda x: x.competition_date, reverse=True)
+                primary_age = all_year_results[0].age_group
+            else:
+                primary_age = 'Veteran'
+
+        cat_results = [r for r in wp_results if r.age_group == primary_age]
+        primary_cat = cat_results[0].category if cat_results else "PRO"
+        cat = primary_cat if primary_age in CATEGORY_APPLICABLE_AGE_GROUPS else None
+
+        targets = [(primary_weapon, primary_gender, primary_age, cat, False)]
+
+        has_nt = any(r.age_group == 'NT' and r.weapon == primary_weapon
+                     and r.gender == primary_gender for r in player_results)
+        if has_nt:
+            targets.append((primary_weapon, primary_gender, 'NT', None, True))
+
+        for weapon, gender, age_group, category, is_nt in targets:
+            rankings = _ranking_calculator.calculate_rankings(
+                weapon=weapon, gender=gender,
+                age_group='NT' if is_nt else age_group,
+                category=None if is_nt else category,
+                year=current_year,
+                national_team_only=is_nt,
+            )
+            for r in rankings:
+                if r.player_name == player_name:
+                    rankings_info.append({
+                        "weapon": weapon,
+                        "gender": gender,
+                        "age_group": age_group,
+                        "age_group_name": AGE_GROUP_CODES.get(age_group, age_group),
+                        "category": category,
+                        "category_name": CATEGORY_CODES.get(category) if category else None,
+                        "rank": r.current_rank,
+                        "total_in_category": len(rankings),
+                        "points": r.total_points,
+                        "competitions": r.competitions_count,
+                        "gold": r.gold_count,
+                        "silver": r.silver_count,
+                        "bronze": r.bronze_count,
+                        "year": current_year,
+                        "is_nt": is_nt,
+                    })
+                    break
 
     return {
         "player_name": player_name,
+        "year": current_year,
         "rankings": rankings_info
     }
 
@@ -1939,6 +4985,9 @@ def calculate_head_to_head(player_name: str, records: List[Dict], profile_teams:
                                 "losses": 0,
                                 "matches": []
                             }
+                        # Update team if current one is empty but new one has a value
+                        elif opponent_team and not opponent_stats[opponent_name].get("team"):
+                            opponent_stats[opponent_name]["team"] = opponent_team
 
                         if result == "V":
                             opponent_stats[opponent_name]["wins"] += 1
@@ -1966,7 +5015,10 @@ def calculate_head_to_head(player_name: str, records: List[Dict], profile_teams:
                         rankings_map[r_name] = r_rank
 
                 # 새로운 full_bouts 구조 처리 (2025년 스크래핑 데이터)
-                full_bouts = de_bracket.get("full_bouts", [])
+                # 데이터 구조: winner_name, player1_name, player2_name, player1_score, player2_score
+                # loser_name 필드가 없으므로 직접 계산해야 함
+                # _get_full_bouts_from_de_bracket 사용으로 bouts_by_round 폴백 지원
+                full_bouts = _get_full_bouts_from_de_bracket(de_bracket)
                 if full_bouts and isinstance(full_bouts, list):
                     # table_index 높은 순으로 정렬 (최종 결과가 더 정확함)
                     sorted_bouts = sorted(
@@ -1978,22 +5030,39 @@ def calculate_head_to_head(player_name: str, records: List[Dict], profile_teams:
                     # 먼저 해당 선수가 관련된 경기들만 수집
                     player_bouts = []
                     for bout in sorted_bouts:
-                        if not isinstance(bout, dict):
+                        if not isinstance(bout, dict) or bout.get("is_bye"):
                             continue
-                        winner = bout.get("winner", {})
-                        loser = bout.get("loser", {})
-                        w_name = winner.get("name", "")
-                        l_name = loser.get("name", "")
 
-                        if w_name == player_name or l_name == player_name:
+                        # 실제 데이터 구조 사용
+                        winner_name_val = bout.get("winner_name", "")
+                        player1 = bout.get("player1_name", "")
+                        player2 = bout.get("player2_name", "")
+
+                        if not winner_name_val or not player1 or not player2:
+                            continue
+
+                        # 패자 계산
+                        winner_name_val = winner_name_val.strip()
+                        player1 = player1.strip()
+                        player2 = player2.strip()
+
+                        if winner_name_val == player1:
+                            loser_name_val = player2
+                        elif winner_name_val == player2:
+                            loser_name_val = player1
+                        else:
+                            continue
+
+                        if winner_name_val == player_name or loser_name_val == player_name:
+                            # 파싱된 정보 추가
+                            bout["_winner_name"] = winner_name_val
+                            bout["_loser_name"] = loser_name_val
                             player_bouts.append(bout)
 
                     # 같은 상대에 대해 여러 결과가 있으면 final_rankings로 검증
                     seen_de_opponents = set()
                     for bout in player_bouts:
-                        winner = bout.get("winner", {})
-                        loser = bout.get("loser", {})
-                        round_name = bout.get("round", "DE")
+                        round_name = bout.get("round_name") or bout.get("round", "DE")
 
                         opponent_name = None
                         my_score = 0
@@ -2001,23 +5070,42 @@ def calculate_head_to_head(player_name: str, records: List[Dict], profile_teams:
                         result = None
                         opponent_team = ""
 
+                        w_name = bout.get("_winner_name", "")
+                        l_name = bout.get("_loser_name", "")
+                        p1_score = bout.get("player1_score")
+                        p2_score = bout.get("player2_score")
+                        p1_team = bout.get("player1_team", "")
+                        p2_team = bout.get("player2_team", "")
+
+                        # 승자/패자 점수 및 팀 결정
+                        if w_name == bout.get("player1_name", "").strip():
+                            w_score = p1_score
+                            l_score = p2_score
+                            w_team = p1_team
+                            l_team = p2_team
+                        else:
+                            w_score = p2_score
+                            l_score = p1_score
+                            w_team = p2_team
+                            l_team = p1_team
+
                         # 선수가 winner인 경우
-                        if winner.get("name") == player_name:
-                            if profile_teams and winner.get("team") not in profile_teams:
+                        if w_name == player_name:
+                            if profile_teams and w_team and w_team not in profile_teams:
                                 continue
-                            opponent_name = loser.get("name")
-                            opponent_team = loser.get("team", "")
-                            my_score = winner.get("score") or 0
-                            opponent_score = loser.get("score") or 0
+                            opponent_name = l_name
+                            opponent_team = l_team
+                            my_score = w_score or 0
+                            opponent_score = l_score or 0
                             result = "V"
                         # 선수가 loser인 경우
-                        elif loser.get("name") == player_name:
-                            if profile_teams and loser.get("team") not in profile_teams:
+                        elif l_name == player_name:
+                            if profile_teams and l_team and l_team not in profile_teams:
                                 continue
-                            opponent_name = winner.get("name")
-                            opponent_team = winner.get("team", "")
-                            my_score = loser.get("score") or 0
-                            opponent_score = winner.get("score") or 0
+                            opponent_name = w_name
+                            opponent_team = w_team
+                            my_score = l_score or 0
+                            opponent_score = w_score or 0
                             result = "D"
 
                         if opponent_name and opponent_name != player_name:
@@ -2049,6 +5137,9 @@ def calculate_head_to_head(player_name: str, records: List[Dict], profile_teams:
                                     "losses": 0,
                                     "matches": []
                                 }
+                            # Update team if current one is empty but new one has a value
+                            elif opponent_team and not opponent_stats[opponent_name].get("team"):
+                                opponent_stats[opponent_name]["team"] = opponent_team
 
                             if result == "V":
                                 opponent_stats[opponent_name]["wins"] += 1
@@ -2108,6 +5199,9 @@ def calculate_head_to_head(player_name: str, records: List[Dict], profile_teams:
                                         "losses": 0,
                                         "matches": []
                                     }
+                                # Update team if current one is empty but new one has a value
+                                elif opponent_team and not opponent_stats[opponent_name].get("team"):
+                                    opponent_stats[opponent_name]["team"] = opponent_team
 
                                 if result == "V":
                                     opponent_stats[opponent_name]["wins"] += 1
@@ -2202,9 +5296,9 @@ async def player_certificate_page(
     }
 
     event_translations = {
-        '플러레': 'Foil',
-        '에뻬': 'Epee',
-        '사브르': 'Sabre',
+        'foil': 'Foil',
+        'epee': 'Epee',
+        'sabre': 'Sabre',
         '여자': 'Women\'s',
         '남자': 'Men\'s',
         '초등부(5-6학년)': 'Elem 5-6',
@@ -2262,9 +5356,8 @@ async def player_certificate_page(
     if identity_profile:
         records_to_use = identity_profile.records
     else:
-        # Fallback to search
-        player_records = get_player_records(player_name, team)
-        records_to_use = player_records
+        # Fallback: use the name-indexed records directly (identity unresolved)
+        records_to_use = _player_index.get(player_name, [])
 
     # Filter by weapon if specified
     weapon_filter_display = None
@@ -2307,7 +5400,7 @@ async def player_certificate_page(
         'name': player_name,
         'name_en': 'Park So-Yun' if player_name == '박소윤' else player_name,
         'player_id': id or (identity_profile.player_id if identity_profile else 'N/A'),
-        'birth_date': 'Jul 24, 2013' if player_name == '박소윤' and (not weapon or weapon == '플러레') else 'N/A',
+        'birth_date': 'Jul 24, 2013' if player_name == '박소윤' and (not weapon or weapon == 'foil') else 'N/A',
         'gender_en': 'Female' if any('여' in r.get('event_name', '') for r in records_to_use[:3]) else 'Male',
         'current_team': current_team,
         'club_en': team_translations.get(current_team, current_team),
@@ -2326,14 +5419,401 @@ async def player_certificate_page(
     )
 
 
+def enrich_records_with_match_details(records: list, player_name: str) -> list:
+    """History 섹션용 상세 매치 데이터 추가
+
+    각 record에 pool_bouts, tournament_bouts, tournament_path 추가
+    """
+    player_name_lower = player_name.lower()
+    enriched = []
+
+    for record in records:
+        # 기본 record 복사
+        enriched_record = dict(record)
+        enriched_record["pool_bouts"] = []
+        enriched_record["tournament_bouts"] = []
+        enriched_record["tournament_path"] = []
+
+        # 이벤트 데이터 찾기
+        sub_event_cd = record.get("sub_event_cd", "")
+        if not sub_event_cd:
+            enriched.append(enriched_record)
+            continue
+
+        event_data = None
+        for comp in _data_cache.get("competitions", []):
+            for event in comp.get("events", []):
+                if event.get("sub_event_cd") == sub_event_cd:
+                    event_data = event
+                    break
+            if event_data:
+                break
+
+        if not event_data:
+            enriched.append(enriched_record)
+            continue
+
+        # Pool 경기 추출
+        pool_rounds = event_data.get("pool_rounds", [])
+        pool_wins = 0
+        pool_losses = 0
+        touches_scored = 0
+        touches_received = 0
+        pool_rank = None
+        pool_total = None
+        pool_number_found = None
+
+        for pool in pool_rounds:
+            pool_number = pool.get("pool_number", 1)
+            pool_results = pool.get("results", [])
+
+            # 해당 선수의 Pool 결과 찾기
+            player_result = None
+            for result in pool_results:
+                if result.get("name", "").lower() == player_name_lower:
+                    player_result = result
+                    break
+
+            if not player_result:
+                continue
+
+            # Pool 순위 및 총 인원 정보 추출
+            pool_rank = player_result.get("rank")
+            pool_total = len(pool_results)
+            pool_number_found = pool_number
+
+            # Pool 개별 매치 - 두 가지 데이터 형식 지원
+            # 형식 1: bouts/matches 배열 (직접 상대 정보 포함)
+            # 형식 2: scores 배열 (위치 기반, 상대 정보는 pool_results에서 매칭 필요)
+            player_bouts = player_result.get("bouts", []) or player_result.get("matches", [])
+            player_scores = player_result.get("scores", [])
+
+            if player_bouts:
+                # 형식 1: bouts/matches 배열 처리
+                for bout in player_bouts:
+                    if not isinstance(bout, dict):
+                        continue
+
+                    opponent = bout.get("opponent", "")
+                    my_score = bout.get("score", 0) or bout.get("my_score", 0)
+                    opp_score = bout.get("opponent_score", 0) or bout.get("opp_score", 0)
+                    result_code = bout.get("result", "")
+
+                    # 결과 판정
+                    if result_code == "V" or (my_score and opp_score and my_score > opp_score):
+                        result_str = "win"
+                        pool_wins += 1
+                    elif result_code == "D" or (my_score and opp_score and my_score < opp_score):
+                        result_str = "lose"
+                        pool_losses += 1
+                    else:
+                        result_str = "draw" if my_score == opp_score else "pending"
+
+                    # 상대 팀 정보 찾기
+                    opponent_team = ""
+                    for result in pool_results:
+                        if result.get("name", "").lower() == opponent.lower():
+                            opponent_team = result.get("team", "")
+                            break
+
+                    enriched_record["pool_bouts"].append({
+                        "pool_number": pool_number,
+                        "opponent_name": opponent,
+                        "opponent_team": opponent_team,
+                        "my_score": my_score,
+                        "opponent_score": opp_score,
+                        "result": "V" if result_str == "win" else "D"
+                    })
+
+                    touches_scored += my_score if isinstance(my_score, int) else 0
+                    touches_received += opp_score if isinstance(opp_score, int) else 0
+
+            elif player_scores:
+                # 형식 2: scores 배열 처리 (위치 기반)
+                # pool_results를 position으로 정렬하여 상대 매칭
+                sorted_pool_results = sorted(pool_results, key=lambda x: x.get("position", 999))
+                player_position = player_result.get("position", 0)
+
+                for idx, score_entry in enumerate(player_scores):
+                    if score_entry is None:
+                        continue  # 자기 자신 위치 (null)
+                    if not isinstance(score_entry, dict):
+                        continue
+
+                    # 상대 선수 찾기 (position 기반)
+                    opponent_idx = idx + 1  # scores 배열은 1-indexed position과 매칭
+                    opponent_result = None
+                    for pr in sorted_pool_results:
+                        if pr.get("position") == opponent_idx:
+                            opponent_result = pr
+                            break
+
+                    if not opponent_result:
+                        continue
+
+                    opponent_name = opponent_result.get("name", "")
+                    opponent_team = opponent_result.get("team", "")
+
+                    # 내 점수와 결과 추출
+                    my_score = score_entry.get("score", 0)
+                    result_type = score_entry.get("type", "")  # "V" or "L"
+
+                    # 상대 점수 찾기 (상대의 scores 배열에서 내 position에 해당하는 값)
+                    opp_score = 0
+                    opponent_scores = opponent_result.get("scores", [])
+                    if player_position and player_position <= len(opponent_scores):
+                        opp_score_entry = opponent_scores[player_position - 1]
+                        if isinstance(opp_score_entry, dict):
+                            opp_score = opp_score_entry.get("score", 0)
+
+                    # 결과 판정
+                    if result_type == "V":
+                        result_str = "win"
+                        pool_wins += 1
+                    elif result_type == "L":
+                        result_str = "lose"
+                        pool_losses += 1
+                    else:
+                        result_str = "pending"
+
+                    enriched_record["pool_bouts"].append({
+                        "pool_number": pool_number,
+                        "opponent_name": opponent_name,
+                        "opponent_team": opponent_team,
+                        "my_score": my_score,
+                        "opponent_score": opp_score,
+                        "result": "V" if result_str == "win" else "D"
+                    })
+
+                    touches_scored += my_score if isinstance(my_score, int) else 0
+                    touches_received += opp_score if isinstance(opp_score, int) else 0
+
+        # Pool 통계 추가
+        enriched_record["pool_record"] = f"{pool_wins}승 {pool_losses}패" if pool_wins or pool_losses else ""
+        enriched_record["pool_wins"] = pool_wins
+        enriched_record["pool_losses"] = pool_losses
+        enriched_record["indicator"] = touches_scored - touches_received
+        enriched_record["touches_scored"] = touches_scored
+        enriched_record["touches_received"] = touches_received
+        enriched_record["pool_rank"] = pool_rank
+        enriched_record["pool_total"] = pool_total
+        enriched_record["pool_number"] = pool_number_found
+        # Calculate V/M (win rate) as percentage
+        if pool_wins + pool_losses > 0:
+            enriched_record["pool_vm"] = round(pool_wins / (pool_wins + pool_losses) * 100, 1)
+        else:
+            enriched_record["pool_vm"] = None
+
+        # DE 경기 추출
+        # _get_full_bouts_from_de_bracket 사용으로 bouts_by_round 폴백 지원
+        de_bracket = event_data.get("de_bracket", {})
+        # dual_de 감지: de_bracket JSON 내 format 또는 events 테이블 de_format 컬럼
+        is_dual_de = isinstance(de_bracket, dict) and (
+            de_bracket.get("format") == "dual_de" or
+            event_data.get("de_format") == "dual_de"
+        )
+        # flat dual_de: de_format은 dual_de이지만 de_bracket에 first_de/second_de가 없는 경우
+        is_flat_dual_de = is_dual_de and isinstance(de_bracket, dict) and "first_de" not in de_bracket
+        if isinstance(de_bracket, dict):
+            full_bouts = _get_full_bouts_from_de_bracket(de_bracket)
+
+            # 이벤트의 실제 시작 라운드 가져오기 (데이터 파이프라인 원칙: 근본 데이터 사용)
+            if is_dual_de and not is_flat_dual_de:
+                # 구조화된 dual_de: second_de(본선)의 starting_round 사용
+                second_de = de_bracket.get("second_de", {})
+                first_de = de_bracket.get("first_de", {})
+                starting_round = second_de.get("starting_round") or first_de.get("starting_round") or "32강"
+                bracket_size = second_de.get("bracket_size") or first_de.get("bracket_size") or 32
+            else:
+                starting_round = de_bracket.get("starting_round", "32강")
+                bracket_size = de_bracket.get("bracket_size", 32)
+
+            # flat dual_de: 라운드 이름 기반으로 de_phase 추론 태깅
+            # 128강 이상에서 시작하면 본선은 보통 32강부터 (가장 일반적 패턴)
+            if is_flat_dual_de:
+                _flat_round_order = ["256강", "128강", "64강", "32강", "16강", "8강", "4강", "결승"]
+                # 본선 시작 라운드 추론: bracket_size가 128이면 본선은 32강, 64이면 16강
+                _main_start = "32강" if int(bracket_size) >= 128 else "16강"
+                if _main_start in _flat_round_order:
+                    _main_idx = _flat_round_order.index(_main_start)
+                    _qualifying_rounds = set(_flat_round_order[:_main_idx])  # 본선 이전 라운드
+                else:
+                    _qualifying_rounds = set()
+                for bout in full_bouts:
+                    if isinstance(bout, dict):
+                        r = bout.get("round_name") or bout.get("round", "")
+                        bout["de_phase"] = "qualifying" if r in _qualifying_rounds else "main"
+
+            # 표준 라운드 순서 (256강 포함)
+            full_round_order = ["256강", "128강", "64강", "32강", "16강", "8강", "4강", "결승"]
+
+            # 이벤트 시작 라운드부터만 포함 (첫 라운드가 정확하게 표시됨)
+            if starting_round in full_round_order:
+                start_idx = full_round_order.index(starting_round)
+                round_order = full_round_order[start_idx:]
+            else:
+                round_order = ["32강", "16강", "8강", "4강", "결승"]
+
+            player_de_rounds = {}
+            seen_de_bouts = set()  # tournament_bouts 중복 방지
+
+            for bout in full_bouts:
+                if not isinstance(bout, dict):
+                    continue
+
+                # 데이터 구조: winner_name, player1_name, player2_name, player1_score, player2_score
+                winner_name = bout.get("winner_name", "")
+                player1 = bout.get("player1_name", "")
+                player2 = bout.get("player2_name", "")
+                p1_score = bout.get("player1_score")
+                p2_score = bout.get("player2_score")
+                round_name = bout.get("round_name") or bout.get("round", "")
+                is_bye = bout.get("is_bye", False)
+
+                # 부전승(BYE) 경기 처리 - 첫 라운드 부전승도 표시
+                if is_bye:
+                    if winner_name and winner_name.strip().lower() == player_name_lower:
+                        # 부전승으로 진출
+                        enriched_record["tournament_bouts"].append({
+                            "round_name": round_name,
+                            "opponent_name": "(부전승)",
+                            "opponent_team": "",
+                            "my_score": None,
+                            "opponent_score": None,
+                            "result": "BYE",
+                            "is_bye": True,
+                            "de_phase": bout.get("de_phase", "main")
+                        })
+                        player_de_rounds[round_name] = "bye"
+                    continue
+
+                if not winner_name or not player1 or not player2:
+                    continue
+
+                # 패자 계산
+                winner_name = winner_name.strip()
+                player1 = player1.strip()
+                player2 = player2.strip()
+
+                if winner_name == player1:
+                    loser_name = player2
+                    winner_score = p1_score
+                    loser_score = p2_score
+                elif winner_name == player2:
+                    loser_name = player1
+                    winner_score = p2_score
+                    loser_score = p1_score
+                else:
+                    continue
+
+                winner_lower = winner_name.lower()
+                loser_lower = loser_name.lower() if loser_name else ""
+
+                # 선수가 승자인 경우
+                if winner_lower == player_name_lower:
+                    opponent = loser_name
+                    my_score = winner_score
+                    opp_score = loser_score
+                    result_str = "win"
+                # 선수가 패자인 경우
+                elif loser_lower == player_name_lower:
+                    opponent = winner_name
+                    my_score = loser_score
+                    opp_score = winner_score
+                    result_str = "lose"
+                else:
+                    continue
+
+                if not opponent or opponent is None:
+                    continue
+
+                # 상대 팀 정보 찾기 (seeding 또는 pool_total_ranking에서)
+                opponent_team = ""
+                opponent_lower = opponent.lower() if opponent else ""
+                seeding = de_bracket.get("seeding", [])
+                for s in seeding:
+                    s_name = s.get("name", "") if s else ""
+                    if s_name and s_name.lower() == opponent_lower:
+                        opponent_team = s.get("team", "")
+                        break
+                if not opponent_team:
+                    pool_total = event_data.get("pool_total_ranking", [])
+                    for r in pool_total:
+                        r_name = r.get("name", "") if r else ""
+                        if r_name and r_name.lower() == opponent_lower:
+                            opponent_team = r.get("team", "")
+                            break
+
+                # 중복 bout 방지 (같은 라운드+상대 조합)
+                bout_key = f"{round_name}|{opponent}"
+                if bout_key in seen_de_bouts:
+                    continue
+                seen_de_bouts.add(bout_key)
+
+                de_phase = bout.get("de_phase", "main")
+                enriched_record["tournament_bouts"].append({
+                    "round_name": round_name,
+                    "opponent_name": opponent,
+                    "opponent_team": opponent_team,
+                    "my_score": my_score,
+                    "opponent_score": opp_score,
+                    "result": "V" if result_str == "win" else "D",
+                    "de_phase": de_phase
+                })
+
+                player_de_rounds[round_name] = result_str
+
+            # Tournament path 생성 (이벤트 시작 라운드부터만 표시)
+            # round_order는 이미 이벤트의 starting_round부터 시작하도록 필터링됨
+            final_rank = record.get("rank")
+            for round_name in round_order:
+                if round_name in player_de_rounds:
+                    result = player_de_rounds[round_name]
+                    enriched_record["tournament_path"].append({
+                        "name": round_name,
+                        "completed": True,
+                        "current": result == "lose",  # 패배한 라운드가 마지막
+                        "is_bye": result == "bye"  # 부전승 표시
+                    })
+
+            # tournament_bouts를 라운드 순서대로 정렬 (BYE 포함)
+            # round_order에 따라 정렬하여 첫 라운드 부전승이 맨 위에 오도록 함
+            round_order_map = {r: i for i, r in enumerate(round_order)}
+            # "준결승" = "4강" 동일 순서 (DB에서 두 표현 혼용)
+            if "4강" in round_order_map and "준결승" not in round_order_map:
+                round_order_map["준결승"] = round_order_map["4강"]
+            enriched_record["tournament_bouts"].sort(
+                key=lambda b: round_order_map.get(b.get("round_name", ""), 999)
+            )
+
+        # 템플릿용 플래그 설정
+        enriched_record["pool_results"] = len(enriched_record["pool_bouts"]) > 0
+        enriched_record["tournament_results"] = len(enriched_record["tournament_bouts"]) > 0
+
+        enriched.append(enriched_record)
+
+    return enriched
+
+
 @app.get("/player/{player_name}", response_class=HTMLResponse)
-async def player_page(request: Request, player_name: str, id: Optional[str] = None, team: Optional[str] = None):
+async def player_page(
+    request: Request,
+    player_name: str,
+    id: Optional[str] = None,
+    team: Optional[str] = None,
+    strength_start: Optional[str] = None,  # 기간 필터 시작 (YYYY-MM) - legacy
+    strength_end: Optional[str] = None,    # 기간 필터 종료 (YYYY-MM) - legacy
+    strength_years: Optional[str] = None,  # 개별 연도 필터 (쉼표 구분: "2024,2025")
+):
     """선수 프로필 페이지 (fencingtracker 스타일)
 
     Args:
         player_name: 선수 이름 또는 선수 ID (KOP00000 형식)
         id: 선수 ID (동명이인 구분용, Optional)
         team: 소속팀 (동명이인 구분용, Optional)
+        strength_start: 단계별 승률 필터 시작 기간 (YYYY-MM 형식, Optional) - legacy
+        strength_end: 단계별 승률 필터 종료 기간 (YYYY-MM 형식, Optional) - legacy
+        strength_years: 개별 연도 필터 (쉼표 구분: "2024,2025", Optional)
     """
     # player_name이 실제로 player_id (KOP00000 형식)인 경우 처리
     if player_name.startswith("KOP") and _identity_resolver:
@@ -2481,8 +5961,12 @@ async def player_page(request: Request, player_name: str, id: Optional[str] = No
     # 경기 기록 정렬 (최신순)
     sorted_records = sorted(records, key=lambda x: x.get("competition_date", ""), reverse=True)
 
+    # History 섹션용 상세 매치 데이터 추가
+    enriched_records = enrich_records_with_match_details(sorted_records, player_name)
+
     # 상대 전적 계산 (동명이인 구분: profile_teams 전달)
-    h2h_profile_teams = set(identity_profile.teams) if identity_profile and (id or profile_identified_by_team) else None
+    # has_disambiguation이 True면 항상 필터링 (records 필터링과 동일 조건)
+    h2h_profile_teams = set(identity_profile.teams) if identity_profile and (id or profile_identified_by_team or has_disambiguation) else None
     head_to_head = calculate_head_to_head(player_name, records, h2h_profile_teams)
 
     # 경기 통계
@@ -2492,6 +5976,41 @@ async def player_page(request: Request, player_name: str, id: Optional[str] = No
         "de_wins": 0, "de_losses": 0, "de_rate": 0,
         "final_wins": 0, "final_losses": 0, "final_rate": 0
     }
+
+    # 단계별 승률 (Stage-wise win rate)
+    round_stats = {
+        "pool": {"wins": 0, "losses": 0, "rate": 0},
+        "t32_and_below": {"wins": 0, "losses": 0, "rate": 0},  # 32강 이하 (~32강)
+        "t16": {"wins": 0, "losses": 0, "rate": 0},  # 16강
+        "t8": {"wins": 0, "losses": 0, "rate": 0},   # 8강
+        "semifinal": {"wins": 0, "losses": 0, "rate": 0},  # 4강 (준결승)
+        "final": {"wins": 0, "losses": 0, "rate": 0}  # 결승
+    }
+
+    # 라운드 이름 → 카테고리 매핑
+    def get_round_category(round_name: str) -> str:
+        if not round_name:
+            return "t32_and_below"
+        # 정확한 라운드 매칭 (substring 충돌 방지: "64강"에 "4강"이 포함되는 문제)
+        # 숫자+강 패턴 추출로 정확한 라운드 식별
+        num_match = re.search(r'(\d+)강', round_name)
+        if num_match:
+            round_num = int(num_match.group(1))
+            if round_num == 4:
+                return "semifinal"
+            elif round_num == 8:
+                return "t8"
+            elif round_num == 16:
+                return "t16"
+            else:
+                return "t32_and_below"  # 32강, 64강, 128강, 256강
+        # 숫자+강 패턴이 아닌 경우 키워드 매칭
+        if "결승" in round_name and "준결승" not in round_name:
+            return "final"
+        elif "준결승" in round_name:
+            return "semifinal"
+        else:
+            return "t32_and_below"
 
     # 경기 통계 추출 (Pool + DE)
     for r in records:
@@ -2512,8 +6031,129 @@ async def player_page(request: Request, player_name: str, id: Optional[str] = No
                     total = int(parts[1])
                     stage_stats["pool_wins"] += wins
                     stage_stats["pool_losses"] += (total - wins)
-            except:
+            except (ValueError, TypeError, IndexError):
                 pass
+
+    # 기간 필터링: strength_years 또는 strength_start/strength_end
+    def _get_year_from_date(date_str: str) -> Optional[int]:
+        """날짜 문자열에서 연도 추출"""
+        if not date_str or len(date_str) < 4:
+            return None
+        try:
+            return int(date_str[:4])
+        except (ValueError, TypeError):
+            return None
+
+    def is_in_date_range(record_date: str, start: str, end: str) -> bool:
+        """날짜가 기간 내에 있는지 확인 (YYYY-MM-DD 또는 YYYY-MM 형식 지원)"""
+        if not record_date:
+            return True  # 날짜 없으면 포함
+        try:
+            # record_date: YYYY-MM-DD 형식
+            rec_ym = record_date[:7]  # YYYY-MM
+            return start <= rec_ym <= end
+        except (TypeError, ValueError):
+            return True
+
+    # 기간 필터링 적용된 enriched_records
+    # strength_years 파라미터 파싱 (개별 연도 선택)
+    selected_years_set = set()
+    if strength_years:
+        try:
+            selected_years_set = {int(y.strip()) for y in strength_years.split(",") if y.strip().isdigit()}
+        except (ValueError, TypeError):
+            pass
+
+    if selected_years_set:
+        # 개별 연도 필터 (새 방식)
+        strength_filtered_records = [
+            r for r in enriched_records
+            if _get_year_from_date(r.get("competition_date", "")) in selected_years_set
+        ]
+    elif strength_start and strength_end:
+        # 레거시 범위 필터
+        strength_filtered_records = [
+            r for r in enriched_records
+            if is_in_date_range(r.get("competition_date", ""), strength_start, strength_end)
+        ]
+    else:
+        # 기본값: 가장 최근 연도만
+        all_years = sorted({
+            _get_year_from_date(r.get("competition_date", ""))
+            for r in enriched_records
+            if _get_year_from_date(r.get("competition_date", ""))
+        })
+        if all_years:
+            default_year = all_years[-1]
+            selected_years_set = {default_year}
+            strength_filtered_records = [
+                r for r in enriched_records
+                if _get_year_from_date(r.get("competition_date", "")) == default_year
+            ]
+        else:
+            strength_filtered_records = enriched_records
+
+    # enriched_records에서 단계별 통계 추출 헬퍼
+    def _compute_round_stats_from_records(target_records, de_phase_filter=None):
+        """주어진 records에서 라운드별 승/패 통계를 계산
+
+        Args:
+            target_records: enriched record 리스트
+            de_phase_filter: None=전체, "main"=본선DE만, "qualifying"=예선DE만
+        """
+        rs = {
+            "pool": {"wins": 0, "losses": 0, "rate": 0},
+            "t32_and_below": {"wins": 0, "losses": 0, "rate": 0},
+            "t16": {"wins": 0, "losses": 0, "rate": 0},
+            "t8": {"wins": 0, "losses": 0, "rate": 0},
+            "semifinal": {"wins": 0, "losses": 0, "rate": 0},
+            "final": {"wins": 0, "losses": 0, "rate": 0}
+        }
+        for r in target_records:
+            for bout in r.get("pool_bouts", []):
+                if bout.get("result") == "V":
+                    rs["pool"]["wins"] += 1
+                elif bout.get("result") == "D":
+                    rs["pool"]["losses"] += 1
+            for bout in r.get("tournament_bouts", []):
+                if bout.get("is_bye"):
+                    continue
+                # dual_de 예선(qualifying) 경기는 본선 통계에서 제외
+                if de_phase_filter and bout.get("de_phase", "main") != de_phase_filter:
+                    continue
+                category = get_round_category(bout.get("round_name", ""))
+                if bout.get("result") == "V":
+                    rs[category]["wins"] += 1
+                elif bout.get("result") == "D":
+                    rs[category]["losses"] += 1
+        for cat in rs:
+            total = rs[cat]["wins"] + rs[cat]["losses"]
+            if total > 0:
+                rs[cat]["rate"] = round(rs[cat]["wins"] / total * 100, 1)
+        return rs
+
+    # Strength 탭용: 기간 필터링 적용된 round_stats (전체 또는 사용자 지정 기간)
+    round_stats = _compute_round_stats_from_records(strength_filtered_records, de_phase_filter="main")
+
+    # Pool 통계가 없으면 stage_stats에서 가져오기
+    if round_stats["pool"]["wins"] == 0 and round_stats["pool"]["losses"] == 0:
+        round_stats["pool"]["wins"] = stage_stats["pool_wins"]
+        round_stats["pool"]["losses"] = stage_stats["pool_losses"]
+        pool_total = round_stats["pool"]["wins"] + round_stats["pool"]["losses"]
+        if pool_total > 0:
+            round_stats["pool"]["rate"] = round(round_stats["pool"]["wins"] / pool_total * 100, 1)
+
+    # Summary 탭용: 최근 기간 round_stats (직전년도 + 올해)
+    from datetime import date as _date_cls
+    _current_year = _date_cls.today().year
+    _prev_year = _current_year - 1
+    recent_records = [
+        r for r in enriched_records
+        if r.get("year") and int(r.get("year", 0)) >= _prev_year
+    ]
+    recent_round_stats = _compute_round_stats_from_records(recent_records, de_phase_filter="main")
+    recent_period_label = f"{_prev_year}~{_current_year}"
+    recent_event_count = len(recent_records)
 
     # 전체 통계 (Pool + DE)
     total_wins = stage_stats["pool_wins"] + stage_stats["de_wins"]
@@ -2547,6 +6187,19 @@ async def player_page(request: Request, player_name: str, id: Optional[str] = No
                     "competition_count": len(p.competition_ids)
                 })
 
+    # Summary 탭용 경량 records_summary (메달 클릭 시 대회 목록 표시용)
+    records_summary = []
+    for r in sorted_records:
+        records_summary.append({
+            "year": r.get("year"),
+            "rank": r.get("rank"),
+            "competition_name": r.get("competition_name", ""),
+            "event_name": r.get("event_name", ""),
+            "weapon": r.get("weapon", ""),
+            "event_cd": r.get("event_cd", ""),
+            "sub_event_cd": r.get("sub_event_cd", ""),
+        })
+
     player_data = {
         "name": player_name,
         "player_id": identity_profile.player_id if identity_profile else None,
@@ -2559,16 +6212,28 @@ async def player_page(request: Request, player_name: str, id: Optional[str] = No
         "current_team": identity_profile.current_team if identity_profile else (teams[0] if teams else None),
         "teams": teams,
         "years": years,
+        "available_years": sorted(years),  # 오름차순 (필터 드롭다운용)
+        "selected_years": sorted(selected_years_set) if selected_years_set else sorted(years),  # 선택된 연도 목록
         "weapons": weapons,
         "ratings": ratings,
         "rating_history": rating_history[:10],
         "podium_by_season": dict(sorted(podium_by_season.items(), reverse=True)),
         "stats": stats,
         "total_records": len(records),
-        "records": sorted_records,
+        "records": enriched_records,  # 상세 매치 데이터 포함된 records
         "head_to_head": head_to_head,  # 모든 상대 전적 표시
+        "tough_opponents": sorted(
+            [o for o in head_to_head if (o["wins"] + o["losses"]) >= 2 and o["win_rate"] < 50],
+            key=lambda x: (x["win_rate"], -(x["wins"] + x["losses"]))
+        )[:3],  # 2회 이상 대전 & 승률 50% 미만, 승률 낮은 순 → 대전 횟수 많은 순
         "bout_stats": bout_stats,
         "stage_stats": stage_stats,
+        "round_stats": round_stats,  # 단계별 승률 - Strength 탭용 (기간 필터 또는 전체)
+        "recent_round_stats": recent_round_stats,  # Summary 탭용 (직전년도+올해)
+        "recent_period_label": recent_period_label,  # "2025~2026"
+        "recent_event_count": recent_event_count,  # 최근 기간 대회 수
+        "records_summary": records_summary,  # Summary 탭 메달 클릭용 경량 데이터
+        "chart_data": _build_rank_chart_data(enriched_records),
         "upcoming_events": [],
         "has_disambiguation": has_disambiguation,
         "other_profiles": other_profiles,
@@ -2585,52 +6250,235 @@ async def player_page(request: Request, player_name: str, id: Optional[str] = No
         ] if identity_profile else []
     }
 
+    # 선발 포인트 조회 (해당 선수만)
+    selection_points = None
+    if _selection_calculator:
+        try:
+            current_team = player_data.get("current_team", "")
+            sp = _selection_calculator.get_player_selection_points(
+                player_name, current_team
+            )
+            # 꿈나무 또는 국대 중 하나라도 있으면 표시
+            if sp.get("kkumnamu") or sp.get("national_team"):
+                selection_points = sp
+        except Exception as e:
+            logger.debug(f"선발 포인트 조회 실패 ({player_name}): {e}")
+
+    player_data["selection_points"] = selection_points
+
+    # FencingLab 랭킹 정보 조회 (선수 프로필 상단 표시용)
+    # - 엄격한 연도 기반 (현재 연도만)
+    # - 동명이인 구분: identity_profile 팀 기반 필터링
+    # - 주력 무기/성별/나이그룹 1개만 표시 (+ NT 선택적)
+    rankings_info = []
+    if _ranking_calculator:
+        try:
+            from collections import Counter
+            current_year = date.today().year
+
+            # 동명이인 구분: identity_profile의 팀 기반 필터링
+            known_teams = set(identity_profile.teams) if identity_profile else set(teams)
+
+            player_results = [
+                r for r in _ranking_calculator.results
+                if r.player_name == player_name
+                and r.competition_date.year == current_year
+                and (not known_teams or r.team in known_teams)
+            ]
+
+            if player_results:
+                # 주력 무기/성별 = 가장 많이 출전한 조합
+                wg_counts = Counter((r.weapon, r.gender) for r in player_results if r.weapon and r.gender)
+
+                if wg_counts:
+                    primary_weapon, primary_gender = wg_counts.most_common(1)[0][0]
+
+                    # 주력 나이그룹 결정 — NT 제외, 실제 리그 우선
+                    wp_results = [r for r in player_results
+                                  if r.weapon == primary_weapon and r.gender == primary_gender]
+
+                    # NT가 아닌 결과에서 나이그룹 추출
+                    league_results = [r for r in wp_results if r.age_group not in ('NT', '')]
+                    if league_results:
+                        age_counts = Counter(r.age_group for r in league_results)
+                        # 유소년/중등/고등/대학 등 실제 리그를 SR보다 우선
+                        YOUTH_AGES = {'E1', 'E2', 'E3', 'MS', 'HS', 'UNI',
+                                      'Y8', 'Y10', 'Y12', 'Y14', 'Cadet', 'Junior'}
+                        youth_counts = {k: v for k, v in age_counts.items() if k in YOUTH_AGES}
+                        if youth_counts:
+                            primary_age = max(youth_counts, key=youth_counts.get)
+                        else:
+                            primary_age = age_counts.most_common(1)[0][0]
+                    else:
+                        # 현재 연도에 NT 이벤트만 있는 경우 → 전체 결과에서 추론
+                        all_year_results = [
+                            r for r in _ranking_calculator.results
+                            if r.player_name == player_name
+                            and (not known_teams or r.team in known_teams)
+                            and r.age_group not in ('NT', '')
+                            and r.weapon == primary_weapon and r.gender == primary_gender
+                        ]
+                        if all_year_results:
+                            all_year_results.sort(key=lambda x: x.competition_date, reverse=True)
+                            primary_age = all_year_results[0].age_group
+                        else:
+                            primary_age = 'Veteran'
+
+                    # 카테고리 결정
+                    cat_results = [r for r in wp_results if r.age_group == primary_age]
+                    primary_cat = cat_results[0].category if cat_results else "PRO"
+                    cat = primary_cat if primary_age in CATEGORY_APPLICABLE_AGE_GROUPS else None
+
+                    # 타겟 구성: 나이리그 1개 + NT 전체 (해당시)
+                    targets = [(primary_weapon, primary_gender, primary_age, cat, False)]
+
+                    has_nt = any(r.age_group == 'NT' and r.weapon == primary_weapon
+                                and r.gender == primary_gender for r in player_results)
+                    if has_nt:
+                        targets.append((primary_weapon, primary_gender, 'NT', None, True))
+
+                    for weapon, gender, age_group, category, is_nt in targets:
+                        all_rankings = _ranking_calculator.calculate_rankings(
+                            weapon=weapon, gender=gender,
+                            age_group='NT' if is_nt else age_group,
+                            category=None if is_nt else category,
+                            year=current_year,
+                            national_team_only=is_nt,
+                        )
+                        for r in all_rankings:
+                            if r.player_name == player_name:
+                                rankings_info.append({
+                                    "weapon": weapon,
+                                    "gender": gender,
+                                    "age_group": age_group,
+                                    "age_group_name": AGE_GROUP_CODES.get(age_group, age_group),
+                                    "category": category,
+                                    "category_name": CATEGORY_CODES.get(category) if category else None,
+                                    "rank": r.current_rank,
+                                    "total": len(all_rankings),
+                                    "points": r.total_points,
+                                    "competitions": r.competitions_count,
+                                    "best_results": r.best_results[:4],
+                                    "year": current_year,
+                                    "is_nt": is_nt,
+                                })
+                                break
+        except Exception as e:
+            logger.debug(f"랭킹 정보 조회 실패 ({player_name}): {e}")
+
+    player_data["rankings_info"] = rankings_info
+
+    # 접근 등급 확인
+    access_level, _ = await get_access_level(request)
+
     context = {
         "request": request,
         "player": player_data,
         "today": date.today().strftime("%b %d, %Y"),
         "title": f"{player_name} - Korean Fencing Tracker",
+        "access_level": access_level,
+        "login_url": "/auth/login",
+        "verify_url": "/auth/verification",
         **get_i18n_template_context(request)
     }
     return templates.TemplateResponse("player_profile.html", context)
 
 
 @app.get("/{lang}/player/{player_name}", response_class=HTMLResponse)
-async def player_page_i18n(request: Request, lang: str, player_name: str, id: Optional[str] = None, team: Optional[str] = None):
+async def player_page_i18n(
+    request: Request,
+    lang: str,
+    player_name: str,
+    id: Optional[str] = None,
+    team: Optional[str] = None,
+    strength_start: Optional[str] = None,
+    strength_end: Optional[str] = None,
+    strength_years: Optional[str] = None,
+):
     """Language-prefixed player profile page - delegates to main player_page"""
-    if lang not in ["ko", "en"]:
+    if lang not in SUPPORTED_LANGUAGES:
         raise HTTPException(status_code=404, detail="Not Found")
-    return await player_page(request, player_name, id, team)
+    return await player_page(request, player_name, id, team, strength_start, strength_end, strength_years)
 
 
-def transform_de_bracket(event_data: Dict) -> Dict:
-    """DE bracket 데이터를 템플릿 호환 형식으로 변환 (bracket_utils 사용)"""
-    de_bracket = event_data.get("de_bracket", {})
-    if not de_bracket:
-        return event_data
+@app.get("/player/{player_name}/h2h/{opponent_name}", response_class=HTMLResponse)
+async def player_h2h_page(
+    request: Request,
+    player_name: str,
+    opponent_name: str,
+):
+    """Head-to-Head 전적 상세 페이지"""
+    # 선수 기록 조회
+    records = _player_index.get(player_name, [])
+    if not records:
+        raise HTTPException(status_code=404, detail="선수를 찾을 수 없습니다")
 
-    # bracket_utils로 정규화
-    normalized = normalize_bracket_data(de_bracket)
+    # 상대 전적 계산 (기존 함수 재사용)
+    all_h2h = calculate_head_to_head(player_name, records)
+    opponent_h2h = None
+    for h in all_h2h:
+        if h["name"] == opponent_name:
+            opponent_h2h = h
+            break
 
-    # NormalizedBracket이 None인 경우 원본 반환
-    if normalized is None:
-        return event_data
+    if not opponent_h2h:
+        raise HTTPException(status_code=404, detail="상대 전적을 찾을 수 없습니다")
 
-    # NormalizedBracket 객체를 event_data에 추가
-    event_data["normalized_bracket"] = normalized
+    # 총 득점 합산
+    my_total_score = 0
+    opp_total_score = 0
+    for m in opponent_h2h.get("matches", []):
+        score_parts = m.get("score", "0-0").split("-")
+        if len(score_parts) == 2:
+            try:
+                my_total_score += int(score_parts[0])
+                opp_total_score += int(score_parts[1])
+            except (ValueError, TypeError):
+                pass
 
-    # 기존 템플릿 호환성을 위한 변환 (레거시 지원)
-    # 속성명: bouts_by_round (matches_by_round 아님)
-    transformed_rounds = {}
-    if hasattr(normalized, 'bouts_by_round') and normalized.bouts_by_round:
-        for round_name, bouts in normalized.bouts_by_round.items():
-            transformed_rounds[round_name] = [b.to_dict() for b in bouts]
+    # 선수 프로필 정보
+    player_team = ""
+    player_weapon = ""
+    if _identity_resolver:
+        profiles = _identity_resolver.get_players_by_name(player_name)
+        if profiles:
+            player_team = profiles[0].current_team or ""
+    opp_team = opponent_h2h.get("team", "")
 
-    event_data["de_bracket"] = transformed_rounds
-    event_data["de_seeding"] = getattr(normalized, 'seeding', [])
-    event_data["de_rounds"] = getattr(normalized, 'rounds', [])
+    h2h_data = {
+        "player_name": player_name,
+        "player_team": player_team,
+        "opponent_name": opponent_name,
+        "opponent_team": opp_team,
+        "wins": opponent_h2h["wins"],
+        "losses": opponent_h2h["losses"],
+        "total_matches": opponent_h2h["wins"] + opponent_h2h["losses"],
+        "win_rate": opponent_h2h.get("win_rate", 0),
+        "my_total_score": my_total_score,
+        "opp_total_score": opp_total_score,
+        "matches": sorted(opponent_h2h.get("matches", []), key=lambda x: x.get("date", ""), reverse=True),
+    }
 
-    return event_data
+    context = {
+        "request": request,
+        "h2h": h2h_data,
+        "title": f"{player_name} vs {opponent_name} - Head to Head",
+        **get_i18n_template_context(request),
+    }
+    return templates.TemplateResponse("h2h.html", context)
+
+
+@app.get("/{lang}/player/{player_name}/h2h/{opponent_name}", response_class=HTMLResponse)
+async def player_h2h_page_i18n(
+    request: Request,
+    lang: str,
+    player_name: str,
+    opponent_name: str,
+):
+    """Language-prefixed H2H page - delegates to main"""
+    if lang not in SUPPORTED_LANGUAGES:
+        raise HTTPException(status_code=404, detail="Not Found")
+    return await player_h2h_page(request, player_name, opponent_name)
 
 
 # ==================== 익산 국제대회 리다이렉트 (레거시 URL 호환) ====================
@@ -2650,6 +6498,130 @@ async def iksan_u13_redirect():
     """익산 U13/U11/U9 → Supabase 표준 대회 페이지로 리다이렉트"""
     from fastapi.responses import RedirectResponse
     return RedirectResponse(url="/competition/COMPM00673", status_code=301)
+
+
+def _compute_event_sub_rankings(final_rankings: list) -> dict:
+    """국가대표 선발대회 이벤트의 나이리그별 서브랭킹 계산
+
+    Args:
+        final_rankings: [{rank, name, team, ...}, ...]
+
+    Returns:
+        {age_code: [{rank, overall_rank, name, team}, ...], ...}
+        빈 딕셔너리면 서브랭킹 없음
+    """
+    if not final_rankings or not _org_age_group_lookup:
+        return {}
+
+    # 각 선수의 나이그룹 추론 (org_type 기반 + 다른 대회 cross-reference)
+    ORG_TYPE_TO_AGE = {
+        'elementary': 'E3', 'middle': 'MS', 'high': 'HS',
+        'university': 'UNI', 'professional': 'SR',
+        'association': 'SR', 'international_school': 'HS',
+    }
+
+    # 나이그룹별 그룹화
+    # 비표준 age_group → 표준 코드 정규화 맵
+    AGE_NORMALIZE = {
+        '중등부': 'MS', '중학교': 'MS', '중등': 'MS',
+        '고등부': 'HS', '고등학교': 'HS', '고등': 'HS',
+        '대학부': 'UNI', '대학': 'UNI',
+        '일반부': 'SR', '일반': 'SR', '성인': 'SR',
+        '초등부': 'E3', '초등': 'E3',
+        'U9': 'E1', 'U11': 'E2', 'U13': 'E3',
+        'U17': 'HS', 'U20': 'UNI',
+        '15세이하부': 'MS', '16세이하부': 'MS',  # 구 소년체전 형식
+        '18세이하부': 'HS',                       # 구 소년체전 형식
+        'E1': 'E1', 'E2': 'E2', 'E3': 'E3',
+        'MS': 'MS', 'HS': 'HS', 'UNI': 'UNI', 'SR': 'SR',
+    }
+    # 학교/연령 특정 코드 (cross-reference에서 우선)
+    # SR은 구체적 학교급이 아니므로 낮은 우선순위
+    SPECIFIC_AGE_CODES = {'E1', 'E2', 'E3', 'MS', 'HS', 'UNI'}  # priority 0
+    # SR = 일반부, 동호인 대회 등에서 부여되지만 실제 학교급이 아닐 수 있음 → priority 1
+
+    from collections import defaultdict
+    age_groups = defaultdict(list)
+    lookup_hit = 0
+    cross_ref_hit = 0
+    defaulted = 0
+    for r in final_rankings:
+        team = r.get("team", "")
+        age = _org_age_group_lookup.get(team)
+        if age:
+            lookup_hit += 1
+        if not age:
+            # cross-reference: _ranking_calculator에서 이 선수의 다른 결과 확인
+            # 우선순위: 학교 기반 코드(MS/HS/UNI) > 국제 코드(U17/U13)
+            # 같은 우선순위 내에서는 최신 대회 우선
+            if _ranking_calculator:
+                player_name = r.get("name", "")
+                candidates = []
+                for pr in _ranking_calculator.results:
+                    if pr.player_name == player_name and pr.age_group and pr.age_group not in ('', 'NT'):
+                        normalized = AGE_NORMALIZE.get(pr.age_group, pr.age_group)
+                        if normalized in SPECIFIC_AGE_CODES:
+                            priority = 0  # 구체적 학교급 (MS/HS/UNI/E1-3)
+                        elif normalized == 'SR':
+                            priority = 1  # 일반부 (학교급 불명확)
+                        else:
+                            priority = 2  # 기타
+                        candidates.append((
+                            priority,
+                            pr.competition_date or '',
+                            normalized,
+                        ))
+                if candidates:
+                    # (priority ASC, date DESC) → 학교 코드 우선, 최신 대회 우선
+                    candidates.sort(key=lambda x: (x[0], x[1]), reverse=False)
+                    # priority ASC 유지, date는 DESC로 → 2단계 정렬
+                    candidates.sort(key=lambda x: x[0])  # 안정 정렬로 priority 우선
+                    # priority가 같은 것들 중 최신 date 선택
+                    best_priority = candidates[0][0]
+                    same_priority = [c for c in candidates if c[0] == best_priority]
+                    same_priority.sort(key=lambda x: x[1], reverse=True)  # 최신 먼저
+                    age = same_priority[0][2]
+                    cross_ref_hit += 1
+            if not age:
+                age = 'SR'
+                defaulted += 1
+        # 정규화 적용 (org lookup 결과도)
+        age = AGE_NORMALIZE.get(age, age)
+        age_groups[age].append({
+            "name": r.get("name", ""),
+            "team": team,
+            "overall_rank": r.get("rank", 0),
+        })
+    logger.debug(f"[SUB-RANKING] lookup_size={len(_org_age_group_lookup)}, "
+                 f"total={len(final_rankings)}, lookup_hit={lookup_hit}, "
+                 f"cross_ref={cross_ref_hit}, defaulted={defaulted}, "
+                 f"groups={dict((k, len(v)) for k, v in age_groups.items())}")
+
+    # 2개 이상의 나이그룹이 있어야 의미 있음
+    if len(age_groups) < 2:
+        return {}
+
+    # 각 그룹 내에서 overall_rank 순으로 정렬 → 리그 순위 부여
+    result = {}
+    # 나이그룹 표시 순서
+    AGE_ORDER = ['E1', 'E2', 'E3', 'MS', 'HS', 'UNI', 'SR']
+    for age in AGE_ORDER:
+        if age not in age_groups:
+            continue
+        players = sorted(age_groups[age], key=lambda x: x["overall_rank"])
+        for i, p in enumerate(players, 1):
+            p["rank"] = i
+        result[age] = players
+
+    # AGE_ORDER에 없는 그룹도 추가
+    for age, players in age_groups.items():
+        if age not in result:
+            players = sorted(players, key=lambda x: x["overall_rank"])
+            for i, p in enumerate(players, 1):
+                p["rank"] = i
+            result[age] = players
+
+    return result
 
 
 @app.get("/competition/{event_cd}", response_class=HTMLResponse)
@@ -2675,38 +6647,114 @@ async def competition_detail_page(request: Request, event_cd: str, event: Option
         if selected_event:
             # 원본 DE 데이터 저장 (순위 계산에 필요)
             original_de_bracket = selected_event.get("de_bracket", {})
+            # DE full bouts 추출 (통계 탭에서 사용 - transform 전에 추출)
+            de_full_bouts_for_stats = _get_full_bouts_from_de_bracket(
+                original_de_bracket
+            ) if isinstance(original_de_bracket, dict) else []
             pool_total_ranking = selected_event.get("pool_total_ranking", [])
             existing_rankings = selected_event.get("final_rankings", [])
+
+            # 풀 종합 순위: pool_rounds가 있으면 항상 자체 계산 (중복/불완전 데이터 방지)
+            if selected_event.get("pool_rounds"):
+                calculated_ranking = calculate_pool_total_ranking(
+                    selected_event["pool_rounds"]
+                )
+                if calculated_ranking:
+                    # 기존 데이터에서 진출 상태 정보 보존
+                    if pool_total_ranking:
+                        calculated_ranking = enrich_with_advancement_status(
+                            calculated_ranking, pool_total_ranking
+                        )
+                    selected_event["pool_total_ranking"] = calculated_ranking
+                    pool_total_ranking = calculated_ranking
 
             # DE 데이터 변환
             selected_event = transform_de_bracket(selected_event)
 
-            # 전체 최종 순위 계산 - 기존 데이터가 불완전할 때만
-            # 불완전 기준: 4등 이하만 있거나 (메달 순위만), 1등이 없는 경우
-            needs_recompute = False
-            if not existing_rankings:
-                needs_recompute = True
-            elif len(existing_rankings) <= 4:
-                # 4명 이하면 불완전할 가능성 높음
-                needs_recompute = True
-            elif existing_rankings and existing_rankings[0].get("rank", 0) != 1:
-                # 1등부터 시작하지 않으면 불완전
-                needs_recompute = True
+            # Dual DE 이벤트: Second DE 결과에서 최종 순위 동적 계산
+            # (DB의 final_rankings가 First DE 기준이므로 항상 재계산)
+            is_dual_de = isinstance(original_de_bracket, dict) and (
+                original_de_bracket.get("format") == "dual_de" or
+                selected_event.get("de_format") == "dual_de"
+            )
+            has_second_de = (
+                is_dual_de and
+                isinstance(original_de_bracket, dict) and
+                isinstance(original_de_bracket.get("second_de"), dict) and
+                (original_de_bracket["second_de"].get("bouts") or
+                 original_de_bracket["second_de"].get("full_bouts"))
+            )
 
-            if needs_recompute and (original_de_bracket or pool_total_ranking):
-                computed_rankings = compute_full_final_rankings(
-                    original_de_bracket,
-                    pool_total_ranking
-                )
-                if computed_rankings:
-                    selected_event["final_rankings"] = computed_rankings
+            # 🔴 결승 완료 게이트: 최종순위는 해당 이벤트의 결승 경기가 끝난 뒤에만
+            # 표시한다. 결승 전에는 DE 진행 결과일 뿐이므로, 브래킷 위치/시드로 추정한
+            # 조기 1·2·3등이 확정 순위처럼 노출되어 사용자를 오도하는 것을 막는다.
+            #
+            # 게이트는 진행 중 이벤트(=DB에 저장된 final_rankings가 없는 경우)의
+            # render-time 계산에만 적용한다. DB에 이미 순위가 있으면 종료된 이벤트의
+            # KFA/스크래핑 순위이므로 게이트하지 않는다(일부 종료 이벤트는 full_bouts가
+            # self-bout 플레이스홀더라 결승 감지가 불가하지만 순위는 KFA에서 확정됨).
+            # → existing_rankings(DB 저장분)가 있으면 신뢰, 없으면 결승 완료 시에만 계산.
+            can_finalize = _is_de_final_complete(original_de_bracket) or bool(existing_rankings)
+
+            if has_second_de:
+                # Dual DE: Second DE(본선) 경기 결과에서 최종 순위 계산 (확정 가능 시에만)
+                if can_finalize:
+                    dual_rankings = compute_dual_de_final_rankings(original_de_bracket, pool_total_ranking)
+                    if dual_rankings:
+                        selected_event["final_rankings"] = dual_rankings
+                        top_rank = dual_rankings[0] if dual_rankings else {}
+                        logger.info(
+                            f"Dual DE final_rankings computed from Second DE: "
+                            f"{len(dual_rankings)} players "
+                            f"(rank {top_rank.get('rank', '?')}: {top_rank.get('name', 'N/A')})"
+                        )
+                else:
+                    # 진행 중 + 결승 미완료 → 조기 순위 숨김 (DE 대진표만 표시)
+                    selected_event["final_rankings"] = []
+            else:
+                # 단일 DE: 기존 데이터가 불완전할 때만 재계산
+                # 불완전 기준: 4등 이하만 있거나 (메달 순위만), 1등이 없는 경우
+                needs_recompute = False
+                if not existing_rankings:
+                    needs_recompute = True
+                elif len(existing_rankings) <= 4:
+                    # 4명 이하면 불완전할 가능성 높음
+                    needs_recompute = True
+                elif existing_rankings and existing_rankings[0].get("rank", 0) != 1:
+                    # 1등부터 시작하지 않으면 불완전
+                    needs_recompute = True
+
+                if needs_recompute and (original_de_bracket or pool_total_ranking):
+                    if can_finalize:
+                        computed_rankings = compute_full_final_rankings(
+                            original_de_bracket,
+                            pool_total_ranking
+                        )
+                        if computed_rankings:
+                            selected_event["final_rankings"] = computed_rankings
+                    else:
+                        # 진행 중(DB 순위 없음) + 결승 미완료 → 조기 순위 숨김
+                        selected_event["final_rankings"] = []
 
             # 포인트 계산 및 추가
             comp_name = comp.get("competition", {}).get("name", "")
             tier = classify_competition_tier(comp_name)
             event_name = selected_event.get("name", "")
             age_group = extract_age_group(event_name)
-            total_participants = selected_event.get("total_participants") or len(selected_event.get("final_rankings", []))
+            # 참가자 수: participants 리스트 > pool 참가자 > pool_total_ranking > final_rankings
+            _evt_participants = selected_event.get("participants", [])
+            _evt_pool_names = set()
+            for _p in selected_event.get("pool_rounds", []):
+                for _r in _p.get("results", []):
+                    _n = _r.get("name", "").strip()
+                    if _n:
+                        _evt_pool_names.add(_n)
+            total_participants = (
+                len(_evt_participants) or
+                len(_evt_pool_names) or
+                len(pool_total_ranking) or
+                len(selected_event.get("final_rankings", []))
+            )
 
             # final_rankings에 포인트 추가 (v2: 참가자 수 기반 + 대회 권위 보정)
             for ranking in selected_event.get("final_rankings", []):
@@ -2721,16 +6769,266 @@ async def competition_detail_page(request: Request, event_cd: str, event: Option
                     )
                     ranking["points"] = points
 
+            # 학년 추정 보강 (참가선수 탭)
+            if _grade_estimator and selected_event.get("participants"):
+                ref_date = comp.get("competition", {}).get("start_date", "")
+                _grade_estimator.enrich_participants(
+                    selected_event["participants"],
+                    selected_event.get("name", ""),
+                    ref_date
+                )
+
+            # 팀별 지역 정보 & 지역별 요약
+            team_regions = {}  # team_name → "서울" or "경기 성남"
+            region_summary = {}  # province → {count, cities: {city: count}}
+            participants = selected_event.get("participants", [])
+            seen_teams = set()
+            for p in participants:
+                team = p.get("team", "")
+                if not team or team in seen_teams:
+                    continue
+                seen_teams.add(team)
+                region_display = get_team_region_display(team)
+                if region_display:
+                    team_regions[team] = region_display
+                    info = _org_region_cache.get(team, {})
+                    prov = info.get("province", "")
+                    city = info.get("city", "")
+                    if prov not in region_summary:
+                        region_summary[prov] = {"count": 0, "cities": {}}
+                    region_summary[prov]["count"] += 1
+                    if city:
+                        region_summary[prov]["cities"][city] = \
+                            region_summary[prov]["cities"].get(city, 0) + 1
+
+            # 선수 레벨 지역+학년 통계
+            player_region_grade = {}
+            if participants:
+                player_region_grade = build_player_region_grade_summary(
+                    participants, selected_event.get("name", "")
+                )
+
+            # 언어 감지: request.state에서 가져옴 (미들웨어에서 설정)
+            lang = getattr(request.state, 'lang', DEFAULT_LANGUAGE)
+
+            # i18n: 팀명 번역 맵 생성 (JS에서 사용)
+            team_translation_map = {}
+            if lang != 'ko':
+                all_teams = set()
+                for p in selected_event.get("participants", []):
+                    t = p.get("team", "")
+                    if t:
+                        all_teams.add(t)
+                for r in selected_event.get("final_rankings", []):
+                    t = r.get("team", "")
+                    if t:
+                        all_teams.add(t)
+                for pool in selected_event.get("pool_rounds", []):
+                    for r in pool.get("results", []):
+                        t = r.get("team", "")
+                        if t:
+                            all_teams.add(t)
+                for team in all_teams:
+                    en = get_localized_org_name_sync(team, lang)
+                    if en != team:
+                        team_translation_map[team] = en
+
+            # i18n: 선수명 번역 맵 생성 (JS에서 사용)
+            player_translation_map = {}
+            if lang != 'ko':
+                all_players = set()
+                for p in selected_event.get("participants", []):
+                    n = p.get("name", "")
+                    if n:
+                        all_players.add(n)
+                for r in selected_event.get("final_rankings", []):
+                    n = r.get("name", "")
+                    if n:
+                        all_players.add(n)
+                for pool in selected_event.get("pool_rounds", []):
+                    for r in pool.get("results", []):
+                        n = r.get("name", "")
+                        if n:
+                            all_players.add(n)
+                for player_name in all_players:
+                    en = get_localized_player_name_sync(player_name, lang)
+                    if en != player_name:
+                        player_translation_map[player_name] = en
+
+            # 국가대표 선발대회: 나이리그별 서브랭킹 생성
+            # NOTE: existing_rankings(원본 DB 데이터, 전체 참가자 포함)를 사용.
+            # Dual DE 이벤트에서 selected_event["final_rankings"]는
+            # compute_dual_de_final_rankings()가 DE 참가자만으로 대체했을 수 있음.
+            age_group_rankings = {}
+            comp_name = comp.get("competition", {}).get("name", "")
+            sub_ranking_source = existing_rankings or selected_event.get("final_rankings", [])
+            if classify_competition_level(comp_name) == 'NATIONAL' and sub_ranking_source:
+                age_group_rankings = _compute_event_sub_rankings(sub_ranking_source)
+
+            # Pool용 선수 리그 랭킹 맵: {선수명: {rank, best_rank, points}}
+            pool_ranking_map = {}
+            if _ranking_calculator and selected_event.get("pool_rounds"):
+                ev_weapon = selected_event.get("weapon", "")
+                ev_gender = selected_event.get("gender", "")
+                ev_age_fie = get_event_age_group_fie(selected_event)
+                if not ev_age_fie or ev_age_fie == 'NT':
+                    ev_age_fie = extract_age_group(selected_event.get("name", ""))
+                legacy_codes = get_matching_legacy_codes(ev_age_fie)
+                ev_age = legacy_codes[0] if legacy_codes else ev_age_fie
+                ev_cat = "PRO" if ev_age in CATEGORY_APPLICABLE_AGE_GROUPS else None
+                comp_year = int(comp.get("competition", {}).get("start_date", "2026")[:4])
+                if ev_weapon and ev_gender:
+                    try:
+                        rk_list = _ranking_calculator.calculate_rankings(
+                            weapon=ev_weapon, gender=ev_gender,
+                            age_group=ev_age, category=ev_cat, year=comp_year
+                        )
+                        for idx, rk in enumerate(rk_list):
+                            rank = rk.current_rank if rk.current_rank else idx + 1
+                            best_rank = rank
+                            for br in rk.best_results:
+                                r = br.get("rank", 999)
+                                if r and r < best_rank:
+                                    best_rank = r
+                            pool_ranking_map[rk.player_name] = {
+                                "rank": rank,
+                                "best_rank": best_rank,
+                                "points": rk.total_points
+                            }
+                    except Exception:
+                        pass
+
+            if selected_event.get("pool_rounds"):
+                for pool in selected_event["pool_rounds"]:
+                    for p in pool.get("results", []):
+                        prk = pool_ranking_map.get(p.get("name", ""))
+                        if prk:
+                            p["league_rank"] = prk["rank"]
+                            p["league_best"] = prk["best_rank"]
+                        else:
+                            p["league_rank"] = 9999
+                            p["league_best"] = 9999
+                    # 대진표용: 실제 경기 결과가 있을 때만 rank 순 정렬 + scores 재배열.
+                    # 대회 전(결과 없음)에는 KFA 풀 편성(position) 순서를 보존해야
+                    # 풀 순번과 예상 경기 순서가 협회와 일치한다.
+                    results = pool.get("results", [])
+                    pool["has_bouts"] = any((p.get("wins") or p.get("losses")) for p in results)
+                    if pool["has_bouts"] and results and results[0].get("scores"):
+                        old_order = list(range(len(results)))
+                        ranked = sorted(enumerate(results), key=lambda x: x[1].get("rank", 999))
+                        idx_map = [r[0] for r in ranked]
+                        new_to_old = idx_map
+                        old_to_new = [0] * len(idx_map)
+                        for new_i, old_i in enumerate(new_to_old):
+                            old_to_new[old_i] = new_i
+                        new_results = []
+                        for new_i, old_i in enumerate(new_to_old):
+                            p = results[old_i].copy()
+                            old_scores = p.get("scores", [])
+                            if old_scores:
+                                p["scores"] = [old_scores[new_to_old[j]] if j < len(old_scores) and new_to_old[j] < len(old_scores) else None for j in range(len(results))]
+                            new_results.append(p)
+                        pool["results"] = new_results
+
             return templates.TemplateResponse("event_result.html", {
                 "request": request,
                 "competition": comp,
-                "event": selected_event
+                "event": selected_event,
+                "team_regions": team_regions,
+                "region_summary": region_summary,
+                "player_region_grade": player_region_grade,
+                "team_translation_map": team_translation_map,
+                "player_translation_map": player_translation_map,
+                "de_full_bouts_for_stats": de_full_bouts_for_stats,
+                "age_group_rankings": age_group_rankings,
+                "pool_ranking_map": pool_ranking_map,
+                **get_i18n_template_context(request, lang)
             })
+
+    # 대회 전체 통계 생성 (participants가 있는 이벤트가 하나라도 있으면)
+    comp_stats = {}
+    has_participants = any(e.get("participants") for e in comp.get("events", []))
+    if has_participants and _grade_estimator:
+        ref_date = comp.get("competition", {}).get("start_date", "")
+        for evt in comp.get("events", []):
+            if evt.get("participants"):
+                _grade_estimator.enrich_participants(
+                    evt["participants"], evt.get("name", ""), ref_date
+                )
+        comp_stats = build_competition_stats(comp)
+
+    # 이벤트 정렬: 무기 → 성별 → 나이그룹 → 단체전 순
+    if comp.get("events"):
+        comp["events"] = sorted(
+            comp["events"],
+            key=lambda e: _event_sort_key(e.get("name", ""))
+        )
+
+    # 언어 감지: request.state에서 가져옴 (미들웨어에서 설정)
+    lang = getattr(request.state, 'lang', DEFAULT_LANGUAGE)
+
+    # i18n: 팀명 번역 맵 생성 (JS에서 사용)
+    team_translation_map = {}
+    if lang != 'ko':
+        all_teams = set()
+        for evt in comp.get("events", []):
+            for p in evt.get("participants", []):
+                t = p.get("team", "")
+                if t:
+                    all_teams.add(t)
+            for r in evt.get("final_rankings", []):
+                t = r.get("team", "")
+                if t:
+                    all_teams.add(t)
+            for pool in evt.get("pool_rounds", []):
+                for r in pool.get("results", []):
+                    t = r.get("team", "")
+                    if t:
+                        all_teams.add(t)
+        for team in all_teams:
+            en = get_localized_org_name_sync(team, lang)
+            if en != team:
+                team_translation_map[team] = en
+
+    # i18n: 선수명 번역 맵 생성 (JS에서 사용)
+    player_translation_map = {}
+    if lang != 'ko':
+        all_player_names = set()
+        for evt in comp.get("events", []):
+            for p in evt.get("participants", []):
+                n = p.get("name", "")
+                if n:
+                    all_player_names.add(n)
+            for r in evt.get("final_rankings", []):
+                n = r.get("name", "")
+                if n:
+                    all_player_names.add(n)
+            for pool in evt.get("pool_rounds", []):
+                for r in pool.get("results", []):
+                    n = r.get("name", "")
+                    if n:
+                        all_player_names.add(n)
+        for player_name in all_player_names:
+            en = get_localized_player_name_sync(player_name, lang)
+            if en != player_name:
+                player_translation_map[player_name] = en
 
     return templates.TemplateResponse("competition.html", {
         "request": request,
-        "competition": comp
+        "competition": comp,
+        "comp_stats": comp_stats,
+        "team_translation_map": team_translation_map,
+        "player_translation_map": player_translation_map,
+        **get_i18n_template_context(request, lang)
     })
+
+
+@app.get("/{lang}/competition/{event_cd}", response_class=HTMLResponse)
+async def competition_detail_page_i18n(request: Request, lang: str, event_cd: str, event: Optional[str] = None):
+    """Language-prefixed competition detail page - delegates to main competition_detail_page"""
+    if lang not in SUPPORTED_LANGUAGES:
+        raise HTTPException(status_code=404, detail="Not Found")
+    return await competition_detail_page(request, event_cd, event)
 
 
 @app.get("/search", response_class=HTMLResponse)
@@ -2738,7 +7036,8 @@ async def search_page(request: Request, q: str = ""):
     """검색 페이지"""
     return templates.TemplateResponse("search.html", {
         "request": request,
-        "query": q
+        "query": q,
+        **get_i18n_template_context(request, "ko")
     })
 
 
@@ -2747,7 +7046,8 @@ async def chat_page(request: Request):
     """AI 채팅 페이지"""
     return templates.TemplateResponse("chat.html", {
         "request": request,
-        "title": "AI 검색"
+        "title": "AI 검색",
+        **get_i18n_template_context(request, "ko")
     })
 
 
@@ -2767,12 +7067,71 @@ async def rankings_page(request: Request, lang: str = "ko"):
         from fastapi.responses import RedirectResponse
         return RedirectResponse(url=f"/{DEFAULT_LANGUAGE}/rankings", status_code=302)
 
+    access_level, _ = await get_access_level(request)
+
+    # Guest preview: 기본 랭킹 top 5 (서버 사이드 렌더링으로 즉시 표시)
+    guest_preview = None
+    if access_level == "guest" and _ranking_calculator:
+        try:
+            preview_rankings = _ranking_calculator.calculate_rankings(
+                weapon="foil", gender="남", age_group="SR", category="PRO",
+                year=date.today().year
+            )
+            if not preview_rankings:
+                preview_rankings = _ranking_calculator.calculate_rankings(
+                    weapon="foil", gender="남", age_group="SR", category="PRO",
+                    year=date.today().year - 1
+                )
+            if preview_rankings:
+                guest_preview = {
+                    "rankings": [
+                        {
+                            "rank": r.current_rank,
+                            "points": r.total_points,
+                            "competitions": r.competitions_count,
+                            "gold": r.gold_count,
+                            "silver": r.silver_count,
+                            "bronze": r.bronze_count,
+                        }
+                        for r in preview_rankings[:5]
+                    ],
+                    "total": len(preview_rankings),
+                }
+        except Exception as e:
+            logger.debug(f"Guest preview 계산 실패: {e}")
+
     context = {
         "request": request,
         "title": "FencingLab Ranking",
+        "access_level": access_level,
+        "login_url": "/auth/login",
+        "guest_preview": guest_preview,
         **get_i18n_template_context(request, lang)
     }
     return templates.TemplateResponse("rankings.html", context)
+
+
+@app.get("/competitions")
+async def competitions_page_redirect(request: Request):
+    """대회 목록 페이지 - 기본 언어로 리다이렉트"""
+    from fastapi.responses import RedirectResponse
+    lang_cookie = request.cookies.get('lang')
+    lang = lang_cookie if lang_cookie in SUPPORTED_LANGUAGES else DEFAULT_LANGUAGE
+    return RedirectResponse(url=f"/{lang}/competitions", status_code=302)
+
+
+@app.get("/{lang}/competitions", response_class=HTMLResponse)
+async def competitions_page(request: Request, lang: str = "ko"):
+    """대회 목록 페이지 (다국어 지원)"""
+    if lang not in SUPPORTED_LANGUAGES:
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url=f"/{DEFAULT_LANGUAGE}/competitions", status_code=302)
+
+    context = {
+        "request": request,
+        **get_i18n_template_context(request, lang)
+    }
+    return templates.TemplateResponse("competitions.html", context)
 
 
 # ==================== FencingLab API ====================
@@ -2785,6 +7144,20 @@ def get_fencinglab_analyzer():
         # Supabase 캐시 데이터 전달 (JSON 파일 사용 안함)
         _fencinglab_analyzer = FencingLabAnalyzer(data=_data_cache)
     return _fencinglab_analyzer
+
+
+def _analytics_lang(lang: str) -> str:
+    """분석 문구(ANALYTICS_TRANSLATIONS) 번역이 없는 언어는 en으로 폴백.
+
+    현재 ko/en만 존재하므로 ja/fr/it/zh/tr은 en을 쓴다 (ko로 새면 UI가 섞임).
+    """
+    try:
+        from app.player_analytics import ANALYTICS_TRANSLATIONS
+        if lang in ANALYTICS_TRANSLATIONS:
+            return lang
+    except Exception:
+        pass
+    return "ko" if lang == "ko" else "en"
 
 
 @app.get("/api/fencinglab/clubs/{club_name}/players")
@@ -2810,16 +7183,25 @@ async def fencinglab_tracked_players(
     # 각 선수에 대해 기본 통계 추가
     result = {}
     for club_name, players in all_players.items():
-        # 클럽명 번역
-        display_club = await get_localized_org_name(_supabase_client, club_name, lang) if _supabase_client else club_name
+        # 클럽명 번역 (동기식 캐시 사용)
+        display_club = get_localized_org_name_sync(club_name, lang)
 
         club_data = []
         for p in players:
-            analytics = analyzer.analyze_player(p["name"], p["team"])
+            # 한 선수의 데이터 이상이 목록 전체를 죽이지 않도록 격리한다.
+            # 실패한 선수는 아래 else 분기를 타서 "데이터 없음"으로 표시된다.
+            try:
+                analytics = analyzer.analyze_player(p["name"], p["team"])
+            except Exception as e:
+                logger.warning(
+                    f"FencingLab tracked-players: analyze_player 실패 "
+                    f"({p['name']}/{p['team']}): {e}"
+                )
+                analytics = None
 
-            # 선수명, 팀명 번역
-            display_name = await get_localized_player_name(_supabase_client, p["name"], lang) if _supabase_client else p["name"]
-            display_team = await get_localized_org_name(_supabase_client, p["team"], lang) if _supabase_client else p["team"]
+            # 선수명, 팀명 번역 (동기식 캐시 사용)
+            display_name = get_localized_player_name_sync(p["name"], lang)
+            display_team = get_localized_org_name_sync(p["team"], lang)
 
             if analytics:
                 club_data.append({
@@ -2854,11 +7236,16 @@ async def fencinglab_tracked_players(
 
 @app.get("/api/fencinglab/player/{player_name}")
 async def fencinglab_player_analytics(
+    request: Request,
     player_name: str,
     team: str = Query(..., description="팀 이름 (필수 - 동명이인 구분)"),
     lang: str = Query("ko", description="언어 코드 (ko/en)")
 ):
     """선수 분석 데이터 (FencingLab) - 이름+팀으로 동명이인 구분"""
+    access_level, _ = await get_access_level(request)
+    if not can_access_fencinglab(access_level):
+        raise HTTPException(status_code=403, detail="선수인증이 필요합니다")
+
     analyzer = get_fencinglab_analyzer()
 
     # 동명이인 확인
@@ -2877,7 +7264,7 @@ async def fencinglab_player_analytics(
             detail="현재 최병철펜싱클럽 소속 선수만 분석 서비스를 이용할 수 없습니다."
         )
 
-    analytics = analyzer.analyze_player(player_name, team, lang)
+    analytics = analyzer.analyze_player(player_name, team, _analytics_lang(lang))
     if not analytics:
         raise HTTPException(status_code=404, detail="선수 데이터를 찾을 수 없습니다.")
 
@@ -2885,35 +7272,77 @@ async def fencinglab_player_analytics(
 
 
 @app.get("/api/fencinglab/demo")
-async def fencinglab_demo():
-    """FencingLab 데모 데이터 (랜딩페이지용) - 실제 데이터 기반 v3"""
-    analyzer = get_fencinglab_analyzer()
+async def fencinglab_demo(lang: str = Query("ko", description="언어 코드 (ko/en/ja/fr/it/zh/tr)")):
+    """FencingLab 데모 데이터 (랜딩페이지용) - 실제 데이터 기반 v3
+
+    랜딩페이지 홈에 임베드되므로 어떤 경우에도 500을 던지지 않는다.
+    분석기/데이터 이상 시 빈(그러나 유효한) 페이로드로 degrade하여
+    프론트가 데모 섹션을 조용히 숨길 수 있게 한다.
+    """
+    if lang not in SUPPORTED_LANGUAGES:
+        lang = DEFAULT_LANGUAGE
+    analytics_lang = _analytics_lang(lang)
 
     # 데모용 선수 목록 (최병철펜싱클럽 대표 선수)
     demo_players = ["박소윤", "오주원", "구지효"]
     demo_team = "최병철펜싱클럽"
     demo_data = []
+    total_club_players = 0
 
-    for name in demo_players:
-        analytics = analyzer.analyze_player(name, demo_team)
-        if analytics:
-            demo_data.append({
-                "name": analytics.player_name,
-                "team": analytics.team,
-                "win_rate": analytics.win_rate,
-                "total_matches": analytics.total_matches,
-                "total_wins": analytics.total_wins,
-                "total_losses": analytics.total_losses,
-                "pool_win_rate": analytics.pool_win_rate,
-                "de_win_rate": analytics.de_win_rate,
-                "clutch_grade": analytics.clutch_grade,
-                "clutch_rate": analytics.clutch_rate
-            })
+    def _localize(fn, value):
+        """번역 실패가 데모 전체를 죽이지 않도록 원문 fallback."""
+        try:
+            return fn(value, lang) or value
+        except Exception as e:
+            logger.debug(f"FencingLab demo 번역 실패 ({value}): {e}")
+            return value
+
+    try:
+        from app.player_analytics import get_analytics_text
+        analyzer = get_fencinglab_analyzer()
+
+        # 언어별 clutch 등급 문자열 → 언어 중립 키 (프론트 배지 스타일용)
+        grade_key_map = {
+            get_analytics_text(k, analytics_lang): k.replace("grade_", "")
+            for k in ("grade_strong", "grade_average", "grade_weak", "grade_insufficient")
+        }
+
+        for name in demo_players:
+            try:
+                analytics = analyzer.analyze_player(name, demo_team, analytics_lang)
+            except Exception as e:
+                # 한 선수의 데이터 이상이 전체 데모를 죽이지 않도록 격리
+                logger.warning(f"FencingLab demo: analyze_player 실패 ({name}): {e}")
+                continue
+            if analytics:
+                demo_data.append({
+                    "name": _localize(get_localized_player_name_sync, analytics.player_name),
+                    "team": _localize(get_localized_org_name_sync, analytics.team),
+                    "win_rate": analytics.win_rate,
+                    "total_matches": analytics.total_matches,
+                    "total_wins": analytics.total_wins,
+                    "total_losses": analytics.total_losses,
+                    "pool_win_rate": analytics.pool_win_rate,
+                    "de_win_rate": analytics.de_win_rate,
+                    "clutch_grade": analytics.clutch_grade,
+                    "clutch_grade_key": grade_key_map.get(analytics.clutch_grade, ""),
+                    "clutch_rate": analytics.clutch_rate
+                })
+
+        try:
+            total_club_players = len(analyzer.get_club_players(demo_team))
+        except Exception as e:
+            logger.warning(f"FencingLab demo: get_club_players 실패: {e}")
+            total_club_players = len(demo_data)
+    except Exception as e:
+        # 분석기 초기화/데이터 로드 실패 등 — 홈이 깨지지 않도록 200으로 graceful degrade
+        logger.error(f"FencingLab demo 엔드포인트 실패, 빈 페이로드 반환: {e}")
+        return {"demo_players": [], "club": _localize(get_localized_org_name_sync, demo_team), "total_club_players": 0}
 
     return {
         "demo_players": demo_data,
-        "club": "최병철펜싱클럽",
-        "total_club_players": len(analyzer.get_club_players("최병철펜싱클럽"))
+        "club": _localize(get_localized_org_name_sync, demo_team),
+        "total_club_players": total_club_players
     }
 
 
@@ -2947,7 +7376,8 @@ async def fencinglab_player_page(request: Request, player_name: str):
     return templates.TemplateResponse("fencinglab_player.html", {
         "request": request,
         "title": f"{player_name} - FencingLab",
-        "player_name": player_name
+        "player_name": player_name,
+        **get_i18n_template_context(request, "ko")
     })
 
 
@@ -2986,7 +7416,8 @@ async def club_dashboard_page(request: Request, test: Optional[str] = None, role
     return templates.TemplateResponse(template_name, {
         "request": request,
         "title": "클럽 대시보드 - Korean Fencing Tracker",
-        "user_role": selected_role
+        "user_role": selected_role,
+        **get_i18n_template_context(request, "ko")
     })
 
 
@@ -2995,7 +7426,8 @@ async def club_checkin_page(request: Request):
     """출석 체크인 페이지 (학생용 모바일 최적화)"""
     return templates.TemplateResponse("club/checkin.html", {
         "request": request,
-        "title": "출석 체크인 - Korean Fencing Tracker"
+        "title": "출석 체크인 - Korean Fencing Tracker",
+        **get_i18n_template_context(request, "ko")
     })
 
 
@@ -3004,8 +7436,1010 @@ async def club_accounting_page(request: Request):
     """회계관리 페이지 (owner/사장 전용)"""
     return templates.TemplateResponse("club/accounting.html", {
         "request": request,
-        "title": "회계관리 - Korean Fencing Tracker"
+        "title": "회계관리 - Korean Fencing Tracker",
+        **get_i18n_template_context(request, "ko")
     })
+
+
+# ==================== 예정/진행 대회 API ====================
+
+@app.get("/api/competitions/upcoming")
+async def get_upcoming_competitions(
+    days: int = Query(30, ge=1, le=90, description="조회할 일수 (기본 30일)"),
+    limit: int = Query(10, ge=1, le=50),
+    lang: str = Query("ko", description="언어 코드")
+):
+    """다가오는 예정 대회 조회
+
+    Returns:
+        upcoming: 예정 대회 목록 (날짜순)
+        total: 전체 예정 대회 수
+    """
+    from datetime import date, timedelta
+    from app.translation_service import VERIFIED_COMPETITION_MAPPINGS
+
+    competitions = get_competitions()
+    today = date.today()
+    end_date = today + timedelta(days=days)
+    upcoming = []
+
+    for comp in competitions:
+        comp_info = comp.get("competition", {})
+        start_date_str = comp_info.get("start_date", "")
+        if not start_date_str:
+            continue
+
+        try:
+            start_date = date.fromisoformat(start_date_str[:10])
+            days_until = (start_date - today).days
+
+            # 대회명 번역
+            comp_name = comp_info.get("name", "")
+            if lang != "ko" and comp_name in VERIFIED_COMPETITION_MAPPINGS:
+                comp_name = VERIFIED_COMPETITION_MAPPINGS[comp_name]
+
+            # 내일 이후 ~ days일 이내 (오늘 시작 대회는 ongoing이므로 제외)
+            # 이미 시작된 대회(진행 중)도 제외
+            comp_end_date_str = comp_info.get("end_date", "")
+            end_dt = date.fromisoformat(comp_end_date_str[:10]) if comp_end_date_str else start_date
+            is_ongoing = start_date <= today <= end_dt
+            if days_until > 0 and days_until <= days and not is_ongoing:
+                upcoming.append({
+                    "event_cd": comp_info.get("event_cd"),
+                    "comp_idx": comp_info.get("comp_idx"),
+                    "name": comp_name,
+                    "start_date": comp_info.get("start_date"),
+                    "end_date": comp_info.get("end_date"),
+                    "venue": translate_venue_name(comp_info.get("venue"), lang),
+                    "status": comp_info.get("status"),
+                    "days_until": days_until,
+                    "event_count": len(comp.get("events", []))
+                })
+        except (ValueError, TypeError):
+            continue
+
+    upcoming.sort(key=lambda x: x.get("days_until", 999))
+    return {
+        "upcoming": upcoming[:limit],
+        "total": len(upcoming),
+        "query_days": days,
+        "today": today.isoformat()
+    }
+
+
+@app.get("/api/competitions/ongoing")
+async def get_ongoing_competitions():
+    """현재 진행 중인 대회 조회
+
+    Returns:
+        ongoing: 진행 중인 대회 목록
+        total: 진행 중인 대회 수
+    """
+    from datetime import date
+
+    competitions = get_competitions()
+    today = date.today()
+    ongoing = []
+
+    for comp in competitions:
+        comp_info = comp.get("competition", {})
+        start_date_str = comp_info.get("start_date", "")
+        end_date_str = comp_info.get("end_date", "")
+
+        if not start_date_str:
+            continue
+
+        try:
+            start_date = date.fromisoformat(start_date_str[:10])
+            end_date = date.fromisoformat(end_date_str[:10]) if end_date_str else start_date
+
+            # 오늘이 시작일과 종료일 사이에 있으면 진행 중
+            if start_date <= today <= end_date:
+                # 진행 일수 계산
+                day_number = (today - start_date).days + 1
+                total_days = (end_date - start_date).days + 1
+
+                ongoing.append({
+                    "event_cd": comp_info.get("event_cd"),
+                    "comp_idx": comp_info.get("comp_idx"),
+                    "name": comp_info.get("name"),
+                    "start_date": comp_info.get("start_date"),
+                    "end_date": comp_info.get("end_date"),
+                    "venue": translate_venue_name(comp_info.get("venue"), lang),
+                    "day_number": day_number,
+                    "total_days": total_days,
+                    "event_count": len(comp.get("events", []))
+                })
+        except (ValueError, TypeError):
+            continue
+
+    return {
+        "ongoing": ongoing,
+        "total": len(ongoing),
+        "today": today.isoformat()
+    }
+
+
+@app.get("/api/competitions/live")
+async def get_live_competitions(lang: str = "ko"):
+    """실시간 대회 정보 (진행 중 + 예정)
+
+    프론트엔드 NOW 배너용 통합 API
+    """
+    from datetime import date
+    from app.translation_service import VERIFIED_COMPETITION_MAPPINGS
+
+    competitions = get_competitions()
+    today = date.today()
+    result = {
+        "ongoing": [],
+        "upcoming": [],  # 7일 이내 예정
+        "today": today.isoformat()
+    }
+
+    for comp in competitions:
+        comp_info = comp.get("competition", {})
+        start_date_str = comp_info.get("start_date", "")
+        end_date_str = comp_info.get("end_date", "")
+
+        if not start_date_str:
+            continue
+
+        try:
+            start_date = date.fromisoformat(start_date_str[:10])
+            end_date = date.fromisoformat(end_date_str[:10]) if end_date_str else start_date
+            days_until = (start_date - today).days
+
+            # 대회명 번역
+            comp_name = comp_info.get("name", "")
+            if lang != "ko" and comp_name in VERIFIED_COMPETITION_MAPPINGS:
+                comp_name = VERIFIED_COMPETITION_MAPPINGS[comp_name]
+
+            comp_data = {
+                "event_cd": comp_info.get("event_cd"),
+                "comp_idx": comp_info.get("comp_idx"),
+                "name": comp_name,
+                "start_date": comp_info.get("start_date"),
+                "end_date": comp_info.get("end_date"),
+                "venue": translate_venue_name(comp_info.get("venue"), lang),
+                "event_count": len(comp.get("events", []))
+            }
+
+            # 진행 중
+            if start_date <= today <= end_date:
+                comp_data["status"] = "live"
+                comp_data["day_number"] = (today - start_date).days + 1
+                comp_data["total_days"] = (end_date - start_date).days + 1
+                result["ongoing"].append(comp_data)
+            # 7일 이내 예정
+            elif 0 < days_until <= 7:
+                comp_data["status"] = "upcoming"
+                comp_data["days_until"] = days_until
+                result["upcoming"].append(comp_data)
+
+        except (ValueError, TypeError):
+            continue
+
+    # 예정 대회는 날짜순 정렬
+    result["upcoming"].sort(key=lambda x: x.get("days_until", 999))
+
+    return result
+
+
+# ==================== 선발 포인트 API ====================
+
+@app.get("/api/selection/kkumnamu")
+async def api_selection_kkumnamu(
+    year: int = 0,
+    weapon: str = "",
+    gender: str = "",
+):
+    """꿈나무 선발 포인트 API
+
+    Args:
+        year: 학년도 (0이면 현재 학년도)
+        weapon: foil/epee/sabre
+        gender: 남/여
+    """
+    if not _selection_calculator:
+        raise HTTPException(status_code=503, detail="선발 포인트 계산기 미초기화")
+
+    if year == 0:
+        year = date.today().year
+
+    rankings = _selection_calculator.calculate_kkumnamu_points(year, weapon, gender)
+    comp_columns = _selection_calculator.get_comp_columns(
+        KKUMNAMU_COMP_PATTERNS, year, "kkumnamu"
+    )
+
+    return {
+        "school_year": year,
+        "season_range": _selection_calculator.get_season_range(year),
+        "weapon": weapon,
+        "gender": gender,
+        "total_players": len(rankings),
+        "competitions": comp_columns,
+        "players": [
+            {
+                "rank": r.rank,
+                "name": r.name,
+                "team": r.team,
+                "total_points": r.total_points,
+                "best_rank": r.best_rank,
+                "grade": r.grade,
+                "grade_confidence": r.grade_confidence,
+                "breakdown": [
+                    {
+                        "comp_id": cp.comp_id,
+                        "comp_label": cp.comp_label,
+                        "comp_name": cp.comp_name,
+                        "comp_date": cp.comp_date,
+                        "rank": cp.rank,
+                        "points": cp.points,
+                    }
+                    for cp in r.breakdown
+                ],
+            }
+            for r in rankings
+        ],
+    }
+
+
+@app.get("/api/selection/national-team")
+async def api_selection_national_team(
+    year: int = 0,
+    weapon: str = "",
+    gender: str = "",
+):
+    """청소년 대표 선발 포인트 API"""
+    if not _selection_calculator:
+        raise HTTPException(status_code=503, detail="선발 포인트 계산기 미초기화")
+
+    if year == 0:
+        year = date.today().year
+
+    rankings = _selection_calculator.calculate_national_team_points(year, weapon, gender)
+    comp_columns = _selection_calculator.get_comp_columns(
+        NATIONAL_TEAM_COMP_PATTERNS, year, "national_team"
+    )
+
+    return {
+        "season_year": year,
+        "season_range": _selection_calculator.get_season_range(year),
+        "weapon": weapon,
+        "gender": gender,
+        "total_players": len(rankings),
+        "competitions": comp_columns,
+        "players": [
+            {
+                "rank": r.rank,
+                "name": r.name,
+                "team": r.team,
+                "total_points": r.total_points,
+                "best_rank": r.best_rank,
+                "grade": r.grade,
+                "grade_confidence": r.grade_confidence,
+                "breakdown": [
+                    {
+                        "comp_id": cp.comp_id,
+                        "comp_label": cp.comp_label,
+                        "comp_name": cp.comp_name,
+                        "comp_date": cp.comp_date,
+                        "rank": cp.rank,
+                        "points": cp.points,
+                    }
+                    for cp in r.breakdown
+                ],
+            }
+            for r in rankings
+        ],
+    }
+
+
+@app.get("/api/selection/player/{player_name}")
+async def api_selection_player(
+    player_name: str,
+    team: str = "",
+):
+    """개별 선수의 선발 포인트 조회"""
+    if not _selection_calculator:
+        raise HTTPException(status_code=503, detail="선발 포인트 계산기 미초기화")
+
+    return _selection_calculator.get_player_selection_points(player_name, team)
+
+
+@app.get("/api/selection/kkumnamu/summary")
+async def api_selection_kkumnamu_summary():
+    """꿈나무 선발 연도별 요약 API"""
+    if not _selection_calculator:
+        raise HTTPException(status_code=503, detail="선발 포인트 계산기 미초기화")
+    return _selection_calculator.get_kkumnamu_year_summary()
+
+
+@app.get("/selection/kkumnamu/summary", response_class=HTMLResponse)
+async def selection_kkumnamu_summary_page(request: Request):
+    """꿈나무 선발 연도별 예상 선발 요약 페이지"""
+    if not _selection_calculator:
+        raise HTTPException(status_code=503, detail="선발 포인트 계산기 미초기화")
+
+    year_summaries = _selection_calculator.get_kkumnamu_year_summary()
+
+    context = {
+        "request": request,
+        "title": "꿈나무 선발 포인트 - 연도별 요약",
+        "year_summaries": year_summaries,
+        "selection_count": 8,
+        **get_i18n_template_context(request),
+    }
+    return templates.TemplateResponse("selection_kkumnamu_summary.html", context)
+
+
+@app.get("/selection/kkumnamu", response_class=HTMLResponse)
+async def selection_kkumnamu_page(
+    request: Request,
+    year: int = 0,
+    weapon: str = "foil",
+    gender: str = "남",
+):
+    """꿈나무 선발 순위 페이지"""
+    if not _selection_calculator:
+        raise HTTPException(status_code=503, detail="선발 포인트 계산기 미초기화")
+
+    if year == 0:
+        year = date.today().year
+
+    rankings = _selection_calculator.calculate_kkumnamu_points(year, weapon, gender)
+    available = _selection_calculator.get_available_years()
+
+    weapon_kr = SELECTION_WEAPON_NAMES_KR.get(weapon, weapon)
+
+    comp_columns = _selection_calculator.get_comp_columns(
+        KKUMNAMU_COMP_PATTERNS, year, "kkumnamu"
+    )
+    season_range = _selection_calculator.get_season_range(year)
+
+    context = {
+        "request": request,
+        "title": f"꿈나무 선발 포인트 - {year}년 {gender} {weapon_kr}",
+        "school_year": year,
+        "weapon": weapon,
+        "gender": gender,
+        "weapon_kr": weapon_kr,
+        "rankings": rankings,
+        "available_years": available.get("kkumnamu_school_years", []),
+        "comp_columns": comp_columns,
+        "season_range": season_range,
+        "selection_count": 8,  # 종목·성별별 선발 인원
+        **get_i18n_template_context(request),
+    }
+    return templates.TemplateResponse("selection_kkumnamu.html", context)
+
+
+@app.get("/api/selection/national-team/summary")
+async def api_selection_national_team_summary():
+    """청소년 대표 선발 연도별 요약 API"""
+    if not _selection_calculator:
+        raise HTTPException(status_code=503, detail="선발 포인트 계산기 미초기화")
+    return _selection_calculator.get_national_team_year_summary()
+
+
+@app.get("/selection/national-team/summary", response_class=HTMLResponse)
+async def selection_national_team_summary_page(request: Request):
+    """청소년 대표 선발 연도별 예상 선발 요약 페이지"""
+    if not _selection_calculator:
+        raise HTTPException(status_code=503, detail="선발 포인트 계산기 미초기화")
+
+    year_summaries = _selection_calculator.get_national_team_year_summary()
+
+    context = {
+        "request": request,
+        "title": "청소년 대표 선발 포인트 - 연도별 요약",
+        "year_summaries": year_summaries,
+        "selection_count": 8,
+        **get_i18n_template_context(request),
+    }
+    return templates.TemplateResponse("selection_national_summary.html", context)
+
+
+@app.get("/selection/national-team", response_class=HTMLResponse)
+async def selection_national_team_page(
+    request: Request,
+    year: int = 0,
+    weapon: str = "foil",
+    gender: str = "남",
+):
+    """청소년 대표 선발 순위 페이지"""
+    if not _selection_calculator:
+        raise HTTPException(status_code=503, detail="선발 포인트 계산기 미초기화")
+
+    if year == 0:
+        year = date.today().year
+
+    rankings = _selection_calculator.calculate_national_team_points(year, weapon, gender)
+    available = _selection_calculator.get_available_years()
+
+    weapon_kr = SELECTION_WEAPON_NAMES_KR.get(weapon, weapon)
+
+    comp_columns = _selection_calculator.get_comp_columns(
+        NATIONAL_TEAM_COMP_PATTERNS, year, "national_team"
+    )
+    season_range = _selection_calculator.get_season_range(year)
+
+    context = {
+        "request": request,
+        "title": f"청소년 대표 선발 포인트 - {year}시즌 {gender} {weapon_kr}",
+        "season_year": year,
+        "weapon": weapon,
+        "gender": gender,
+        "weapon_kr": weapon_kr,
+        "rankings": rankings,
+        "available_years": available.get("national_team_seasons", []),
+        "comp_columns": comp_columns,
+        "season_range": season_range,
+        **get_i18n_template_context(request),
+    }
+    return templates.TemplateResponse("selection_national.html", context)
+
+
+# ==================== 선발 포인트 - 다국어 라우트 ====================
+
+@app.get("/{lang}/selection/kkumnamu/summary", response_class=HTMLResponse)
+async def selection_kkumnamu_summary_page_i18n(request: Request, lang: str):
+    """꿈나무 선발 요약 - 다국어"""
+    if lang not in SUPPORTED_LANGUAGES:
+        raise HTTPException(status_code=404)
+    return await selection_kkumnamu_summary_page(request)
+
+
+@app.get("/{lang}/selection/kkumnamu", response_class=HTMLResponse)
+async def selection_kkumnamu_page_i18n(
+    request: Request, lang: str,
+    year: int = 0, weapon: str = "foil", gender: str = "남",
+):
+    """꿈나무 선발 순위 - 다국어"""
+    if lang not in SUPPORTED_LANGUAGES:
+        raise HTTPException(status_code=404)
+    return await selection_kkumnamu_page(request, year, weapon, gender)
+
+
+@app.get("/{lang}/selection/national-team/summary", response_class=HTMLResponse)
+async def selection_national_team_summary_page_i18n(request: Request, lang: str):
+    """청소년 대표 선발 요약 - 다국어"""
+    if lang not in SUPPORTED_LANGUAGES:
+        raise HTTPException(status_code=404)
+    return await selection_national_team_summary_page(request)
+
+
+@app.get("/{lang}/selection/national-team", response_class=HTMLResponse)
+async def selection_national_team_page_i18n(
+    request: Request, lang: str,
+    year: int = 0, weapon: str = "foil", gender: str = "남",
+):
+    """청소년 대표 선발 순위 - 다국어"""
+    if lang not in SUPPORTED_LANGUAGES:
+        raise HTTPException(status_code=404)
+    return await selection_national_team_page(request, year, weapon, gender)
+
+
+# ==================== 영문명 수정 API ====================
+
+@app.put("/api/player/me/english-name")
+async def update_my_english_name(request: Request, body: EnglishNameUpdate):
+    """본인 영문명 수정 API (JWT 인증 필요, member.player_id로 선수 특정)"""
+    member = await get_current_member(request)
+    if not member:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다")
+
+    player_id = member.get("player_id")
+    if not player_id:
+        raise HTTPException(status_code=400, detail="연결된 선수 프로필이 없습니다")
+
+    english_name = body.english_name.strip()
+    if not english_name:
+        raise HTTPException(status_code=400, detail="영문명을 입력해주세요")
+
+    try:
+        # 선수 조회
+        result = _supabase_client.table("players").select(
+            "id, player_name, translations"
+        ).eq("id", player_id).limit(1).execute()
+
+        if not result.data:
+            raise HTTPException(status_code=404, detail="선수 프로필을 찾을 수 없습니다")
+
+        player = result.data[0]
+        player_name = player["player_name"]
+        translations = player.get("translations") or {}
+
+        # translations.en 업데이트
+        translations["en"] = {
+            **(translations.get("en", {})),
+            "name": english_name,
+            "verified": True,
+            "source": "self_verified",
+            "updated_at": datetime.utcnow().isoformat() + "Z",
+        }
+
+        _supabase_client.table("players").update(
+            {"translations": translations}
+        ).eq("id", player_id).execute()
+
+        # 캐시 즉시 갱신
+        _player_translation_cache[player_name] = english_name
+
+        return {"success": True, "player_name": player_name, "english_name": english_name}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"영문명 수정 실패: {e}")
+        raise HTTPException(status_code=500, detail="영문명 수정에 실패했습니다")
+
+
+@app.put("/api/player/{player_name}/english-name")
+async def update_player_english_name(request: Request, player_name: str, body: EnglishNameUpdate):
+    """관리자/코치 영문명 수정 API (admin/coach/head_coach/owner 권한 필요)"""
+    member = await get_current_member(request)
+    if not member:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다")
+
+    # 권한 확인: admin, coach, head_coach, owner만 허용
+    club_role = member.get("club_role", "")
+    member_type = member.get("member_type", "")
+    allowed_roles = {"admin", "coach", "head_coach", "owner"}
+    if club_role not in allowed_roles and member_type != "admin":
+        raise HTTPException(status_code=403, detail="영문명 수정 권한이 없습니다")
+
+    english_name = body.english_name.strip()
+    if not english_name:
+        raise HTTPException(status_code=400, detail="영문명을 입력해주세요")
+
+    try:
+        from urllib.parse import unquote
+        decoded_name = unquote(player_name)
+
+        # 선수 조회
+        result = _supabase_client.table("players").select(
+            "id, player_name, translations"
+        ).eq("player_name", decoded_name).limit(1).execute()
+
+        if not result.data:
+            raise HTTPException(status_code=404, detail=f"선수 '{decoded_name}'을 찾을 수 없습니다")
+
+        player = result.data[0]
+        translations = player.get("translations") or {}
+
+        # translations.en 업데이트
+        translations["en"] = {
+            **(translations.get("en", {})),
+            "name": english_name,
+            "verified": True,
+            "source": "admin_verified",
+            "verified_by": member.get("id"),
+            "updated_at": datetime.utcnow().isoformat() + "Z",
+        }
+
+        _supabase_client.table("players").update(
+            {"translations": translations}
+        ).eq("id", player["id"]).execute()
+
+        # 캐시 즉시 갱신
+        _player_translation_cache[decoded_name] = english_name
+
+        return {"success": True, "player_name": decoded_name, "english_name": english_name}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"영문명 수정 실패 ({player_name}): {e}")
+        raise HTTPException(status_code=500, detail="영문명 수정에 실패했습니다")
+
+
+# ==================== 즐겨찾기(Favorites) API ====================
+
+class FavoriteAddRequest(BaseModel):
+    player_name: str
+
+class FavoriteImportRequest(BaseModel):
+    player_names: List[str]
+
+
+@app.get("/api/favorites")
+async def api_get_favorites(request: Request):
+    """내 즐겨찾기 목록 조회"""
+    access_level, member = await get_access_level(request)
+    if access_level == "guest" or member is None:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다")
+
+    member_id = member.get("id")
+    if not member_id or not _supabase_client:
+        raise HTTPException(status_code=500, detail="서버 오류")
+
+    try:
+        result = _supabase_client.table("member_favorites").select(
+            "player_name, display_order, created_at"
+        ).eq("member_id", member_id).order("display_order").execute()
+
+        return {
+            "favorites": [r["player_name"] for r in (result.data or [])],
+            "total": len(result.data or []),
+        }
+    except Exception as e:
+        logger.error(f"즐겨찾기 조회 실패: {e}")
+        raise HTTPException(status_code=500, detail="즐겨찾기 조회 실패")
+
+
+@app.post("/api/favorites")
+async def api_add_favorite(request: Request, body: FavoriteAddRequest):
+    """즐겨찾기 추가"""
+    access_level, member = await get_access_level(request)
+    if access_level == "guest" or member is None:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다")
+
+    member_id = member.get("id")
+    if not member_id or not _supabase_client:
+        raise HTTPException(status_code=500, detail="서버 오류")
+
+    player_name = body.player_name.strip()
+    if not player_name:
+        raise HTTPException(status_code=400, detail="선수 이름이 필요합니다")
+
+    try:
+        _supabase_client.table("member_favorites").upsert(
+            {"member_id": member_id, "player_name": player_name},
+            on_conflict="member_id,player_name"
+        ).execute()
+        return {"success": True, "player_name": player_name}
+    except Exception as e:
+        logger.error(f"즐겨찾기 추가 실패: {e}")
+        raise HTTPException(status_code=500, detail="즐겨찾기 추가 실패")
+
+
+@app.delete("/api/favorites/{player_name:path}")
+async def api_remove_favorite(request: Request, player_name: str):
+    """즐겨찾기 제거"""
+    access_level, member = await get_access_level(request)
+    if access_level == "guest" or member is None:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다")
+
+    member_id = member.get("id")
+    if not member_id or not _supabase_client:
+        raise HTTPException(status_code=500, detail="서버 오류")
+
+    from urllib.parse import unquote
+    decoded_name = unquote(player_name).strip()
+
+    try:
+        _supabase_client.table("member_favorites").delete().eq(
+            "member_id", member_id
+        ).eq("player_name", decoded_name).execute()
+        return {"success": True, "player_name": decoded_name}
+    except Exception as e:
+        logger.error(f"즐겨찾기 제거 실패: {e}")
+        raise HTTPException(status_code=500, detail="즐겨찾기 제거 실패")
+
+
+@app.post("/api/favorites/import")
+async def api_import_favorites(request: Request, body: FavoriteImportRequest):
+    """localStorage → DB 일괄 이전"""
+    access_level, member = await get_access_level(request)
+    if access_level == "guest" or member is None:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다")
+
+    member_id = member.get("id")
+    if not member_id or not _supabase_client:
+        raise HTTPException(status_code=500, detail="서버 오류")
+
+    imported = 0
+    for name in body.player_names:
+        name = name.strip()
+        if not name:
+            continue
+        try:
+            _supabase_client.table("member_favorites").upsert(
+                {"member_id": member_id, "player_name": name},
+                on_conflict="member_id,player_name"
+            ).execute()
+            imported += 1
+        except Exception:
+            pass  # 중복 등 무시
+
+    return {"success": True, "imported": imported, "total": len(body.player_names)}
+
+
+@app.get("/api/favorites/dashboard")
+async def api_favorites_dashboard(request: Request):
+    """즐겨찾기 선수별 최근 1개 대회 결과 대시보드"""
+    access_level, member = await get_access_level(request)
+    if access_level == "guest" or member is None:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다")
+
+    member_id = member.get("id")
+    if not member_id or not _supabase_client:
+        raise HTTPException(status_code=500, detail="서버 오류")
+
+    lang = getattr(request.state, 'lang', DEFAULT_LANGUAGE)
+
+    try:
+        result = _supabase_client.table("member_favorites").select(
+            "player_name, display_order"
+        ).eq("member_id", member_id).order("display_order").execute()
+
+        favorites_data = []
+        for fav in (result.data or []):
+            player_name = fav["player_name"]
+            records = _player_index.get(player_name, [])
+
+            # 최근 대회 1건 (competition_date 내림차순)
+            latest = None
+            if records:
+                sorted_records = sorted(
+                    records,
+                    key=lambda r: r.get("competition_date", "") or "",
+                    reverse=True
+                )
+                latest = sorted_records[0]
+
+            # 현재 소속 (identity resolver)
+            current_team = ""
+            if _identity_resolver:
+                profiles = _identity_resolver.name_to_profiles.get(player_name, [])
+                if profiles:
+                    current_team = profiles[0].current_team or ""
+
+            # i18n 이름 변환
+            display_name = get_localized_player_name_sync(player_name, lang)
+            display_team = get_localized_org_name_sync(current_team, lang) if current_team else ""
+
+            entry = {
+                "player_name": player_name,
+                "display_name": display_name,
+                "current_team": current_team,
+                "display_team": display_team,
+                "latest_result": None,
+            }
+
+            if latest:
+                entry["latest_result"] = {
+                    "competition_name": latest.get("competition_name", ""),
+                    "display_competition_name": translate_competition_name(
+                        latest.get("competition_name", ""), lang
+                    ) if lang != "ko" else latest.get("competition_name", ""),
+                    "competition_date": latest.get("competition_date", ""),
+                    "event_name": latest.get("event_name", ""),
+                    "display_event_name": translate_event_name(
+                        latest.get("event_name", ""), lang
+                    ) if lang != "ko" else latest.get("event_name", ""),
+                    "event_cd": latest.get("event_cd", ""),
+                    "sub_event_cd": latest.get("sub_event_cd", ""),
+                    "rank": latest.get("rank"),
+                    "pool_rank": latest.get("pool_rank"),
+                    "total_participants": latest.get("total_participants"),
+                    "pool_wins": latest.get("pool_wins", 0),
+                    "pool_losses": latest.get("pool_losses", 0),
+                    "de_wins": latest.get("de_wins", 0),
+                    "de_losses": latest.get("de_losses", 0),
+                    "weapon": latest.get("weapon", ""),
+                    "age_group": latest.get("age_group", ""),
+                }
+
+            favorites_data.append(entry)
+
+        return {
+            "favorites": favorites_data,
+            "total": len(favorites_data),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"즐겨찾기 대시보드 조회 실패: {e}")
+        raise HTTPException(status_code=500, detail="대시보드 조회 실패")
+
+
+@app.get("/api/favorites/event/{sub_event_cd}")
+async def api_favorites_in_event(request: Request, sub_event_cd: str):
+    """해당 이벤트에 참가한 즐겨찾기 선수 반환"""
+    access_level, member = await get_access_level(request)
+    if access_level == "guest" or member is None:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다")
+
+    member_id = member.get("id")
+    if not member_id or not _supabase_client:
+        raise HTTPException(status_code=500, detail="서버 오류")
+
+    lang = getattr(request.state, 'lang', DEFAULT_LANGUAGE)
+
+    try:
+        result = _supabase_client.table("member_favorites").select(
+            "player_name"
+        ).eq("member_id", member_id).execute()
+
+        fav_names = {r["player_name"] for r in (result.data or [])}
+        matches = []
+
+        for name in fav_names:
+            records = _player_index.get(name, [])
+            for rec in records:
+                if rec.get("sub_event_cd") == sub_event_cd:
+                    display_name = get_localized_player_name_sync(name, lang)
+                    team = rec.get("team", "")
+                    display_team = get_localized_org_name_sync(team, lang) if team else ""
+                    matches.append({
+                        "player_name": name,
+                        "display_name": display_name,
+                        "team": team,
+                        "display_team": display_team,
+                        "rank": rec.get("rank"),
+                        "pool_rank": rec.get("pool_rank"),
+                        "total_participants": rec.get("total_participants"),
+                        "pool_wins": rec.get("pool_wins", 0),
+                        "pool_losses": rec.get("pool_losses", 0),
+                        "de_wins": rec.get("de_wins", 0),
+                        "de_losses": rec.get("de_losses", 0),
+                    })
+                    break  # 같은 이벤트에 1회만
+
+        return {
+            "favorites_in_event": matches,
+            "total": len(matches),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"이벤트 즐겨찾기 조회 실패: {e}")
+        raise HTTPException(status_code=500, detail="이벤트 즐겨찾기 조회 실패")
+
+
+# ==================== 데이터 새로고침 API ====================
+
+@app.post("/api/refresh-data")
+async def refresh_data_cache(request: Request):
+    """서버 데이터 캐시 새로고침 API
+
+    스크래핑/선수 데이터 업데이트 완료 후 호출하여 DB의 최신 데이터를 서버 메모리에 로드
+    identity_resolver도 재구축하여 current_team 등이 올바르게 반영됨
+    """
+    await require_admin_or_internal(request)
+    try:
+        logger.info("🔄 데이터 캐시 새로고침 시작...")
+
+        # 1. Supabase에서 최신 데이터 로드
+        success = load_data_from_supabase()
+        if not success:
+            return {"success": False, "message": "데이터 로드 실패"}
+
+        # 2. 선수 인덱스 및 캐시 재구축
+        build_player_index()
+        build_competition_player_cache()
+        build_team_event_index()
+
+        # 3. identity_resolver 재구축 (핵심 - current_team 올바르게 반영)
+        build_org_region_cache()  # 지역 캐시 먼저 (resolver가 참조)
+        build_identity_resolver()
+        build_org_translation_cache()
+        build_player_translation_cache()
+        build_matches_count()  # 새 스크래핑분이 히어로 스탯에 반영되도록 재집계
+
+        # 4. 학년 추정기 재구축
+        global _grade_estimator
+        try:
+            ge = GradeEstimator()
+            ge.build_cache(_data_cache.get("competitions", []), None)
+            _grade_estimator = ge
+        except Exception as e:
+            logger.error(f"학년 추정기 재구축 실패: {e}")
+
+        # 5. 선발 포인트 계산기 재구축
+        global _selection_calculator
+        try:
+            _selection_calculator = SelectionPointCalculator(_data_cache, _grade_estimator)
+        except Exception as e:
+            logger.error(f"선발 포인트 계산기 재구축 실패: {e}")
+
+        logger.info("✅ 데이터 캐시 및 identity_resolver 새로고침 완료")
+        return {
+            "success": True,
+            "message": "데이터 캐시가 새로고침되었습니다 (identity_resolver 포함)",
+            "competitions": len(_data_cache.get("competitions", [])),
+            "events": len(_data_cache.get("events", [])),
+            "profiles": len(_identity_resolver.profiles) if _identity_resolver else 0
+        }
+    except Exception as e:
+        logger.error(f"데이터 새로고침 오류: {e}")
+        return {"success": False, "error": str(e)}
+
+
+# ==================== 스케줄러 API ====================
+
+@app.get("/api/scheduler/status")
+async def get_scheduler_status():
+    """스케줄러 상태 조회 API"""
+    if not SCHEDULER_AVAILABLE:
+        return {"error": "스케줄러를 사용할 수 없습니다", "available": False}
+
+    if not ENABLE_SCHEDULER:
+        return {
+            "available": True,
+            "enabled": False,
+            "message": "스케줄러가 비활성화되어 있습니다. ENABLE_SCHEDULER=true로 활성화하세요."
+        }
+
+    try:
+        scheduler = get_scheduler()
+        status = scheduler.get_status()
+        return {
+            "available": True,
+            "enabled": True,
+            **status
+        }
+    except Exception as e:
+        return {"error": str(e), "available": True, "enabled": True}
+
+
+@app.post("/api/scheduler/run")
+async def run_scheduler_now(request: Request, task_type: str = "detect"):
+    """스케줄러 즉시 실행 API
+
+    Args:
+        task_type:
+            - "detect": 대회 공고 감지 (새 대회 찾기)
+            - "scrape": 이벤트 기반 스크래핑 (진행 중 대회)
+            - "final": 최종 결과 수집 (종료된 대회)
+            - "all": 전체 실행
+    """
+    await require_admin_or_internal(request)
+    if not SCHEDULER_AVAILABLE or not ENABLE_SCHEDULER:
+        raise HTTPException(status_code=503, detail="스케줄러가 활성화되지 않았습니다")
+
+    try:
+        scheduler = get_scheduler()
+        result = await scheduler.run_now(task_type)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== 데이터 무결성 검증 API ====================
+
+@app.get("/api/admin/validate")
+async def api_validate_data(request: Request):
+    """전체 데이터 무결성 검증"""
+    await require_admin_or_internal(request)
+    from app.data_validator import DataValidator
+    validator = DataValidator(get_competitions(), org_cache=_org_region_cache)
+    issues = validator.validate_all()
+
+    errors = [i.to_dict() for i in issues if i.severity == "ERROR"]
+    warnings = [i.to_dict() for i in issues if i.severity == "WARNING"]
+
+    # 규칙별 통계
+    by_rule = {}
+    for issue in issues:
+        by_rule[issue.rule_id] = by_rule.get(issue.rule_id, 0) + 1
+
+    return {
+        "total_issues": len(issues),
+        "error_count": len(errors),
+        "warning_count": len(warnings),
+        "by_rule": by_rule,
+        "errors": errors[:100],      # 최대 100건
+        "warnings": warnings[:100],
+    }
+
+
+@app.get("/api/admin/validate/{player_name}")
+async def api_validate_player(request: Request, player_name: str):
+    """특정 선수 데이터 검증"""
+    await require_admin_or_internal(request)
+    from app.data_validator import DataValidator
+    validator = DataValidator(get_competitions(), org_cache=_org_region_cache)
+    issues = validator.validate_player(player_name)
+
+    return {
+        "player": player_name,
+        "total_issues": len(issues),
+        "issues": [i.to_dict() for i in issues],
+    }
 
 
 # ==================== 서버 실행 ====================

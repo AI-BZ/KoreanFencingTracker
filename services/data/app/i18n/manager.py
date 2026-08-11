@@ -13,15 +13,18 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Supported languages
-SUPPORTED_LANGUAGES = ['ko', 'en']
+SUPPORTED_LANGUAGES = ['ko', 'en', 'fr', 'it', 'ja', 'zh', 'tr']
 DEFAULT_LANGUAGE = 'ko'
 
 # Language display names
 LANGUAGE_NAMES = {
     'ko': '한국어',
     'en': 'English',
+    'fr': 'Français',
+    'it': 'Italiano',
     'ja': '日本語',
     'zh': '中文',
+    'tr': 'Türkçe',
 }
 
 

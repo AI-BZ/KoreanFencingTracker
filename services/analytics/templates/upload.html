@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t('upload.title') if t else '경기 영상 분석' }} - FencingMind Analytics{% endblock %}
+
+{% block nav_upload %}active{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    <div class="text-center mb-10">
+        <h1 class="text-3xl font-bold text-white">{{ t('upload.title') if t else '경기 영상 분석' }}</h1>
+        <p class="mt-3 text-gray-400">{{ t('upload.subtitle') if t else '펜싱 경기 영상을 업로드하면 AI가 자동으로 분석합니다.' }}</p>
+    </div>
+
+    <form id="upload-form" class="space-y-8">
+        <!-- Drag & Drop Area -->
+        <div id="drop-zone"
+             class="dark-drop-zone drop-zone relative border-2 border-dashed rounded-2xl p-12
+                    text-center cursor-pointer transition-all">
+            <input type="file" id="file-input" accept=".mp4,.avi,.mov" class="hidden">
+            <div id="drop-zone-content">
+                <svg class="mx-auto h-16 w-16 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                          d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                </svg>
+                <p class="mt-4 text-lg font-medium text-gray-300">
+                    {{ t('upload.drop_text') if t else '영상 파일을 드래그하거나 클릭하여 선택하세요' }}
+                </p>
+                <p class="mt-2 text-sm text-gray-500">
+                    {{ t('upload.drop_hint') if t else 'MP4, AVI, MOV 지원 (최대 500MB)' }}
+                </p>
+            </div>
+            <div id="file-info" class="hidden">
+                <svg class="mx-auto h-12 w-12 text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                </svg>
+                <p id="file-name" class="mt-3 text-lg font-medium text-white"></p>
+                <p id="file-size" class="mt-1 text-sm text-gray-400"></p>
+                <button type="button" id="remove-file"
+                        class="mt-3 text-sm text-red-400 hover:text-red-300 underline">
+                    {{ t('upload.remove_file') if t else '파일 제거' }}
+                </button>
+            </div>
+        </div>
+
+        <!-- Progress Bar -->
+        <div id="progress-section" class="hidden">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-sm font-medium text-gray-300">{{ t('upload.uploading') if t else '업로드 중...' }}</span>
+                <span id="progress-pct" class="text-sm font-medium text-brand-400">0%</span>
+            </div>
+            <div class="w-full bg-white/5 rounded-full h-2.5 overflow-hidden">
+                <div id="progress-bar"
+                     class="bg-brand-600 h-2.5 rounded-full transition-all duration-300"
+                     style="width: 0%"></div>
+            </div>
+        </div>
+
+        <!-- Options -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <div>
+                <label for="source-type" class="block text-sm font-medium text-gray-300 mb-2">
+                    {{ t('upload.source_type') if t else '촬영 유형' }}
+                </label>
+                <select id="source-type" name="source_type" class="dark-select w-full rounded-lg px-4 py-2.5 text-sm">
+                    <option value="coach">{{ t('upload.source_coach') if t else '코치 촬영' }}</option>
+                    <option value="parent">{{ t('upload.source_parent') if t else '학부모 촬영' }}</option>
+                    <option value="player">{{ t('upload.source_player') if t else '선수 촬영' }}</option>
+                    <option value="tv_broadcast">{{ t('upload.source_tv') if t else 'TV 중계' }}</option>
+                </select>
+            </div>
+            <div>
+                <label for="weapon" class="block text-sm font-medium text-gray-300 mb-2">
+                    {{ t('upload.weapon') if t else '종목' }}
+                </label>
+                <select id="weapon" name="weapon" class="dark-select w-full rounded-lg px-4 py-2.5 text-sm">
+                    <option value="foil">{{ t('upload.weapon_foil') if t else '플뢰레 (Foil)' }}</option>
+                    <option value="epee">{{ t('upload.weapon_epee') if t else '에페 (Epee)' }}</option>
+                    <option value="sabre">{{ t('upload.weapon_sabre') if t else '사브르 (Sabre)' }}</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Submit -->
+        <div class="flex justify-center">
+            <button type="submit" id="upload-btn" disabled
+                    class="px-8 py-3 bg-brand-600 text-white font-semibold rounded-xl
+                           shadow-sm hover:bg-brand-500 focus:outline-none focus:ring-2
+                           focus:ring-offset-2 focus:ring-offset-[#0a0a0f] focus:ring-brand-500
+                           transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                {{ t('upload.btn_analyze') if t else '분석 시작' }}
+            </button>
+        </div>
+    </form>
+
+    <!-- Upload Complete Message -->
+    <div id="upload-success" class="hidden mt-8">
+        <div class="glass-card p-6 text-center border-green-500/30">
+            <svg class="mx-auto h-12 w-12 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <h3 class="mt-3 text-lg font-semibold text-green-400">{{ t('upload.success_title') if t else '업로드 완료' }}</h3>
+            <p class="mt-1 text-sm text-gray-400">
+                {{ t('upload.success_desc') if t else '분석이 자동으로 시작되었습니다.' }}
+            </p>
+            <p class="mt-1 text-xs text-gray-500">
+                {{ t('upload.success_detail') if t else 'ROI 자동 감지 → 스코어 추적 → 기술 분류 → 리포트 생성' }}
+            </p>
+            <a href="/dashboard" id="go-dashboard"
+               class="inline-block mt-4 px-6 py-2.5 bg-green-600 text-white font-medium rounded-lg
+                      hover:bg-green-500 transition-colors">
+                {{ t('upload.btn_dashboard') if t else '대시보드에서 확인' }}
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/upload.js"></script>
+{% endblock %}

@@ -73,3 +73,12 @@ video/
 
 # Playwright MCP temp files
 .playwright-mcp/
+
+# Dev session artifacts (2026-07-09 eval cleanup)
+/*.png
+/*.zip
+docs/screenshots/
+.coverage
+services/data/data/
+services/data/static/manifest.json
+services/data/static/sw.js

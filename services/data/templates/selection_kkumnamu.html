@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="selection-page">
+        <!-- 비공식 안내 배너 -->
+        <div class="selection-unofficial-notice">
+            ⚠️ {{ _t("본 순위는 공개된 대회 결과를 기반으로 추정한 비공식 자료입니다. 실제 선발 결과와 다를 수 있습니다.") }}
+        </div>
+
+        <div class="selection-header">
+            <h1>{{ _t("꿈나무 선발 포인트") }}</h1>
+            <p class="selection-desc">{{ _t("중1 기간 4개 대상 대회 성적 합산 → 중2 초 종목·성별별 %s명 선발 | %s년 (%s)")|format(selection_count, school_year, season_range) }}</p>
+            {% if lang != 'ko' and _t("꿈나무 프로그램 설명") %}
+            <p class="selection-program-info">{{ _t("꿈나무 프로그램 설명") }}</p>
+            {% endif %}
+            <div class="selection-nav-tabs">
+                <a href="/{{ lang|default('ko') }}/selection/kkumnamu?year={{ school_year }}&weapon={{ weapon }}&gender={{ gender }}" class="sel-nav-tab active">{{ _t("꿈나무") }}</a>
+                <a href="/{{ lang|default('ko') }}/selection/national-team/summary" class="sel-nav-tab">{{ _t("청소년 대표") }}</a>
+            </div>
+        </div>
+
+        <!-- 필터 바 -->
+        <div class="selection-filters">
+            <div class="filter-group">
+                <label>{{ _t("연도") }}</label>
+                <select id="yearFilter" onchange="applyFilters()">
+                    {% for y in available_years %}
+                    <option value="{{ y }}" {% if y == school_year %}selected{% endif %}>{{ _t("%s년")|format(y) }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>{{ _t("무기") }}</label>
+                <select id="weaponFilter" onchange="applyFilters()">
+                    <option value="foil" {% if weapon == 'foil' %}selected{% endif %}>{{ _t("플뢰레") }}</option>
+                    <option value="epee" {% if weapon == 'epee' %}selected{% endif %}>{{ _t("에페") }}</option>
+                    <option value="sabre" {% if weapon == 'sabre' %}selected{% endif %}>{{ _t("사브르") }}</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>{{ _t("성별") }}</label>
+                <select id="genderFilter" onchange="applyFilters()">
+                    <option value="남" {% if gender == '남' %}selected{% endif %}>{{ _t("남자") }}</option>
+                    <option value="여" {% if gender == '여' %}selected{% endif %}>{{ _t("여자") }}</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- 대상 대회 안내 -->
+        <div class="selection-comp-info">
+            <h4>{{ _t("%s년 대상 대회 (4개)")|format(school_year) }}</h4>
+            <div class="comp-chips">
+                {% for col in comp_columns %}
+                <span class="comp-chip {% if col.status == 'upcoming' %}upcoming{% endif %}">
+                    {{ tr_comp(col.label) }}
+                    <small class="comp-date">
+                        {% if col.status == 'completed' %}({{ col.date_short }}){% else %}({{ col.date_short }} {{ _t("예정") }}){% endif %}
+                    </small>
+                </span>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- 로그인 안내 -->
+        <div class="auth-login-prompt" id="selectionAuthPrompt">
+            🔒 {{ _t("선수 이름과 소속은 로그인 후 확인할 수 있습니다.") }}
+            <a href="https://account.fencingmind.ai/auth/login?redirect_url={{ request.url | urlencode }}" onclick="localStorage.setItem('fencingmind_login_redirect', window.location.href)">{{ _t("로그인") }}</a>
+        </div>
+
+        <!-- 순위 테이블 -->
+        {% if rankings %}
+        <div class="selection-table-wrapper">
+            <table class="selection-table">
+                <thead>
+                    <tr>
+                        <th class="rank-col">{{ _t("순위") }}</th>
+                        <th class="name-col">{{ _t("선수") }}</th>
+                        <th class="team-col">{{ _t("소속") }}</th>
+                        {% for col in comp_columns %}
+                        <th class="pts-col {% if col.status == 'upcoming' %}upcoming{% endif %}">
+                            {{ tr_comp(col.label) }}<br>
+                            <small class="comp-date">
+                                {% if col.status == 'completed' %}({{ col.date_short }}){% else %}({{ col.date_short }} {{ _t("예정") }}){% endif %}
+                            </small>
+                        </th>
+                        {% endfor %}
+                        <th class="total-col">{{ _t("합계") }}</th>
+                        <th class="grade-col">{{ _t("학년") }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in rankings %}
+                    {% set is_selected = r.rank <= selection_count %}
+                    {% set is_cutoff = is_selected and (loop.index == rankings|length or rankings[loop.index].rank > selection_count) %}
+                    <tr class="{% if is_selected %}selection-line{% endif %}{% if is_cutoff %} selection-cutoff-border{% endif %}">
+                        <td class="rank-col">
+                            <span class="rank-badge {% if r.rank <= selection_count %}selected{% endif %}">{{ r.rank }}</span>
+                        </td>
+                        <td class="name-col">
+                            <span class="auth-protected"><a href="/player/{{ r.name }}?team={{ r.team }}" class="player-link">{{ tr_player(r.name) }}</a></span>
+                            {% if r.best_rank %}<span class="best-rank-badge">{{ _t("(%s위)")|format(r.best_rank) }}</span>{% endif %}
+                        </td>
+                        <td class="team-col"><span class="auth-protected">{{ tr_team(r.team) }}</span></td>
+                        {% for col in comp_columns %}
+                        <td class="pts-col {% if col.status == 'upcoming' %}upcoming{% endif %}">
+                            {% set ns = namespace(found=false) %}
+                            {% for cp in r.breakdown %}
+                                {% if cp.comp_id == col.id %}
+                                    <span class="pts-value" title="{{ cp.comp_name }} - {{ _t('%s위')|format(cp.rank) }}">{{ cp.points|int }}</span>
+                                    {% set ns.found = true %}
+                                {% endif %}
+                            {% endfor %}
+                            {% if not ns.found %}<span class="pts-empty">-</span>{% endif %}
+                        </td>
+                        {% endfor %}
+                        <td class="total-col"><strong>{{ r.total_points|int }}</strong></td>
+                        <td class="grade-col">
+                            {% if r.grade_confidence == 'confirmed' %}
+                            <span class="grade-badge confirmed">{{ tr_grade(r.grade) }}</span>
+                            {% elif r.grade_confidence == 'estimated' %}
+                            <span class="grade-badge estimated">{{ tr_grade(r.grade) }}</span>
+                            {% else %}
+                            <span class="grade-badge unknown">{{ _t("미확인") }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- 선발 라인 안내 -->
+        <div class="selection-cutoff-note">
+            {{ _t("상위 %s명까지 선발 대상 (하이라이트 표시)")|format(selection_count) }}
+        </div>
+
+        {% else %}
+        <div class="no-data-box">
+            <p>{{ _t("해당 조건의 데이터가 없습니다.") }}</p>
+            <p class="sub-note">{{ _t("대상 대회가 아직 열리지 않았거나, 해당 종목/성별 데이터가 없을 수 있습니다.") }}</p>
+        </div>
+        {% endif %}
+
+        <!-- 포인트 배점표 -->
+        <div class="selection-point-table-info">
+            <h4>{{ _t("포인트 배점표") }}</h4>
+            <div class="point-table-grid">
+                <div class="pt-item"><span class="pt-rank">{{ _t("1위") }}</span><span class="pt-pts">32</span></div>
+                <div class="pt-item"><span class="pt-rank">{{ _t("2위") }}</span><span class="pt-pts">26</span></div>
+                <div class="pt-item"><span class="pt-rank">{{ _t("공동3위") }}</span><span class="pt-pts">20</span></div>
+                <div class="pt-item"><span class="pt-rank">{{ _t("5~8위") }}</span><span class="pt-pts">14</span></div>
+                <div class="pt-item"><span class="pt-rank">{{ _t("9~16위") }}</span><span class="pt-pts">8</span></div>
+                <div class="pt-item"><span class="pt-rank">{{ _t("17~32위") }}</span><span class="pt-pts">4</span></div>
+                <div class="pt-item"><span class="pt-rank">{{ _t("33~64위") }}</span><span class="pt-pts">2</span></div>
+                <div class="pt-item"><span class="pt-rank">{{ _t("65~96위") }}</span><span class="pt-pts">1</span></div>
+                <div class="pt-item"><span class="pt-rank">{{ _t("97~128위") }}</span><span class="pt-pts">0.5</span></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function applyFilters() {
+    const year = document.getElementById('yearFilter').value;
+    const weapon = document.getElementById('weaponFilter').value;
+    const gender = document.getElementById('genderFilter').value;
+    window.location.href = `/{{ lang|default('ko') }}/selection/kkumnamu?year=${year}&weapon=${weapon}&gender=${encodeURIComponent(gender)}`;
+}
+</script>
+{% endblock %}

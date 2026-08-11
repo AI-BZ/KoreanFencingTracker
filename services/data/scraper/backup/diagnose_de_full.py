@@ -3,7 +3,6 @@ DE 전체 브라켓 구조 확인 - 준결승/결승 위치 찾기
 """
 
 import asyncio
-import json
 import sys
 from pathlib import Path
 

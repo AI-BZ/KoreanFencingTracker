@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+
+{% block title %}{{ i18n.account.verification.page_title|default('본인 인증 - FencingMind') }}{% endblock %}
+
+{% block content %}
+<div class="verification-container">
+    <div class="verification-card">
+        <div class="verification-header">
+            <h1>
+                {% if verification_flow == 'player' %}
+                {{ i18n.account.verification.header_title|default('선수 인증') }}
+                {% elif verification_flow == 'parent' %}
+                학부모 인증
+                {% elif verification_flow == 'coach' %}
+                코치 인증
+                {% elif verification_flow == 'director' %}
+                조직 인증
+                {% else %}
+                인증
+                {% endif %}
+            </h1>
+            <p>
+                {% if verification_flow == 'player' %}
+                {{ i18n.account.verification.header_subtitle|default('펜싱 선수임을 인증하면 모든 기능을 이용할 수 있습니다') }}
+                {% elif verification_flow == 'parent' %}
+                자녀(선수)와의 관계를 인증하면 자녀의 대회 성적과 일정을 확인할 수 있습니다
+                {% elif verification_flow == 'coach' %}
+                선수 데이터를 연결하면 대회 이력과 성과를 확인할 수 있습니다
+                {% elif verification_flow == 'director' %}
+                조직 소유권을 인증하면 클럽 관리 기능을 이용할 수 있습니다
+                {% else %}
+                회원 유형에 맞는 인증을 진행해주세요
+                {% endif %}
+            </p>
+        </div>
+
+        <!-- 현재 인증 상태 -->
+        <div class="verification-status status-{{ member.verification_status }}">
+            {% if member.verification_status == 'verified' %}
+                <span class="status-icon">✅</span>
+                <span>{{ i18n.account.verification.status_verified|default('인증 완료') }}</span>
+            {% elif member.verification_status == 'submitted' %}
+                <span class="status-icon">⏳</span>
+                <span>{{ i18n.account.verification.status_submitted|default('검토 중') }}</span>
+            {% elif member.verification_status == 'rejected' %}
+                <span class="status-icon">❌</span>
+                <span>{{ i18n.account.verification.status_rejected|default('인증 거부 - 다시 시도해주세요') }}</span>
+            {% else %}
+                <span class="status-icon">📋</span>
+                <span>{{ i18n.account.verification.status_pending|default('인증 대기 중') }}</span>
+            {% endif %}
+        </div>
+
+        <!-- Flow-specific content -->
+        {% if member.verification_status != 'verified' %}
+            {% if verification_flow == 'player' %}
+                {% include "verification/_player_flow.html" %}
+            {% elif verification_flow == 'parent' %}
+                {% include "verification/_parent_flow.html" %}
+            {% elif verification_flow == 'coach' %}
+                {% include "verification/_coach_flow.html" %}
+            {% elif verification_flow == 'director' %}
+                {% include "verification/_director_flow.html" %}
+            {% else %}
+                {% include "verification/_general_flow.html" %}
+            {% endif %}
+        {% endif %}
+    </div>
+</div>
+
+<style>
+.verification-container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+.verification-card {
+    background: var(--bg-card);
+    border-radius: 16px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.1);
+    padding: 2rem;
+}
+
+.verification-header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.verification-header h1 {
+    font-size: 1.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.verification-header p {
+    color: var(--text-secondary);
+}
+
+.verification-status {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 2rem;
+    font-weight: 500;
+}
+
+.verification-status.status-verified { background: rgba(16, 185, 129, 0.15); color: var(--success-color); }
+.verification-status.status-submitted { background: rgba(245, 158, 11, 0.15); color: var(--warning-color); }
+.verification-status.status-rejected { background: rgba(239, 68, 68, 0.15); color: var(--danger-color); }
+.verification-status.status-pending { background: rgba(255, 255, 255, 0.08); color: var(--text-secondary); }
+.status-icon { font-size: 1.25rem; }
+
+.verification-methods h2 { font-size: 1.1rem; margin-bottom: 1rem; }
+.method-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+.method-card { background: var(--bg-tertiary); border: 2px solid transparent; border-radius: 12px; padding: 1.5rem; text-align: center; transition: all 0.2s; cursor: pointer; }
+.method-card:hover { border-color: var(--accent-primary); }
+.method-card.selected { border-color: var(--accent-primary); background: rgba(201, 48, 44, 0.08); }
+.method-icon { font-size: 2.5rem; margin-bottom: 0.75rem; }
+.method-card h3 { font-size: 1rem; margin-bottom: 0.5rem; }
+.method-desc { font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 1rem; line-height: 1.4; }
+.select-btn { padding: 0.5rem 1.5rem; background: var(--accent-primary); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9rem; }
+.select-btn:hover { box-shadow: 0 4px 12px var(--glow-primary); }
+
+.upload-section { margin-top: 2rem; padding-top: 2rem; border-top: 1px solid var(--border-color); }
+.upload-section h3 { margin-bottom: 1rem; }
+.upload-guide { background: rgba(245, 158, 11, 0.08); border-left: 4px solid var(--warning-color); padding: 1rem; margin-bottom: 1rem; border-radius: 0 8px 8px 0; font-size: 0.9rem; line-height: 1.6; }
+.upload-area { border: 2px dashed var(--border-light); border-radius: 12px; padding: 2rem; text-align: center; cursor: pointer; transition: all 0.2s; margin-bottom: 1rem; }
+.upload-area:hover { border-color: var(--accent-primary); background: rgba(255,255,255,0.03); }
+.upload-area.dragover { border-color: var(--accent-primary); background: rgba(59,130,246,0.05); }
+.upload-placeholder { color: var(--text-secondary); }
+.upload-icon { font-size: 3rem; display: block; margin-bottom: 0.5rem; }
+.upload-hint { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.5rem; }
+.upload-btn { width: 100%; padding: 1rem; background: linear-gradient(135deg, var(--accent-primary), #a02320); color: white; border: none; border-radius: 8px; font-size: 1rem; font-weight: 600; cursor: pointer; }
+.upload-btn:disabled { background: rgba(255,255,255,0.1); color: var(--text-muted); cursor: not-allowed; }
+.upload-result { margin-top: 1rem; padding: 1rem; border-radius: 8px; }
+.upload-result.success { background: rgba(16, 185, 129, 0.15); color: var(--success-color); }
+.upload-result.error { background: rgba(239, 68, 68, 0.15); color: var(--danger-color); }
+
+.verification-history { margin-top: 2rem; padding-top: 2rem; border-top: 1px solid var(--border-color); }
+.verification-history h2 { font-size: 1.1rem; margin-bottom: 1rem; }
+.history-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.history-table th, .history-table td { padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border-color); }
+.history-table th { background: var(--bg-tertiary); font-weight: 600; color: var(--text-primary); }
+
+.badge { display: inline-block; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 500; }
+.badge-success { background: rgba(16, 185, 129, 0.15); color: var(--success-color); }
+.badge-danger { background: rgba(239, 68, 68, 0.15); color: var(--danger-color); }
+.badge-warning { background: rgba(245, 158, 11, 0.15); color: var(--warning-color); }
+.badge-secondary { background: rgba(255, 255, 255, 0.08); color: var(--text-secondary); }
+
+.rejection-reason { background: rgba(239, 68, 68, 0.05); }
+.rejection-reason td { font-size: 0.85rem; color: var(--danger-color); padding-left: 1.5rem; }
+</style>
+{% endblock %}

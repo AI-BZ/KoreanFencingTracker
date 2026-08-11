@@ -3,7 +3,6 @@ AI 기반 자연어 검색 서비스
 선수 라이벌, 전적, 통계 등을 자연어로 질문할 수 있음
 """
 import re
-import json
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
 from loguru import logger
@@ -295,7 +294,7 @@ class FencingAIChat:
         for r in ranks:
             try:
                 int_ranks.append(int(r))
-            except:
+            except (ValueError, TypeError):
                 pass
 
         best_rank = min(int_ranks) if int_ranks else "-"

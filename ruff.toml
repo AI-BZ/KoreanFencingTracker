@@ -1,0 +1,17 @@
+# Ruff configuration for FencingMind
+# Baseline established 2026-07-10. Safe autofixes applied; remaining
+# lint categories (F841, E402, F601, E722) tracked for manual review.
+line-length = 120
+target-version = "py313"
+
+[lint]
+# Start pragmatic: surface real-bug categories, defer stylistic noise.
+select = ["E", "F", "W"]
+ignore = [
+    "E501",  # line too long (long Korean strings/URLs; revisit later)
+    "E402",  # module import not at top (conditional imports in server.py)
+]
+
+[lint.per-file-ignores]
+"__init__.py" = ["F401"]  # re-exports
+"tests/**" = ["F841", "F811"]

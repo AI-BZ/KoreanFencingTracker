@@ -9,8 +9,8 @@ import asyncio
 import json
 import re
 import random
-from datetime import datetime, date
-from typing import List, Dict, Any, Optional, Tuple
+from datetime import datetime
+from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, asdict, field
 from playwright.async_api import async_playwright, Browser, Page
 from loguru import logger

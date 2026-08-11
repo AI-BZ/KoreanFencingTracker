@@ -10,11 +10,8 @@ Detects language from:
 
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import RedirectResponse
-from typing import Optional
-import re
 
-from .manager import SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE, i18n, get_translator
+from .manager import SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE, LANGUAGE_NAMES, i18n, get_translator
 
 
 def get_language_from_request(request: Request) -> str:
@@ -126,6 +123,7 @@ class LanguageMiddleware(BaseHTTPMiddleware):
             value=lang,
             max_age=365 * 24 * 60 * 60,  # 1 year
             httponly=False,
+            secure=True,
             samesite='lax'
         )
 
@@ -148,6 +146,7 @@ def create_language_context(request: Request, lang: str = None) -> dict:
         'lang': lang,
         't': get_translator(lang),
         'supported_langs': SUPPORTED_LANGUAGES,
+        'lang_names': LANGUAGE_NAMES,
         'alternate_urls': get_alternate_urls(request, lang),
         'i18n': i18n.get_for_template(lang),
     }

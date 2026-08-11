@@ -1,0 +1,126 @@
+/* FencingMind Analytics - Custom Styles (Dark Theme Compatible) */
+
+/* Drop zone interactions */
+.drop-zone.drag-over {
+    border-color: var(--accent-primary, #c9302c);
+    background-color: rgba(201, 48, 44, 0.1);
+    transform: scale(1.01);
+}
+
+.drop-zone.drag-over svg {
+    color: var(--accent-primary, #c9302c);
+}
+
+/* Upload progress animation */
+@keyframes progress-stripe {
+    from { background-position: 1rem 0; }
+    to { background-position: 0 0; }
+}
+
+.progress-animated {
+    background-image: linear-gradient(
+        45deg,
+        rgba(255,255,255,.15) 25%,
+        transparent 25%,
+        transparent 50%,
+        rgba(255,255,255,.15) 50%,
+        rgba(255,255,255,.15) 75%,
+        transparent 75%,
+        transparent
+    );
+    background-size: 1rem 1rem;
+    animation: progress-stripe 0.5s linear infinite;
+}
+
+/* Print-friendly styles */
+@media print {
+    nav, footer, #share-btn, .no-print, .parallax-bg, .parallax-overlay, .dark-navbar, .dark-footer {
+        display: none !important;
+    }
+
+    body {
+        background: white !important;
+        color: #111 !important;
+        font-size: 11pt;
+    }
+
+    main {
+        padding: 0 !important;
+    }
+
+    .max-w-\[1600px\] {
+        flex-direction: column !important;
+        max-width: 100% !important;
+        padding: 0 !important;
+    }
+
+    .report-left-panel {
+        position: static !important;
+        width: 100% !important;
+        max-height: none !important;
+        overflow-y: visible !important;
+    }
+
+    .shadow-sm, .glass-card {
+        box-shadow: none !important;
+        background: white !important;
+        border: 1px solid #ddd !important;
+    }
+
+    .rounded-2xl {
+        border-radius: 0.5rem !important;
+    }
+
+    /* Force background colors to print */
+    .bg-blue-50\/50, .bg-red-50\/50 {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    /* Page breaks */
+    .mb-8 {
+        page-break-inside: avoid;
+    }
+
+    /* Chart sizing for print */
+    canvas {
+        max-height: 250px !important;
+    }
+}
+
+/* Status badge pulse animation */
+@keyframes status-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+
+.animate-pulse {
+    animation: status-pulse 1.5s ease-in-out infinite;
+}
+
+/* Table row hover transition */
+tbody tr {
+    transition: background-color 0.15s ease;
+}
+
+/* Chart container responsive */
+canvas {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+/* Score display responsive */
+@media (max-width: 640px) {
+    .text-5xl {
+        font-size: 2.5rem;
+    }
+}
+
+/* Left panel scrollbar */
+.report-left-panel::-webkit-scrollbar {
+    width: 4px;
+}
+.report-left-panel::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 2px;
+}

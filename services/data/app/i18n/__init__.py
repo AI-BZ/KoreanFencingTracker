@@ -21,6 +21,9 @@ from .middleware import (
     LanguageMiddleware,
     create_language_context,
 )
+from .auto_translate import make_auto_translator, get_js_translations
+from .event_translator import translate_event_name
+from .competition_names import translate_competition_name, translate_venue_name, get_js_competition_names
 
 __all__ = [
     'TranslationManager',
@@ -32,4 +35,10 @@ __all__ = [
     'get_language_from_request',
     'LanguageMiddleware',
     'create_language_context',
+    'make_auto_translator',
+    'get_js_translations',
+    'translate_event_name',
+    'translate_competition_name',
+    'translate_venue_name',
+    'get_js_competition_names',
 ]

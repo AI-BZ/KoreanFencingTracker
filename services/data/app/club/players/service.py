@@ -6,9 +6,25 @@ Player Data Service
 """
 
 from typing import Optional, List, Dict, Any
-from datetime import date, datetime
+from datetime import datetime
+import os
 import httpx
-from database.supabase_client import get_supabase_client
+from supabase import create_client, Client
+
+
+# Supabase 클라이언트 싱글톤
+_supabase_client: Optional[Client] = None
+
+
+def get_supabase_client() -> Optional[Client]:
+    """Supabase 클라이언트 싱글톤 (로컬 버전)"""
+    global _supabase_client
+    if _supabase_client is None:
+        url = os.getenv("SUPABASE_URL")
+        key = os.getenv("SUPABASE_KEY")
+        if url and key:
+            _supabase_client = create_client(url, key)
+    return _supabase_client
 
 
 class PlayerService:
@@ -129,6 +145,15 @@ class PlayerService:
     # =============================================
     # 선수 프로필 및 통계
     # =============================================
+
+    async def get_player_name(self, player_id: int) -> Optional[str]:
+        """선수 이름 조회"""
+        response = self.supabase.table("players").select(
+            "name"
+        ).eq("id", player_id).single().execute()
+        if response.data:
+            return response.data.get("name")
+        return None
 
     async def get_player_profile(self, player_id: int) -> Optional[Dict[str, Any]]:
         """
@@ -675,7 +700,7 @@ class PlayerService:
             try:
                 async with httpx.AsyncClient() as client:
                     response = await client.get(
-                        f"http://localhost:71/api/players/search",
+                        "http://localhost:71/api/players/search",
                         params={"q": player_name},
                         timeout=5.0
                     )
@@ -701,7 +726,7 @@ class PlayerService:
                                     "recent_result": recent_result
                                 }
                                 break
-            except Exception as e:
+            except Exception:
                 # 실패해도 무시하고 기본값 사용
                 pass
 
@@ -764,7 +789,7 @@ class PlayerService:
                     if comp_count > 0:
                         return f"대회 {comp_count}회 출전"
 
-        except Exception:
+        except (KeyError, TypeError, AttributeError):
             pass
 
         return None
@@ -788,7 +813,7 @@ class PlayerService:
             # 메인 API에서 클럽 소속 선수 검색 (현재 + 과거 소속 모두 포함)
             async with httpx.AsyncClient() as client:
                 response = await client.get(
-                    f"http://localhost:71/api/players/search",
+                    "http://localhost:71/api/players/search",
                     params={"q": organization_name, "limit": 200, "include_history": "true"},
                     timeout=10.0
                 )
@@ -989,7 +1014,7 @@ class PlayerService:
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.get(
-                    f"http://localhost:71/api/players/search",
+                    "http://localhost:71/api/players/search",
                     params={"q": player_name},
                     timeout=5.0
                 )
@@ -1031,7 +1056,7 @@ class PlayerService:
                         "disambiguation_warning": result.get("disambiguation_warning")
                     }
 
-        except Exception:
+        except (KeyError, TypeError, AttributeError):
             pass
 
         return {}
@@ -1163,7 +1188,7 @@ class PlayerService:
 
                 return "일반"
 
-        except Exception:
+        except (KeyError, TypeError, AttributeError):
             return "일반"
 
     async def add_player_to_roster(
@@ -1191,8 +1216,8 @@ class PlayerService:
                         player_name = data.get("name")
                         weapons = data.get("weapons", [])
                         weapon = weapons[0] if weapons else None
-            except Exception:
-                return {"success": False, "error": "선수 정보 조회 실패"}
+            except (httpx.HTTPError, httpx.TimeoutException, KeyError, TypeError) as e:
+                return {"success": False, "error": f"선수 정보 조회 실패: {type(e).__name__}"}
 
         if not player_name:
             return {"success": False, "error": "선수 이름이 필요합니다"}

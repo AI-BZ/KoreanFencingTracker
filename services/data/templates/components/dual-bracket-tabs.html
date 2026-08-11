@@ -1,0 +1,247 @@
+{#
+  Dual DE Tab Navigation Component
+  Usage: {% include 'components/dual-bracket-tabs.html' %}
+  Requires: dual_bracket (NormalizedDualDEBracket data from bracket_utils)
+
+  Dual DE Format (국가대표 선발전):
+  - First DE (예선 DE): 128강(64경기) -> 64강(32경기) = 2라운드, 32명 진출자 선발
+  - Second DE (본선 DE): 시드 32명 + First DE 진출자 32명 = 64명
+    -> 64강 -> 32강 -> 16강 -> 8강 -> 준결승 -> 결승
+#}
+
+{% set is_first_de_complete = dual_bracket.status in ['first_de_completed', 'second_de_in_progress', 'completed'] %}
+{% set is_second_de_active = dual_bracket.status in ['second_de_in_progress', 'completed'] %}
+{% set is_completed = dual_bracket.status == 'completed' %}
+
+<div class="dual-de-container" id="dual-de-container" data-status="{{ dual_bracket.status }}">
+
+    <!-- DE Phase Selector Header -->
+    <div class="dual-de-header">
+        <div class="de-phase-toggle" role="tablist" aria-label="DE 단계 선택">
+            <button class="de-phase-btn active"
+                    id="first-de-tab"
+                    data-phase="first"
+                    role="tab"
+                    aria-selected="true"
+                    aria-controls="first-de-panel">
+                <span class="phase-indicator {% if dual_bracket.status == 'first_de_in_progress' %}active{% elif is_first_de_complete %}complete{% endif %}"></span>
+                <span class="phase-label">First DE</span>
+                <span class="phase-sublabel">예선 DE (32명의 면제자가 있는 예선엘리미나시옹디렉트)</span>
+            </button>
+            <button class="de-phase-btn {% if is_second_de_active %}{% else %}{% endif %}"
+                    id="second-de-tab"
+                    data-phase="second"
+                    role="tab"
+                    aria-selected="false"
+                    aria-controls="second-de-panel"
+                    {% if not is_first_de_complete %}disabled aria-disabled="true"{% endif %}>
+                <span class="phase-indicator {% if dual_bracket.status == 'second_de_in_progress' %}active{% elif is_completed %}complete{% endif %}"></span>
+                <span class="phase-label">Second DE</span>
+                <span class="phase-sublabel">본선 DE (64강)</span>
+            </button>
+        </div>
+
+        <!-- Status Badge -->
+        <div class="dual-de-status">
+            {% if dual_bracket.status == 'first_de_in_progress' %}
+            <span class="status-badge in-progress">
+                <span class="status-dot pulse"></span>
+                First DE 진행 중
+            </span>
+            {% elif dual_bracket.status == 'first_de_completed' %}
+            <span class="status-badge waiting">
+                <span class="status-dot"></span>
+                Second DE 대기 중
+            </span>
+            {% elif dual_bracket.status == 'second_de_in_progress' %}
+            <span class="status-badge in-progress">
+                <span class="status-dot pulse"></span>
+                Second DE 진행 중
+            </span>
+            {% elif is_completed %}
+            <span class="status-badge complete">
+                <span class="status-icon">✓</span>
+                대회 종료
+            </span>
+            {% else %}
+            <span class="status-badge pending">
+                <span class="status-icon">○</span>
+                대기 중
+            </span>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Seeded Players Section (Collapsible) -->
+    {% if dual_bracket.seeded_players %}
+    <details class="seeded-players-section" {% if dual_bracket.status == 'first_de_in_progress' %}open{% endif %}>
+        <summary class="seeded-header">
+            <span class="seeded-icon">⭐</span>
+            <span class="seeded-title">Seeded Players</span>
+            <span class="seeded-subtitle">(First DE 면제 - Second DE 직행)</span>
+            <span class="seeded-count">{{ dual_bracket.seeded_players|length }}명</span>
+            <span class="seeded-toggle-icon">▼</span>
+        </summary>
+        <div class="seeded-grid">
+            {% for player in dual_bracket.seeded_players %}
+            <div class="seeded-item" data-player-name="{{ player.name }}">
+                <span class="seeded-rank">[{{ player.seed }}]</span>
+                <a href="/player/{{ player.name|urlencode }}?team={{ player.team|urlencode }}"
+                   class="seeded-name player-link">{{ tr_player(player.name) }}</a>
+                <span class="seeded-team">{{ tr_team(player.team) }}</span>
+                <span class="seeded-badge">SEED</span>
+            </div>
+            {% endfor %}
+        </div>
+    </details>
+    {% endif %}
+
+    <!-- First DE Panel -->
+    <div class="de-phase-panel active"
+         id="first-de-panel"
+         data-phase="first"
+         role="tabpanel"
+         aria-labelledby="first-de-tab">
+        {% if dual_bracket.first_de %}
+
+        <!-- First DE Info Banner -->
+        <div class="de-info-banner first-de">
+            <div class="banner-icon">🏃</div>
+            <div class="banner-content">
+                <div class="banner-title">예선 DE (First DE)</div>
+                <div class="banner-description">
+                    비시드 선수 {{ dual_bracket.first_de_participant_count }}명이 32강 진출을 위해 경쟁합니다.
+                    128강(64경기) → 64강(32경기) 2라운드를 거쳐 32명이 Second DE로 진출합니다.
+                </div>
+            </div>
+        </div>
+
+        <!-- First DE Progress -->
+        {% if dual_bracket.first_de.rounds %}
+        <div class="de-progress-bar">
+            <div class="progress-track">
+                {% for round_name in dual_bracket.first_de.rounds %}
+                {% set round_bouts = dual_bracket.first_de.bouts_by_round.get(round_name, []) %}
+                {% set completed_count = round_bouts|selectattr('is_completed')|list|length %}
+                {% set total_count = round_bouts|length %}
+                {% set is_round_complete = completed_count == total_count and total_count > 0 %}
+                <div class="progress-step {% if is_round_complete %}completed{% elif completed_count > 0 %}current{% endif %}">
+                    <div class="step-marker"></div>
+                    <span class="step-label">{{ round_name }}</span>
+                    <span class="step-count">{{ completed_count }}/{{ total_count }}</span>
+                </div>
+                {% endfor %}
+                <div class="progress-step final {% if is_first_de_complete %}completed{% endif %}">
+                    <div class="step-marker final-marker"></div>
+                    <span class="step-label">→ Second DE</span>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Include Standard Bracket Component for First DE -->
+        {% set bracket = dual_bracket.first_de %}
+        {% set bracket_id = "first-de-bracket" %}
+        {% set bracket_phase = "first_de" %}
+        {% include 'components/bracket.html' %}
+
+        <!-- First DE Qualifiers List -->
+        {% if dual_bracket.first_de_qualifiers and is_first_de_complete %}
+        <div class="qualifiers-section">
+            <div class="qualifiers-header">
+                <span class="qualifiers-icon">✅</span>
+                <span class="qualifiers-title">Second DE 진출자</span>
+                <span class="qualifiers-count">
+                    {{ dual_bracket.first_de_qualifiers|length }}명 진출
+                </span>
+            </div>
+            <div class="qualifiers-grid">
+                {% for player in dual_bracket.first_de_qualifiers %}
+                <div class="qualifier-item" data-player-name="{{ player.name }}">
+                    <span class="qualifier-seed">[{{ player.seed }}]</span>
+                    <a href="/player/{{ player.name|urlencode }}?team={{ player.team|urlencode }}"
+                       class="qualifier-name player-link">{{ tr_player(player.name) }}</a>
+                    <span class="qualifier-team">{{ tr_team(player.team) }}</span>
+                    <span class="qualifier-badge">진출</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        {% else %}
+        <div class="bracket-empty">
+            <div class="empty-icon">📋</div>
+            <p>First DE 데이터가 없습니다</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Second DE Panel -->
+    <div class="de-phase-panel"
+         id="second-de-panel"
+         data-phase="second"
+         role="tabpanel"
+         aria-labelledby="second-de-tab"
+         hidden>
+        {% if dual_bracket.second_de %}
+
+        <!-- Second DE Info Banner -->
+        <div class="de-info-banner second-de">
+            <div class="banner-icon">🏆</div>
+            <div class="banner-content">
+                <div class="banner-title">본선 DE (Second DE)</div>
+                <div class="banner-description">
+                    시드 선수 {{ dual_bracket.seeded_count }}명 + First DE 진출자 {{ dual_bracket.first_de_qualifiers|length }}명
+                    = 총 {{ dual_bracket.second_de.participant_count }}명이 최종 순위를 가립니다.
+                </div>
+            </div>
+        </div>
+
+        <!-- Second DE Participant Sources -->
+        <div class="second-de-sources">
+            <div class="source-group seeded">
+                <span class="source-icon">⭐</span>
+                <span class="source-label">Seeded Players</span>
+                <span class="source-count">{{ dual_bracket.seeded_count }}명</span>
+            </div>
+            <span class="source-connector">+</span>
+            <div class="source-group qualifiers">
+                <span class="source-icon">✅</span>
+                <span class="source-label">First DE 진출자</span>
+                <span class="source-count">{{ dual_bracket.first_de_qualifiers|length }}명</span>
+            </div>
+            <span class="source-connector">=</span>
+            <div class="source-group total">
+                <span class="source-icon">👥</span>
+                <span class="source-label">Total</span>
+                <span class="source-count">{{ dual_bracket.second_de.participant_count }}명</span>
+            </div>
+        </div>
+
+        <!-- Include Standard Bracket Component for Second DE -->
+        {% set bracket = dual_bracket.second_de %}
+        {% set bracket_id = "second-de-bracket" %}
+        {% set bracket_phase = "second_de" %}
+        {% include 'components/bracket.html' %}
+
+        {% else %}
+        <div class="bracket-empty">
+            {% if not is_first_de_complete %}
+            <div class="waiting-notice">
+                <span class="waiting-icon">⏳</span>
+                <p>First DE가 완료되면 Second DE가 표시됩니다</p>
+                <p class="waiting-sublabel">현재 First DE 진행 중</p>
+            </div>
+            {% else %}
+            <div class="empty-icon">📋</div>
+            <p>Second DE 데이터가 없습니다</p>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+
+</div>
+
+<!-- Dual DE JavaScript Controller -->
+<script src="{{ url_for('static', path='js/dual-bracket.js') }}" defer></script>

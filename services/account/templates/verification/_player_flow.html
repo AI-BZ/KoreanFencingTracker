@@ -1,0 +1,176 @@
+<!-- Player Verification Flow: 이미지 인증 + 선수 Claim -->
+<div class="verification-methods">
+    <h2>{{ i18n.account.verification.select_method|default('인증 방법 선택') }}</h2>
+
+    <div class="method-cards">
+        {% for vt in verification_types %}
+        <div class="method-card" data-type="{{ vt.value }}">
+            <div class="method-icon">
+                {% if vt.value == 'association_card' %}
+                📇
+                {% elif vt.value == 'mask_photo' %}
+                🎭
+                {% else %}
+                👕
+                {% endif %}
+            </div>
+            <h3>{{ vt.label }}</h3>
+            <p class="method-desc">
+                {% if vt.value == 'association_card' %}
+                {{ i18n.account.verification.desc_association_card|default('대한펜싱협회 등록증을 촬영해주세요') }}
+                {% elif vt.value == 'mask_photo' %}
+                {{ i18n.account.verification.desc_mask_photo|default('펜싱 마스크와 함께<br>이름/날짜를 적은 종이를 촬영') }}
+                {% else %}
+                {{ i18n.account.verification.desc_uniform_photo|default('펜싱 도복과 함께<br>이름/날짜를 적은 종이를 촬영') }}
+                {% endif %}
+            </p>
+            <button class="select-btn" onclick="selectMethod('{{ vt.value }}')">
+                {{ i18n.account.verification.select_btn|default('선택') }}
+            </button>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Upload form -->
+    <div class="upload-section" id="uploadSection" style="display: none;">
+        <h3 id="uploadTitle">{{ i18n.account.verification.upload_title|default('이미지 업로드') }}</h3>
+        <div class="upload-guide" id="uploadGuide"></div>
+        <form id="uploadForm" enctype="multipart/form-data">
+            <input type="hidden" name="verification_type" id="verificationType">
+            <div class="upload-area" id="uploadArea">
+                <input type="file" id="fileInput" name="file" accept="image/*" style="display: none;">
+                <div class="upload-placeholder" id="uploadPlaceholder">
+                    <span class="upload-icon">📷</span>
+                    <p>{{ i18n.account.verification.upload_placeholder|default('클릭하거나 이미지를 드래그하세요') }}</p>
+                    <p class="upload-hint">{{ i18n.account.verification.upload_hint|default('JPG, PNG, WEBP (최대 10MB)') }}</p>
+                </div>
+                <img id="previewImage" style="display: none; max-width: 100%; border-radius: 8px;">
+            </div>
+            <button type="submit" class="upload-btn" id="uploadBtn" disabled>
+                {{ i18n.account.verification.upload_btn|default('인증 요청하기') }}
+            </button>
+        </form>
+        <div class="upload-result" id="uploadResult" style="display: none;"></div>
+    </div>
+</div>
+
+<!-- Verification history -->
+{% if verifications %}
+<div class="verification-history">
+    <h2>{{ i18n.account.verification.history_title|default('인증 내역') }}</h2>
+    <table class="history-table">
+        <thead>
+            <tr>
+                <th>{{ i18n.account.verification.col_type|default('유형') }}</th>
+                <th>{{ i18n.account.verification.col_status|default('상태') }}</th>
+                <th>{{ i18n.account.verification.col_confidence|default('신뢰도') }}</th>
+                <th>{{ i18n.account.verification.col_extracted_name|default('추출된 이름') }}</th>
+                <th>{{ i18n.account.verification.col_date|default('날짜') }}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for v in verifications %}
+            <tr class="status-row-{{ v.status }}">
+                <td>
+                    {% if v.verification_type == 'association_card' %}협회 등록증
+                    {% elif v.verification_type == 'mask_photo' %}마스크 사진
+                    {% else %}도복 사진{% endif %}
+                </td>
+                <td>
+                    {% if v.status == 'approved' %}
+                    <span class="badge badge-success">승인</span>
+                    {% elif v.status == 'rejected' %}
+                    <span class="badge badge-danger">거부</span>
+                    {% elif v.status == 'processing' %}
+                    <span class="badge badge-warning">처리중</span>
+                    {% else %}
+                    <span class="badge badge-secondary">대기</span>
+                    {% endif %}
+                </td>
+                <td>{{ (v.gemini_confidence * 100)|round(1) if v.gemini_confidence else '-' }}%</td>
+                <td>{{ v.extracted_name or '-' }}</td>
+                <td>{{ v.created_at[:10] if v.created_at else '-' }}</td>
+            </tr>
+            {% if v.rejection_reason %}
+            <tr class="rejection-reason">
+                <td colspan="5">거부 사유: {{ v.rejection_reason }}</td>
+            </tr>
+            {% endif %}
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<script>
+const guides = {
+    'association_card': '{{ i18n.account.verification.guide_association_card|default("대한펜싱협회 등록증을 촬영해주세요. 이름, 등록번호, 소속이 보이도록 촬영하세요.") }}',
+    'mask_photo': '{{ i18n.account.verification.guide_mask_photo|default("펜싱 마스크와 함께 <strong>오늘 날짜</strong>와 <strong>본인 이름</strong>을 적은 종이를 들고 촬영하세요.") }}',
+    'uniform_photo': '{{ i18n.account.verification.guide_uniform_photo|default("펜싱 도복과 함께 <strong>오늘 날짜</strong>와 <strong>본인 이름</strong>을 적은 종이를 들고 촬영하세요.") }}'
+};
+
+function selectMethod(type) {
+    document.querySelectorAll('.method-card').forEach(card => card.classList.remove('selected'));
+    document.querySelector(`[data-type="${type}"]`).classList.add('selected');
+    document.getElementById('uploadSection').style.display = 'block';
+    document.getElementById('verificationType').value = type;
+    document.getElementById('uploadGuide').innerHTML = guides[type];
+    document.getElementById('previewImage').style.display = 'none';
+    document.getElementById('uploadPlaceholder').style.display = 'block';
+    document.getElementById('fileInput').value = '';
+    document.getElementById('uploadBtn').disabled = true;
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const uploadArea = document.getElementById('uploadArea');
+    const fileInput = document.getElementById('fileInput');
+    const previewImage = document.getElementById('previewImage');
+    const placeholder = document.getElementById('uploadPlaceholder');
+    const uploadBtn = document.getElementById('uploadBtn');
+    const uploadForm = document.getElementById('uploadForm');
+    const uploadResult = document.getElementById('uploadResult');
+
+    if (!uploadArea) return;
+
+    uploadArea.addEventListener('click', () => fileInput.click());
+    uploadArea.addEventListener('dragover', (e) => { e.preventDefault(); uploadArea.classList.add('dragover'); });
+    uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+    uploadArea.addEventListener('drop', (e) => {
+        e.preventDefault(); uploadArea.classList.remove('dragover');
+        if (e.dataTransfer.files.length) { fileInput.files = e.dataTransfer.files; showPreview(e.dataTransfer.files[0]); }
+    });
+    fileInput.addEventListener('change', (e) => { if (e.target.files.length) showPreview(e.target.files[0]); });
+
+    function showPreview(file) {
+        const reader = new FileReader();
+        reader.onload = (e) => { previewImage.src = e.target.result; previewImage.style.display = 'block'; placeholder.style.display = 'none'; uploadBtn.disabled = false; };
+        reader.readAsDataURL(file);
+    }
+
+    uploadForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        uploadBtn.disabled = true;
+        uploadBtn.textContent = '처리 중...';
+        const formData = new FormData(uploadForm);
+        try {
+            const response = await fetch('/account/verification/upload', { method: 'POST', body: formData });
+            const result = await response.json();
+            uploadResult.style.display = 'block';
+            if (result.success) {
+                uploadResult.className = 'upload-result success';
+                uploadResult.innerHTML = `<strong>${result.message}</strong>`;
+                if (result.status === 'approved') setTimeout(() => location.reload(), 2000);
+            } else {
+                uploadResult.className = 'upload-result error';
+                uploadResult.textContent = result.error || '오류가 발생했습니다';
+            }
+        } catch (error) {
+            uploadResult.style.display = 'block';
+            uploadResult.className = 'upload-result error';
+            uploadResult.textContent = '네트워크 오류가 발생했습니다';
+        }
+        uploadBtn.disabled = false;
+        uploadBtn.textContent = '인증 요청하기';
+    });
+});
+</script>

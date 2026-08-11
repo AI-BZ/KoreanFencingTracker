@@ -24,7 +24,7 @@
     background: var(--fl-bg-primary);
     min-height: 100vh;
     padding: 2rem;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: var(--fm-font-primary, 'Pretendard Variable', 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif);
 }
 
 /* Header */
@@ -145,21 +145,20 @@
     margin-top: 0.25rem;
 }
 
-/* Insight Cards */
+/* Insight Cards — severity reads from the surface tint, not a side rule */
 .fl-insight-card {
-    background: var(--fl-bg-secondary);
+    background: var(--fl-accent-green-dim);
     border-radius: 12px;
     padding: 1rem;
     margin-top: 1rem;
-    border-left: 3px solid var(--fl-accent-green);
 }
 
 .fl-insight-card.warning {
-    border-left-color: var(--fl-accent-yellow);
+    background: rgba(255, 204, 0, 0.12);
 }
 
 .fl-insight-card.danger {
-    border-left-color: var(--fl-accent-red);
+    background: rgba(255, 68, 102, 0.12);
 }
 
 .fl-insight-title {
@@ -500,7 +499,6 @@
 .fl-bar-fill {
     height: 100%;
     border-radius: 4px;
-    transition: width 0.5s ease;
 }
 
 .fl-comparison-rate {
@@ -698,4 +696,398 @@
     .fl-comparison-rate {
         font-size: 1rem;
     }
+}
+
+/* ========================================
+   Date Range Slider - Video Editor Style
+   ======================================== */
+
+.date-range-filter {
+    background: rgba(26, 26, 37, 0.75);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+.range-slider-container {
+    max-width: 100%;
+    padding: 0 8px;
+}
+
+/* Year labels above the slider */
+.range-slider-labels {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    padding: 0 6px;
+}
+
+.year-label {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.6);
+    transition: color 0.2s ease;
+}
+
+.year-label.in-range {
+    color: #00ff88;
+    font-weight: 600;
+    text-shadow: 0 0 8px rgba(0, 255, 136, 0.5);
+}
+
+/* Track - Video timeline style */
+.range-slider-track {
+    position: relative;
+    height: 8px;
+    background: rgba(17, 17, 24, 0.8);
+    border-radius: 4px;
+    cursor: pointer;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+/* Selected range - highlighted area */
+.range-slider-selected {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    background: linear-gradient(90deg, #00ff88, #00d4ff);
+    border-radius: 4px;
+    pointer-events: none;
+}
+
+/* Handles - draggable endpoints */
+.range-slider-handle {
+    position: absolute;
+    top: 50%;
+    width: 16px;
+    height: 24px;
+    background: #1a1a24;
+    border: 2px solid #00ff88;
+    border-radius: 4px;
+    transform: translate(-50%, -50%);
+    cursor: ew-resize;
+    z-index: 10;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.range-slider-handle:hover {
+    border-color: #00d4ff;
+    box-shadow: 0 0 8px rgba(0, 212, 255, 0.5);
+}
+
+.range-slider-handle:active {
+    border-color: #00d4ff;
+    box-shadow: 0 0 12px rgba(0, 212, 255, 0.7);
+}
+
+/* Handle inner grip lines (video editor style) */
+.range-slider-handle::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 4px;
+    height: 12px;
+    background: repeating-linear-gradient(
+        to bottom,
+        #00ff88 0px,
+        #00ff88 2px,
+        transparent 2px,
+        transparent 4px
+    );
+}
+
+/* Value display and buttons */
+.range-slider-values {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 12px;
+    font-size: 0.85rem;
+}
+
+.range-value-start,
+.range-value-end {
+    font-weight: 600;
+    color: #00ff88;
+    min-width: 40px;
+    text-align: center;
+}
+
+.range-value-separator {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.range-apply-btn,
+.range-reset-btn {
+    padding: 6px 14px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: none;
+}
+
+.range-apply-btn {
+    background: #00ff88;
+    color: #0a0a0f;
+}
+
+.range-apply-btn:hover {
+    background: #00d4ff;
+    box-shadow: 0 0 8px rgba(0, 212, 255, 0.5);
+}
+
+.range-reset-btn {
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.range-reset-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+/* Mobile responsive */
+@media (max-width: 480px) {
+    .range-slider-handle {
+        width: 20px;
+        height: 28px;
+    }
+
+    .range-slider-labels {
+        font-size: 0.6rem;
+    }
+
+    .range-slider-values {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+}
+
+/* ==================== LIGHT THEME (Toss-style) ==================== */
+[data-theme="light"] {
+    --fl-bg-primary: #ffffff;
+    --fl-bg-secondary: #f5f5f7;
+    --fl-bg-card: #ffffff;
+    --fl-bg-card-hover: #f9f9fb;
+    --fl-text-primary: #191f28;
+    --fl-text-secondary: #4e5968;
+    --fl-text-muted: #8b95a1;
+    --fl-accent-green: #059669;
+    --fl-accent-green-dim: rgba(5, 150, 105, 0.08);
+    --fl-accent-blue: #1e3a8a;
+    --fl-accent-blue-dim: rgba(30, 58, 138, 0.08);
+    --fl-accent-red: #c9302c;
+    --fl-accent-yellow: #d97706;
+    --fl-border: #e5e8eb;
+    --fl-glow-green: none;
+    --fl-glow-blue: none;
+}
+
+[data-theme="light"] .fencinglab-container {
+    background: #ffffff;
+}
+
+[data-theme="light"] .fl-player-card {
+    background: #ffffff;
+    border-color: #e5e8eb;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+}
+
+[data-theme="light"] .fl-player-card:hover {
+    background: #f9f9fb;
+    border-color: #059669;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+}
+
+[data-theme="light"] .fl-stat-item {
+    background: #f5f5f7;
+}
+
+[data-theme="light"] .fl-stat-value {
+    text-shadow: none;
+}
+
+[data-theme="light"] .fl-insight-card {
+    background: #f5f5f7;
+}
+
+[data-theme="light"] .fl-history-container {
+    background: #ffffff;
+    border: 1px solid #e5e8eb;
+}
+
+[data-theme="light"] .fl-badge {
+    border-color: #e5e8eb;
+}
+
+/* Header & text */
+[data-theme="light"] .fl-header {
+    color: #191f28;
+}
+
+[data-theme="light"] .fl-logo {
+    color: #191f28;
+}
+
+[data-theme="light"] .fl-logo span {
+    color: #059669;
+    text-shadow: none;
+}
+
+[data-theme="light"] .fl-subtitle {
+    color: #4e5968;
+}
+
+/* Text utility classes */
+[data-theme="light"] .fl-text-primary {
+    color: #191f28 !important;
+}
+
+[data-theme="light"] .fl-text-secondary {
+    color: #4e5968 !important;
+}
+
+[data-theme="light"] .fl-text-muted {
+    color: #8b95a1 !important;
+}
+
+/* Player info */
+[data-theme="light"] .fl-player-name {
+    color: #191f28;
+}
+
+[data-theme="light"] .fl-player-team {
+    color: #4e5968;
+}
+
+[data-theme="light"] .fl-player-avatar {
+    background: linear-gradient(135deg, #059669, #1e3a8a);
+}
+
+/* Stats */
+[data-theme="light"] .fl-stat-value {
+    color: #191f28;
+    text-shadow: none;
+}
+
+[data-theme="light"] .fl-stat-label {
+    color: #8b95a1;
+}
+
+/* Section titles */
+[data-theme="light"] .fl-section-title {
+    color: #191f28;
+}
+
+/* Bars */
+[data-theme="light"] .fl-percent-bar {
+    background: #f0f0f5;
+}
+
+[data-theme="light"] .fl-bar-track {
+    background: #f0f0f5;
+}
+
+[data-theme="light"] .fl-bar-label {
+    color: #4e5968;
+}
+
+[data-theme="light"] .fl-bar-value {
+    color: #191f28;
+}
+
+/* Insight card extra */
+[data-theme="light"] .fl-insight-card h4 {
+    color: #191f28;
+}
+
+[data-theme="light"] .fl-insight-card p {
+    color: #4e5968;
+}
+
+/* Chart container */
+[data-theme="light"] .fl-chart-container {
+    background: #ffffff;
+    border: 1px solid #e5e8eb;
+    border-radius: 12px;
+}
+
+/* CTA link */
+[data-theme="light"] .fl-cta-link,
+[data-theme="light"] .fl-view-link {
+    color: #c9302c;
+}
+
+[data-theme="light"] .fl-cta-link:hover,
+[data-theme="light"] .fl-view-link:hover {
+    color: #a02320;
+}
+
+/* Demo section (landing page) */
+[data-theme="light"] .fl-demo-title h2 {
+    color: #191f28;
+}
+
+[data-theme="light"] .fl-demo-title h2 span {
+    color: #059669;
+}
+
+[data-theme="light"] .fl-demo-title p {
+    color: #4e5968;
+}
+
+[data-theme="light"] .fl-demo-link {
+    background: #c9302c;
+    color: #ffffff;
+}
+
+[data-theme="light"] .fl-demo-link:hover {
+    background: #a02320;
+    box-shadow: 0 4px 12px rgba(201, 48, 44, 0.3);
+}
+
+[data-theme="light"] .fl-demo-card {
+    background: #ffffff;
+    border-color: #e5e8eb;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+[data-theme="light"] .fl-demo-card:hover {
+    border-color: #059669;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+}
+
+[data-theme="light"] .fl-demo-stats {
+    background: #f5f5f7;
+}
+
+[data-theme="light"] .fl-demo-stats .fl-stat .value {
+    color: #191f28;
+}
+
+[data-theme="light"] .fl-demo-stats .fl-stat .value.green {
+    color: #059669;
+}
+
+[data-theme="light"] .fl-demo-stats .fl-stat .label {
+    color: #8b95a1;
+}
+
+[data-theme="light"] .fl-demo-badge {
+    background: #f5f5f7;
+    color: #4e5968;
+}
+
+[data-theme="light"] .fl-demo-badge.strong {
+    background: rgba(5, 150, 105, 0.08);
+    color: #059669;
 }

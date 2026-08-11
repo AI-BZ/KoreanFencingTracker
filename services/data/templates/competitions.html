@@ -1,0 +1,1006 @@
+{% extends "base.html" %}
+
+{% block title %}{{ i18n.common.nav.competitions|default('대회') }} - {{ i18n.common.site.title|default('Korean Fencing Tracker') }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .page-header {
+        background: transparent !important;
+        border: none !important;
+        color: white;
+        padding: 3rem 0 1.5rem;
+        text-align: center;
+    }
+    .page-header h1 {
+        font-size: 2.2rem;
+        margin-bottom: 0.5rem;
+    }
+    .page-header p {
+        opacity: 0.7;
+        font-size: 1rem;
+    }
+
+    /* NOW 배너 - 진행 중인 대회 */
+    .live-competitions {
+        background: linear-gradient(135deg, #c9302c 0%, #9d2420 100%);
+        padding: 1rem 0;
+        margin-bottom: 0;
+    }
+    .live-header {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        margin-bottom: 0.8rem;
+    }
+    .live-badge {
+        background: white;
+        color: #c9302c;
+        padding: 0.3rem 0.8rem;
+        border-radius: 20px;
+        font-weight: 700;
+        font-size: 0.85rem;
+        animation: pulse 2s infinite;
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+    }
+    .live-badge::before {
+        content: '';
+        width: 8px;
+        height: 8px;
+        background: #c9302c;
+        border-radius: 50%;
+        animation: blink 1s infinite;
+    }
+    @keyframes pulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+    }
+    @keyframes blink {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.3; }
+    }
+    .live-title {
+        color: white;
+        font-size: 1.1rem;
+        font-weight: 600;
+    }
+    .live-cards {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+    .live-card {
+        background: rgba(255,255,255,0.95);
+        border-radius: 12px;
+        padding: 1rem 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        cursor: pointer;
+        transition: transform 0.2s, box-shadow 0.2s;
+        text-decoration: none;
+        color: inherit;
+        min-width: 280px;
+    }
+    .live-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.2);
+    }
+    .live-card-icon { font-size: 2rem; }
+    .live-card-info h4 { margin: 0 0 0.3rem 0; font-size: 1rem; color: #333; }
+    .live-card-info p { margin: 0; font-size: 0.85rem; color: #666; }
+    .live-card-status { margin-left: auto; text-align: right; }
+    .live-card-status .status {
+        font-size: 0.75rem;
+        padding: 0.2rem 0.5rem;
+        border-radius: 10px;
+        font-weight: 600;
+    }
+    .status-live { background: #d4edda; color: #155724; }
+    .live-card-status .date { font-size: 0.75rem; color: #999; margin-top: 0.2rem; }
+
+    /* UPCOMING 배너 */
+    .upcoming-competitions {
+        background: linear-gradient(135deg, #1e3a8a 0%, #16306e 100%);
+        padding: 1rem 0;
+        margin-bottom: 0;
+    }
+    .upcoming-header {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        margin-bottom: 0.8rem;
+    }
+    .upcoming-badge {
+        background: white;
+        color: #1e3a8a;
+        padding: 0.3rem 0.8rem;
+        border-radius: 20px;
+        font-weight: 700;
+        font-size: 0.85rem;
+    }
+    .upcoming-cards {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+    .upcoming-card {
+        background: rgba(18, 18, 26, 0.95);
+        border-radius: 12px;
+        padding: 0;
+        display: flex;
+        align-items: stretch;
+        cursor: pointer;
+        transition: transform 0.2s, box-shadow 0.2s;
+        text-decoration: none;
+        color: inherit;
+        min-width: 320px;
+        max-width: 450px;
+        overflow: hidden;
+    }
+    .upcoming-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.4);
+    }
+    .upcoming-card-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 56px;
+        background: rgba(96, 165, 250, 0.14);
+        flex-shrink: 0;
+    }
+    .upcoming-card-icon svg {
+        width: 24px;
+        height: 24px;
+        stroke: #93b4f5;
+        stroke-width: 1.5;
+        fill: none;
+    }
+    .upcoming-card-info {
+        flex: 1;
+        padding: 1rem 1.2rem;
+        min-width: 0;
+    }
+    .upcoming-card-info h4 {
+        margin: 0 0 0.3rem 0;
+        font-size: 0.95rem;
+        color: #fff;
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .upcoming-card-info p {
+        margin: 0;
+        font-size: 0.8rem;
+        color: rgba(255, 255, 255, 0.5);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .upcoming-card-status {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 0.8rem 1rem;
+        background: rgba(255, 255, 255, 0.03);
+        min-width: 80px;
+        flex-shrink: 0;
+    }
+    .upcoming-card-status .status {
+        font-family: var(--fm-font-display);
+        font-size: 1.35rem;
+        line-height: 1;
+        font-weight: 700;
+        color: #ff8080;
+        letter-spacing: 0.04em;
+    }
+    .upcoming-card-status .date {
+        font-size: 0.7rem;
+        color: rgba(255, 255, 255, 0.4);
+        margin-top: 0.25rem;
+    }
+
+    /* 필터 & 검색 영역 */
+    .competitions-controls {
+        background: rgba(18, 18, 26, 0.85);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        padding: 1.5rem 2rem;
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        margin: 2rem 0 1.5rem;
+    }
+
+    /* 연도 필터 탭 */
+    .year-tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+    }
+    .year-tab {
+        padding: 0.5rem 1rem;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        background: rgba(18, 18, 26, 0.9);
+        color: rgba(255, 255, 255, 0.8);
+        border-radius: 20px;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-size: 0.9rem;
+    }
+    .year-tab:hover {
+        border-color: #c9302c;
+        color: #c9302c;
+    }
+    .year-tab.active {
+        background: #c9302c;
+        color: white;
+        border-color: #c9302c;
+    }
+
+    /* 대회명 검색 */
+    .comp-search-wrapper {
+        position: relative;
+        max-width: 500px;
+    }
+    .comp-search-input {
+        width: 100%;
+        padding: 0.75rem 1.2rem;
+        font-size: 0.95rem;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 25px;
+        outline: none;
+        transition: border-color 0.2s;
+        box-sizing: border-box;
+        background: rgba(26, 26, 37, 0.9);
+        color: white;
+    }
+    .comp-search-input::placeholder {
+        color: rgba(255, 255, 255, 0.4);
+    }
+    .comp-search-input:focus {
+        border-color: #c9302c;
+        box-shadow: 0 0 10px rgba(201, 48, 44, 0.2);
+    }
+
+    /* 대회 카드 목록 */
+    .comp-cards {
+        display: grid;
+        /* minmax(0, 1fr) caps the track at the container width so the nowrap
+           card title truncates instead of forcing max-content overflow (mobile 390px) */
+        grid-template-columns: minmax(0, 1fr);
+        gap: 0.75rem;
+    }
+    .comp-card {
+        background: rgba(18, 18, 26, 0.85);
+        backdrop-filter: blur(10px);
+        border-radius: 12px;
+        padding: 1.2rem 1.5rem;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        min-width: 0;
+        transition: transform 0.2s, border-color 0.2s;
+        cursor: pointer;
+        text-decoration: none;
+        color: inherit;
+    }
+    .comp-card:hover {
+        transform: translateY(-2px);
+        border-color: #c9302c;
+    }
+    .comp-card-info {
+        flex: 1;
+        min-width: 0;
+    }
+    .comp-card-name {
+        font-weight: 600;
+        font-size: 1.05rem;
+        color: white;
+        margin-bottom: 0.3rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .comp-card-meta {
+        color: rgba(255, 255, 255, 0.5);
+        font-size: 0.85rem;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+    }
+    .comp-card-meta span {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+    }
+    .comp-card-right {
+        text-align: right;
+        flex-shrink: 0;
+        margin-left: 1rem;
+    }
+    .comp-card-date {
+        font-size: 0.9rem;
+        color: rgba(255, 255, 255, 0.7);
+        font-weight: 500;
+    }
+    .comp-card-arrow {
+        color: rgba(255, 255, 255, 0.3);
+        font-size: 1.2rem;
+        margin-top: 0.25rem;
+    }
+
+    /* 결과 헤더 */
+    .results-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+    }
+    .results-header h3 {
+        color: white;
+        margin: 0;
+    }
+    .results-count {
+        color: rgba(255, 255, 255, 0.5);
+        font-size: 0.9rem;
+    }
+
+    /* 페이지네이션 */
+    .pagination {
+        display: flex;
+        justify-content: center;
+        gap: 0.5rem;
+        margin: 2rem 0;
+        flex-wrap: wrap;
+    }
+    .page-btn {
+        padding: 0.5rem 1rem;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        background: rgba(18, 18, 26, 0.9);
+        color: rgba(255, 255, 255, 0.8);
+        border-radius: 8px;
+        cursor: pointer;
+    }
+    .page-btn:hover {
+        border-color: #c9302c;
+        color: #c9302c;
+    }
+    .page-btn.active {
+        background: #c9302c;
+        color: white;
+        border-color: #c9302c;
+    }
+    .page-btn:disabled {
+        opacity: 0.3;
+        cursor: not-allowed;
+    }
+
+    /* 빈 결과 */
+    .empty-state {
+        background: rgba(26, 26, 37, 0.8);
+        border-radius: 12px;
+        padding: 3rem;
+        text-align: center;
+        color: rgba(255, 255, 255, 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .empty-state-icon {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+    }
+    .empty-state h4 {
+        color: white;
+        margin-bottom: 0.5rem;
+    }
+
+    /* 로딩 */
+    .loading {
+        text-align: center;
+        padding: 2rem;
+        color: rgba(255, 255, 255, 0.6);
+    }
+    .loading::after {
+        content: '';
+        display: inline-block;
+        width: 20px;
+        height: 20px;
+        border: 2px solid rgba(255,255,255,0.2);
+        border-top-color: #c9302c;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin-left: 0.5rem;
+        vertical-align: middle;
+    }
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+
+    @media (max-width: 768px) {
+        .page-header h1 { font-size: 1.6rem; }
+        .page-header { padding: 2rem 0 1rem; }
+        .competitions-controls { padding: 1rem; }
+        .comp-cards { gap: 0.6rem; }
+        .comp-card {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.4rem;
+            padding: 0.85rem 1rem;
+        }
+        /* Column flex + align-items:flex-start would size the info block to the
+           nowrap title's max-content; force full width so the title truncates. */
+        .comp-card-info { width: 100%; min-width: 0; }
+        .comp-card-name { font-size: 0.98rem; margin-bottom: 0.2rem; }
+        .comp-card-meta { font-size: 0.78rem; gap: 0.5rem; }
+        /* 날짜와 화살표를 한 행에 둔다. 세로 스택으로 두면 화살표가 혼자
+           한 줄을 차지해 카드가 불필요하게 길어졌다. */
+        .comp-card-right {
+            width: 100%;
+            margin-left: 0;
+            margin-top: 0;
+            text-align: left;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.5rem;
+        }
+        .comp-card-date { font-size: 0.82rem; }
+        .comp-card-arrow { margin-top: 0; font-size: 1rem; line-height: 1; }
+        .year-tabs { gap: 0.35rem; }
+        .year-tab { padding: 0.4rem 0.75rem; font-size: 0.8rem; }
+    }
+
+    /* ===== Light Theme (Toss style) ===== */
+    [data-theme="light"] .page-header {
+        color: #191f28;
+    }
+    [data-theme="light"] .page-header p {
+        color: #8b95a1;
+        opacity: 1;
+    }
+
+    /* Upcoming cards - light */
+    [data-theme="light"] .upcoming-card {
+        background: #ffffff;
+        border: 1px solid #e5e8eb;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+    [data-theme="light"] .upcoming-card:hover {
+        box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+        border-color: #c9302c;
+    }
+    [data-theme="light"] .upcoming-card-icon {
+        background: rgba(30, 58, 138, 0.08);
+    }
+    [data-theme="light"] .upcoming-card-icon svg {
+        stroke: #1e3a8a;
+    }
+    [data-theme="light"] .upcoming-card-info h4 {
+        color: #191f28;
+    }
+    [data-theme="light"] .upcoming-card-info p {
+        color: #8b95a1;
+    }
+    [data-theme="light"] .upcoming-card-status {
+        background: #f5f5f7;
+    }
+    [data-theme="light"] .upcoming-card-status .status {
+        color: #c9302c;
+    }
+    [data-theme="light"] .upcoming-card-status .date {
+        color: #8b95a1;
+    }
+
+    /* Controls area - light */
+    [data-theme="light"] .competitions-controls {
+        background: #ffffff;
+        border: 1px solid #e5e8eb;
+        backdrop-filter: none;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+
+    /* Year tabs - light */
+    [data-theme="light"] .year-tab {
+        background: #ffffff;
+        border-color: #e5e8eb;
+        color: #4e5968;
+    }
+    [data-theme="light"] .year-tab:hover {
+        border-color: #c9302c;
+        color: #c9302c;
+        background: #fff5f5;
+    }
+    [data-theme="light"] .year-tab.active {
+        background: #c9302c;
+        color: #ffffff;
+        border-color: #c9302c;
+    }
+
+    /* Search input - light */
+    [data-theme="light"] .comp-search-input {
+        background: #f5f5f7;
+        color: #191f28;
+        border-color: #e5e8eb;
+    }
+    [data-theme="light"] .comp-search-input::placeholder {
+        color: #8b95a1;
+    }
+    [data-theme="light"] .comp-search-input:focus {
+        background: #ffffff;
+        border-color: #c9302c;
+        box-shadow: 0 0 0 3px rgba(201, 48, 44, 0.1);
+    }
+
+    /* Competition cards - light */
+    [data-theme="light"] .comp-card {
+        background: #ffffff;
+        border: 1px solid #e5e8eb;
+        backdrop-filter: none;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+    [data-theme="light"] .comp-card:hover {
+        border-color: #c9302c;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+    }
+    [data-theme="light"] .comp-card-name {
+        color: #191f28;
+    }
+    [data-theme="light"] .comp-card-meta {
+        color: #8b95a1;
+    }
+    [data-theme="light"] .comp-card-date {
+        color: #4e5968;
+    }
+    [data-theme="light"] .comp-card-arrow {
+        color: #d1d6db;
+    }
+
+    /* Results header - light */
+    [data-theme="light"] .results-header h3 {
+        color: #191f28;
+    }
+    [data-theme="light"] .results-count {
+        color: #8b95a1;
+    }
+
+    /* Pagination - light */
+    [data-theme="light"] .page-btn {
+        background: #ffffff;
+        border-color: #e5e8eb;
+        color: #4e5968;
+    }
+    [data-theme="light"] .page-btn:hover {
+        background: #f5f5f7;
+        border-color: #d1d6db;
+        color: #191f28;
+    }
+    [data-theme="light"] .page-btn.active {
+        background: #c9302c;
+        color: #ffffff;
+        border-color: #c9302c;
+        box-shadow: 0 2px 8px rgba(201, 48, 44, 0.2);
+    }
+    [data-theme="light"] .page-btn:disabled {
+        opacity: 0.3;
+    }
+
+    /* Empty state - light */
+    [data-theme="light"] .empty-state {
+        background: #f5f5f7;
+        border-color: #e5e8eb;
+        color: #8b95a1;
+    }
+    [data-theme="light"] .empty-state h4 {
+        color: #191f28;
+    }
+
+    /* Loading - light */
+    [data-theme="light"] .loading {
+        color: #8b95a1;
+    }
+    [data-theme="light"] .loading::after {
+        border-color: #e5e8eb;
+        border-top-color: #c9302c;
+    }
+
+    /* ===== Scoreboard numerals =====
+       Countdown, dates and counts are pure latin/numeric strings, so the
+       condensed display face applies safely to the whole element. Condensed
+       runs narrow, hence the small size bumps; positive tracking only. */
+    /* .upcoming-card-status .status is fully specified above at its own rule
+       (1.35rem, matched to the home page D-day); it is deliberately not
+       repeated here, where the later font-size would override it. */
+    .live-card-status .status {
+        font-family: var(--fm-font-display);
+        font-weight: 700;
+        font-size: 0.95rem;
+        letter-spacing: 0.04em;
+    }
+    .upcoming-card-status .date,
+    .live-card-status .date,
+    .comp-card-date {
+        font-family: var(--fm-font-display);
+        font-weight: 600;
+        letter-spacing: 0.01em;
+        font-variant-numeric: lining-nums;
+    }
+    .comp-card-date {
+        font-size: 1rem;
+    }
+    /* .results-count is a translated sentence ("총 148개"); only the injected
+       .fm-num span around the figure carries the display face. */
+    .results-count .fm-num {
+        font-size: 1.05em;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div class="container">
+        <h1>{{ i18n.common.nav.competitions|default('대회') }}</h1>
+    </div>
+</div>
+
+<!-- NOW: Live Competitions Banner -->
+<div class="live-competitions" id="live-competitions" style="display: none;">
+    <div class="container">
+        <div class="live-header">
+            <span class="live-badge">NOW</span>
+            <span class="live-title">{{ i18n.common.live.title|default('Live Competitions') }}</span>
+        </div>
+        <div class="live-cards" id="live-cards"></div>
+    </div>
+</div>
+
+<!-- Upcoming Competitions Banner -->
+<div class="upcoming-competitions" id="upcoming-competitions" style="display: none;">
+    <div class="container">
+        <div class="upcoming-header">
+            <span class="upcoming-badge">UPCOMING</span>
+        </div>
+        <div class="upcoming-cards" id="upcoming-cards"></div>
+    </div>
+</div>
+
+<div class="container">
+    <!-- 필터 & 검색 -->
+    <div class="competitions-controls">
+        <div class="year-tabs" id="year-tabs">
+            <!-- 동적으로 생성됨 -->
+        </div>
+        <div class="comp-search-wrapper">
+            <input type="text" class="comp-search-input" id="comp-search"
+                   placeholder="{{ i18n.common.search.placeholder|default('Search player or team...') }}" autocomplete="off">
+        </div>
+    </div>
+
+    <!-- 대회 목록 -->
+    <div class="results-header">
+        <h3>{{ i18n.common.competition.title|default('대회') }}</h3>
+        <span class="results-count" id="results-count"></span>
+    </div>
+    <div class="comp-cards" id="comp-cards">
+        <div class="loading" id="loading">{{ i18n.common.common.loading|default('Loading...') }}</div>
+    </div>
+    <div class="pagination" id="pagination"></div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const currentLang = '{{ lang }}';
+const i18n = {
+    total_count: '{{ i18n.common.home.total_count|default("Total {count}") }}',
+    no_results: '{{ i18n.common.home.no_results|default("No results found") }}',
+    loading: '{{ i18n.common.common.loading|default("Loading...") }}',
+    all: '{{ i18n.common.filters.all|default("All") }}',
+    events: '{{ i18n.common.table.event|default("Event") }}',
+    previous: '{{ i18n.common.pagination.previous|default("Previous") }}',
+    next: '{{ i18n.common.pagination.next|default("Next") }}'
+};
+
+const state = {
+    year: null,
+    search: '',
+    page: 1,
+    perPage: 20,
+    years: []
+};
+
+// 초기화
+document.addEventListener('DOMContentLoaded', async () => {
+    await loadFilters();
+    await loadCompetitions();
+    await loadLiveBanners();
+    setupEventListeners();
+});
+
+// 필터 옵션 (연도 탭) 로드
+async function loadFilters() {
+    try {
+        const res = await fetch('/api/filters');
+        const data = await res.json();
+        state.years = data.years || [];
+
+        const tabsDiv = document.getElementById('year-tabs');
+        let html = `<button class="year-tab active" data-year="">${i18n.all}</button>`;
+        state.years.forEach(year => {
+            html += `<button class="year-tab" data-year="${year}">${year}</button>`;
+        });
+        tabsDiv.innerHTML = html;
+    } catch (e) {
+        console.error('Filters error:', e);
+    }
+}
+
+// 대회 목록 로드
+async function loadCompetitions() {
+    const cardsDiv = document.getElementById('comp-cards');
+    cardsDiv.innerHTML = `<div class="loading">${i18n.loading}</div>`;
+
+    try {
+        const params = new URLSearchParams();
+        params.append('page', state.page);
+        params.append('per_page', state.perPage);
+        params.append('lang', currentLang);
+        if (state.year) params.append('year', state.year);
+        if (state.search) params.append('search', state.search);
+
+        const res = await fetch('/api/competitions?' + params.toString());
+        const data = await res.json();
+
+        document.getElementById('results-count').innerHTML =
+            i18n.total_count.replace('{count}',
+                '<span class="fm-num">' + data.total.toLocaleString() + '</span>');
+
+        if (data.competitions.length === 0) {
+            cardsDiv.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">🔍</div>
+                    <h4>${i18n.no_results}</h4>
+                </div>
+            `;
+            document.getElementById('pagination').innerHTML = '';
+            return;
+        }
+
+        cardsDiv.innerHTML = data.competitions.map(comp => `
+            <a href="/competition/${comp.event_cd}" class="comp-card">
+                <div class="comp-card-info">
+                    <div class="comp-card-name">${_tr_comp(comp.name)}</div>
+                    <div class="comp-card-meta">
+                        ${comp.location ? `<span>📍 ${comp.location}</span>` : ''}
+                        <span>${comp.event_count} ${i18n.events}</span>
+                    </div>
+                </div>
+                <div class="comp-card-right">
+                    <div class="comp-card-date">${formatDate(comp.start_date, comp.end_date)}</div>
+                    <div class="comp-card-arrow">→</div>
+                </div>
+            </a>
+        `).join('');
+
+        renderPagination(data.page, Math.ceil(data.total / state.perPage));
+    } catch (e) {
+        console.error('Competitions error:', e);
+        cardsDiv.innerHTML = `<div class="empty-state"><div class="empty-state-icon">⚠️</div><h4>${_t('데이터 로드 실패')}</h4></div>`;
+    }
+}
+
+// 날짜 포맷
+function formatDate(startDate, endDate) {
+    if (!startDate) return '';
+    const start = new Date(startDate);
+    const end = endDate ? new Date(endDate) : start;
+
+    const sy = start.getFullYear();
+    const sm = start.getMonth() + 1;
+    const sd = start.getDate();
+    const em = end.getMonth() + 1;
+    const ed = end.getDate();
+
+    if (sm === em && sd === ed) {
+        return `${sy}.${sm}.${sd}`;
+    }
+    return `${sy}.${sm}.${sd} - ${em}.${ed}`;
+}
+
+// 페이지네이션
+function renderPagination(current, total) {
+    if (total <= 1) {
+        document.getElementById('pagination').innerHTML = '';
+        return;
+    }
+
+    let html = '';
+    html += `<button class="page-btn" onclick="goToPage(${current - 1})" ${current <= 1 ? 'disabled' : ''}>${i18n.previous}</button>`;
+
+    const start = Math.max(1, current - 2);
+    const end = Math.min(total, current + 2);
+
+    if (start > 1) {
+        html += `<button class="page-btn" onclick="goToPage(1)">1</button>`;
+        if (start > 2) html += `<span style="padding: 0.5rem; color: var(--text-muted, rgba(255,255,255,0.4));">...</span>`;
+    }
+
+    for (let i = start; i <= end; i++) {
+        html += `<button class="page-btn ${i === current ? 'active' : ''}" onclick="goToPage(${i})">${i}</button>`;
+    }
+
+    if (end < total) {
+        if (end < total - 1) html += `<span style="padding: 0.5rem; color: var(--text-muted, rgba(255,255,255,0.4));">...</span>`;
+        html += `<button class="page-btn" onclick="goToPage(${total})">${total}</button>`;
+    }
+
+    html += `<button class="page-btn" onclick="goToPage(${current + 1})" ${current >= total ? 'disabled' : ''}>${i18n.next}</button>`;
+
+    document.getElementById('pagination').innerHTML = html;
+}
+
+function goToPage(page) {
+    state.page = page;
+    loadCompetitions();
+    window.scrollTo({ top: 200, behavior: 'smooth' });
+}
+
+// NOW / UPCOMING 배너 로드
+async function loadLiveBanners() {
+    try {
+        const response = await fetch('/api/competitions/live?lang=' + currentLang);
+        const data = await response.json();
+
+        const liveBanner = document.getElementById('live-competitions');
+        const liveCards = document.getElementById('live-cards');
+        const upcomingBanner = document.getElementById('upcoming-competitions');
+        const upcomingCards = document.getElementById('upcoming-cards');
+
+        // 진행 중인 대회
+        if (data.ongoing && data.ongoing.length > 0) {
+            liveBanner.style.display = 'block';
+            liveCards.innerHTML = data.ongoing.map(comp => `
+                <a href="/competition/${comp.comp_idx || comp.event_cd}" class="live-card">
+                    <div class="live-card-icon">🏆</div>
+                    <div class="live-card-info">
+                        <h4>${_tr_comp(comp.name)}</h4>
+                        <p>Day ${comp.day_number}/${comp.total_days} ${comp.venue ? '• ' + comp.venue : ''}</p>
+                    </div>
+                    <div class="live-card-status">
+                        <span class="status status-live">LIVE</span>
+                        <div class="date">${formatDateRange(comp.start_date, comp.end_date)}</div>
+                    </div>
+                </a>
+            `).join('');
+        }
+
+        // 예정 대회 (7일 이내)
+        if (data.upcoming && data.upcoming.length > 0) {
+            upcomingBanner.style.display = 'block';
+            upcomingCards.innerHTML = data.upcoming.map(comp => `
+                <a href="/competition/${comp.comp_idx || comp.event_cd}" class="upcoming-card">
+                    <div class="upcoming-card-icon">
+                        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 2L4 6v6c0 5.55 3.84 10.74 8 12 4.16-1.26 8-6.45 8-12V6l-8-4z"/>
+                            <path d="M9 12l2 2 4-4"/>
+                        </svg>
+                    </div>
+                    <div class="upcoming-card-info">
+                        <h4>${_tr_comp(comp.name)}</h4>
+                        <p>${comp.venue || ''}</p>
+                    </div>
+                    <div class="upcoming-card-status">
+                        <span class="status">D-${comp.days_until}</span>
+                        <div class="date">${formatDateRange(comp.start_date, comp.end_date)}</div>
+                    </div>
+                </a>
+            `).join('');
+        }
+
+        // 30일 이내 추가 로드
+        await loadUpcoming30();
+
+    } catch (error) {
+        console.error('Failed to load live competitions:', error);
+    }
+}
+
+async function loadUpcoming30() {
+    try {
+        const response = await fetch('/api/competitions/upcoming?days=30&limit=5&lang=' + currentLang);
+        const data = await response.json();
+
+        const upcomingBanner = document.getElementById('upcoming-competitions');
+        const upcomingCards = document.getElementById('upcoming-cards');
+
+        if (data.upcoming && data.upcoming.length > 0) {
+            const hasExisting = upcomingCards.querySelector('.upcoming-card') !== null;
+            const additional = data.upcoming.filter(comp => comp.days_until > 7);
+
+            if (additional.length > 0 || !hasExisting) {
+                upcomingBanner.style.display = 'block';
+                const comps = hasExisting ? additional : data.upcoming.slice(0, 5);
+                const html = comps.map(comp => `
+                    <a href="/competition/${comp.comp_idx || comp.event_cd}" class="upcoming-card">
+                        <div class="upcoming-card-icon">
+                            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <rect x="3" y="4" width="18" height="18" rx="2"/>
+                                <path d="M16 2v4M8 2v4M3 10h18"/>
+                                <path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/>
+                            </svg>
+                        </div>
+                        <div class="upcoming-card-info">
+                            <h4>${_tr_comp(comp.name)}</h4>
+                            <p>${comp.venue || ''}</p>
+                        </div>
+                        <div class="upcoming-card-status">
+                            <span class="status">${comp.days_until === 0 ? 'TODAY' : 'D-' + comp.days_until}</span>
+                            <div class="date">${formatDateRange(comp.start_date, comp.end_date)}</div>
+                        </div>
+                    </a>
+                `).join('');
+
+                if (hasExisting) {
+                    upcomingCards.innerHTML += html;
+                } else {
+                    upcomingCards.innerHTML = html;
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Failed to load upcoming competitions:', error);
+    }
+}
+
+function formatDateRange(startDate, endDate) {
+    if (!startDate) return '';
+    const start = new Date(startDate);
+    const end = endDate ? new Date(endDate) : start;
+
+    const sm = start.getMonth() + 1;
+    const sd = start.getDate();
+    const em = end.getMonth() + 1;
+    const ed = end.getDate();
+
+    if (sm === em && sd === ed) return `${sm}.${sd}`;
+    return `${sm}.${sd} - ${em}.${ed}`;
+}
+
+// 이벤트 리스너
+function setupEventListeners() {
+    // 연도 탭 클릭
+    document.getElementById('year-tabs').addEventListener('click', (e) => {
+        const tab = e.target.closest('.year-tab');
+        if (!tab) return;
+
+        document.querySelectorAll('.year-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+
+        const yearVal = tab.dataset.year;
+        state.year = yearVal ? parseInt(yearVal) : null;
+        state.page = 1;
+        loadCompetitions();
+    });
+
+    // 대회명 검색 (debounce)
+    let searchTimeout;
+    document.getElementById('comp-search').addEventListener('input', (e) => {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => {
+            state.search = e.target.value.trim();
+            state.page = 1;
+            loadCompetitions();
+        }, 300);
+    });
+}
+</script>
+{% endblock %}

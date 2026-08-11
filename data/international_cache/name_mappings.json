@@ -66038,5 +66038,1365 @@
     "source": "romanization",
     "external_id": null,
     "generated_date": "2025-12-24T10:03:52.481725"
+  },
+  "강한빈": {
+    "en_name": "Hanbin Kang",
+    "en_surname": "Kang",
+    "en_given": "Hanbin",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-01-12T17:32:33.223036"
+  },
+  "권수지": {
+    "en_name": "Suji Kwon",
+    "en_surname": "Kwon",
+    "en_given": "Suji",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-01-12T17:32:33.289409"
+  },
+  "이라은": {
+    "en_name": "Raeun Lee",
+    "en_surname": "Lee",
+    "en_given": "Raeun",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-01-20T11:26:40.419021"
+  },
+  "정혜인(*)": {
+    "en_name": "Hyein(*) Jung",
+    "en_surname": "Jung",
+    "en_given": "Hyein(*)",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-01-20T11:26:40.471740"
+  },
+  "경상남도펜싱협회": {
+    "en_name": "Sangnamdopensinghyeophoe Gyeong",
+    "en_surname": "Gyeong",
+    "en_given": "Sangnamdopensinghyeophoe",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-01-20T11:26:40.523837"
+  },
+  "진주시펜싱협회": {
+    "en_name": "Jusipensinghyeophoe Jin",
+    "en_surname": "Jin",
+    "en_given": "Jusipensinghyeophoe",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-01-20T11:26:40.575878"
+  },
+  "김하진(*)": {
+    "en_name": "Hajin(*) Kim",
+    "en_surname": "Kim",
+    "en_given": "Hajin(*)",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-01-24T01:46:58.112166"
+  },
+  "김연후": {
+    "en_name": "Yeonhu Kim",
+    "en_surname": "Kim",
+    "en_given": "Yeonhu",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-03-22T20:41:05.537718"
+  },
+  "장이한": {
+    "en_name": "Ihan Jang",
+    "en_surname": "Jang",
+    "en_given": "Ihan",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-03-22T20:41:05.594704"
+  },
+  "김민석130609": {
+    "en_name": "Minseok130609 Kim",
+    "en_surname": "Kim",
+    "en_given": "Minseok130609",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-03-22T20:41:05.651112"
+  },
+  "석현우": {
+    "en_name": "Hyeonu Seok",
+    "en_surname": "Seok",
+    "en_given": "Hyeonu",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-03-22T20:41:05.707779"
+  },
+  "김승유": {
+    "en_name": "Seungyu Kim",
+    "en_surname": "Kim",
+    "en_given": "Seungyu",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-03-22T20:41:05.763028"
+  },
+  "최성훈": {
+    "en_name": "Seonghun Choi",
+    "en_surname": "Choi",
+    "en_given": "Seonghun",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-03-22T20:41:05.819491"
+  },
+  "강온유": {
+    "en_name": "Onyu Kang",
+    "en_surname": "Kang",
+    "en_given": "Onyu",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-03-22T20:41:05.875113"
+  },
+  "정윤성": {
+    "en_name": "Yunseong Jung",
+    "en_surname": "Jung",
+    "en_given": "Yunseong",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-03-22T20:41:05.931281"
+  },
+  "김민석110124": {
+    "en_name": "Minseok110124 Kim",
+    "en_surname": "Kim",
+    "en_given": "Minseok110124",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-03-22T20:41:05.987195"
+  },
+  "현예하람": {
+    "en_name": "Yeharam Hyeon",
+    "en_surname": "Hyeon",
+    "en_given": "Yeharam",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-03-22T20:41:06.043565"
+  },
+  "윤성민": {
+    "en_name": "Seongmin Yoon",
+    "en_surname": "Yoon",
+    "en_given": "Seongmin",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-03-22T20:41:06.099825"
+  },
+  "장세민": {
+    "en_name": "Semin Jang",
+    "en_surname": "Jang",
+    "en_given": "Semin",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-03-22T20:41:06.155960"
+  },
+  "신유찬": {
+    "en_name": "Yuchan Shin",
+    "en_surname": "Shin",
+    "en_given": "Yuchan",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-03-22T20:41:06.214363"
+  },
+  "차우성": {
+    "en_name": "Useong Cha",
+    "en_surname": "Cha",
+    "en_given": "Useong",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-03-22T20:41:06.271220"
+  },
+  "임시우": {
+    "en_name": "Siu Lim",
+    "en_surname": "Lim",
+    "en_given": "Siu",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-03-22T20:41:06.327293"
+  },
+  "조성훈": {
+    "en_name": "Seonghun Jo",
+    "en_surname": "Jo",
+    "en_given": "Seonghun",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-03-22T20:41:06.383417"
+  },
+  "안주은": {
+    "en_name": "Jueun An",
+    "en_surname": "An",
+    "en_given": "Jueun",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-03-22T20:41:06.441619"
+  },
+  "안예은": {
+    "en_name": "Yeeun An",
+    "en_surname": "An",
+    "en_given": "Yeeun",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-03-22T20:41:06.503894"
+  },
+  "강유리": {
+    "en_name": "Yuri Kang",
+    "en_surname": "Kang",
+    "en_given": "Yuri",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-03-22T20:41:06.560002"
+  },
+  "박유이": {
+    "en_name": "Yui Park",
+    "en_surname": "Park",
+    "en_given": "Yui",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-03-22T20:41:06.617185"
+  },
+  "강정희": {
+    "en_name": "Jeonghui Kang",
+    "en_surname": "Kang",
+    "en_given": "Jeonghui",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-03-22T20:41:06.672605"
+  },
+  "오연희": {
+    "en_name": "Yeonhui Oh",
+    "en_surname": "Oh",
+    "en_given": "Yeonhui",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-03-22T20:41:06.728325"
+  },
+  "강예서": {
+    "en_name": "Yeseo Kang",
+    "en_surname": "Kang",
+    "en_given": "Yeseo",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-03-22T20:41:06.784852"
+  },
+  "최하령": {
+    "en_name": "Haryeong Choi",
+    "en_surname": "Choi",
+    "en_given": "Haryeong",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-03-22T20:41:06.841109"
+  },
+  "안나연": {
+    "en_name": "Nayeon An",
+    "en_surname": "An",
+    "en_given": "Nayeon",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-03-22T20:41:06.898060"
+  },
+  "주민영": {
+    "en_name": "Minyeong Joo",
+    "en_surname": "Joo",
+    "en_given": "Minyeong",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-03-22T20:41:06.954442"
+  },
+  "서민지": {
+    "en_name": "Minji Seo",
+    "en_surname": "Seo",
+    "en_given": "Minji",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-03-22T20:41:07.010715"
+  },
+  "한승주": {
+    "en_name": "Seungju Han",
+    "en_surname": "Han",
+    "en_given": "Seungju",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-03-22T20:41:07.068527"
+  },
+  "안천우": {
+    "en_name": "Cheonu An",
+    "en_surname": "An",
+    "en_given": "Cheonu",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-03-22T20:41:07.128851"
+  },
+  "이태관": {
+    "en_name": "Taegwan Lee",
+    "en_surname": "Lee",
+    "en_given": "Taegwan",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-03-22T20:41:07.184618"
+  },
+  "이서현101002": {
+    "en_name": "Seohyeon101002 Lee",
+    "en_surname": "Lee",
+    "en_given": "Seohyeon101002",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-03-22T20:41:07.240925"
+  },
+  "이서현090806": {
+    "en_name": "Seohyeon090806 Lee",
+    "en_surname": "Lee",
+    "en_given": "Seohyeon090806",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-03-22T20:41:07.297463"
+  },
+  "김승영": {
+    "en_name": "Seungyeong Kim",
+    "en_surname": "Kim",
+    "en_given": "Seungyeong",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-03-22T20:41:07.353804"
+  },
+  "강성원": {
+    "en_name": "Seongwon Kang",
+    "en_surname": "Kang",
+    "en_given": "Seongwon",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-03-22T20:41:07.410466"
+  },
+  "김요섭": {
+    "en_name": "Yoseop Kim",
+    "en_surname": "Kim",
+    "en_given": "Yoseop",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-03-22T20:41:07.471829"
+  },
+  "김다람": {
+    "en_name": "Daram Kim",
+    "en_surname": "Kim",
+    "en_given": "Daram",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-03-22T20:41:07.529241"
+  },
+  "류호연(*)": {
+    "en_name": "Hoyeon(*) Ryu",
+    "en_surname": "Ryu",
+    "en_given": "Hoyeon(*)",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-04-11T22:59:58.854734"
+  },
+  "이다은(*)": {
+    "en_name": "Daeun(*) Lee",
+    "en_surname": "Lee",
+    "en_given": "Daeun(*)",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-04-11T22:59:59.169307"
+  },
+  "강민서(*)": {
+    "en_name": "Minseo(*) Kang",
+    "en_surname": "Kang",
+    "en_given": "Minseo(*)",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-04-11T22:59:59.483086"
+  },
+  "김아윤(*)": {
+    "en_name": "Ayun(*) Kim",
+    "en_surname": "Kim",
+    "en_given": "Ayun(*)",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-04-11T22:59:59.680174"
+  },
+  "유상주펜싱아카데미": {
+    "en_name": "Sangjupensingakademi Yoo",
+    "en_surname": "Yoo",
+    "en_given": "Sangjupensingakademi",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-04-11T22:59:59.718635"
+  },
+  "최민서(*)": {
+    "en_name": "Minseo(*) Choi",
+    "en_surname": "Choi",
+    "en_given": "Minseo(*)",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-04-11T22:59:59.837144"
+  },
+  "한국조형예술고등학교": {
+    "en_name": "Gukjohyeongyesulgodeunghakgyo Han",
+    "en_surname": "Han",
+    "en_given": "Gukjohyeongyesulgodeunghakgyo",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-04-11T22:59:59.993704"
+  },
+  "최병철펜싱클럽": {
+    "en_name": "Byeongcheolpensingkeulreop Choi",
+    "en_surname": "Choi",
+    "en_given": "Byeongcheolpensingkeulreop",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-04-11T23:00:00.190179"
+  },
+  "진장중학교": {
+    "en_name": "Jangjunghakgyo Jin",
+    "en_surname": "Jin",
+    "en_given": "Jangjunghakgyo",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-04-11T23:00:00.230139"
+  },
+  "연산중학교": {
+    "en_name": "Sanjunghakgyo Yeon",
+    "en_surname": "Yeon",
+    "en_given": "Sanjunghakgyo",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-04-11T23:00:00.269453"
+  },
+  "김서후": {
+    "en_name": "Seohu Kim",
+    "en_surname": "Kim",
+    "en_given": "Seohu",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:57:59.178572"
+  },
+  "이수현(*)": {
+    "en_name": "Suhyeon(*) Lee",
+    "en_surname": "Lee",
+    "en_given": "Suhyeon(*)",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:57:59.224473"
+  },
+  "데쉬줄리채린": {
+    "en_name": "Swijulrichaerin De",
+    "en_surname": "De",
+    "en_given": "Swijulrichaerin",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:57:59.263435"
+  },
+  "엔티언펜싱클럽 송도": {
+    "en_name": "Tieonpensingkeulreop songdo En",
+    "en_surname": "En",
+    "en_given": "Tieonpensingkeulreop songdo",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:57:59.302762"
+  },
+  "유한효": {
+    "en_name": "Hanhyo Yoo",
+    "en_surname": "Yoo",
+    "en_given": "Hanhyo",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:57:59.344450"
+  },
+  "주윤우": {
+    "en_name": "Yunu Joo",
+    "en_surname": "Joo",
+    "en_given": "Yunu",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:57:59.418579"
+  },
+  "강노아화랑": {
+    "en_name": "Noahwarang Kang",
+    "en_surname": "Kang",
+    "en_given": "Noahwarang",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:57:59.457940"
+  },
+  "이정후": {
+    "en_name": "Jeonghu Lee",
+    "en_surname": "Lee",
+    "en_given": "Jeonghu",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:57:59.493267"
+  },
+  "최산": {
+    "en_name": "San Choi",
+    "en_surname": "Choi",
+    "en_given": "San",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:57:59.527928"
+  },
+  "정인": {
+    "en_name": "In Jung",
+    "en_surname": "Jung",
+    "en_given": "In",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:57:59.562923"
+  },
+  "위솔이": {
+    "en_name": "Soli Wi",
+    "en_surname": "Wi",
+    "en_given": "Soli",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:57:59.598448"
+  },
+  "천지윤": {
+    "en_name": "Jiyun Cheon",
+    "en_surname": "Cheon",
+    "en_given": "Jiyun",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:57:59.635851"
+  },
+  "최예지": {
+    "en_name": "Yeji Choi",
+    "en_surname": "Choi",
+    "en_given": "Yeji",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:57:59.672076"
+  },
+  "공예찬": {
+    "en_name": "Yechan Gong",
+    "en_surname": "Gong",
+    "en_given": "Yechan",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:57:59.709020"
+  },
+  "엄산": {
+    "en_name": "San Eom",
+    "en_surname": "Eom",
+    "en_given": "San",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:57:59.744346"
+  },
+  "임은우": {
+    "en_name": "Eunu Lim",
+    "en_surname": "Lim",
+    "en_given": "Eunu",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:57:59.779194"
+  },
+  "임찬혁": {
+    "en_name": "Chanhyeok Lim",
+    "en_surname": "Lim",
+    "en_given": "Chanhyeok",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:57:59.815034"
+  },
+  "김고은": {
+    "en_name": "Goeun Kim",
+    "en_surname": "Kim",
+    "en_given": "Goeun",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:57:59.853274"
+  },
+  "천예진": {
+    "en_name": "Yejin Cheon",
+    "en_surname": "Cheon",
+    "en_given": "Yejin",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:57:59.899186"
+  },
+  "공예담": {
+    "en_name": "Yedam Gong",
+    "en_surname": "Gong",
+    "en_given": "Yedam",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:57:59.941906"
+  },
+  "심수민": {
+    "en_name": "Sumin Shim",
+    "en_surname": "Shim",
+    "en_given": "Sumin",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:57:59.992252"
+  },
+  "최들": {
+    "en_name": "Deul Choi",
+    "en_surname": "Choi",
+    "en_given": "Deul",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:00.061539"
+  },
+  "강윤지": {
+    "en_name": "Yunji Kang",
+    "en_surname": "Kang",
+    "en_given": "Yunji",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:00.099830"
+  },
+  "남서율": {
+    "en_name": "Seoyul Nam",
+    "en_surname": "Nam",
+    "en_given": "Seoyul",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:00.172282"
+  },
+  "이하운": {
+    "en_name": "Haun Lee",
+    "en_surname": "Lee",
+    "en_given": "Haun",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:00.272553"
+  },
+  "이채하": {
+    "en_name": "Chaeha Lee",
+    "en_surname": "Lee",
+    "en_given": "Chaeha",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:00.321593"
+  },
+  "최유연": {
+    "en_name": "Yuyeon Choi",
+    "en_surname": "Choi",
+    "en_given": "Yuyeon",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:00.370450"
+  },
+  "민지현": {
+    "en_name": "Jihyeon Min",
+    "en_surname": "Min",
+    "en_given": "Jihyeon",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:00.412019"
+  },
+  "장예진": {
+    "en_name": "Yejin Jang",
+    "en_surname": "Jang",
+    "en_given": "Yejin",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:00.459715"
+  },
+  "고윤서": {
+    "en_name": "Yunseo Ko",
+    "en_surname": "Ko",
+    "en_given": "Yunseo",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:00.499843"
+  },
+  "은호펜싱클럽": {
+    "en_name": "Hopensingkeulreop Eun",
+    "en_surname": "Eun",
+    "en_given": "Hopensingkeulreop",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:00.535182"
+  },
+  "센텀펜싱클럽": {
+    "en_name": "Teompensingkeulreop Sen",
+    "en_surname": "Sen",
+    "en_given": "Teompensingkeulreop",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:00.570892"
+  },
+  "퍼스트펜싱클럽": {
+    "en_name": "Seuteupensingkeulreop Peo",
+    "en_surname": "Peo",
+    "en_given": "Seuteupensingkeulreop",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:00.607282"
+  },
+  "윈펜싱클럽": {
+    "en_name": "Pensingkeulreop Win",
+    "en_surname": "Win",
+    "en_given": "Pensingkeulreop",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:00.649664"
+  },
+  "펜싱아카데미 더원": {
+    "en_name": "Singakademi deowon Pen",
+    "en_surname": "Pen",
+    "en_given": "Singakademi deowon",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:00.688124"
+  },
+  "해남동초등학교": {
+    "en_name": "Namdongchodeunghakgyo Hae",
+    "en_surname": "Hae",
+    "en_given": "Namdongchodeunghakgyo",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:00.735619"
+  },
+  "노인후": {
+    "en_name": "Inhu No",
+    "en_surname": "No",
+    "en_given": "Inhu",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:00.787317"
+  },
+  "엔시스펜싱": {
+    "en_name": "Siseupensing En",
+    "en_surname": "En",
+    "en_given": "Siseupensing",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:00.826091"
+  },
+  "(사)나주스포츠클럽": {
+    "en_name": "Sa)najuseupocheukeulreop (",
+    "en_surname": "(",
+    "en_given": "Sa)najuseupocheukeulreop",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:00.876932"
+  },
+  "윤규원": {
+    "en_name": "Gyuwon Yoon",
+    "en_surname": "Yoon",
+    "en_given": "Gyuwon",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:00.927422"
+  },
+  "윤하라": {
+    "en_name": "Hara Yoon",
+    "en_surname": "Yoon",
+    "en_given": "Hara",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:00.966238"
+  },
+  "이규원": {
+    "en_name": "Gyuwon Lee",
+    "en_surname": "Lee",
+    "en_given": "Gyuwon",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:01.009873"
+  },
+  "성지용": {
+    "en_name": "Jiyong Seong",
+    "en_surname": "Seong",
+    "en_given": "Jiyong",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:01.068961"
+  },
+  "박하성": {
+    "en_name": "Haseong Park",
+    "en_surname": "Park",
+    "en_given": "Haseong",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:01.141601"
+  },
+  "남한결": {
+    "en_name": "Hangyeol Nam",
+    "en_surname": "Nam",
+    "en_given": "Hangyeol",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:01.179562"
+  },
+  "백동우": {
+    "en_name": "Dongu Baek",
+    "en_surname": "Baek",
+    "en_given": "Dongu",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:01.224450"
+  },
+  "황선익": {
+    "en_name": "Seonik Hwang",
+    "en_surname": "Hwang",
+    "en_given": "Seonik",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:01.262232"
+  },
+  "노주안": {
+    "en_name": "Juan No",
+    "en_surname": "No",
+    "en_given": "Juan",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:01.303498"
+  },
+  "강다원": {
+    "en_name": "Dawon Kang",
+    "en_surname": "Kang",
+    "en_given": "Dawon",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:01.338538"
+  },
+  "정윤하": {
+    "en_name": "Yunha Jung",
+    "en_surname": "Jung",
+    "en_given": "Yunha",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:01.376497"
+  },
+  "박봄": {
+    "en_name": "Bom Park",
+    "en_surname": "Park",
+    "en_given": "Bom",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:01.411243"
+  },
+  "윤세영": {
+    "en_name": "Seyeong Yoon",
+    "en_surname": "Yoon",
+    "en_given": "Seyeong",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:01.448796"
+  },
+  "최나혁": {
+    "en_name": "Nahyeok Choi",
+    "en_surname": "Choi",
+    "en_given": "Nahyeok",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:01.489013"
+  },
+  "변도윤": {
+    "en_name": "Doyun Byeon",
+    "en_surname": "Byeon",
+    "en_given": "Doyun",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:01.524114"
+  },
+  "국건영": {
+    "en_name": "Geonyeong Guk",
+    "en_surname": "Guk",
+    "en_given": "Geonyeong",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:01.560859"
+  },
+  "김찬종": {
+    "en_name": "Chanjong Kim",
+    "en_surname": "Kim",
+    "en_given": "Chanjong",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:01.598666"
+  },
+  "윤시우": {
+    "en_name": "Siu Yoon",
+    "en_surname": "Yoon",
+    "en_given": "Siu",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:01.645503"
+  },
+  "펜싱의계절": {
+    "en_name": "Singuigyejeol Pen",
+    "en_surname": "Pen",
+    "en_given": "Singuigyejeol",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:01.686760"
+  },
+  "로얄펜싱클럽": {
+    "en_name": "Yalpensingkeulreop Ro",
+    "en_surname": "Ro",
+    "en_given": "Yalpensingkeulreop",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:01.744005"
+  },
+  "박종원": {
+    "en_name": "Jongwon Park",
+    "en_surname": "Park",
+    "en_given": "Jongwon",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:01.780704"
+  },
+  "정대한": {
+    "en_name": "Daehan Jung",
+    "en_surname": "Jung",
+    "en_given": "Daehan",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:01.827754"
+  },
+  "손유나": {
+    "en_name": "Yuna Son",
+    "en_surname": "Son",
+    "en_given": "Yuna",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:01.868241"
+  },
+  "손서우": {
+    "en_name": "Seou Son",
+    "en_surname": "Son",
+    "en_given": "Seou",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:01.904266"
+  },
+  "이예온": {
+    "en_name": "Yeon Lee",
+    "en_surname": "Lee",
+    "en_given": "Yeon",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:01.938617"
+  },
+  "김리우": {
+    "en_name": "Riu Kim",
+    "en_surname": "Kim",
+    "en_given": "Riu",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:01.974698"
+  },
+  "정세미": {
+    "en_name": "Semi Jung",
+    "en_surname": "Jung",
+    "en_given": "Semi",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:02.010695"
+  },
+  "김채이": {
+    "en_name": "Chaei Kim",
+    "en_surname": "Kim",
+    "en_given": "Chaei",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:02.046373"
+  },
+  "조효민": {
+    "en_name": "Hyomin Jo",
+    "en_surname": "Jo",
+    "en_given": "Hyomin",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:02.084542"
+  },
+  "전주스포츠클럽": {
+    "en_name": "Juseupocheukeulreop Jeon",
+    "en_surname": "Jeon",
+    "en_given": "Juseupocheukeulreop",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:02.122180"
+  },
+  "대전GD펜싱클럽": {
+    "en_name": "Jeongdpensingkeulreop Dae",
+    "en_surname": "Dae",
+    "en_given": "Jeongdpensingkeulreop",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:02.169868"
+  },
+  "신세하": {
+    "en_name": "Seha Shin",
+    "en_surname": "Shin",
+    "en_given": "Seha",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:02.212683"
+  },
+  "박시준": {
+    "en_name": "Sijun Park",
+    "en_surname": "Park",
+    "en_given": "Sijun",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:02.250095"
+  },
+  "이레오": {
+    "en_name": "Reo Lee",
+    "en_surname": "Lee",
+    "en_given": "Reo",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:02.285266"
+  },
+  "김서아": {
+    "en_name": "Seoa Kim",
+    "en_surname": "Kim",
+    "en_given": "Seoa",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:02.320749"
+  },
+  "주서영": {
+    "en_name": "Seoyeong Joo",
+    "en_surname": "Joo",
+    "en_given": "Seoyeong",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:02.356501"
+  },
+  "홍주아": {
+    "en_name": "Jua Hong",
+    "en_surname": "Hong",
+    "en_given": "Jua",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:02.395726"
+  },
+  "안채현": {
+    "en_name": "Chaehyeon An",
+    "en_surname": "An",
+    "en_given": "Chaehyeon",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:02.431255"
+  },
+  "윤채정": {
+    "en_name": "Chaejeong Yoon",
+    "en_surname": "Yoon",
+    "en_given": "Chaejeong",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:02.466258"
+  },
+  "강다정": {
+    "en_name": "Dajeong Kang",
+    "en_surname": "Kang",
+    "en_given": "Dajeong",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:02.501492"
+  },
+  "위즈펜싱클럽": {
+    "en_name": "Jeupensingkeulreop Wi",
+    "en_surname": "Wi",
+    "en_given": "Jeupensingkeulreop",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:02.541607"
+  },
+  "화순군펜싱협회": {
+    "en_name": "Sungunpensinghyeophoe Hwa",
+    "en_surname": "Hwa",
+    "en_given": "Sungunpensinghyeophoe",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:02.593674"
+  },
+  "세인트존스베리아카데미제주": {
+    "en_name": "Inteujonseuberiakademijeju Se",
+    "en_surname": "Se",
+    "en_given": "Inteujonseuberiakademijeju",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:02.629809"
+  },
+  "구미스포츠클럽": {
+    "en_name": "Miseupocheukeulreop Gu",
+    "en_surname": "Gu",
+    "en_given": "Miseupocheukeulreop",
+    "name_order": "western",
+    "confidence": 0.7,
+    "source": "romanization",
+    "external_id": null,
+    "generated_date": "2026-05-28T11:58:02.668756"
   }
 }
