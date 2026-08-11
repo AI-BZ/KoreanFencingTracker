@@ -1,0 +1,1130 @@
+{% extends "base.html" %}
+
+{% block title %}영상 코멘트 - FencingMind Club{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ==============================================
+   VIDEOS PAGE - Mobile-First Dark Theme
+   ============================================== */
+
+.videos-page {
+    padding: 1rem;
+    max-width: 1000px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+/* --- Header --- */
+.videos-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.videos-header-left {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.back-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: 1.2rem;
+    flex-shrink: 0;
+    transition: all 0.2s;
+}
+
+.back-btn:hover {
+    border-color: var(--border-light);
+    color: var(--text-primary);
+    background: var(--bg-card-hover);
+}
+
+.videos-header h1 {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+/* --- Stats Row --- */
+.video-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.75rem;
+}
+
+.video-stat-card {
+    background: var(--bg-card);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    padding: 1rem;
+    text-align: center;
+}
+
+.video-stat-card .icon { font-size: 1.3rem; margin-bottom: 0.25rem; }
+.video-stat-card .value {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    line-height: 1.2;
+}
+.video-stat-card .label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-top: 0.25rem;
+}
+
+/* --- Category Filter --- */
+.category-tabs {
+    display: flex;
+    gap: 0.5rem;
+    overflow-x: auto;
+    padding-bottom: 0.25rem;
+    -webkit-overflow-scrolling: touch;
+}
+
+.category-tab {
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s;
+}
+
+.category-tab:hover {
+    border-color: var(--border-light);
+    color: var(--text-primary);
+}
+
+.category-tab.active {
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+    color: #fff;
+}
+
+/* --- Add Video Button --- */
+.btn-add-video {
+    padding: 0.6rem 1.2rem;
+    border-radius: 10px;
+    background: var(--accent-primary);
+    border: none;
+    color: #fff;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+
+.btn-add-video:hover {
+    filter: brightness(1.15);
+    transform: translateY(-1px);
+}
+
+/* --- Video Grid --- */
+.video-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1rem;
+}
+
+@media (max-width: 640px) {
+    .video-grid { grid-template-columns: 1fr; }
+    .video-stats { grid-template-columns: repeat(3, 1fr); }
+}
+
+.video-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.video-card:hover {
+    border-color: var(--border-light);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+.video-thumbnail {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16/9;
+    background: var(--bg-tertiary);
+    overflow: hidden;
+}
+
+.video-thumbnail img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.video-thumbnail .play-icon {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 48px;
+    height: 48px;
+    background: rgba(0,0,0,0.7);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 1.2rem;
+    pointer-events: none;
+}
+
+.video-category-badge {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.badge-training { background: var(--info-color); color: #fff; }
+.badge-competition { background: var(--accent-primary); color: #fff; }
+.badge-drill { background: var(--success-color); color: #fff; }
+
+.video-info {
+    padding: 0.75rem 1rem;
+}
+
+.video-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    margin-bottom: 0.4rem;
+}
+
+.video-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+}
+
+.video-meta .comments-count { display: flex; align-items: center; gap: 0.25rem; }
+
+/* --- Video Detail Modal --- */
+.modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.85);
+    z-index: 1000;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.modal-overlay.active { display: flex; justify-content: center; padding: 1rem; }
+
+.modal-content {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    width: 100%;
+    max-width: 800px;
+    margin: auto;
+    overflow: hidden;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.modal-header h2 {
+    font-size: 1.1rem;
+    color: var(--text-primary);
+    flex: 1;
+    margin-right: 0.5rem;
+}
+
+.modal-close {
+    width: 36px;
+    height: 36px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 1.1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.modal-close:hover { color: var(--text-primary); border-color: var(--border-light); }
+
+.modal-body { padding: 0; }
+
+.video-player {
+    width: 100%;
+    aspect-ratio: 16/9;
+    background: #000;
+}
+
+.video-player iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+}
+
+.video-detail-info { padding: 1rem; border-bottom: 1px solid var(--border-color); }
+.video-detail-info .author { color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 0.5rem; }
+.video-detail-info .description { color: var(--text-secondary); font-size: 0.9rem; line-height: 1.5; }
+
+/* --- Comments Section --- */
+.comments-section { padding: 1rem; }
+
+.comments-section h3 {
+    font-size: 1rem;
+    color: var(--text-primary);
+    margin-bottom: 1rem;
+}
+
+.comment-form {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+}
+
+.comment-form input[type="text"] {
+    flex: 1;
+    min-width: 200px;
+    padding: 0.6rem 0.8rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+}
+
+.comment-form input[type="text"]::placeholder { color: var(--text-muted); }
+
+.comment-form input[type="number"] {
+    width: 90px;
+    padding: 0.6rem 0.5rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+}
+
+.comment-form .btn-send {
+    padding: 0.6rem 1rem;
+    background: var(--accent-primary);
+    border: none;
+    border-radius: 8px;
+    color: #fff;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.comment-form .btn-send:hover { filter: brightness(1.15); }
+
+.comment-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.comment-item {
+    padding: 0.75rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+}
+
+.comment-item.reply {
+    margin-left: 2rem;
+    border-left: 2px solid var(--accent-primary);
+}
+
+.comment-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.4rem;
+}
+
+.comment-author {
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+}
+
+.comment-timestamp {
+    font-size: 0.75rem;
+    background: var(--accent-secondary);
+    color: #fff;
+    padding: 1px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.comment-timestamp:hover { filter: brightness(1.2); }
+
+.comment-time {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.comment-content {
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+.comment-actions {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 0.4rem;
+}
+
+.comment-action {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 0;
+}
+
+.comment-action:hover { color: var(--text-primary); }
+
+/* --- Add Video Form Modal --- */
+.add-video-form {
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.form-group { display: flex; flex-direction: column; gap: 0.4rem; }
+
+.form-group label {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.form-group input,
+.form-group textarea,
+.form-group select {
+    padding: 0.7rem 0.8rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.form-group input:focus,
+.form-group textarea:focus,
+.form-group select:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
+.form-group textarea { resize: vertical; min-height: 80px; }
+
+.form-group select option { background: var(--bg-secondary); color: var(--text-primary); }
+
+.preview-card {
+    display: none;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 0.75rem;
+}
+
+.preview-card img {
+    width: 100%;
+    border-radius: 6px;
+    margin-bottom: 0.5rem;
+}
+
+.preview-card .preview-title {
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.form-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: flex-end;
+}
+
+.btn-cancel {
+    padding: 0.6rem 1.2rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+
+.btn-submit {
+    padding: 0.6rem 1.2rem;
+    background: var(--accent-primary);
+    border: none;
+    border-radius: 8px;
+    color: #fff;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.btn-submit:hover { filter: brightness(1.15); }
+.btn-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* --- Empty State --- */
+.empty-state {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--text-secondary);
+}
+
+.empty-state .icon { font-size: 3rem; margin-bottom: 1rem; }
+.empty-state p { font-size: 0.95rem; }
+
+/* --- Delete Button --- */
+.btn-delete {
+    padding: 0.4rem 0.8rem;
+    background: transparent;
+    border: 1px solid var(--danger-color);
+    border-radius: 6px;
+    color: var(--danger-color);
+    cursor: pointer;
+    font-size: 0.78rem;
+}
+
+.btn-delete:hover { background: var(--danger-color); color: #fff; }
+
+/* --- Loading --- */
+.loading-spinner {
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-secondary);
+}
+
+@media (max-width: 500px) {
+    .videos-header { flex-direction: column; align-items: flex-start; }
+    .comment-form { flex-direction: column; }
+    .comment-form input[type="number"] { width: 100%; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="videos-page">
+    <!-- Header -->
+    <div class="videos-header">
+        <div class="videos-header-left">
+            <a href="/api/club/" class="back-btn">&larr;</a>
+            <h1>영상 코멘트</h1>
+        </div>
+        <button class="btn-add-video" onclick="openAddVideoModal()">+ 영상 추가</button>
+    </div>
+
+    <!-- Stats -->
+    <div class="video-stats">
+        <div class="video-stat-card">
+            <div class="icon">🎬</div>
+            <div class="value" id="statTotalVideos">-</div>
+            <div class="label">전체 영상</div>
+        </div>
+        <div class="video-stat-card">
+            <div class="icon">💬</div>
+            <div class="value" id="statTotalComments">-</div>
+            <div class="label">전체 코멘트</div>
+        </div>
+        <div class="video-stat-card">
+            <div class="icon">📂</div>
+            <div class="value" id="statCategories">-</div>
+            <div class="label">카테고리</div>
+        </div>
+    </div>
+
+    <!-- Category Filter -->
+    <div class="category-tabs">
+        <div class="category-tab active" data-category="" onclick="filterCategory(this)">전체</div>
+        <div class="category-tab" data-category="training" onclick="filterCategory(this)">훈련</div>
+        <div class="category-tab" data-category="competition" onclick="filterCategory(this)">대회</div>
+        <div class="category-tab" data-category="drill" onclick="filterCategory(this)">드릴</div>
+    </div>
+
+    <!-- Video Grid -->
+    <div class="video-grid" id="videoGrid">
+        <div class="loading-spinner">불러오는 중...</div>
+    </div>
+</div>
+
+<!-- Add Video Modal -->
+<div class="modal-overlay" id="addVideoModal">
+    <div class="modal-content" style="max-width:550px;">
+        <div class="modal-header">
+            <h2>영상 추가</h2>
+            <button class="modal-close" onclick="closeAddVideoModal()">&times;</button>
+        </div>
+        <div class="add-video-form" id="addVideoForm">
+            <div class="form-group">
+                <label>YouTube URL *</label>
+                <input type="text" id="inputYoutubeUrl" placeholder="https://www.youtube.com/watch?v=..." oninput="onUrlInput()">
+            </div>
+            <div class="preview-card" id="urlPreview">
+                <img id="previewThumb" src="" alt="">
+                <div class="preview-title" id="previewTitle"></div>
+            </div>
+            <div class="form-group">
+                <label>제목 (미입력 시 자동 추출)</label>
+                <input type="text" id="inputTitle" placeholder="영상 제목">
+            </div>
+            <div class="form-group">
+                <label>설명</label>
+                <textarea id="inputDescription" placeholder="영상에 대한 설명"></textarea>
+            </div>
+            <div class="form-group">
+                <label>카테고리</label>
+                <select id="inputCategory">
+                    <option value="">선택 안 함</option>
+                    <option value="training">훈련</option>
+                    <option value="competition">대회</option>
+                    <option value="drill">드릴</option>
+                </select>
+            </div>
+            <div class="form-actions">
+                <button class="btn-cancel" onclick="closeAddVideoModal()">취소</button>
+                <button class="btn-submit" id="btnSubmitVideo" onclick="submitVideo()" disabled>등록</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Video Detail Modal -->
+<div class="modal-overlay" id="videoDetailModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 id="detailTitle">영상 제목</h2>
+            <button class="modal-close" onclick="closeDetailModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="video-player" id="videoPlayer"></div>
+            <div class="video-detail-info">
+                <div class="author" id="detailAuthor"></div>
+                <div class="description" id="detailDescription"></div>
+                <div style="margin-top:0.5rem;" id="detailActions"></div>
+            </div>
+            <div class="comments-section">
+                <h3>코멘트 <span id="detailCommentsCount"></span></h3>
+                <div class="comment-form" id="commentForm">
+                    <input type="text" id="commentInput" placeholder="코멘트 입력...">
+                    <input type="number" id="commentTimestamp" placeholder="초 (선택)" min="0" title="타임스탬프 (초)">
+                    <button class="btn-send" onclick="submitComment()">전송</button>
+                </div>
+                <div class="comment-list" id="commentList"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const API_BASE = '/api/club/videos';
+const params = new URLSearchParams(window.location.search);
+const testMode = params.get('test') === '1';
+
+let currentCategory = '';
+let currentVideoId = null;
+let videoPlayer = null;
+
+function getHeaders() {
+    const h = { 'Content-Type': 'application/json' };
+    const token = localStorage.getItem('access_token');
+    if (token) h['Authorization'] = 'Bearer ' + token;
+    return h;
+}
+
+function getAuthParam() {
+    return testMode ? '?test=1' : '';
+}
+
+function apiUrl(path) {
+    const sep = path.includes('?') ? '&' : '?';
+    return testMode ? (API_BASE + path + sep + 'test=1') : (API_BASE + path);
+}
+
+// =============================================
+// Stats
+// =============================================
+async function loadStats() {
+    try {
+        const res = await fetch(apiUrl('/stats'), { headers: getHeaders() });
+        if (!res.ok) return;
+        const data = await res.json();
+        document.getElementById('statTotalVideos').textContent = data.total_videos;
+        document.getElementById('statTotalComments').textContent = data.total_comments;
+        const catCount = Object.keys(data.by_category || {}).length;
+        document.getElementById('statCategories').textContent = catCount;
+    } catch (e) {
+        console.error('Stats load error:', e);
+    }
+}
+
+// =============================================
+// Video List
+// =============================================
+async function loadVideos() {
+    const grid = document.getElementById('videoGrid');
+    grid.innerHTML = '<div class="loading-spinner">불러오는 중...</div>';
+
+    let url = '/?limit=50';
+    if (currentCategory) url += '&category=' + currentCategory;
+
+    try {
+        const res = await fetch(apiUrl(url), { headers: getHeaders() });
+        if (!res.ok) throw new Error('Failed to load');
+        const videos = await res.json();
+
+        if (videos.length === 0) {
+            grid.innerHTML = `
+                <div class="empty-state" style="grid-column:1/-1;">
+                    <div class="icon">🎬</div>
+                    <p>등록된 영상이 없습니다</p>
+                </div>`;
+            return;
+        }
+
+        grid.innerHTML = videos.map(v => renderVideoCard(v)).join('');
+    } catch (e) {
+        console.error('Video load error:', e);
+        grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><p>영상을 불러올 수 없습니다</p></div>';
+    }
+}
+
+function renderVideoCard(v) {
+    const thumb = v.thumbnail_url || `https://img.youtube.com/vi/${v.youtube_id || ''}/hqdefault.jpg`;
+    const catBadge = v.category ? `<span class="video-category-badge badge-${v.category}">${categoryLabel(v.category)}</span>` : '';
+    const timeAgo = formatTimeAgo(v.created_at);
+
+    return `
+    <div class="video-card" onclick="openVideoDetail('${v.id}')">
+        <div class="video-thumbnail">
+            <img src="${thumb}" alt="${escHtml(v.title || '')}" onerror="this.src='/static/images/video-placeholder.png'">
+            <div class="play-icon">&#9654;</div>
+            ${catBadge}
+        </div>
+        <div class="video-info">
+            <div class="video-title">${escHtml(v.title || '제목 없음')}</div>
+            <div class="video-meta">
+                <span>${escHtml(v.member_name || '알 수 없음')}</span>
+                <span>${timeAgo}</span>
+                <span class="comments-count">💬 ${v.comments_count || 0}</span>
+            </div>
+        </div>
+    </div>`;
+}
+
+function categoryLabel(cat) {
+    const map = { training: '훈련', competition: '대회', drill: '드릴' };
+    return map[cat] || cat;
+}
+
+function filterCategory(el) {
+    document.querySelectorAll('.category-tab').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    currentCategory = el.dataset.category;
+    loadVideos();
+}
+
+// =============================================
+// Add Video
+// =============================================
+function openAddVideoModal() {
+    document.getElementById('addVideoModal').classList.add('active');
+    document.getElementById('inputYoutubeUrl').value = '';
+    document.getElementById('inputTitle').value = '';
+    document.getElementById('inputDescription').value = '';
+    document.getElementById('inputCategory').value = '';
+    document.getElementById('urlPreview').style.display = 'none';
+    document.getElementById('btnSubmitVideo').disabled = true;
+}
+
+function closeAddVideoModal() {
+    document.getElementById('addVideoModal').classList.remove('active');
+}
+
+let urlDebounce = null;
+function onUrlInput() {
+    clearTimeout(urlDebounce);
+    const url = document.getElementById('inputYoutubeUrl').value.trim();
+    const ytId = extractYoutubeId(url);
+
+    if (ytId) {
+        document.getElementById('btnSubmitVideo').disabled = false;
+        urlDebounce = setTimeout(() => fetchPreview(url, ytId), 500);
+    } else {
+        document.getElementById('btnSubmitVideo').disabled = true;
+        document.getElementById('urlPreview').style.display = 'none';
+    }
+}
+
+function extractYoutubeId(url) {
+    const patterns = [
+        /(?:youtube\.com\/watch\?v=)([\w-]+)/,
+        /(?:youtube\.com\/shorts\/)([\w-]+)/,
+        /(?:youtu\.be\/)([\w-]+)/,
+        /(?:youtube\.com\/embed\/)([\w-]+)/,
+    ];
+    for (const p of patterns) {
+        const m = url.match(p);
+        if (m) return m[1];
+    }
+    return null;
+}
+
+async function fetchPreview(url, ytId) {
+    const preview = document.getElementById('urlPreview');
+    const thumb = `https://img.youtube.com/vi/${ytId}/hqdefault.jpg`;
+    document.getElementById('previewThumb').src = thumb;
+
+    try {
+        const res = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`);
+        if (res.ok) {
+            const data = await res.json();
+            document.getElementById('previewTitle').textContent = data.title || '';
+            if (!document.getElementById('inputTitle').value) {
+                document.getElementById('inputTitle').value = data.title || '';
+            }
+        }
+    } catch (e) {
+        document.getElementById('previewTitle').textContent = '';
+    }
+
+    preview.style.display = 'block';
+}
+
+async function submitVideo() {
+    const btn = document.getElementById('btnSubmitVideo');
+    btn.disabled = true;
+    btn.textContent = '등록 중...';
+
+    const body = {
+        youtube_url: document.getElementById('inputYoutubeUrl').value.trim(),
+        title: document.getElementById('inputTitle').value.trim() || null,
+        description: document.getElementById('inputDescription').value.trim() || null,
+        category: document.getElementById('inputCategory').value || null,
+    };
+
+    try {
+        const res = await fetch(apiUrl('/'), {
+            method: 'POST',
+            headers: getHeaders(),
+            body: JSON.stringify(body),
+        });
+
+        if (res.ok) {
+            closeAddVideoModal();
+            loadVideos();
+            loadStats();
+        } else {
+            const err = await res.json();
+            alert(err.detail || '영상 등록 실패');
+        }
+    } catch (e) {
+        alert('네트워크 오류');
+    }
+
+    btn.disabled = false;
+    btn.textContent = '등록';
+}
+
+// =============================================
+// Video Detail
+// =============================================
+async function openVideoDetail(videoId) {
+    currentVideoId = videoId;
+    document.getElementById('videoDetailModal').classList.add('active');
+    document.getElementById('videoPlayer').innerHTML = '';
+    document.getElementById('commentList').innerHTML = '<div class="loading-spinner">불러오는 중...</div>';
+
+    try {
+        const res = await fetch(apiUrl('/' + videoId), { headers: getHeaders() });
+        if (!res.ok) throw new Error('Failed');
+        const v = await res.json();
+
+        document.getElementById('detailTitle').textContent = v.title || '제목 없음';
+        document.getElementById('detailAuthor').textContent = (v.member_name || '알 수 없음') + ' · ' + formatDate(v.created_at);
+        document.getElementById('detailDescription').textContent = v.description || '';
+
+        // Embed player
+        if (v.youtube_id) {
+            document.getElementById('videoPlayer').innerHTML =
+                `<iframe src="https://www.youtube.com/embed/${v.youtube_id}?enablejsapi=1"
+                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                         allowfullscreen></iframe>`;
+        }
+
+        // Delete button (owner or video author)
+        document.getElementById('detailActions').innerHTML =
+            `<button class="btn-delete" onclick="deleteVideo('${v.id}')">영상 삭제</button>`;
+
+        // Comments
+        document.getElementById('detailCommentsCount').textContent = '(' + (v.comments || []).length + ')';
+        renderComments(v.comments || []);
+
+    } catch (e) {
+        console.error('Detail load error:', e);
+    }
+}
+
+function closeDetailModal() {
+    document.getElementById('videoDetailModal').classList.remove('active');
+    document.getElementById('videoPlayer').innerHTML = '';
+    currentVideoId = null;
+}
+
+function renderComments(comments) {
+    const list = document.getElementById('commentList');
+    if (comments.length === 0) {
+        list.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:1rem;">코멘트가 없습니다</div>';
+        return;
+    }
+
+    let html = '';
+    for (const c of comments) {
+        html += renderComment(c, false);
+        if (c.replies && c.replies.length > 0) {
+            for (const r of c.replies) {
+                html += renderComment(r, true);
+            }
+        }
+    }
+    list.innerHTML = html;
+}
+
+function renderComment(c, isReply) {
+    const tsHtml = c.timestamp_seconds != null
+        ? `<span class="comment-timestamp" onclick="seekTo(${c.timestamp_seconds})">${formatSeconds(c.timestamp_seconds)}</span>`
+        : '';
+
+    return `
+    <div class="comment-item ${isReply ? 'reply' : ''}">
+        <div class="comment-header">
+            <div>
+                <span class="comment-author">${escHtml(c.author_name || '알 수 없음')}</span>
+                ${tsHtml}
+            </div>
+            <span class="comment-time">${formatTimeAgo(c.created_at)}</span>
+        </div>
+        <div class="comment-content">${escHtml(c.content)}</div>
+        <div class="comment-actions">
+            ${!isReply ? `<button class="comment-action" onclick="replyTo('${c.id}', '${escHtml(c.author_name || '')}')">답글</button>` : ''}
+            <button class="comment-action" onclick="deleteComment('${c.id}')" style="color:var(--danger-color);">삭제</button>
+        </div>
+    </div>`;
+}
+
+function seekTo(seconds) {
+    const iframe = document.querySelector('#videoPlayer iframe');
+    if (iframe) {
+        iframe.src = iframe.src.split('?')[0] + `?start=${seconds}&autoplay=1&enablejsapi=1`;
+    }
+}
+
+// =============================================
+// Comment CRUD
+// =============================================
+let replyingTo = null;
+
+function replyTo(commentId, authorName) {
+    replyingTo = commentId;
+    const input = document.getElementById('commentInput');
+    input.placeholder = `@${authorName}에게 답글...`;
+    input.focus();
+}
+
+async function submitComment() {
+    const content = document.getElementById('commentInput').value.trim();
+    if (!content || !currentVideoId) return;
+
+    const tsInput = document.getElementById('commentTimestamp').value;
+    const body = {
+        content: content,
+        timestamp_seconds: tsInput ? parseInt(tsInput) : null,
+        parent_comment_id: replyingTo || null,
+    };
+
+    try {
+        const res = await fetch(apiUrl('/' + currentVideoId + '/comments'), {
+            method: 'POST',
+            headers: getHeaders(),
+            body: JSON.stringify(body),
+        });
+
+        if (res.ok) {
+            document.getElementById('commentInput').value = '';
+            document.getElementById('commentTimestamp').value = '';
+            document.getElementById('commentInput').placeholder = '코멘트 입력...';
+            replyingTo = null;
+            // Reload detail
+            openVideoDetail(currentVideoId);
+        } else {
+            const err = await res.json();
+            alert(err.detail || '코멘트 등록 실패');
+        }
+    } catch (e) {
+        alert('네트워크 오류');
+    }
+}
+
+async function deleteComment(commentId) {
+    if (!confirm('댓글을 삭제하시겠습니까?')) return;
+
+    try {
+        const res = await fetch(apiUrl('/' + currentVideoId + '/comments/' + commentId), {
+            method: 'DELETE',
+            headers: getHeaders(),
+        });
+        if (res.ok) {
+            openVideoDetail(currentVideoId);
+        } else {
+            const err = await res.json();
+            alert(err.detail || '삭제 실패');
+        }
+    } catch (e) {
+        alert('네트워크 오류');
+    }
+}
+
+async function deleteVideo(videoId) {
+    if (!confirm('영상을 삭제하시겠습니까? 모든 코멘트도 함께 삭제됩니다.')) return;
+
+    try {
+        const res = await fetch(apiUrl('/' + videoId), {
+            method: 'DELETE',
+            headers: getHeaders(),
+        });
+        if (res.ok) {
+            closeDetailModal();
+            loadVideos();
+            loadStats();
+        } else {
+            const err = await res.json();
+            alert(err.detail || '삭제 실패');
+        }
+    } catch (e) {
+        alert('네트워크 오류');
+    }
+}
+
+// =============================================
+// Utilities
+// =============================================
+function escHtml(s) {
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+}
+
+function formatSeconds(s) {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return m + ':' + String(sec).padStart(2, '0');
+}
+
+function formatTimeAgo(dateStr) {
+    const d = new Date(dateStr);
+    const now = new Date();
+    const diff = Math.floor((now - d) / 1000);
+
+    if (diff < 60) return '방금 전';
+    if (diff < 3600) return Math.floor(diff / 60) + '분 전';
+    if (diff < 86400) return Math.floor(diff / 3600) + '시간 전';
+    if (diff < 604800) return Math.floor(diff / 86400) + '일 전';
+
+    return d.toLocaleDateString('ko-KR');
+}
+
+function formatDate(dateStr) {
+    return new Date(dateStr).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+// Close modals with Escape
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+        closeAddVideoModal();
+        closeDetailModal();
+    }
+});
+
+// Close modals clicking overlay
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+    overlay.addEventListener('click', e => {
+        if (e.target === overlay) {
+            closeAddVideoModal();
+            closeDetailModal();
+        }
+    });
+});
+
+// =============================================
+// Init
+// =============================================
+loadStats();
+loadVideos();
+</script>
+{% endblock %}

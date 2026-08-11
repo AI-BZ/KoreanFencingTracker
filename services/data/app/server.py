@@ -165,8 +165,6 @@ from app.access_control import (
     RANKINGS_HIDDEN_TOP_N,
 )
 
-# Club Management 모듈 (SaaS)
-from app.club import club_router
 
 # 글로벌 연령 그룹 정렬 순서 (FIE 표준)
 AGE_GROUP_ORDER = ["Y8", "Y10", "Y12", "Y14", "Cadet", "Junior", "Veteran", "National"]
@@ -313,8 +311,6 @@ app.add_middleware(LanguageMiddleware, i18n=_service_i18n)
 # Auth 리다이렉트 shim (기존 템플릿 호환성)
 app.include_router(auth_router)
 
-# Club Management 라우터 등록 (SaaS)
-app.include_router(club_router, prefix="/api")
 
 # 데이터 저장소 (메모리 캐시)
 _data_cache: Dict[str, Any] = {}

@@ -1,0 +1,508 @@
+{% extends "base.html" %}
+
+{% block title %}회계관리 - Korean Fencing Tracker{% endblock %}
+
+{% block extra_css %}
+<style>
+.accounting-page {
+    padding: 2rem 0;
+}
+
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+}
+
+.page-header h1 {
+    font-size: 1.8rem;
+    color: #1a1a2e;
+}
+
+.back-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: #f5f5f5;
+    color: #333;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    text-decoration: none;
+    font-size: 0.9rem;
+}
+
+.back-btn:hover {
+    background: #eee;
+}
+
+/* Summary Cards */
+.summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.summary-card {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    padding: 1.5rem;
+}
+
+.summary-card h3 {
+    font-size: 0.9rem;
+    color: #666;
+    margin-bottom: 0.5rem;
+}
+
+.summary-value {
+    font-size: 2rem;
+    font-weight: 700;
+}
+
+.summary-value.warning {
+    color: #f5a623;
+}
+
+.summary-value.danger {
+    color: #e53935;
+}
+
+.summary-value.success {
+    color: #4caf50;
+}
+
+.summary-value.primary {
+    color: #667eea;
+}
+
+/* Fees Section */
+.fees-section {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.fees-section h2 {
+    font-size: 1.3rem;
+    margin-bottom: 1rem;
+    color: #1a1a2e;
+}
+
+.fees-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.fees-table th,
+.fees-table td {
+    padding: 0.8rem;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+}
+
+.fees-table th {
+    font-weight: 600;
+    color: #666;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+}
+
+.fees-table tr:hover {
+    background: #f8f9ff;
+}
+
+.status-badge {
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.status-badge.pending {
+    background: #fff3e0;
+    color: #e65100;
+}
+
+.status-badge.overdue {
+    background: #ffebee;
+    color: #c62828;
+}
+
+.status-badge.paid {
+    background: #e8f5e9;
+    color: #2e7d32;
+}
+
+.action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.4rem 0.8rem;
+    background: #667eea;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.8rem;
+}
+
+.action-btn:hover {
+    background: #5a6fd6;
+}
+
+.action-btn.secondary {
+    background: #f5f5f5;
+    color: #333;
+}
+
+/* Access Denied */
+.access-denied {
+    text-align: center;
+    padding: 4rem 2rem;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.access-denied .icon {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+}
+
+.access-denied h2 {
+    color: #e53935;
+    margin-bottom: 0.5rem;
+}
+
+.access-denied p {
+    color: #666;
+}
+
+/* Loading */
+.loading {
+    text-align: center;
+    padding: 3rem;
+    color: #888;
+}
+
+/* Empty state */
+.empty-state {
+    text-align: center;
+    padding: 2rem;
+    color: #888;
+}
+
+/* Tabs */
+.tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.tab-btn {
+    padding: 0.6rem 1.2rem;
+    background: #f5f5f5;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: all 0.2s;
+}
+
+.tab-btn.active {
+    background: #667eea;
+    color: white;
+}
+
+.tab-btn:hover:not(.active) {
+    background: #eee;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container accounting-page">
+    <div class="page-header">
+        <h1>💰 회계관리</h1>
+        <a href="/club/" class="back-btn">← 대시보드로 돌아가기</a>
+    </div>
+
+    <div id="accountingContent">
+        <div class="loading">회계 데이터 로딩 중...</div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const TEST_MODE = false;
+const API_BASE = '/api/club';
+const API_SUFFIX = '';
+
+async function loadAccountingData() {
+    const container = document.getElementById('accountingContent');
+
+    try {
+        const headers = TEST_MODE ? {} : {
+            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+        };
+
+        // 대시보드 API에서 비용 데이터 가져오기
+        const response = await fetch(`${API_BASE}/dashboard${API_SUFFIX}`, { headers });
+
+        if (!response.ok) {
+            if (response.status === 401) {
+                window.location.href = '/auth/login?redirect=/club/accounting';
+                return;
+            }
+            if (response.status === 403) {
+                renderAccessDenied();
+                return;
+            }
+            throw new Error('데이터 로드 실패');
+        }
+
+        const data = await response.json();
+
+        // 회계 상세 API 호출 (별도)
+        const feesResponse = await fetch(`${API_BASE}/accounting/summary${API_SUFFIX}`, { headers });
+        let feesData = {};
+        if (feesResponse.ok) {
+            feesData = await feesResponse.json();
+        }
+
+        renderAccounting(data, feesData);
+
+    } catch (error) {
+        console.error('Accounting error:', error);
+        container.innerHTML = `
+            <div class="access-denied">
+                <div class="icon">⚠️</div>
+                <h2>오류 발생</h2>
+                <p>회계 데이터를 불러올 수 없습니다.</p>
+                <a href="/club/" class="action-btn" style="margin-top: 1rem; display: inline-block;">대시보드로 이동</a>
+            </div>
+        `;
+    }
+}
+
+function renderAccessDenied() {
+    document.getElementById('accountingContent').innerHTML = `
+        <div class="access-denied">
+            <div class="icon">🔒</div>
+            <h2>접근 권한 없음</h2>
+            <p>회계관리는 클럽 대표(사장)만 접근할 수 있습니다.</p>
+            <a href="/club/" class="action-btn" style="margin-top: 1rem; display: inline-block;">대시보드로 이동</a>
+        </div>
+    `;
+}
+
+function renderAccounting(dashboardData, feesData) {
+    const container = document.getElementById('accountingContent');
+
+    const pendingFees = dashboardData.pending_fees || 0;
+    const overdueFees = dashboardData.overdue_fees || 0;
+    const thisMonthCollection = dashboardData.this_month_collection || 0;
+    const totalOutstanding = pendingFees + overdueFees;
+
+    container.innerHTML = `
+        <!-- Summary Cards -->
+        <div class="summary-grid">
+            <div class="summary-card">
+                <h3>미납 합계</h3>
+                <div class="summary-value warning">${formatCurrency(pendingFees)}원</div>
+            </div>
+            <div class="summary-card">
+                <h3>연체 합계</h3>
+                <div class="summary-value danger">${formatCurrency(overdueFees)}원</div>
+            </div>
+            <div class="summary-card">
+                <h3>이번 달 수금</h3>
+                <div class="summary-value success">${formatCurrency(thisMonthCollection)}원</div>
+            </div>
+            <div class="summary-card">
+                <h3>미수금 총액</h3>
+                <div class="summary-value primary">${formatCurrency(totalOutstanding)}원</div>
+            </div>
+        </div>
+
+        <!-- Pending Fees -->
+        <div class="fees-section">
+            <h2>📋 미납/연체 내역</h2>
+            <div class="tabs">
+                <button class="tab-btn active" onclick="filterFees('all')">전체</button>
+                <button class="tab-btn" onclick="filterFees('pending')">미납</button>
+                <button class="tab-btn" onclick="filterFees('overdue')">연체</button>
+            </div>
+            <div id="feesTableContent">
+                <div class="loading">내역 로딩 중...</div>
+            </div>
+        </div>
+
+        <!-- Monthly Summary -->
+        <div class="fees-section">
+            <h2>📊 월별 수금 현황</h2>
+            <div id="monthlySummary">
+                <div class="empty-state">월별 데이터는 추후 제공 예정입니다.</div>
+            </div>
+        </div>
+    `;
+
+    // Load fees detail
+    loadFeesDetail();
+}
+
+async function loadFeesDetail() {
+    const container = document.getElementById('feesTableContent');
+
+    try {
+        const headers = TEST_MODE ? {} : {
+            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+        };
+
+        const response = await fetch(`${API_BASE}/accounting/fees${API_SUFFIX}`, { headers });
+
+        if (!response.ok) {
+            // API가 없으면 테스트 데이터 표시
+            renderTestFeesData();
+            return;
+        }
+
+        const data = await response.json();
+        renderFeesTable(data.fees || []);
+
+    } catch (error) {
+        console.error('Fees error:', error);
+        renderTestFeesData();
+    }
+}
+
+function renderTestFeesData() {
+    // 테스트용 데이터 (API 미구현 시)
+    const testFees = [
+        { member_name: '박소윤', fee_type: '월회비', amount: 150000, status: 'pending', due_date: '2024-12-10' },
+        { member_name: '안호윤', fee_type: '월회비', amount: 150000, status: 'pending', due_date: '2024-12-10' },
+        { member_name: '이규현', fee_type: '월회비', amount: 150000, status: 'overdue', due_date: '2024-11-10' },
+    ];
+    renderFeesTable(testFees);
+}
+
+function renderFeesTable(fees) {
+    const container = document.getElementById('feesTableContent');
+
+    if (!fees || fees.length === 0) {
+        container.innerHTML = '<div class="empty-state">미납/연체 내역이 없습니다</div>';
+        return;
+    }
+
+    container.innerHTML = `
+        <table class="fees-table">
+            <thead>
+                <tr>
+                    <th>회원명</th>
+                    <th>유형</th>
+                    <th>금액</th>
+                    <th>기한</th>
+                    <th>상태</th>
+                    <th>액션</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${fees.map(fee => `
+                    <tr data-status="${fee.status}">
+                        <td><strong>${fee.member_name}</strong></td>
+                        <td>${getFeeTypeLabel(fee.fee_type)}</td>
+                        <td>${formatCurrency(fee.amount)}원</td>
+                        <td>${fee.due_date || '-'}</td>
+                        <td><span class="status-badge ${fee.status}">${getStatusLabel(fee.status)}</span></td>
+                        <td>
+                            <button class="action-btn" onclick="markAsPaid('${fee.id}')">납부확인</button>
+                        </td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `;
+}
+
+function filterFees(status) {
+    // Update tab buttons
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+    event.target.classList.add('active');
+
+    // Filter table rows
+    document.querySelectorAll('.fees-table tbody tr').forEach(row => {
+        if (status === 'all' || row.dataset.status === status) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+}
+
+async function markAsPaid(feeId) {
+    if (!confirm('납부 완료로 처리하시겠습니까?')) return;
+
+    try {
+        const headers = {
+            'Content-Type': 'application/json',
+            ...(TEST_MODE ? {} : {'Authorization': `Bearer ${localStorage.getItem('access_token')}`})
+        };
+
+        const response = await fetch(`${API_BASE}/accounting/fees/${feeId}/paid${API_SUFFIX}`, {
+            method: 'POST',
+            headers
+        });
+
+        if (response.ok) {
+            alert('납부 확인되었습니다.');
+            loadAccountingData();  // Reload
+        } else {
+            alert('처리에 실패했습니다.');
+        }
+    } catch (error) {
+        console.error('Mark as paid error:', error);
+        alert('처리에 실패했습니다.');
+    }
+}
+
+// Helpers
+function formatCurrency(amount) {
+    return new Intl.NumberFormat('ko-KR').format(amount || 0);
+}
+
+function getFeeTypeLabel(type) {
+    const labels = {
+        'membership': '월회비',
+        'lesson': '레슨비',
+        'competition': '대회비',
+        'equipment': '장비비',
+        'uniform': '유니폼비',
+        'registration': '등록비',
+        'other': '기타'
+    };
+    return labels[type] || type;
+}
+
+function getStatusLabel(status) {
+    const labels = {
+        'pending': '미납',
+        'overdue': '연체',
+        'paid': '납부완료',
+        'waived': '면제'
+    };
+    return labels[status] || status;
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', loadAccountingData);
+</script>
+{% endblock %}

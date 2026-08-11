@@ -1,0 +1,215 @@
+/* =============================================================
+   FencingMind Club - Skeleton Loading UI
+   Shimmer animation for loading placeholders.
+   ============================================================= */
+
+/* =====================================================
+   BASE SKELETON
+   ===================================================== */
+
+.skeleton {
+    position: relative;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: var(--radius-md, 8px);
+    color: transparent !important;
+    pointer-events: none;
+    user-select: none;
+}
+
+.skeleton * {
+    visibility: hidden;
+}
+
+.skeleton::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0) 0%,
+        rgba(255, 255, 255, 0.04) 40%,
+        rgba(255, 255, 255, 0.08) 50%,
+        rgba(255, 255, 255, 0.04) 60%,
+        rgba(255, 255, 255, 0) 100%
+    );
+    animation: skeleton-shimmer 1.8s ease-in-out infinite;
+    transform: translateX(-100%);
+}
+
+@keyframes skeleton-shimmer {
+    0% {
+        transform: translateX(-100%);
+    }
+    100% {
+        transform: translateX(100%);
+    }
+}
+
+/* =====================================================
+   SKELETON VARIANTS
+   ===================================================== */
+
+/* Text line */
+.skeleton-text {
+    height: 1em;
+    border-radius: var(--radius-sm, 6px);
+    margin-bottom: var(--space-2, 0.5rem);
+}
+
+.skeleton-text:last-child {
+    width: 70%;
+}
+
+.skeleton-text-sm {
+    height: 0.75em;
+}
+
+.skeleton-text-lg {
+    height: 1.5em;
+}
+
+/* Card */
+.skeleton-card {
+    height: 120px;
+    border-radius: var(--radius-lg, 12px);
+    border: 1px solid var(--border-color);
+}
+
+.skeleton-card-tall {
+    height: 200px;
+}
+
+/* Avatar / Circle */
+.skeleton-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: var(--radius-full, 9999px);
+    flex-shrink: 0;
+}
+
+.skeleton-avatar-sm {
+    width: 32px;
+    height: 32px;
+}
+
+.skeleton-avatar-lg {
+    width: 64px;
+    height: 64px;
+}
+
+/* Button */
+.skeleton-button {
+    height: 40px;
+    width: 120px;
+    border-radius: var(--radius-md, 8px);
+}
+
+.skeleton-button-full {
+    width: 100%;
+}
+
+/* Table row */
+.skeleton-table-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4, 1rem);
+    padding: var(--space-3, 0.75rem) var(--space-4, 1rem);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.skeleton-table-cell {
+    height: 1em;
+    border-radius: var(--radius-sm, 6px);
+    flex: 1;
+}
+
+.skeleton-table-cell:first-child {
+    flex: 0 0 40px;
+}
+
+.skeleton-table-cell:last-child {
+    flex: 0 0 80px;
+}
+
+/* Image placeholder */
+.skeleton-image {
+    width: 100%;
+    height: 0;
+    padding-bottom: 56.25%; /* 16:9 ratio */
+    border-radius: var(--radius-lg, 12px);
+}
+
+/* Stat value */
+.skeleton-stat {
+    height: 2.2rem;
+    width: 60px;
+    border-radius: var(--radius-sm, 6px);
+    margin-bottom: var(--space-2, 0.5rem);
+}
+
+/* =====================================================
+   COMPOSITE SKELETON PATTERNS
+   ===================================================== */
+
+/* Stat card skeleton */
+.skeleton-stat-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-2, 0.5rem);
+    padding: var(--space-5, 1.25rem);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg, 12px);
+}
+
+/* List item skeleton */
+.skeleton-list-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3, 0.75rem);
+    padding: var(--space-3, 0.75rem) 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.skeleton-list-item:last-child {
+    border-bottom: none;
+}
+
+/* =====================================================
+   SKELETON CONTAINER
+   ===================================================== */
+
+.skeleton-container {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3, 0.75rem);
+}
+
+.skeleton-container.hidden {
+    display: none;
+}
+
+/* =====================================================
+   REDUCED MOTION
+   ===================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+    .skeleton::after {
+        animation: skeleton-pulse 2s ease-in-out infinite;
+        transform: none;
+        background: rgba(255, 255, 255, 0.06);
+    }
+
+    @keyframes skeleton-pulse {
+        0%, 100% {
+            opacity: 0.4;
+        }
+        50% {
+            opacity: 1;
+        }
+    }
+}

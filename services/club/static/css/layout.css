@@ -1,0 +1,433 @@
+/* =============================================================
+   FencingMind Club - Layout System
+   Desktop sidebar for coaches, mobile bottom nav for students.
+   Responsive breakpoints: mobile < 768px, tablet 769-1024px, desktop > 1025px
+   ============================================================= */
+
+/* =====================================================
+   MOBILE BOTTOM NAVIGATION
+   Fixed bottom nav visible on mobile only (< 768px)
+   ===================================================== */
+
+.bottom-nav {
+    display: none;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: var(--bottom-nav-height, 64px);
+    background: rgba(10, 10, 15, 0.97);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-top: 1px solid var(--border-color);
+    z-index: var(--z-navbar, 1000);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.bottom-nav-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    height: var(--bottom-nav-height, 64px);
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 0 var(--space-2, 0.5rem);
+}
+
+.bottom-nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    text-decoration: none;
+    color: var(--text-muted);
+    flex: 1;
+    min-width: 0;
+    padding: var(--space-1, 0.25rem) 0;
+    border-radius: var(--radius-md, 8px);
+    transition: color var(--transition-fast, 150ms ease),
+                background var(--transition-fast, 150ms ease);
+    -webkit-tap-highlight-color: transparent;
+    position: relative;
+}
+
+.bottom-nav-item:hover {
+    color: var(--text-secondary);
+}
+
+.bottom-nav-item:active {
+    background: var(--bg-hover, rgba(255, 255, 255, 0.05));
+}
+
+.bottom-nav-item.active {
+    color: var(--accent-primary);
+}
+
+.bottom-nav-item.active::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 24px;
+    height: 3px;
+    background: var(--accent-primary);
+    border-radius: 0 0 3px 3px;
+}
+
+.bottom-nav-icon {
+    font-size: 1.25rem;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 24px;
+}
+
+.bottom-nav-label {
+    font-size: var(--font-size-xs, 0.75rem);
+    font-weight: var(--font-weight-medium, 500);
+    line-height: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 64px;
+}
+
+/* Notification badge on nav item */
+.bottom-nav-badge {
+    position: absolute;
+    top: 2px;
+    right: 50%;
+    transform: translateX(calc(50% + 10px));
+    min-width: 16px;
+    height: 16px;
+    background: var(--danger-color);
+    color: #fff;
+    font-size: 0.625rem;
+    font-weight: var(--font-weight-bold, 700);
+    border-radius: var(--radius-full, 9999px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 4px;
+    line-height: 1;
+}
+
+/* =====================================================
+   MOBILE STYLES (< 768px)
+   ===================================================== */
+
+@media (max-width: 768px) {
+    .bottom-nav {
+        display: block;
+    }
+
+    /* Add padding to main content so it does not hide behind bottom nav */
+    .main-content {
+        padding-bottom: calc(var(--bottom-nav-height, 64px) + env(safe-area-inset-bottom, 0px) + var(--space-4, 1rem));
+    }
+
+    /* Hide footer on mobile when bottom nav is shown */
+    .footer {
+        display: none;
+    }
+
+    /* Hide desktop-only nav links on mobile since bottom nav replaces them */
+    .navbar .nav-links {
+        display: none;
+    }
+
+    /* Simplify top navbar on mobile */
+    .navbar {
+        padding: 8px 0;
+    }
+
+    .navbar .container {
+        gap: 0;
+    }
+}
+
+/* =====================================================
+   DESKTOP SIDEBAR LAYOUT (> 1025px, coach/admin)
+   ===================================================== */
+
+.layout-with-sidebar {
+    display: flex;
+    min-height: 100vh;
+    padding-top: var(--navbar-height, 60px);
+}
+
+.sidebar {
+    position: fixed;
+    top: var(--navbar-height, 60px);
+    left: 0;
+    bottom: 0;
+    width: var(--sidebar-width, 260px);
+    background: rgba(10, 10, 15, 0.97);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-right: 1px solid var(--border-color);
+    z-index: var(--z-sticky, 200);
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: var(--space-6, 1.5rem) 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.sidebar-section {
+    padding: 0 var(--space-4, 1rem);
+    margin-bottom: var(--space-6, 1.5rem);
+}
+
+.sidebar-label {
+    font-size: var(--font-size-xs, 0.75rem);
+    font-weight: var(--font-weight-semibold, 600);
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: var(--letter-spacing-wide, 0.05em);
+    padding: 0 var(--space-3, 0.75rem);
+    margin-bottom: var(--space-2, 0.5rem);
+}
+
+.sidebar-nav {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.sidebar-nav-item {
+    margin-bottom: 2px;
+}
+
+.sidebar-nav-link {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3, 0.75rem);
+    padding: var(--space-2, 0.5rem) var(--space-3, 0.75rem);
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: var(--font-size-sm, 0.875rem);
+    font-weight: var(--font-weight-medium, 500);
+    border-radius: var(--radius-md, 8px);
+    transition: color var(--transition-fast, 150ms ease),
+                background var(--transition-fast, 150ms ease);
+}
+
+.sidebar-nav-link:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover, rgba(255, 255, 255, 0.05));
+}
+
+.sidebar-nav-link.active {
+    color: var(--text-primary);
+    background: rgba(201, 48, 44, 0.15);
+    border-left: 3px solid var(--accent-primary);
+    padding-left: calc(var(--space-3, 0.75rem) - 3px);
+}
+
+.sidebar-nav-icon {
+    font-size: 1.125rem;
+    width: 24px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.sidebar-spacer {
+    flex: 1;
+}
+
+/* Content area offset when sidebar is present */
+.sidebar-content {
+    flex: 1;
+    margin-left: var(--sidebar-width, 260px);
+    min-width: 0;
+}
+
+/* =====================================================
+   TABLET (769px - 1024px): collapse sidebar
+   ===================================================== */
+
+@media (max-width: 1024px) {
+    .sidebar {
+        display: none;
+    }
+
+    .sidebar-content {
+        margin-left: 0;
+    }
+}
+
+/* =====================================================
+   DESKTOP NAVBAR ENHANCEMENTS
+   ===================================================== */
+
+.nav-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3, 0.75rem);
+    margin-left: auto;
+}
+
+.nav-notification-btn {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-full, 9999px);
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all var(--transition-fast, 150ms ease);
+    font-size: 1.2rem;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.nav-notification-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover, rgba(255, 255, 255, 0.05));
+    border-color: var(--border-color);
+}
+
+.nav-notification-badge {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    min-width: 8px;
+    height: 8px;
+    background: var(--danger-color);
+    border-radius: var(--radius-full, 9999px);
+    border: 2px solid var(--bg-primary);
+}
+
+/* Profile dropdown */
+.nav-profile-dropdown {
+    position: relative;
+}
+
+.nav-profile-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2, 0.5rem);
+    padding: var(--space-1, 0.25rem) var(--space-3, 0.75rem) var(--space-1, 0.25rem) var(--space-1, 0.25rem);
+    border-radius: var(--radius-full, 9999px);
+    border: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all var(--transition-fast, 150ms ease);
+    font-family: inherit;
+}
+
+.nav-profile-btn:hover {
+    background: var(--bg-tertiary);
+    border-color: var(--border-light);
+}
+
+.nav-profile-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-full, 9999px);
+    background: var(--accent-gold);
+    color: var(--bg-primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: var(--font-weight-bold, 700);
+    font-size: var(--font-size-sm, 0.875rem);
+}
+
+.nav-profile-name {
+    font-size: var(--font-size-sm, 0.875rem);
+    font-weight: var(--font-weight-medium, 500);
+    max-width: 100px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.nav-profile-menu {
+    display: none;
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    min-width: 200px;
+    background: rgba(18, 18, 26, 0.97);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg, 12px);
+    padding: var(--space-2, 0.5rem);
+    z-index: var(--z-dropdown, 100);
+    box-shadow: var(--shadow-lg);
+}
+
+.nav-profile-menu.open {
+    display: block;
+}
+
+.nav-profile-menu-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3, 0.75rem);
+    padding: var(--space-2, 0.5rem) var(--space-3, 0.75rem);
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: var(--font-size-sm, 0.875rem);
+    border-radius: var(--radius-md, 8px);
+    transition: all var(--transition-fast, 150ms ease);
+}
+
+.nav-profile-menu-item:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover, rgba(255, 255, 255, 0.05));
+}
+
+.nav-profile-menu-divider {
+    height: 1px;
+    background: var(--border-color);
+    margin: var(--space-2, 0.5rem) 0;
+}
+
+/* Hide profile dropdown elements on mobile */
+@media (max-width: 768px) {
+    .nav-profile-name {
+        display: none;
+    }
+
+    .nav-notification-btn {
+        width: 36px;
+        height: 36px;
+    }
+}
+
+/* =====================================================
+   FOCUS STATES - Accessibility
+   ===================================================== */
+
+.bottom-nav-item:focus-visible,
+.sidebar-nav-link:focus-visible,
+.nav-notification-btn:focus-visible,
+.nav-profile-btn:focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
+}
+
+/* =====================================================
+   UTILITY: page content wrapper for bottom nav offset
+   ===================================================== */
+
+.page-content {
+    padding-bottom: var(--space-4, 1rem);
+}
+
+@media (max-width: 768px) {
+    .page-content {
+        padding-bottom: calc(var(--bottom-nav-height, 64px) + env(safe-area-inset-bottom, 0px) + var(--space-4, 1rem));
+    }
+}

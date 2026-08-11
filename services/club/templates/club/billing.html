@@ -1,0 +1,881 @@
+{% extends "base.html" %}
+
+{% block title %}결제 관리 - FencingMind Club{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ==============================================
+   BILLING PAGE - Mobile-First Dark Theme
+   ============================================== */
+
+/* --- Layout --- */
+.billing-page {
+    padding: 1rem;
+    max-width: 800px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+/* --- Header --- */
+.billing-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.back-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: 1.2rem;
+    flex-shrink: 0;
+    transition: all 0.2s;
+}
+
+.back-btn:hover {
+    border-color: var(--border-light);
+    color: var(--text-primary);
+    background: var(--bg-card-hover);
+}
+
+.billing-header h1 {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+/* --- Stat Cards --- */
+.billing-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.75rem;
+}
+
+@media (max-width: 480px) {
+    .billing-stats { grid-template-columns: 1fr; }
+}
+
+.billing-stat-card {
+    background: var(--bg-card);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    padding: 1rem;
+    text-align: center;
+    transition: border-color 0.2s;
+}
+
+.billing-stat-card:hover {
+    border-color: var(--border-light);
+}
+
+.billing-stat-card .icon {
+    font-size: 1.3rem;
+    margin-bottom: 0.25rem;
+}
+
+.billing-stat-card .value {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    font-family: 'Inter', sans-serif;
+    line-height: 1.2;
+}
+
+.billing-stat-card .value.success { color: var(--success-color); }
+.billing-stat-card .value.warning { color: var(--warning-color); }
+.billing-stat-card .value.danger { color: var(--danger-color); }
+
+.billing-stat-card .label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 0.2rem;
+    font-weight: 500;
+}
+
+/* --- Section Card --- */
+.section-card {
+    background: var(--bg-card);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    overflow: hidden;
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.875rem 1.25rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.section-header h2 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.section-content {
+    padding: 0.75rem 1.25rem;
+}
+
+/* --- Invoice Card --- */
+.invoice-card {
+    padding: 1rem 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.invoice-card:last-child {
+    border-bottom: none;
+}
+
+.invoice-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 0.5rem;
+}
+
+.invoice-title {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 0.95rem;
+}
+
+.invoice-type {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 0.15rem;
+}
+
+.invoice-amount {
+    text-align: right;
+}
+
+.invoice-amount .amount {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--warning-color);
+}
+
+.invoice-amount .due {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-top: 0.1rem;
+}
+
+.pay-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    width: 100%;
+    min-height: 44px;
+    padding: 0.625rem 1rem;
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: opacity 0.15s ease, transform 0.15s ease;
+    margin-top: 0.75rem;
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+}
+
+.pay-btn:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+}
+
+.pay-btn:active {
+    transform: translateY(0);
+}
+
+.pay-btn:disabled {
+    background: var(--bg-tertiary);
+    color: var(--text-muted);
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+.pay-btn:disabled:hover {
+    opacity: 1;
+    transform: none;
+}
+
+/* --- Payment History --- */
+.payment-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--border-color);
+    min-height: 48px;
+}
+
+.payment-item:last-child {
+    border-bottom: none;
+}
+
+.payment-info h4 {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.1rem;
+}
+
+.payment-info p {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.payment-right {
+    text-align: right;
+}
+
+.payment-right .amount {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.payment-right .method {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-top: 0.1rem;
+}
+
+/* --- Status Badge --- */
+.status-badge {
+    display: inline-block;
+    padding: 0.2rem 0.5rem;
+    border-radius: 6px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.status-badge.paid {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--success-color);
+    border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.status-badge.pending {
+    background: rgba(245, 158, 11, 0.15);
+    color: var(--warning-color);
+    border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+.status-badge.overdue {
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--danger-color);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.status-badge.failed {
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--danger-color);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.status-badge.refunded {
+    background: rgba(107, 114, 128, 0.15);
+    color: var(--text-muted);
+    border: 1px solid rgba(107, 114, 128, 0.25);
+}
+
+.status-badge.success {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--success-color);
+    border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+/* --- Empty State --- */
+.empty-state {
+    text-align: center;
+    padding: 1.5rem 1rem;
+    color: var(--text-muted);
+}
+
+.empty-state .icon {
+    font-size: 1.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.empty-state p {
+    font-size: 0.875rem;
+}
+
+/* --- Loading --- */
+.loading {
+    text-align: center;
+    padding: 1.5rem;
+    color: var(--text-muted);
+}
+
+/* --- Recurring Billing Item --- */
+.recurring-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--border-color);
+    min-height: 48px;
+}
+
+.recurring-item:last-child {
+    border-bottom: none;
+}
+
+.recurring-info h4 {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.15rem;
+}
+
+.recurring-info p {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.recurring-right {
+    text-align: right;
+    flex-shrink: 0;
+}
+
+.recurring-right .amount {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.recurring-right .next-date {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-top: 0.1rem;
+}
+
+/* --- Overdue Item --- */
+.overdue-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--border-color);
+    min-height: 48px;
+}
+
+.overdue-item:last-child {
+    border-bottom: none;
+}
+
+.overdue-info h4 {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--danger-color);
+    margin-bottom: 0.15rem;
+}
+
+.overdue-info p {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.overdue-right {
+    text-align: right;
+    flex-shrink: 0;
+}
+
+.overdue-right .amount {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--danger-color);
+}
+
+.overdue-right .days {
+    font-size: 0.7rem;
+    color: var(--danger-color);
+    margin-top: 0.1rem;
+}
+
+/* --- Action Buttons (Section Header) --- */
+.section-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.35rem 0.75rem;
+    background: var(--bg-tertiary, rgba(59, 130, 246, 0.1));
+    color: var(--accent-color, #3b82f6);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+
+.action-btn:hover {
+    background: rgba(59, 130, 246, 0.2);
+    border-color: rgba(59, 130, 246, 0.4);
+}
+
+.action-btn.danger {
+    color: var(--danger-color);
+    background: rgba(239, 68, 68, 0.1);
+}
+
+.action-btn.danger:hover {
+    background: rgba(239, 68, 68, 0.2);
+    border-color: rgba(239, 68, 68, 0.4);
+}
+
+.action-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* --- Admin Only Visibility --- */
+.admin-only {
+    display: none;
+}
+
+.admin-only.visible {
+    display: block;
+}
+
+/* --- Desktop Enhancement --- */
+@media (min-width: 601px) {
+    .billing-page {
+        padding: 1.5rem 1rem;
+        gap: 1.25rem;
+    }
+
+    .billing-header h1 {
+        font-size: 1.5rem;
+    }
+
+    .billing-stat-card .value {
+        font-size: 1.75rem;
+    }
+
+    .section-content {
+        padding: 1rem 1.5rem;
+    }
+
+    .pay-btn {
+        width: auto;
+        min-width: 160px;
+        margin-left: auto;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container billing-page">
+    <!-- Header -->
+    <div class="billing-header">
+        <a href="/api/club/" class="back-btn" title="대시보드로 돌아가기">&#8592;</a>
+        <h1>&#128176; 결제 관리</h1>
+    </div>
+
+    <!-- Billing Stats -->
+    <div class="billing-stats">
+        <div class="billing-stat-card">
+            <div class="icon">&#128203;</div>
+            <div class="value" id="statInvoiced">-</div>
+            <div class="label">이번 달 청구</div>
+        </div>
+        <div class="billing-stat-card">
+            <div class="value success" id="statPaid">-</div>
+            <div class="label">납부 완료</div>
+        </div>
+        <div class="billing-stat-card">
+            <div class="value danger" id="statUnpaid">-</div>
+            <div class="label">미납 금액</div>
+        </div>
+    </div>
+
+    <!-- Unpaid Invoices -->
+    <div class="section-card">
+        <div class="section-header">
+            <h2>&#128680; 미납 청구서</h2>
+        </div>
+        <div class="section-content" id="unpaidInvoicesContent">
+            <div class="loading">청구서 로딩 중...</div>
+        </div>
+    </div>
+
+    <!-- Payment History -->
+    <div class="section-card">
+        <div class="section-header">
+            <h2>&#128179; 결제 내역</h2>
+        </div>
+        <div class="section-content" id="paymentHistoryContent">
+            <div class="loading">결제 내역 로딩 중...</div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.portone.io/v2/browser-sdk.js"></script>
+<script>
+const API_BASE = '/api/billing';
+
+function getAuthHeaders() {
+    return { 'Authorization': `Bearer ${localStorage.getItem('access_token')}` };
+}
+
+function getTestParam() {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('test') === '1' ? '?test=1' : '';
+}
+
+function formatAmount(amount) {
+    if (amount == null) return '-';
+    return '\u20A9' + Number(amount).toLocaleString('ko-KR');
+}
+
+function handleUnauthorized() {
+    localStorage.removeItem('access_token');
+    window.location.href = '/auth/login?redirect=/api/club/billing';
+}
+
+const invoiceTypeLabels = {
+    'monthly_dues': '월 회비',
+    'lesson': '레슨비',
+    'competition_entry': '대회 출전비',
+    'coach_travel': '코치 출장비',
+    'transportation': '교통비',
+    'equipment_repair': '장비 수리비',
+    'equipment_purchase': '장비 구매비',
+    'other': '기타',
+};
+
+const paymentMethodLabels = {
+    'card': '카드',
+    'cash': '현금',
+    'bank_transfer': '계좌이체',
+    'billing_key': '자동결제',
+};
+
+const statusLabels = {
+    'pending': '대기',
+    'paid': '완납',
+    'partial': '부분납부',
+    'overdue': '연체',
+    'waived': '면제',
+    'success': '완료',
+    'failed': '실패',
+    'refunded': '환불',
+};
+
+// =============================================
+// Data Loading
+// =============================================
+
+async function loadBillingSummary() {
+    try {
+        const response = await fetch(`${API_BASE}/my/outstanding`, {
+            headers: getAuthHeaders()
+        });
+
+        if (response.status === 401) {
+            handleUnauthorized();
+            return;
+        }
+
+        if (!response.ok) {
+            // Fallback: set default values
+            document.getElementById('statInvoiced').textContent = '-';
+            document.getElementById('statPaid').textContent = '-';
+            document.getElementById('statUnpaid').textContent = '-';
+            return;
+        }
+
+        const data = await response.json();
+        const totalOutstanding = data.total_outstanding || 0;
+
+        document.getElementById('statUnpaid').textContent = formatAmount(totalOutstanding);
+
+        // Also fetch all invoices for summary
+        const invoiceRes = await fetch(`${API_BASE}/my/invoices?limit=50`, {
+            headers: getAuthHeaders()
+        });
+
+        if (invoiceRes.ok) {
+            const invoiceData = await invoiceRes.json();
+            const invoices = invoiceData.invoices || [];
+
+            let totalInvoiced = 0;
+            let totalPaid = 0;
+
+            invoices.forEach(inv => {
+                totalInvoiced += inv.amount || 0;
+                totalPaid += inv.paid_amount || 0;
+            });
+
+            document.getElementById('statInvoiced').textContent = formatAmount(totalInvoiced);
+            document.getElementById('statPaid').textContent = formatAmount(totalPaid);
+        }
+
+    } catch (error) {
+        console.error('결제 현황 로드 오류:', error);
+    }
+}
+
+async function loadUnpaidInvoices() {
+    const container = document.getElementById('unpaidInvoicesContent');
+
+    try {
+        const response = await fetch(`${API_BASE}/my/outstanding`, {
+            headers: getAuthHeaders()
+        });
+
+        if (response.status === 401) {
+            handleUnauthorized();
+            return;
+        }
+
+        if (!response.ok) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="icon">&#128203;</div>
+                    <p>청구 내역을 불러올 수 없습니다</p>
+                </div>
+            `;
+            return;
+        }
+
+        const data = await response.json();
+        const items = data.items || [];
+
+        if (items.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="icon">&#9989;</div>
+                    <p>미납 청구서가 없습니다</p>
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = items.map(item => {
+            const outstanding = item.outstanding || (item.amount - (item.paid || 0));
+            const dueDateStr = item.due_date
+                ? new Date(item.due_date).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })
+                : '';
+            const statusClass = item.status === 'overdue' ? 'overdue' : 'pending';
+
+            return `
+                <div class="invoice-card">
+                    <div class="invoice-top">
+                        <div>
+                            <div class="invoice-title">${item.title || '청구서'}</div>
+                            <div class="invoice-type">
+                                ${invoiceTypeLabels[item.type] || item.type || ''}
+                                <span class="status-badge ${statusClass}">${statusLabels[item.status] || item.status}</span>
+                            </div>
+                        </div>
+                        <div class="invoice-amount">
+                            <div class="amount">${formatAmount(outstanding)}</div>
+                            ${dueDateStr ? `<div class="due">납부기한: ${dueDateStr}</div>` : ''}
+                        </div>
+                    </div>
+                    <button class="pay-btn"
+                            onclick="payWithPortOne(${item.invoice_member_id}, ${outstanding}, '${(item.title || '청구서').replace(/'/g, "\\'")}')">
+                        &#128179; 카드 결제
+                    </button>
+                </div>
+            `;
+        }).join('');
+
+    } catch (error) {
+        console.error('미납 청구서 로드 오류:', error);
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="icon">&#128203;</div>
+                <p>청구 내역을 불러올 수 없습니다</p>
+            </div>
+        `;
+    }
+}
+
+async function loadPaymentHistory() {
+    const container = document.getElementById('paymentHistoryContent');
+
+    try {
+        const response = await fetch(`${API_BASE}/my/invoices?limit=20`, {
+            headers: getAuthHeaders()
+        });
+
+        if (response.status === 401) {
+            handleUnauthorized();
+            return;
+        }
+
+        if (!response.ok) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="icon">&#128179;</div>
+                    <p>결제 내역을 불러올 수 없습니다</p>
+                </div>
+            `;
+            return;
+        }
+
+        const data = await response.json();
+        const invoices = data.invoices || [];
+
+        if (invoices.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="icon">&#128179;</div>
+                    <p>결제 내역이 없습니다</p>
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = invoices.map(inv => {
+            const dateStr = inv.created_at
+                ? new Date(inv.created_at).toLocaleDateString('ko-KR', {
+                    year: 'numeric', month: 'short', day: 'numeric'
+                })
+                : '';
+            const statusClass = inv.status === 'paid' ? 'paid'
+                : inv.status === 'overdue' ? 'overdue'
+                : inv.status === 'partial' ? 'pending'
+                : 'pending';
+
+            return `
+                <div class="payment-item">
+                    <div class="payment-info">
+                        <h4>${inv.invoice_title || '청구서'}</h4>
+                        <p>${dateStr} &middot; ${invoiceTypeLabels[inv.invoice_type] || inv.invoice_type || ''}</p>
+                    </div>
+                    <div class="payment-right">
+                        <div class="amount">${formatAmount(inv.amount)}</div>
+                        <span class="status-badge ${statusClass}">${statusLabels[inv.status] || inv.status}</span>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+    } catch (error) {
+        console.error('결제 내역 로드 오류:', error);
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="icon">&#128179;</div>
+                <p>결제 내역을 불러올 수 없습니다</p>
+            </div>
+        `;
+    }
+}
+
+// =============================================
+// PortOne V2 Payment
+// =============================================
+
+async function payWithPortOne(invoiceMemberId, amount, title) {
+    if (!window.PortOne) {
+        alert('결제 모듈을 불러오는 중입니다. 잠시 후 다시 시도해주세요.');
+        return;
+    }
+
+    const paymentId = `fm_${invoiceMemberId}_${Date.now()}`;
+
+    try {
+        const response = await PortOne.requestPayment({
+            storeId: "{{ portone_store_id | default('') }}",
+            channelKey: "{{ portone_channel_key | default('') }}",
+            paymentId: paymentId,
+            orderName: title,
+            totalAmount: amount,
+            currency: "KRW",
+            payMethod: "CARD",
+            customer: {
+                fullName: "FencingMind 회원",
+            },
+        });
+
+        if (response.code) {
+            // User cancelled or error
+            if (response.code === 'FAILURE_TYPE_PG') {
+                alert('결제가 실패했습니다: ' + (response.message || '알 수 없는 오류'));
+            }
+            // User cancel: do nothing
+            return;
+        }
+
+        // Payment success - verify on server
+        const verifyRes = await fetch(`${API_BASE}/payments/verify-portone`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...getAuthHeaders()
+            },
+            body: JSON.stringify({
+                payment_id: paymentId,
+                invoice_member_id: invoiceMemberId,
+            })
+        });
+
+        if (verifyRes.ok) {
+            const result = await verifyRes.json();
+            alert(`결제가 완료되었습니다. (${formatAmount(result.amount)})`);
+            // Reload data
+            loadBillingSummary();
+            loadUnpaidInvoices();
+            loadPaymentHistory();
+        } else {
+            const err = await verifyRes.json().catch(() => ({}));
+            alert('결제 검증에 실패했습니다: ' + (err.detail || '서버 오류'));
+        }
+
+    } catch (error) {
+        console.error('결제 오류:', error);
+        alert('결제 처리 중 오류가 발생했습니다.');
+    }
+}
+
+// =============================================
+// Initialize
+// =============================================
+
+document.addEventListener('DOMContentLoaded', () => {
+    loadBillingSummary();
+    loadUnpaidInvoices();
+    loadPaymentHistory();
+});
+</script>
+{% endblock %}

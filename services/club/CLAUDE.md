@@ -1,7 +1,8 @@
 # club.fencingmind.ai - 클럽 관리 SaaS
 
 **서브도메인:** club.fencingmind.ai
-**포트:** 72
+**포트:** 72 (코드 기본값, `CLUB_PORT`로 오버라이드 — 운영 인스턴스는 9072)
+**파일럿:** 최병철펜싱클럽 (org_id: 401)
 **상태:** 🔨 개발 중
 
 ---
@@ -23,22 +24,42 @@
 ## 폴더 구조
 ```
 services/club/
-├── api/                 # FastAPI API
-├── dashboard/           # 코치용 대시보드
-├── checkin/             # 출석 체크인
-├── members/             # 회원 관리
-├── payments/            # 결제
-├── player/              # 선수용 기능
-├── parent/              # 학부모용 기능
-├── templates/           # 템플릿
-├── static/              # 정적 파일
-└── tests/               # 테스트
+├── app/
+│   ├── server.py       # FastAPI 메인
+│   ├── config.py       # 설정
+│   ├── database.py     # shared_core.db 래퍼
+│   ├── pages.py        # 페이지 라우트
+│   ├── middleware.py   # 언어/테마 미들웨어
+│   ├── errors.py       # 에러 핸들러
+│   ├── scheduler.py    # 백그라운드 스케줄러
+│   ├── auth/           # 인증 (account 서비스 연동 shim)
+│   ├── club/           # 클럽 관리
+│   │   ├── router.py
+│   │   ├── models.py
+│   │   ├── dependencies.py  # shared_core.auth 래퍼
+│   │   └── players/
+│   ├── announcements/  # 공지사항
+│   ├── billing/        # 결제
+│   ├── checkin/        # 출석 체크인
+│   ├── competitions/   # 대회 참가
+│   ├── i18n/           # 다국어
+│   ├── lessons/        # 레슨
+│   ├── notifications/  # 알림
+│   ├── schedule/       # 일정
+│   ├── settings/       # 설정
+│   ├── sync/           # 동기화
+│   └── videos/         # 영상
+├── templates/club/
+├── static/
+└── requirements.txt
+packages/shared_core/    # 통합 인증/DB 패키지
 ```
 
 ## 서버 실행
 ```bash
-cd services/club
-python -m uvicorn api.server:app --host 0.0.0.0 --port 72
+cd /Users/gyejinpark/Documents/GitHub/FencingMind-club
+PYTHONPATH="${PWD}:${PWD}/packages:${PWD}/services/club" \
+  python -m uvicorn services.club.app.server:app --host 0.0.0.0 --port 72 --reload
 ```
 
 ---
@@ -50,8 +71,6 @@ python -m uvicorn api.server:app --host 0.0.0.0 --port 72
 - `club_notification_templates` - 알림 템플릿
 - `club_schedules` - 일정
 - `club_announcements` - 공지사항
-
-**현재 services/data/app/club/에 있는 테이블 (마이그레이션 예정):**
 - `club_settings` - 클럽 설정
 - `attendance` - 출석
 - `lessons` - 레슨
@@ -66,9 +85,22 @@ python -m uvicorn api.server:app --host 0.0.0.0 --port 72
 
 ## 인증 연동
 - **회원가입/로그인**: account.fencingmind.ai (port 70)에서 처리
+- **shared_core 기반**: JWT + Supabase Auth 이중 인증
 - **JWT 검증**: `from shared_core.auth.jwt import get_current_member`
-- **역할 확인**: `from shared_core.auth.dependencies import require_auth`
+- **역할 확인**: `from shared_core.auth.dependencies import require_roles, require_coach, require_admin`
+- **로그인 필수 처리**: `from shared_core.auth.jwt import require_auth`
 - **회원 관리 API 직접 구현 금지** — account 서비스만 담당
+- **테스트 모드**: `CLUB_TEST_MODE=1` 또는 `?test=1`
+
+## 환경 변수
+```
+SUPABASE_URL=
+SUPABASE_KEY=
+CLUB_PORT=72
+DEFAULT_ORG_ID=401
+JWT_SECRET_KEY=your-jwt-secret-key
+KAKAO_CLIENT_ID=
+```
 
 ## Git 브랜치 규칙
 - 이 서비스의 코드는 `feature/club/*` 브랜치에서만 수정
@@ -121,5 +153,5 @@ python -m uvicorn api.server:app --host 0.0.0.0 --port 72
 ---
 
 ## 현재 상태
-⚠️ 현재 클럽 관리 기능은 `services/data/app/club/`에 있음
-Phase 2에서 이 폴더로 분리 예정
+클럽 관리 기능은 이 서비스(`services/club/`)로 분리 완료.
+`services/data/app/club/`은 라우터 등록이 해제된 레거시 코드로, 정리 대상.

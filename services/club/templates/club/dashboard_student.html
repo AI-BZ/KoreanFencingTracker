@@ -1,0 +1,1068 @@
+{% extends "base.html" %}
+
+{% block title %}내 클럽 - FencingMind Club{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ==============================================
+   STUDENT DASHBOARD - Mobile-First Dark Theme
+   ============================================== */
+
+/* --- Layout --- */
+.student-dashboard {
+    padding: 1rem;
+    max-width: 600px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+/* --- Welcome Card --- */
+.welcome-card {
+    background: linear-gradient(135deg, var(--accent-secondary) 0%, var(--accent-primary) 100%);
+    border-radius: 16px;
+    padding: 1.25rem 1.5rem;
+    border: 1px solid var(--border-light);
+}
+
+.welcome-card h1 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 0.25rem;
+}
+
+.welcome-card .club-name {
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+/* --- Check-in Section --- */
+.checkin-section {
+    background: var(--bg-card);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    padding: 1.5rem;
+    text-align: center;
+}
+
+.checkin-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    width: 100%;
+    min-height: 56px;
+    padding: 0.875rem 1.5rem;
+    background: linear-gradient(135deg, var(--success-color), #059669);
+    color: #fff;
+    border: none;
+    border-radius: 14px;
+    font-size: 1.125rem;
+    font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    box-shadow: 0 4px 16px rgba(16, 185, 129, 0.35);
+    -webkit-tap-highlight-color: transparent;
+}
+
+.checkin-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 24px rgba(16, 185, 129, 0.45);
+}
+
+.checkin-btn:active {
+    transform: translateY(0);
+}
+
+.checkin-btn.checked {
+    background: var(--bg-tertiary);
+    color: var(--text-muted);
+    cursor: default;
+    box-shadow: none;
+}
+
+.checkin-btn.checked:hover {
+    transform: none;
+    box-shadow: none;
+}
+
+.checkin-status {
+    margin-top: 0.75rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    min-height: 1.25rem;
+}
+
+.checkin-status.success {
+    color: var(--success-color);
+    font-weight: 500;
+}
+
+/* --- Stats Grid --- */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
+}
+
+.stat-card {
+    background: var(--bg-card);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    padding: 1rem;
+    text-align: center;
+    transition: border-color 0.2s ease;
+}
+
+.stat-card:hover {
+    border-color: var(--border-light);
+}
+
+.stat-card .icon {
+    font-size: 1.5rem;
+    margin-bottom: 0.375rem;
+}
+
+.stat-card .value {
+    font-size: 1.75rem;
+    font-weight: 800;
+    color: var(--accent-gold, #d4a574);
+    font-family: 'Inter', sans-serif;
+    line-height: 1.2;
+}
+
+.stat-card .label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 0.25rem;
+    font-weight: 500;
+}
+
+/* --- Section Card --- */
+.section-card {
+    background: var(--bg-card);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    overflow: hidden;
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.875rem 1.25rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.section-header h2 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.section-header a {
+    color: var(--accent-gold, #d4a574);
+    font-size: 0.8rem;
+    text-decoration: none;
+    font-weight: 500;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 0.25rem;
+}
+
+.section-header a:hover {
+    text-decoration: underline;
+}
+
+.section-content {
+    padding: 0.75rem 1.25rem;
+}
+
+/* --- Attendance List --- */
+.attendance-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.attendance-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--border-color);
+    min-height: 48px;
+}
+
+.attendance-item:last-child {
+    border-bottom: none;
+}
+
+.attendance-date {
+    font-weight: 500;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+}
+
+.attendance-time {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    margin-top: 0.125rem;
+}
+
+.attendance-type {
+    display: inline-block;
+    padding: 0.25rem 0.625rem;
+    border-radius: 6px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    background: rgba(30, 58, 138, 0.2);
+    color: var(--info-color);
+    border: 1px solid rgba(59, 130, 246, 0.25);
+    white-space: nowrap;
+}
+
+/* --- Lesson Schedule --- */
+.lesson-item {
+    display: flex;
+    align-items: center;
+    gap: 0.875rem;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--border-color);
+    min-height: 48px;
+}
+
+.lesson-item:last-child {
+    border-bottom: none;
+}
+
+.lesson-time {
+    background: var(--accent-secondary);
+    color: #fff;
+    padding: 0.5rem 0.625rem;
+    border-radius: 10px;
+    font-weight: 700;
+    font-size: 0.8rem;
+    min-width: 56px;
+    text-align: center;
+    flex-shrink: 0;
+    line-height: 1.3;
+}
+
+.lesson-info h4 {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.125rem;
+}
+
+.lesson-info p {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+/* --- Lesson Packages --- */
+.pkg-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.pkg-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--border-color);
+    min-height: 48px;
+}
+
+.pkg-item:last-child {
+    border-bottom: none;
+}
+
+.pkg-coach {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+}
+
+.pkg-type {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 0.125rem;
+}
+
+.pkg-count {
+    text-align: right;
+}
+
+.pkg-remaining {
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: var(--accent-gold, #d4a574);
+}
+
+.pkg-remaining.low {
+    color: var(--warning-color);
+}
+
+.pkg-remaining.zero {
+    color: var(--text-muted);
+}
+
+.pkg-total {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+
+.request-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    width: 100%;
+    min-height: 44px;
+    padding: 0.625rem 1rem;
+    background: var(--accent-secondary);
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: opacity 0.15s ease;
+    margin-top: 0.75rem;
+}
+
+.request-btn:hover {
+    opacity: 0.9;
+}
+
+/* --- Announcements --- */
+.announcement-item {
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.announcement-item:last-child {
+    border-bottom: none;
+}
+
+.announcement-title {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    margin-bottom: 0.25rem;
+}
+
+.announcement-meta {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.announcement-preview {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-top: 0.375rem;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    line-height: 1.5;
+}
+
+/* --- Empty State --- */
+.empty-state {
+    text-align: center;
+    padding: 1.5rem 1rem;
+    color: var(--text-muted);
+}
+
+.empty-state .icon {
+    font-size: 1.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.empty-state p {
+    font-size: 0.875rem;
+}
+
+/* --- Quick Links (Student) --- */
+.quick-links-student {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.quick-links-student li a {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.875rem 1.25rem;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: background 0.15s ease, color 0.15s ease;
+    min-height: 48px;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.quick-links-student li:last-child a {
+    border-bottom: none;
+}
+
+.quick-links-student li a:hover {
+    background: var(--bg-hover, rgba(255, 255, 255, 0.05));
+    color: var(--text-primary);
+}
+
+/* --- Profile Link --- */
+.profile-link {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 48px;
+    padding: 0.75rem 1rem;
+    color: var(--accent-gold, #d4a574);
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 0.9rem;
+    border-radius: 14px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-card);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    transition: border-color 0.2s ease, background 0.2s ease;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.profile-link:hover {
+    border-color: var(--border-light);
+    background: var(--bg-card-hover);
+}
+
+/* --- Desktop Enhancement --- */
+@media (min-width: 601px) {
+    .student-dashboard {
+        padding: 1.5rem 1rem;
+        gap: 1.25rem;
+    }
+
+    .welcome-card {
+        padding: 1.5rem 2rem;
+    }
+
+    .welcome-card h1 {
+        font-size: 1.5rem;
+    }
+
+    .checkin-btn {
+        width: auto;
+        min-width: 240px;
+        margin: 0 auto;
+    }
+
+    .stat-card .value {
+        font-size: 2rem;
+    }
+
+    .section-content {
+        padding: 1rem 1.5rem;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container student-dashboard">
+    <!-- Welcome Card -->
+    <div class="welcome-card">
+        <h1 id="welcomeName">로딩 중...</h1>
+        <p class="club-name" id="clubName">클럽 정보 로딩 중...</p>
+    </div>
+
+    <!-- Check-in Section -->
+    <div class="checkin-section">
+        <button class="checkin-btn" id="checkinBtn" onclick="doCheckIn()" type="button">
+            체크인
+        </button>
+        <div class="checkin-status" id="checkinStatus"></div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="icon">📅</div>
+            <div class="value" id="monthlyAttendance">-</div>
+            <div class="label">이번 달 출석</div>
+        </div>
+        <div class="stat-card">
+            <div class="icon">🎯</div>
+            <div class="value" id="upcomingLessons">-</div>
+            <div class="label">예정 레슨</div>
+        </div>
+    </div>
+
+    <!-- My Attendance -->
+    <div class="section-card">
+        <div class="section-header">
+            <h2>📋 내 출석</h2>
+            <a href="/club/my-attendance">전체 보기</a>
+        </div>
+        <div class="section-content" id="attendanceContent">
+            <div class="empty-state">
+                <div class="icon">📋</div>
+                <p>출석 기록 로딩 중...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- My Lessons -->
+    <div class="section-card">
+        <div class="section-header">
+            <h2>📖 내 레슨</h2>
+            <a href="/club/my-lessons">전체 보기</a>
+        </div>
+        <div class="section-content" id="lessonsContent">
+            <div class="empty-state">
+                <div class="icon">📖</div>
+                <p>레슨 정보 로딩 중...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- My Lesson Packages -->
+    <div class="section-card">
+        <div class="section-header">
+            <h2>🎫 내 레슨 패키지</h2>
+        </div>
+        <div class="section-content" id="myPackagesContent">
+            <div class="empty-state">
+                <div class="icon">🎫</div>
+                <p>패키지 정보 로딩 중...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Upcoming Competitions -->
+    <div class="section-card">
+        <div class="section-header">
+            <h2>🏆 다가오는 대회</h2>
+        </div>
+        <div class="section-content" id="competitionsContent">
+            <div class="empty-state">
+                <div class="icon">🏆</div>
+                <p>대회 정보 로딩 중...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Announcements -->
+    <div class="section-card">
+        <div class="section-header">
+            <h2>📢 공지사항</h2>
+            <a href="/club/announcements">전체 보기</a>
+        </div>
+        <div class="section-content" id="announcementsContent">
+            <div class="empty-state">
+                <div class="icon">📢</div>
+                <p>공지사항 로딩 중...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Links -->
+    <div class="section-card">
+        <div class="section-header">
+            <h2>&#128279; 바로가기</h2>
+        </div>
+        <div class="section-content" style="padding:0;">
+            <ul class="quick-links-student">
+                <li><a href="/api/club/videos">&#127916; 훈련 영상</a></li>
+                <li><a href="/api/club/announcements-page">&#128226; 공지사항</a></li>
+                <li><a href="/api/club/notifications">&#128276; 알림 설정</a></li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Profile Link -->
+    <a href="/club/my-profile" class="profile-link">내 프로필 보기 &rarr;</a>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const API_BASE = '/api/club';
+
+let memberData = null;
+
+function getAuthHeaders() {
+    return { 'Authorization': `Bearer ${localStorage.getItem('access_token')}` };
+}
+
+function handleUnauthorized() {
+    localStorage.removeItem('access_token');
+    window.location.href = '/auth/login?redirect=/api/club/';
+}
+
+async function loadDashboard() {
+    try {
+        const meResponse = await fetch(`${API_BASE}/me`, {
+            headers: getAuthHeaders()
+        });
+
+        if (meResponse.status === 401) {
+            handleUnauthorized();
+            return;
+        }
+
+        if (meResponse.ok) {
+            memberData = await meResponse.json();
+            document.getElementById('welcomeName').textContent =
+                `${memberData.full_name}님, 안녕하세요!`;
+            document.getElementById('clubName').textContent =
+                memberData.organization_name || '클럽 정보 없음';
+        }
+
+        loadAttendance();
+        loadLessons();
+        loadMyPackages();
+        loadCompetitions();
+        loadAnnouncements();
+        checkCheckinStatus();
+
+    } catch (error) {
+        console.error('Dashboard load error:', error);
+    }
+}
+
+async function checkCheckinStatus() {
+    try {
+        const response = await fetch(`${API_BASE}/check-in/status`, {
+            headers: getAuthHeaders()
+        });
+
+        if (response.status === 401) {
+            handleUnauthorized();
+            return;
+        }
+
+        if (response.ok) {
+            const data = await response.json();
+            const btn = document.getElementById('checkinBtn');
+            const status = document.getElementById('checkinStatus');
+
+            if (data.already_checked_in) {
+                btn.classList.add('checked');
+                btn.textContent = '체크인 완료';
+                btn.disabled = true;
+                status.className = 'checkin-status success';
+                status.textContent = `오늘 체크인 완료 ${data.check_in_time || ''}`;
+            }
+        }
+    } catch (error) {
+        console.error('Checkin status error:', error);
+    }
+}
+
+async function doCheckIn() {
+    const btn = document.getElementById('checkinBtn');
+    if (btn.classList.contains('checked') || btn.disabled) return;
+
+    btn.disabled = true;
+
+    try {
+        const response = await fetch(`${API_BASE}/check-in`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...getAuthHeaders()
+            },
+            body: JSON.stringify({ attendance_type: 'regular' })
+        });
+
+        if (response.status === 401) {
+            handleUnauthorized();
+            return;
+        }
+
+        if (response.ok) {
+            btn.classList.add('checked');
+            btn.textContent = '체크인 완료';
+
+            const status = document.getElementById('checkinStatus');
+            status.className = 'checkin-status success';
+            status.textContent = '체크인 완료!';
+
+            loadAttendance();
+        } else {
+            btn.disabled = false;
+            const error = await response.json();
+            alert(error.detail || '체크인에 실패했습니다');
+        }
+    } catch (error) {
+        btn.disabled = false;
+        console.error('Check-in error:', error);
+        alert('체크인 중 오류가 발생했습니다.');
+    }
+}
+
+async function loadAttendance() {
+    try {
+        const response = await fetch(`${API_BASE}/my/attendance`, {
+            headers: getAuthHeaders()
+        });
+
+        if (response.status === 401) {
+            handleUnauthorized();
+            return;
+        }
+
+        if (!response.ok) {
+            renderFallbackAttendance();
+            return;
+        }
+
+        const data = await response.json();
+        renderAttendance(data.attendance || []);
+        document.getElementById('monthlyAttendance').textContent = data.monthly_count || 0;
+
+    } catch (error) {
+        console.error('Attendance error:', error);
+        renderFallbackAttendance();
+    }
+}
+
+function renderFallbackAttendance() {
+    const container = document.getElementById('attendanceContent');
+    container.innerHTML = `
+        <div class="empty-state">
+            <div class="icon">📋</div>
+            <p>출석 기록이 없습니다</p>
+        </div>
+    `;
+    document.getElementById('monthlyAttendance').textContent = '0';
+}
+
+function renderAttendance(attendance) {
+    const container = document.getElementById('attendanceContent');
+
+    if (!attendance || attendance.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="icon">📋</div>
+                <p>출석 기록이 없습니다</p>
+            </div>
+        `;
+        return;
+    }
+
+    const typeLabels = {
+        regular: '정규 훈련',
+        lesson: '레슨',
+        competition: '대회',
+        other: '기타'
+    };
+
+    container.innerHTML = `
+        <ul class="attendance-list">
+            ${attendance.slice(0, 5).map(a => `
+                <li class="attendance-item">
+                    <div>
+                        <div class="attendance-date">${formatDate(a.date || a.check_in_at)}</div>
+                        <div class="attendance-time">${a.check_in_at?.split('T')[1]?.slice(0,5) || a.check_in_at || ''}</div>
+                    </div>
+                    <span class="attendance-type">${typeLabels[a.type] || a.type || 'Training'}</span>
+                </li>
+            `).join('')}
+        </ul>
+    `;
+}
+
+async function loadLessons() {
+    try {
+        const response = await fetch(`${API_BASE}/my/lessons`, {
+            headers: getAuthHeaders()
+        });
+
+        if (response.status === 401) {
+            handleUnauthorized();
+            return;
+        }
+
+        if (!response.ok) {
+            renderFallbackLessons();
+            return;
+        }
+
+        const data = await response.json();
+        renderLessons(data.lessons || []);
+        document.getElementById('upcomingLessons').textContent = data.upcoming_count || 0;
+
+    } catch (error) {
+        console.error('Lessons error:', error);
+        renderFallbackLessons();
+    }
+}
+
+function renderFallbackLessons() {
+    const container = document.getElementById('lessonsContent');
+    container.innerHTML = `
+        <div class="empty-state">
+            <div class="icon">📖</div>
+            <p>예정된 레슨이 없습니다</p>
+        </div>
+    `;
+    document.getElementById('upcomingLessons').textContent = '0';
+}
+
+function renderLessons(lessons) {
+    const container = document.getElementById('lessonsContent');
+
+    if (!lessons || lessons.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="icon">📖</div>
+                <p>예정된 레슨이 없습니다</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = lessons.map(l => `
+        <div class="lesson-item">
+            <div class="lesson-time">${l.day || ''}<br>${l.time || ''}</div>
+            <div class="lesson-info">
+                <h4>${l.type || 'Lesson'}</h4>
+                <p>${l.coach || 'Coach'}</p>
+            </div>
+        </div>
+    `).join('');
+}
+
+async function loadAnnouncements() {
+    try {
+        const response = await fetch(`${API_BASE}/announcements`, {
+            headers: getAuthHeaders()
+        });
+
+        if (response.status === 401) {
+            handleUnauthorized();
+            return;
+        }
+
+        if (!response.ok) {
+            renderFallbackAnnouncements();
+            return;
+        }
+
+        const data = await response.json();
+        renderAnnouncements(data.announcements || []);
+
+    } catch (error) {
+        console.error('Announcements error:', error);
+        renderFallbackAnnouncements();
+    }
+}
+
+function renderFallbackAnnouncements() {
+    const container = document.getElementById('announcementsContent');
+    container.innerHTML = `
+        <div class="empty-state">
+            <div class="icon">📢</div>
+            <p>공지사항이 없습니다</p>
+        </div>
+    `;
+}
+
+function renderAnnouncements(announcements) {
+    const container = document.getElementById('announcementsContent');
+
+    if (!announcements || announcements.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="icon">📢</div>
+                <p>공지사항이 없습니다</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = announcements.slice(0, 3).map(a => `
+        <div class="announcement-item">
+            <div class="announcement-title">${a.title}</div>
+            <div class="announcement-meta">${formatDate(a.date)}</div>
+            <div class="announcement-preview">${a.preview || a.content?.slice(0, 100) || ''}</div>
+        </div>
+    `).join('');
+}
+
+async function loadCompetitions() {
+    const container = document.getElementById('competitionsContent');
+    try {
+        const response = await fetch('/api/competitions/events?status=upcoming&limit=5', {
+            headers: getAuthHeaders()
+        });
+
+        if (response.status === 401) { handleUnauthorized(); return; }
+
+        if (!response.ok) {
+            container.innerHTML = `<div class="empty-state"><div class="icon">🏆</div><p>대회 정보를 불러올 수 없습니다</p></div>`;
+            return;
+        }
+
+        const data = await response.json();
+        const events = data.items || [];
+
+        if (events.length === 0) {
+            container.innerHTML = `<div class="empty-state"><div class="icon">🏆</div><p>예정된 대회가 없습니다</p></div>`;
+            return;
+        }
+
+        container.innerHTML = events.map(e => `
+            <div style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <div style="font-weight: 600; color: var(--text-primary);">${e.name}</div>
+                        <div style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.25rem;">
+                            📅 ${e.start_date}${e.location ? ' · 📍 ' + e.location : ''}${e.weapon ? ' · ⚔️ ' + e.weapon : ''}
+                        </div>
+                        ${e.rsvp_deadline ? `<div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.15rem;">응답 마감: ${e.rsvp_deadline}</div>` : ''}
+                    </div>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <button onclick="submitRSVP('${e.id}', 'attending')" style="padding: 0.4rem 0.8rem; background: var(--accent-green, #22c55e); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.8rem;">참가</button>
+                        <button onclick="submitRSVP('${e.id}', 'not_attending')" style="padding: 0.4rem 0.8rem; background: var(--text-muted); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.8rem;">불참</button>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    } catch (error) {
+        console.error('Competitions error:', error);
+        container.innerHTML = `<div class="empty-state"><div class="icon">🏆</div><p>대회 정보를 불러올 수 없습니다</p></div>`;
+    }
+}
+
+async function submitRSVP(eventId, status) {
+    try {
+        const response = await fetch(`/api/competitions/events/${eventId}/rsvp`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+            body: JSON.stringify({ status })
+        });
+
+        if (response.ok) {
+            alert(status === 'attending' ? '참가 응답 완료!' : '불참 응답 완료!');
+            loadCompetitions();
+        } else {
+            const err = await response.json();
+            alert(err.detail || 'RSVP 제출 실패');
+        }
+    } catch (error) {
+        console.error('RSVP error:', error);
+        alert('응답 제출 중 오류가 발생했습니다');
+    }
+}
+
+async function loadMyPackages() {
+    const container = document.getElementById('myPackagesContent');
+    try {
+        const response = await fetch('/api/lessons/packages/my', {
+            headers: getAuthHeaders()
+        });
+
+        if (response.status === 401) {
+            handleUnauthorized();
+            return;
+        }
+
+        if (!response.ok) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="icon">🎫</div>
+                    <p>패키지 정보를 불러올 수 없습니다</p>
+                </div>
+            `;
+            return;
+        }
+
+        const data = await response.json();
+        const packages = data.packages || [];
+
+        if (packages.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="icon">🎫</div>
+                    <p>등록된 레슨 패키지가 없습니다</p>
+                </div>
+            `;
+            return;
+        }
+
+        // Update stats card
+        const totalRemaining = packages.reduce((sum, p) => sum + (p.remaining_sessions || 0), 0);
+        const upcomingEl = document.getElementById('upcomingLessons');
+        if (upcomingEl) upcomingEl.textContent = totalRemaining;
+
+        const typeLabels = {
+            '10_pack': '10회', '20_pack': '20회',
+            'single': '1회', 'custom': '커스텀'
+        };
+
+        container.innerHTML = `
+            <ul class="pkg-list">
+                ${packages.map(p => {
+                    const remaining = p.remaining_sessions || 0;
+                    const total = p.total_sessions || 0;
+                    const cls = remaining === 0 ? 'zero' : remaining <= 2 ? 'low' : '';
+                    return `
+                        <li class="pkg-item">
+                            <div>
+                                <div class="pkg-coach">${p.coach_name || '코치'}</div>
+                                <div class="pkg-type">${typeLabels[p.package_type] || p.package_type} 패키지</div>
+                            </div>
+                            <div class="pkg-count">
+                                <div class="pkg-remaining ${cls}">${remaining}</div>
+                                <div class="pkg-total">/ ${total}회</div>
+                            </div>
+                        </li>
+                    `;
+                }).join('')}
+            </ul>
+        `;
+    } catch (error) {
+        console.error('My packages error:', error);
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="icon">🎫</div>
+                <p>패키지 정보를 불러올 수 없습니다</p>
+            </div>
+        `;
+    }
+}
+
+function formatDate(dateStr) {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' });
+}
+
+document.addEventListener('DOMContentLoaded', loadDashboard);
+</script>
+{% endblock %}
