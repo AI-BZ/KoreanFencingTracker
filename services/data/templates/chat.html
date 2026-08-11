@@ -1,33 +1,33 @@
 {% extends "base.html" %}
 
-{% block title %}AI 검색 - Korean Fencing Tracker{% endblock %}
+{% block title %}{{ _t("AI 검색") }} - Korean Fencing Tracker{% endblock %}
 
 {% block content %}
 <div class="chat-container">
     <div class="chat-header">
-        <h1>AI 펜싱 검색</h1>
-        <p>자연어로 선수, 대회, 전적을 검색하세요</p>
+        <h1>{{ _t("AI 펜싱 검색") }}</h1>
+        <p>{{ _t("자연어로 선수, 대회, 전적을 검색하세요") }}</p>
     </div>
 
     <div class="chat-messages" id="chatMessages">
         <div class="message bot-message">
             <div class="message-content">
-                <p>안녕하세요! 펜싱 데이터 AI 검색입니다.</p>
-                <p>다음과 같이 질문해보세요:</p>
+                <p>{{ _t("안녕하세요! 펜싱 데이터 AI 검색입니다.") }}</p>
+                <p>{{ _t("다음과 같이 질문해보세요:") }}</p>
                 <ul>
-                    <li>"박소윤의 라이벌은 누구야?"</li>
-                    <li>"김지연 선수 성적"</li>
-                    <li>"전국체육대회 대회 목록"</li>
-                    <li>"통계 보여줘"</li>
+                    <li>"{{ _t("박소윤의 라이벌은 누구야?") }}"</li>
+                    <li>"{{ _t("김지연 선수 성적") }}"</li>
+                    <li>"{{ _t("전국체육대회 대회 목록") }}"</li>
+                    <li>"{{ _t("통계 보여줘") }}"</li>
                 </ul>
             </div>
         </div>
     </div>
 
     <div class="chat-suggestions" id="chatSuggestions">
-        <button class="suggestion-btn" onclick="sendSuggestion('통계 보여줘')">통계 보여줘</button>
-        <button class="suggestion-btn" onclick="sendSuggestion('전국체육대회')">전국체육대회</button>
-        <button class="suggestion-btn" onclick="sendSuggestion('선수권대회')">선수권대회</button>
+        <button class="suggestion-btn" onclick="sendSuggestion('{{ _t("통계 보여줘") }}')">{{ _t("통계 보여줘") }}</button>
+        <button class="suggestion-btn" onclick="sendSuggestion('{{ _t("전국체육대회") }}')">{{ _t("전국체육대회") }}</button>
+        <button class="suggestion-btn" onclick="sendSuggestion('{{ _t("선수권대회") }}')">{{ _t("선수권대회") }}</button>
     </div>
 
     <div class="chat-input-container">
@@ -35,7 +35,7 @@
             <input
                 type="text"
                 id="chatInput"
-                placeholder="질문을 입력하세요... (예: 박소윤의 라이벌은 누구야?)"
+                placeholder="{{ _t('질문을 입력하세요... (예: 박소윤의 라이벌은 누구야?)') }}"
                 autocomplete="off"
             >
             <button type="submit" id="sendBtn">
@@ -366,7 +366,7 @@ function formatResponse(response) {
             html += `
                 <button class="disambiguation-btn" onclick="selectPlayer('${opt.name}', '${opt.team}')">
                     <strong>${opt.name}</strong>
-                    <div class="team">${opt.team} (${opt.event_count}개 대회 참가)</div>
+                    <div class="team">${opt.team} (${opt.event_count}${_t('개 대회 참가')})</div>
                 </button>
             `;
         });
@@ -375,9 +375,9 @@ function formatResponse(response) {
 
     // 데이터 카드
     if (response.data && response.data.recent_events) {
-        html += '<div class="data-card"><h4>최근 대회 성적</h4><table>';
+        html += '<div class="data-card"><h4>' + _t('최근 대회 성적') + '</h4><table>';
         response.data.recent_events.forEach(e => {
-            html += `<tr><td>${e.event || e.competition}</td><td>${e.rank || '-'}위</td></tr>`;
+            html += `<tr><td>${e.event || e.competition}</td><td>${e.rank || '-'}${_t('위')}</td></tr>`;
         });
         html += '</table></div>';
     }
@@ -417,7 +417,7 @@ async function sendMessage(event) {
 
     } catch (error) {
         removeTypingIndicator();
-        addMessage('<p>죄송합니다. 오류가 발생했습니다. 다시 시도해주세요.</p>');
+        addMessage('<p>' + _t('죄송합니다. 오류가 발생했습니다. 다시 시도해주세요.') + '</p>');
     }
 
     sendBtn.disabled = false;
@@ -430,7 +430,7 @@ function sendSuggestion(text) {
 }
 
 async function selectPlayer(name, team) {
-    addMessage(`${name} (${team}) 선택`, true);
+    addMessage(`${name} (${team}) ${_t('선택')}`, true);
     addTypingIndicator();
 
     try {
@@ -445,7 +445,7 @@ async function selectPlayer(name, team) {
 
     } catch (error) {
         removeTypingIndicator();
-        addMessage('<p>오류가 발생했습니다.</p>');
+        addMessage('<p>' + _t('오류가 발생했습니다.') + '</p>');
     }
 }
 

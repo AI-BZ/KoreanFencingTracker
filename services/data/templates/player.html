@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ player_name }} - 전적 | Korean Fencing Tracker{% endblock %}
+{% block title %}{{ player_name }} - {{ _t("전적") }} | Korean Fencing Tracker{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -228,7 +228,7 @@
 <div class="player-header">
     <div class="container">
         <div class="player-name" id="player-name">{{ player_name }}</div>
-        <div class="player-teams" id="player-teams">로딩 중...</div>
+        <div class="player-teams" id="player-teams">{{ _t("로딩 중...") }}</div>
     </div>
 </div>
 
@@ -237,19 +237,19 @@
     <div class="stats-grid" id="stats-grid">
         <div class="stat-card">
             <div class="stat-value gold" id="stat-gold">-</div>
-            <div class="stat-label">1위</div>
+            <div class="stat-label">{{ _t("1위") }}</div>
         </div>
         <div class="stat-card">
             <div class="stat-value silver" id="stat-silver">-</div>
-            <div class="stat-label">2위</div>
+            <div class="stat-label">{{ _t("2위") }}</div>
         </div>
         <div class="stat-card">
             <div class="stat-value bronze" id="stat-bronze">-</div>
-            <div class="stat-label">3위</div>
+            <div class="stat-label">{{ _t("3위") }}</div>
         </div>
         <div class="stat-card">
             <div class="stat-value total" id="stat-total">-</div>
-            <div class="stat-label">총 기록</div>
+            <div class="stat-label">{{ _t("총 기록") }}</div>
         </div>
     </div>
 
@@ -259,21 +259,21 @@
     <!-- 필터 -->
     <div class="filter-bar">
         <select class="filter-select" id="filter-weapon">
-            <option value="">전체 무기</option>
-            <option value="플러레">플러레</option>
-            <option value="에뻬">에뻬</option>
-            <option value="사브르">사브르</option>
+            <option value="">{{ _t("전체 무기") }}</option>
+            <option value="foil">{{ _t("플뢰레") }}</option>
+            <option value="epee">{{ _t("에페") }}</option>
+            <option value="sabre">{{ _t("사브르") }}</option>
         </select>
         <select class="filter-select" id="filter-year">
-            <option value="">전체 연도</option>
+            <option value="">{{ _t("전체 연도") }}</option>
         </select>
     </div>
 
     <!-- 기록 목록 -->
     <div class="records-section">
-        <h3 style="margin-bottom: 1rem;">대회 기록</h3>
+        <h3 style="margin-bottom: 1rem;">{{ _t("대회 기록") }}</h3>
         <div id="records-list">
-            <div class="loading">데이터 로딩 중</div>
+            <div class="loading">{{ _t("데이터 로딩 중") }}</div>
         </div>
     </div>
 </div>
@@ -291,7 +291,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 async function loadPlayerData(weapon = '', year = '') {
     const recordsList = document.getElementById('records-list');
-    recordsList.innerHTML = '<div class="loading">데이터 로딩 중</div>';
+    recordsList.innerHTML = '<div class="loading">' + _t('데이터 로딩 중') + '</div>';
 
     try {
         let url = '/api/player/' + encodeURIComponent(playerName);
@@ -304,7 +304,7 @@ async function loadPlayerData(weapon = '', year = '') {
 
         if (!res.ok) {
             if (res.status === 404) {
-                recordsList.innerHTML = '<div class="empty">선수를 찾을 수 없습니다</div>';
+                recordsList.innerHTML = '<div class="empty">' + _t('선수를 찾을 수 없습니다') + '</div>';
                 return;
             }
             throw new Error('Failed to load');
@@ -314,7 +314,7 @@ async function loadPlayerData(weapon = '', year = '') {
         renderPlayerData();
     } catch (e) {
         console.error('Load error:', e);
-        recordsList.innerHTML = '<div class="error">데이터 로드 실패</div>';
+        recordsList.innerHTML = '<div class="error">' + _t('데이터 로드 실패') + '</div>';
     }
 }
 
@@ -324,7 +324,7 @@ function renderPlayerData() {
     // 이름 & 팀
     document.getElementById('player-name').textContent = playerData.name;
     document.getElementById('player-teams').textContent =
-        playerData.teams.length > 0 ? playerData.teams.join(', ') : '소속 정보 없음';
+        playerData.teams.length > 0 ? playerData.teams.join(', ') : _t('소속 정보 없음');
 
     // 통계
     document.getElementById('stat-gold').textContent = playerData.stats.medals.gold;
@@ -336,7 +336,7 @@ function renderPlayerData() {
     const weaponStats = document.getElementById('weapon-stats');
     const weapons = playerData.stats.by_weapon;
     weaponStats.innerHTML = Object.entries(weapons).map(([weapon, count]) => {
-        const cls = weapon === '플러레' ? 'foil' : weapon === '에뻬' ? 'epee' : 'sabre';
+        const cls = weapon === 'foil' ? 'foil' : weapon === 'epee' ? 'epee' : 'sabre';
         return `
             <div class="weapon-bar ${cls}">
                 <div class="weapon-count">${count}</div>
@@ -348,8 +348,8 @@ function renderPlayerData() {
     // 연도 필터 옵션
     const yearSelect = document.getElementById('filter-year');
     const years = Object.keys(playerData.stats.by_year).sort((a, b) => b - a);
-    yearSelect.innerHTML = '<option value="">전체 연도</option>' +
-        years.map(y => `<option value="${y}">${y}년</option>`).join('');
+    yearSelect.innerHTML = '<option value="">' + _t('전체 연도') + '</option>' +
+        years.map(y => `<option value="${y}">${y}${_t('년')}</option>`).join('');
 
     // 기록 목록
     renderRecords(playerData.records);
@@ -359,7 +359,7 @@ function renderRecords(records) {
     const recordsList = document.getElementById('records-list');
 
     if (!records || records.length === 0) {
-        recordsList.innerHTML = '<div class="empty">기록이 없습니다</div>';
+        recordsList.innerHTML = '<div class="empty">' + _t('기록이 없습니다') + '</div>';
         return;
     }
 
@@ -375,8 +375,8 @@ function renderRecords(records) {
                     <div class="rank-badge ${rankClass}">${rankText}</div>
                 </div>
                 <div class="record-info">
-                    <div class="record-event">${r.event_name}</div>
-                    <div class="record-competition">${r.competition_name}</div>
+                    <div class="record-event">${_tr_event(r.event_name)}</div>
+                    <div class="record-competition">${_tr_comp(r.competition_name)}</div>
                     <div class="record-tags">
                         ${r.weapon ? `<span class="tag tag-weapon">${r.weapon}</span>` : ''}
                         ${r.gender ? `<span class="tag tag-gender">${r.gender}</span>` : ''}

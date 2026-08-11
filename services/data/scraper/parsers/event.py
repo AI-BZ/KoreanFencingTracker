@@ -2,7 +2,6 @@
 종목 정보 파서
 """
 from typing import List, Dict, Any
-import re
 from loguru import logger
 
 from ..models import Event, Weapon, Gender

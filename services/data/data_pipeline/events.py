@@ -316,7 +316,7 @@ class EventSubscriber:
                     "updated_at": datetime.now().isoformat()
                 }).eq("id", event_id).execute()
             
-            logger.info(f"✅ Match processing completed")
+            logger.info("✅ Match processing completed")
         
         except Exception as e:
             logger.error(f"❌ Match processing failed: {e}")
@@ -351,7 +351,7 @@ class EventSubscriber:
                     "updated_at": datetime.now().isoformat()
                 }).eq("id", comp_id).execute()
             
-            logger.info(f"✅ Event update processing completed")
+            logger.info("✅ Event update processing completed")
         
         except Exception as e:
             logger.error(f"❌ Event update processing failed: {e}")

@@ -524,8 +524,136 @@ class ParticipantAttendance(BaseModel):
     attendance_status: ParticipantStatus
 
 
+# =============================================
+# Competition Entry Models (대회 참가 관리)
+# =============================================
+
+class CompetitionEntryStatus(str, Enum):
+    """대회 참가 상태"""
+    planning = "planning"           # 계획중
+    registered = "registered"       # 등록완료
+    in_progress = "in_progress"     # 진행중
+    completed = "completed"         # 완료
+    cancelled = "cancelled"         # 취소
+
+
+class CompetitionEntryCreate(BaseModel):
+    """대회 참가 등록"""
+    competition_id: Optional[int] = None  # 기존 대회 연결 (선택)
+    competition_name: str = Field(..., min_length=1, max_length=255)
+    competition_date: date
+    competition_location: Optional[str] = None
+    entry_fee_total: int = Field(default=0, ge=0)
+    travel_expense_total: int = Field(default=0, ge=0)
+    accommodation_total: int = Field(default=0, ge=0)
+    other_expense_total: int = Field(default=0, ge=0)
+    notes: Optional[str] = None
+    participant_ids: Optional[List[str]] = None  # 참가자 member_id 목록
+
+
+class CompetitionEntryUpdate(BaseModel):
+    """대회 참가 수정"""
+    competition_name: Optional[str] = None
+    competition_date: Optional[date] = None
+    competition_location: Optional[str] = None
+    status: Optional[CompetitionEntryStatus] = None
+    entry_fee_total: Optional[int] = None
+    travel_expense_total: Optional[int] = None
+    accommodation_total: Optional[int] = None
+    other_expense_total: Optional[int] = None
+    notes: Optional[str] = None
+
+
+class CompetitionParticipantAdd(BaseModel):
+    """대회 참가자 추가"""
+    member_id: str
+    event_name: Optional[str] = None
+    entry_fee: int = 0
+    travel_expense: int = 0
+    accommodation: int = 0
+    other_expense: int = 0
+
+
+class CompetitionParticipantResponse(BaseModel):
+    """대회 참가자 응답"""
+    id: str
+    member_id: str
+    member_name: str
+    event_name: Optional[str] = None
+    entry_fee: int = 0
+    travel_expense: int = 0
+    accommodation: int = 0
+    other_expense: int = 0
+    total_cost: int = 0
+    final_rank: Optional[int] = None
+    payment_status: str = "pending"
+
+
+class CompetitionEntryResponse(BaseModel):
+    """대회 참가 응답"""
+    id: str
+    organization_id: int
+    competition_id: Optional[int] = None
+    competition_name: str
+    competition_date: date
+    competition_location: Optional[str] = None
+    status: CompetitionEntryStatus
+    entry_fee_total: int = 0
+    travel_expense_total: int = 0
+    accommodation_total: int = 0
+    other_expense_total: int = 0
+    total_cost: int = 0
+    participant_count: int = 0
+    notes: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class CompetitionEntryDetail(BaseModel):
+    """대회 참가 상세 (참가자 포함)"""
+    id: str
+    organization_id: int
+    competition_id: Optional[int] = None
+    competition_name: str
+    competition_date: date
+    competition_location: Optional[str] = None
+    status: CompetitionEntryStatus
+    entry_fee_total: int = 0
+    travel_expense_total: int = 0
+    accommodation_total: int = 0
+    other_expense_total: int = 0
+    total_cost: int = 0
+    participants: List[CompetitionParticipantResponse] = []
+    notes: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+# =============================================
+# Message Models (클럽 메시지)
+# =============================================
+
+class MessageCreate(BaseModel):
+    """메시지 생성"""
+    title: str = Field(..., min_length=1, max_length=200)
+    content: str = Field(..., min_length=1)
+    target_role: Optional[str] = None  # 특정 역할에만 (None = 전체)
+
+
+class MessageResponse(BaseModel):
+    """메시지 응답"""
+    id: str
+    title: str
+    content: str
+    author_id: str
+    author_name: str
+    target_role: Optional[str] = None
+    created_at: datetime
+
+
 # Forward references 해결
 PlayerProfile.model_rebuild()
 HeadToHeadRecord.model_rebuild()
 TeamRoster.model_rebuild()
 AttendanceStats.model_rebuild()
+CompetitionEntryDetail.model_rebuild()

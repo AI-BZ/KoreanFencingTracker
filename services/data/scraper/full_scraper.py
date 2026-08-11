@@ -10,13 +10,12 @@ import asyncio
 import json
 import re
 import random
+import time
 from datetime import datetime, date
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass, field, asdict
 from playwright.async_api import async_playwright, Browser, Page
 from loguru import logger
-import aiohttp
-from bs4 import BeautifulSoup
 
 # DE Scraper v4 import
 from scraper.de_scraper_v4 import DEScraper
@@ -70,6 +69,90 @@ VALID_ROUNDS_BY_SIZE = {
     8: {'8강', '준결승', '결승', '3-4위'},
     4: {'준결승', '결승', '3-4위'},
 }
+
+
+# ============================================
+# 경기 유효성 검증 (무효 데이터 필터링)
+# ============================================
+
+def is_valid_bout(bout: Dict[str, Any]) -> bool:
+    """
+    경기(bout) 유효성 검증
+
+    무효 판정 기준:
+    1. player1_name == player2_name (같은 사람이 양쪽에 있음) → 템플릿 데이터
+    2. 둘 다 이름이 없고 BYE도 아님 → 아직 대진 미정
+    3. 점수 없이 승자 없고 BYE도 아님 → 아직 경기 안 함
+
+    Returns:
+        True: 유효한 경기
+        False: 무효한 경기 (필터링 대상)
+    """
+    p1_name = bout.get('player1_name')
+    p2_name = bout.get('player2_name')
+    is_bye = bout.get('is_bye', False)
+
+    # 케이스 1: player1 == player2 (같은 사람) → 무효 (템플릿 데이터)
+    if p1_name and p2_name and p1_name == p2_name:
+        round_name = bout.get('round_name', '?')
+        match_num = bout.get('match_number', '?')
+        logger.warning(f"⚠️ 무효 경기 감지 (동일 선수): {round_name} #{match_num}: {p1_name} vs {p2_name}")
+        return False
+
+    # 케이스 2: BYE 경기는 유효
+    if is_bye:
+        return True
+
+    # 케이스 3: 둘 다 이름 없음 → 무효 (대진 미정)
+    if not p1_name and not p2_name:
+        round_name = bout.get('round_name', '?')
+        match_num = bout.get('match_number', '?')
+        logger.warning(f"⚠️ 무효 경기 감지 (대진 미정): {round_name} #{match_num}")
+        return False
+
+    # 케이스 4: 두 선수 모두 있는데 점수가 없고 승자도 없으면 경기 안 함
+    if p1_name and p2_name:
+        p1_score = bout.get('player1_score')
+        p2_score = bout.get('player2_score')
+        winner = bout.get('winner_name')
+
+        if p1_score is None and p2_score is None and winner is None:
+            round_name = bout.get('round_name', '?')
+            match_num = bout.get('match_number', '?')
+            logger.warning(f"⚠️ 무효 경기 감지 (미완료): {round_name} #{match_num}: {p1_name} vs {p2_name}")
+            return False
+
+    return True
+
+
+def filter_valid_bouts(bouts: List[Dict[str, Any]], round_name: str = None) -> List[Dict[str, Any]]:
+    """
+    유효한 경기만 필터링
+
+    Args:
+        bouts: 경기 목록
+        round_name: 로그용 라운드 이름 (선택)
+
+    Returns:
+        유효한 경기만 포함된 리스트
+    """
+    if not bouts:
+        return bouts
+
+    valid_bouts = []
+    invalid_count = 0
+
+    for bout in bouts:
+        if is_valid_bout(bout):
+            valid_bouts.append(bout)
+        else:
+            invalid_count += 1
+
+    if invalid_count > 0:
+        context = f" ({round_name})" if round_name else ""
+        logger.info(f"📊 경기 유효성 검증{context}: {len(bouts)}개 중 {invalid_count}개 무효 → {len(valid_bouts)}개 유효")
+
+    return valid_bouts
 
 
 def get_correct_bracket_size(participant_count: int) -> int:
@@ -234,6 +317,21 @@ def post_process_de_bracket(bracket_data: Dict[str, Any]) -> Dict[str, Any]:
 
     seeding = bracket_data.get('seeding', [])
     if not seeding:
+        # seeding 없을 때 bout 내용도 검증 - 빈 placeholder bout 제거
+        bouts = bracket_data.get('bouts', [])
+        if bouts:
+            has_valid = False
+            for b in bouts:
+                p1_name = b.get('player1_name') or (b.get('player1', {}) or {}).get('name')
+                p2_name = b.get('player2_name') or (b.get('player2', {}) or {}).get('name')
+                if p1_name or p2_name:
+                    has_valid = True
+                    break
+            if not has_valid:
+                logger.warning(f"⚠️ seeding 없고 bout {len(bouts)}개 모두 빈 placeholder → bout 제거")
+                bracket_data['bouts'] = []
+                bracket_data['full_bouts'] = []
+                bracket_data['bouts_by_round'] = {}
         return bracket_data
 
     # 1. bracket_size 계산
@@ -252,6 +350,15 @@ def post_process_de_bracket(bracket_data: Dict[str, Any]) -> Dict[str, Any]:
     # 3. 시작 라운드의 부전승 경기 생성
     bouts = bracket_data.get('bouts', [])
     full_bouts = bracket_data.get('full_bouts', [])
+
+    # 3.1 ★★★ 무효 경기 필터링 (동일 선수, 대진 미정, 미완료 경기 제거) ★★★
+    # 이 검증은 v4/v3 모든 경로에서 적용됨
+    original_bout_count = len(bouts)
+    bouts = filter_valid_bouts(bouts, "bouts")
+    full_bouts = filter_valid_bouts(full_bouts, "full_bouts")
+
+    if len(bouts) < original_bout_count:
+        logger.info(f"📊 무효 경기 필터링 완료: {original_bout_count}개 → {len(bouts)}개")
 
     # bouts에서 시작 라운드 경기만 추출
     starting_round_bouts = [b for b in bouts if b.get('round_name') == starting_round]
@@ -272,6 +379,10 @@ def post_process_de_bracket(bracket_data: Dict[str, Any]) -> Dict[str, Any]:
         if round_name not in bouts_by_round:
             bouts_by_round[round_name] = []
         bouts_by_round[round_name].append(bout)
+
+    # 4.1 bouts_by_round 내 self-bout 등 무효 경기 방어적 필터링
+    for round_name, round_bouts in bouts_by_round.items():
+        bouts_by_round[round_name] = filter_valid_bouts(round_bouts, f"bouts_by_round[{round_name}]")
 
     # 5. 무효한 라운드 필터링
     if bracket_size in VALID_ROUNDS_BY_SIZE:
@@ -296,6 +407,125 @@ def post_process_de_bracket(bracket_data: Dict[str, Any]) -> Dict[str, Any]:
 
     logger.debug(f"DE 후처리 완료: bracket_size={bracket_size}, starting_round={starting_round}, "
                 f"seeding={len(seeding)}명, bouts={len(all_bouts)}개")
+
+    # 7. ★★★ 시드 라운드 종합 검증 (Seed Round Verification System) ★★★
+    bracket_data = _verify_seed_round_integrity(bracket_data)
+
+    return bracket_data
+
+
+def _verify_seed_round_integrity(bracket_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    시드 라운드 종합 검증 시스템
+
+    스크래핑 후 DE 브라켓 데이터의 정합성을 검증하고 자동 수정:
+    1. bracket_size ↔ starting_round 일관성
+    2. participant_count ↔ 시딩 수 일관성
+    3. 경기 데이터에 나타나는 선수 vs 시딩 교차 검증
+    4. 라운드별 경기 수 검증
+    5. 시드 번호 연속성 검증
+    """
+    seeding = bracket_data.get('seeding', [])
+    bouts = bracket_data.get('bouts', [])
+    bouts_by_round = bracket_data.get('bouts_by_round', {})
+    bracket_size = bracket_data.get('bracket_size', 0)
+    starting_round = bracket_data.get('starting_round', '')
+    participant_count = bracket_data.get('participant_count', 0)
+
+    if bracket_size == 0 or not seeding:
+        return bracket_data
+
+    issues = []
+    auto_fixed = []
+
+    # ── 검증 1: bracket_size ↔ starting_round 일관성 ──
+    expected_starting_round = get_starting_round(bracket_size)
+    if starting_round and starting_round != expected_starting_round:
+        # bracket_size에서 계산한 starting_round와 불일치 → bracket_size 기준으로 수정
+        issues.append(
+            f"V1: starting_round 불일치: '{starting_round}' != expected '{expected_starting_round}' "
+            f"(bracket_size={bracket_size})"
+        )
+        bracket_data['starting_round'] = expected_starting_round
+        auto_fixed.append(f"V1: starting_round → '{expected_starting_round}'")
+
+    # ── 검증 2: participant_count ↔ 시딩 수 교차 검증 ──
+    actual_players_in_seeding = [s for s in seeding if s.get('name') and not s.get('is_bye')]
+    actual_count = len(actual_players_in_seeding)
+
+    if participant_count != actual_count and actual_count > 0:
+        issues.append(
+            f"V2: participant_count 불일치: {participant_count} != 시딩 실제 선수 {actual_count}명"
+        )
+        bracket_data['participant_count'] = actual_count
+        auto_fixed.append(f"V2: participant_count → {actual_count}")
+        participant_count = actual_count
+
+    # bracket_size가 participant_count보다 작으면 수정
+    correct_bracket_size = get_correct_bracket_size(participant_count)
+    if bracket_size < correct_bracket_size:
+        issues.append(
+            f"V2b: bracket_size({bracket_size}) < 필요 크기({correct_bracket_size}) "
+            f"for {participant_count}명"
+        )
+        bracket_data['bracket_size'] = correct_bracket_size
+        bracket_data['starting_round'] = get_starting_round(correct_bracket_size)
+        auto_fixed.append(f"V2b: bracket_size → {correct_bracket_size}")
+
+    # ── 검증 3: 경기 데이터의 선수 vs 시딩 교차 검증 ──
+    seeded_names = {s['name'] for s in actual_players_in_seeding}
+    players_in_bouts = set()
+    for b in bouts:
+        p1 = b.get('player1_name') or ''
+        p2 = b.get('player2_name') or ''
+        if p1 and not b.get('player1_is_bye', False):
+            players_in_bouts.add(p1)
+        if p2 and not b.get('player2_is_bye', False):
+            players_in_bouts.add(p2)
+
+    # 경기에 나타나지만 시딩에 없는 선수
+    missing_from_seeding = players_in_bouts - seeded_names
+    if missing_from_seeding and len(missing_from_seeding) > 2:
+        # 2명 이하는 이름 표기 차이일 수 있으므로 무시
+        issues.append(
+            f"V3: 경기에 존재하지만 시딩에 없는 선수 {len(missing_from_seeding)}명: "
+            f"{list(missing_from_seeding)[:5]}{'...' if len(missing_from_seeding) > 5 else ''}"
+        )
+
+    # ── 검증 4: 라운드별 경기 수 검증 ──
+    round_size_map = {
+        '128강': 64, '64강': 32, '32강': 16, '16강': 8,
+        '8강': 4, '준결승': 2, '결승': 1, '3-4위': 1
+    }
+    for round_name_key, round_bouts in bouts_by_round.items():
+        normalized_key = round_name_key.replace('전', '')
+        expected_count = round_size_map.get(normalized_key)
+        actual_bout_count = len(round_bouts)
+        if expected_count and actual_bout_count > expected_count:
+            issues.append(
+                f"V4: {round_name_key} 경기 수 초과: {actual_bout_count}개 > 예상 {expected_count}개"
+            )
+
+    # ── 검증 5: 시드 번호 연속성 (갭 탐지) ──
+    if actual_players_in_seeding:
+        seed_numbers = sorted([s.get('seed', 0) for s in actual_players_in_seeding if s.get('seed')])
+        if seed_numbers:
+            max_seed = seed_numbers[-1]
+            # 시드 번호가 bracket_size를 초과하면 문제
+            if max_seed > bracket_size:
+                issues.append(
+                    f"V5: 최대 시드 번호({max_seed}) > bracket_size({bracket_size})"
+                )
+
+    # ── 결과 로깅 ──
+    if issues:
+        for issue in issues:
+            logger.warning(f"🔍 시드검증: {issue}")
+        for fix in auto_fixed:
+            logger.info(f"🔧 시드검증 자동수정: {fix}")
+    else:
+        logger.debug(f"✅ 시드검증 통과: bracket_size={bracket_size}, "
+                     f"participants={participant_count}, bouts={len(bouts)}")
 
     return bracket_data
 
@@ -407,10 +637,18 @@ class KFFFullScraper:
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        if self._browser:
-            await self._browser.close()
-        if self._playwright:
-            await self._playwright.stop()
+        try:
+            if self._browser:
+                await self._browser.close()
+        except Exception:
+            pass
+        try:
+            if self._playwright:
+                await self._playwright.stop()
+        except Exception:
+            pass
+        self._browser = None
+        self._playwright = None
 
     def _get_player_id(self, name: str, team: str) -> int:
         """선수 고유 ID 반환 (이름+팀 조합)"""
@@ -493,7 +731,7 @@ class KFFFullScraper:
                     await page_obj.wait_for_timeout(1500)
                     await throttle_request()  # 스로틀링 적용
                     page_num += 1
-                except:
+                except (TimeoutError, Exception):
                     break
 
         finally:
@@ -523,6 +761,84 @@ class KFFFullScraper:
         return None, None
 
     # ==================== 종목 조회 ====================
+
+    async def get_events_direct(self, comp_idx: str) -> List[Event]:
+        """대회의 종목 목록 직접 조회 (클릭 방식)
+
+        ⚡ 최적화: comp_idx(COMPM 형식)로 대회를 직접 찾아 클릭
+        - 웹사이트가 JavaScript 상태를 필요로 하므로 직접 URL 접근 불가
+        - 대신 리스트에서 해당 대회를 찾아 클릭하는 방식 사용
+        """
+        page = await self._browser.new_page()
+        events = []
+        page.set_default_timeout(15000)
+
+        try:
+            # 1. 대회 리스트 페이지로 이동
+            logger.debug(f"get_events_direct: {comp_idx}")
+            await page.goto(f"{self.BASE_URL}/game/compList?code=game", wait_until="networkidle", timeout=20000)
+            await page.wait_for_timeout(2000)
+
+            # 2. comp_idx로 대회 링크 찾기 (funcView('COMPM00679', '2') 형식)
+            link = page.locator(f"a[onclick*=\"{comp_idx}\"]")
+            link_count = await link.count()
+
+            if link_count == 0:
+                logger.warning(f"  대회 링크 없음: {comp_idx}")
+                return events
+
+            # 3. 대회 클릭
+            logger.debug("  대회 링크 발견, 클릭...")
+            await link.first.click(timeout=7000)
+            await page.wait_for_timeout(3000)
+            await throttle_request()
+
+            # 4. 경기결과 탭 클릭
+            try:
+                result_tab = page.locator("a[onclick*='funcLeftSub']:has-text('경기결과')").first
+                tab_count = await result_tab.count()
+                if tab_count > 0:
+                    await result_tab.click(timeout=5000)
+                    await page.wait_for_timeout(2000)
+                    logger.debug("  경기결과 탭 클릭 성공")
+                else:
+                    logger.debug("  경기결과 탭 없음")
+            except Exception as e:
+                logger.debug(f"  경기결과 탭 클릭 실패: {e}")
+
+            # 5. SELECT에서 종목 추출
+            options = await page.evaluate("""
+                () => {
+                    const selects = document.querySelectorAll('select');
+                    for (const select of selects) {
+                        const opts = Array.from(select.options)
+                            .map(opt => ({ value: opt.value, text: opt.textContent.trim() }))
+                            .filter(opt => opt.value && opt.value.startsWith('COMPS'));
+                        if (opts.length > 0) return opts;
+                    }
+                    return [];
+                }
+            """)
+            logger.info(f"  종목 수: {len(options)}")
+
+            for opt in options:
+                weapon, gender, event_type, age_group = self._parse_event_name(opt["text"])
+                events.append(Event(
+                    event_cd=comp_idx,
+                    sub_event_cd=opt["value"],
+                    name=opt["text"],
+                    weapon=weapon,
+                    gender=gender,
+                    event_type=event_type,
+                    age_group=age_group
+                ))
+
+        except Exception as e:
+            logger.error(f"직접 종목 조회 오류 ({comp_idx}): {e}")
+        finally:
+            await page.close()
+
+        return events
 
     async def get_events(self, event_cd: str, page_num: int = 1) -> List[Event]:
         """대회의 종목 목록 조회"""
@@ -569,9 +885,9 @@ class KFFFullScraper:
                 if tab_count > 0:
                     await result_tab.click(timeout=5000)
                     await page.wait_for_timeout(2000)
-                    logger.debug(f"  경기결과 탭 클릭 성공")
+                    logger.debug("  경기결과 탭 클릭 성공")
                 else:
-                    logger.debug(f"  경기결과 탭 없음")
+                    logger.debug("  경기결과 탭 없음")
             except Exception as e:
                 logger.debug(f"  경기결과 탭 클릭 실패: {e}")
 
@@ -616,12 +932,12 @@ class KFFFullScraper:
         event_type = ""
         age_group = ""
 
-        if "플러레" in name:
-            weapon = "플러레"
-        elif "에뻬" in name:
-            weapon = "에뻬"
+        if "플뢰레" in name or "플러레" in name:
+            weapon = "foil"
+        elif "에페" in name or "에뻬" in name:
+            weapon = "epee"
         elif "사브르" in name:
-            weapon = "사브르"
+            weapon = "sabre"
 
         if "남" in name:
             gender = "남"
@@ -651,6 +967,7 @@ class KFFFullScraper:
 
     async def get_full_results(self, event_cd: str, sub_event_cd: str, page_num: int = 1) -> Dict[str, Any]:
         """종목별 전체 경기 결과 조회 (풀 + 순위)"""
+        start_time = time.time()
         page = await self._browser.new_page()
         page.set_default_timeout(15000)
 
@@ -674,7 +991,7 @@ class KFFFullScraper:
                         next_btn = page.locator("a:has-text('다음페이지')")
                         await next_btn.click(timeout=3000)
                         await page.wait_for_timeout(1000)
-                    except:
+                    except (TimeoutError, Exception):
                         break
 
             # 대회 클릭
@@ -701,8 +1018,9 @@ class KFFFullScraper:
                 logger.debug(f"종목 선택 오류: {e}")
 
             # 풀 결과 파싱
-            pool_data = await self._parse_pool_results_v2(page)
+            pool_data, pool_diagnostics = await self._parse_pool_results_v2(page)
             results["pool_rounds"] = pool_data
+            results["_pool_diagnostics"] = pool_diagnostics
 
             # 뿔 최종 랭킹 (Pool Total) 파싱
             pool_total = await self._parse_pool_total_ranking(page)
@@ -722,6 +1040,31 @@ class KFFFullScraper:
                 de_tab = page.locator("a:has-text('엘리미나시옹디렉트')").first
                 await de_tab.click(timeout=5000, force=True)
                 await page.wait_for_timeout(1000)
+
+                # Dual DE: Second DE로 전환하여 최종 순위 수집
+                # (기본값은 First DE이므로 Second DE 순위가 올바른 최종 순위)
+                try:
+                    has_dual_de_selector = await page.evaluate(
+                        "() => !!document.querySelector('select#schEtc01')"
+                    )
+                    if has_dual_de_selector:
+                        logger.info("🎯 Dual DE 감지 (경기결과 탭) - Second DE로 전환하여 최종 순위 수집")
+                        await page.evaluate("""
+                            () => {
+                                const selector = document.querySelector('select#schEtc01');
+                                if (selector && selector.options.length >= 2) {
+                                    selector.selectedIndex = 1;
+                                    if (typeof fnChangeRuls === 'function') {
+                                        fnChangeRuls();
+                                    } else {
+                                        selector.dispatchEvent(new Event('change', { bubbles: true }));
+                                    }
+                                }
+                            }
+                        """)
+                        await page.wait_for_timeout(2000)
+                except Exception as dual_de_err:
+                    logger.debug(f"Dual DE 전환 시도 중 오류 (무시): {dual_de_err}")
 
                 # 최종 순위 수집 (경기결과 탭의 엘리미나시옹디렉트 하위)
                 results["final_rankings"] = await self._parse_final_rankings_v2(page)
@@ -762,7 +1105,8 @@ class KFFFullScraper:
                 # "엘리미나시옹디렉트" 서브 탭 클릭 (대진표 탭 하위)
                 de_bracket_tab = page.locator("a:has-text('엘리미나시옹디렉트')").first
                 await de_bracket_tab.click(timeout=5000, force=True)
-                await page.wait_for_timeout(1500)
+                # Dual DE 페이지의 경우 schEtc01 selector 로딩에 더 긴 시간 필요
+                await page.wait_for_timeout(3000)
                 logger.info("Direct Elimination 대진표 탭 클릭 완료")
 
                 # 실제 대진표 트리 데이터 수집 (v3: 전체 브래킷 구조 분석)
@@ -790,6 +1134,7 @@ class KFFFullScraper:
 
     async def get_de_only(self, event_cd: str, sub_event_cd: str, page_num: int = 1) -> Dict[str, Any]:
         """DE 데이터만 수집 (보완 스크래핑용)"""
+        start_time = time.time()
         results = {
             "de_bracket": {},
             "de_matches": []
@@ -809,7 +1154,7 @@ class KFFFullScraper:
                         next_btn = page.locator("a:has-text('다음페이지')")
                         await next_btn.click(timeout=3000)
                         await page.wait_for_timeout(1000)
-                    except:
+                    except (TimeoutError, Exception):
                         break
 
             # 대회 클릭
@@ -868,14 +1213,81 @@ class KFFFullScraper:
         finally:
             await page.close()
 
+        # Post-scrape 교차 검증 (Layer 2)
+        pool_diag = results.get("_pool_diagnostics", {})
+        scrape_warnings = self._validate_scrape_completeness(
+            event_name=f"{event_cd}/{sub_event_cd}",
+            results=results,
+            pool_diagnostics=pool_diag,
+        )
+        results["_scrape_warnings"] = scrape_warnings
+        results["_duration_ms"] = int((time.time() - start_time) * 1000)
+
+        for w in scrape_warnings:
+            if w.get("severity") == "ERROR":
+                logger.error(f"🚨 스크래핑 검증 실패: {w['message']}")
+            elif w.get("severity") == "WARNING":
+                logger.warning(f"⚠️ 스크래핑 경고: {w['message']}")
+
         return results
 
-    async def _parse_pool_results_v2(self, page: Page) -> List[Dict]:
-        """개선된 풀 결과 파싱 v3 - 정확한 풀 구분 및 점수 매트릭스"""
+    def _validate_scrape_completeness(self, event_name: str, results: dict,
+                                      pool_diagnostics: dict = None) -> list:
+        """Post-scrape 교차 검증 — 빈 배열이 '데이터 없음'인지 '수집 실패'인지 판별"""
+        warnings = []
+        pool_total = results.get('pool_total_ranking', [])
+        pool_rounds = results.get('pool_rounds', [])
+        de_bracket = results.get('de_bracket', {})
+        final_rankings = results.get('final_rankings', [])
+        de_bouts = (de_bracket.get('full_bouts') or []) if de_bracket else []
+
+        # CHECK 1: pool_total 있는데 pool_rounds 없음 → 수집 실패
+        if len(pool_total) > 0 and len(pool_rounds) == 0:
+            warnings.append({
+                'type': 'POOL_DATA_INCOMPLETE',
+                'severity': 'ERROR',
+                'event_name': event_name,
+                'message': (f'pool_total_ranking {len(pool_total)}명 존재하지만 '
+                            f'pool_rounds 0개 — 풀 상세 데이터 수집 실패'),
+                'diagnostics': pool_diagnostics,
+            })
+
+        # CHECK 2: pool_diagnostics에서 skip된 풀 있으면 기록
+        if pool_diagnostics and pool_diagnostics.get('pools_skipped'):
+            skipped = pool_diagnostics['pools_skipped']
+            warnings.append({
+                'type': 'POOL_PARSE_SKIPPED',
+                'severity': 'WARNING',
+                'event_name': event_name,
+                'message': f'{len(skipped)}개 풀 파싱 건너뜀: {skipped}',
+            })
+
+        # CHECK 3: DE bouts 있는데 final_rankings 없음 → 아직 진행 중 or 수집 누락
+        if len(de_bouts) > 0 and len(final_rankings) == 0:
+            warnings.append({
+                'type': 'FINAL_RANKINGS_MISSING',
+                'severity': 'INFO',
+                'event_name': event_name,
+                'message': (f'DE {len(de_bouts)}경기 존재하지만 '
+                            f'final_rankings 없음 (대회 진행 중일 수 있음)'),
+            })
+
+        return warnings
+
+    async def _parse_pool_results_v2(self, page: Page) -> tuple:
+        """개선된 풀 결과 파싱 v3 - 정확한 풀 구분 및 점수 매트릭스
+        Returns: (pool_list, diagnostics_dict)
+        """
         try:
             pool_data = await page.evaluate("""
                 () => {
                     const pools = [];
+                    const diagnostics = {
+                        pool_headers_found: 0,
+                        pools_parsed: 0,
+                        pools_skipped: [],
+                        total_rows_processed: 0
+                    };
                     let roundNumber = 1;
 
                     // 풀 헤더 UL 요소들 찾기 (뿔 N 텍스트를 포함하는 UL)
@@ -896,6 +1308,8 @@ class KFFFullScraper:
                             }
                         }
                     });
+
+                    diagnostics.pool_headers_found = poolHeaders.length;
 
                     // 각 풀 헤더에 대해 바로 다음 테이블 파싱
                     poolHeaders.forEach(({ ul, poolNumber }) => {
@@ -921,7 +1335,10 @@ class KFFFullScraper:
                             nextElem = nextElem.nextElementSibling;
                         }
 
-                        if (!nextElem || nextElem.tagName !== 'TABLE') return;
+                        if (!nextElem || nextElem.tagName !== 'TABLE') {
+                            diagnostics.pools_skipped.push({pool: poolNumber, reason: 'no_table_found'});
+                            return;
+                        }
 
                         const table = nextElem;
                         const results = [];
@@ -932,7 +1349,10 @@ class KFFFullScraper:
                         const headerTexts = Array.from(headers).map(h => h.textContent.trim());
 
                         // 풀 결과 테이블인지 확인
-                        if (!headerTexts.includes('이름') || !headerTexts.includes('승률')) return;
+                        if (!headerTexts.includes('이름') || !headerTexts.includes('승률')) {
+                            diagnostics.pools_skipped.push({pool: poolNumber, reason: 'header_mismatch', actual_headers: headerTexts.slice(0, 8)});
+                            return;
+                        }
 
                         // 상대 수 계산 (헤더에서 숫자 컬럼 개수)
                         const numericHeaders = headerTexts.filter(h => /^\\d+$/.test(h));
@@ -950,6 +1370,8 @@ class KFFFullScraper:
                             );
                         }
 
+                        diagnostics.total_rows_processed += rows.length;
+
                         rows.forEach((row, rowIdx) => {
                             const cells = row.querySelectorAll('td');
                             if (cells.length < 10) return; // 최소 컬럼 수 확인
@@ -963,6 +1385,9 @@ class KFFFullScraper:
 
                             // 점수 배열 추출 (3번 인덱스부터 상대 수만큼)
                             const scores = [];
+                            let actualWins = 0;
+                            let actualLosses = 0;
+
                             for (let i = 0; i < numOpponents; i++) {
                                 const scoreCell = cells[3 + i];
                                 let scoreText = scoreCell?.textContent?.trim() || '';
@@ -975,12 +1400,22 @@ class KFFFullScraper:
                                     // V, V3, V5 등 (승리)
                                     const vScore = scoreText.length === 1 ? 5 : parseInt(scoreText.substring(1)) || 5;
                                     scores.push({ type: 'V', score: vScore });
+                                    actualWins++;
+                                } else if (scoreText.toUpperCase() === 'A') {
+                                    // A = Abandon/Forfeit — 이 선수가 기권함 (FIE t.95)
+                                    // 경기 미진행이므로 wins/losses에 카운트하지 않음
+                                    scores.push({ type: 'A', score: null, is_forfeit: true });
+                                } else if (scoreText.toUpperCase() === 'X') {
+                                    // X = 상대가 기권 — 이 bout은 미진행
+                                    // 경기 미진행이므로 wins/losses에 카운트하지 않음
+                                    scores.push({ type: 'X', score: null, is_forfeit: true });
                                 } else if (scoreText === '' || scoreText === '-') {
-                                    // 빈 셀 (대각선 아님) - 패배 0점 또는 경기 미진행으로 처리
-                                    scores.push({ type: 'L', score: 0 });
+                                    // 빈 셀 = 경기 미진행 (Not played)
+                                    scores.push({ type: 'N', score: null });
                                 } else {
-                                    // 숫자 (패배 점수)
+                                    // 숫자 (패배 점수) - 실제 경기 진행됨
                                     scores.push({ type: 'L', score: parseInt(scoreText) || 0 });
+                                    actualLosses++;
                                 }
                             }
 
@@ -988,13 +1423,16 @@ class KFFFullScraper:
                             const lastCells = Array.from(cells).slice(-4);
                             const winRateText = lastCells[0]?.textContent?.trim() || '0/0';
                             const winRateParts = winRateText.split('/');
-                            const wins = parseInt(winRateParts[0]) || 0;
-                            const total = parseInt(winRateParts[1]) || 0;
-                            const losses = total - wins;
+                            // 실제 진행된 경기에서의 승/패만 계산
+                            const wins = actualWins;
+                            const losses = actualLosses;
 
                             const indicator = parseInt(lastCells[1]?.textContent?.trim()) || 0;
                             const touches = parseInt(lastCells[2]?.textContent?.trim()) || 0;
                             const rank = parseInt(lastCells[3]?.textContent?.trim()) || 0;
+
+                            // 기권자 감지: scores에 'A' 타입이 있으면 이 선수가 기권함
+                            const isForfeit = scores.some(s => s && s.type === 'A');
 
                             players.push({ no, name, team, scores });
 
@@ -1007,22 +1445,25 @@ class KFFFullScraper:
                                 losses: losses,
                                 indicator: indicator,
                                 touches: touches,
-                                rank: rank
+                                rank: rank,
+                                is_forfeit: isForfeit
                             });
                         });
 
-                        // 개별 bout 추출
+                        // 개별 bout 추출 (실제 진행된 경기만)
                         const bouts = [];
                         for (let i = 0; i < players.length; i++) {
                             for (let j = i + 1; j < players.length; j++) {
                                 const p1 = players[i];
                                 const p2 = players[j];
 
-                                // p1의 j번째 상대 점수 확인
-                                if (p1.scores[j] && p1.scores[j] !== null) {
-                                    const score1 = p1.scores[j].score;
-                                    const score2 = (p2.scores[i] && p2.scores[i] !== null) ? p2.scores[i].score : 0;
-                                    const winner = p1.scores[j].type === 'V' ? p1.name : p2.name;
+                                // p1의 j번째 상대 점수 확인 - 미진행(N), 기권(A/X) 제외
+                                const p1Score = p1.scores[j];
+                                if (p1Score && p1Score !== null && p1Score.type !== 'N' && p1Score.type !== 'A' && p1Score.type !== 'X') {
+                                    const score1 = p1Score.score;
+                                    const p2Score = p2.scores[i];
+                                    const score2 = (p2Score && p2Score !== null && p2Score.type !== 'N') ? p2Score.score : 0;
+                                    const winner = p1Score.type === 'V' ? p1.name : p2.name;
 
                                     bouts.push({
                                         player1_name: p1.name,
@@ -1037,6 +1478,7 @@ class KFFFullScraper:
                             }
                         }
 
+                        diagnostics.pools_parsed++;
                         pools.push({
                             round_number: roundNumber,
                             pool_number: poolNumber,
@@ -1051,15 +1493,25 @@ class KFFFullScraper:
                     // 풀 번호로 정렬
                     pools.sort((a, b) => a.pool_number - b.pool_number);
 
-                    return pools;
+                    return {pools, diagnostics};
                 }
             """)
 
-            return pool_data
+            if isinstance(pool_data, dict):
+                diagnostics = pool_data.get('diagnostics', {})
+                pools = pool_data.get('pools', [])
+                if diagnostics.get('pools_skipped'):
+                    for skip in diagnostics['pools_skipped']:
+                        logger.warning(f"⚠️ Pool {skip.get('pool')} skipped: {skip.get('reason')}")
+                        if skip.get('actual_headers'):
+                            logger.warning(f"   Actual headers: {skip['actual_headers']}")
+                return pools, diagnostics
+            else:
+                return pool_data if pool_data else [], {}
 
         except Exception as e:
             logger.error(f"풀 결과 파싱 오류: {e}")
-            return []
+            return [], {"error": str(e)}
 
     async def _parse_pool_total_ranking(self, page: Page) -> List[Dict]:
         """뿔 최종 랭킹 (Pool Total) 파싱 - 최종랭킹(진출) + 탈락자랭킹 모두 추출"""
@@ -1165,8 +1617,17 @@ class KFFFullScraper:
                         return rankings;
                     }
                 """)
-                all_rankings.extend(eliminated_rankings)
-                logger.debug(f"탈락자랭킹: {len(eliminated_rankings)}명")
+                # 중복 제거: 진출자와 동일 선수가 탈락자에도 나오면 제외
+                # (KFF에서 전원 진출 시 드롭다운 전환 후에도 같은 테이블 표시됨)
+                qualified_names = {r["name"] for r in qualified_rankings}
+                deduped_eliminated = [r for r in eliminated_rankings if r["name"] not in qualified_names]
+                all_rankings.extend(deduped_eliminated)
+                if len(deduped_eliminated) < len(eliminated_rankings):
+                    logger.info(
+                        f"탈락자랭킹 중복 제거: {len(eliminated_rankings)}명 → {len(deduped_eliminated)}명 "
+                        f"(진출자와 {len(eliminated_rankings) - len(deduped_eliminated)}명 중복)"
+                    )
+                logger.debug(f"탈락자랭킹: {len(deduped_eliminated)}명")
 
             except Exception as e:
                 logger.debug(f"탈락자랭킹 추출 오류 (무시): {e}")
@@ -1176,14 +1637,14 @@ class KFFFullScraper:
                 close_btn = page.locator("#layer_final_ranking a:has-text('닫기')")
                 await close_btn.click(timeout=2000)
                 await page.wait_for_timeout(300)
-            except:
+            except (TimeoutError, Exception):
                 try:
                     await page.evaluate("document.querySelector('#layer_final_ranking').style.display = 'none'")
-                except:
+                except (TimeoutError, Exception):
                     try:
                         await page.keyboard.press("Escape")
                         await page.wait_for_timeout(300)
-                    except:
+                    except (TimeoutError, Exception):
                         pass
 
             # 최종 확인: 팝업 강제 숨기기
@@ -1192,7 +1653,7 @@ class KFFFullScraper:
                     const popup = document.querySelector('#layer_final_ranking');
                     if (popup) popup.style.display = 'none';
                 """)
-            except:
+            except (TimeoutError, Exception):
                 pass
 
             logger.info(f"뿔 최종 랭킹 총 {len(all_rankings)}명 (진출: {len(qualified_rankings)}, 탈락: {len([r for r in all_rankings if r.get('status') == '탈락'])})")
@@ -1547,10 +2008,48 @@ class KFFFullScraper:
         2. row_table 컬럼 기반 파싱
         3. 다음 라운드에서 점수 추출
         4. 멀티 탭 병합 (32강전 + 8강전)
+        5. Dual DE 자동 감지 (국가대표 선발전 등)
         """
         try:
             # DEScraper v4 사용
             scraper = DEScraper(page)
+
+            # ===== tournament_table 구조 먼저 확인 (빠른 체크, 타임아웃 없음) =====
+            # 이 체크를 먼저 하면 Dual DE 감지 타임아웃을 피할 수 있음
+            has_tt = await scraper._has_tournament_table()
+            if has_tt:
+                # tournament_table이 있어도 dual_de일 수 있음 (국가대표 선발전 등)
+                # dual_de는 #schEtc01 selector로 빠르게 체크 (타임아웃 없음)
+                is_dual_de = await scraper.detect_dual_de_format(wait_for_selector=False)
+                if is_dual_de:
+                    logger.info("🏆 Dual DE + tournament_table 구조 감지")
+                    dual_bracket = await scraper.parse_dual_de_bracket()
+                    if dual_bracket and (dual_bracket.first_de or dual_bracket.second_de):
+                        first_de_info = f"first_de={len(dual_bracket.first_de.matches) if dual_bracket.first_de else 0}경기"
+                        second_de_info = f"second_de={len(dual_bracket.second_de.matches) if dual_bracket.second_de else 0}경기"
+                        logger.info(f"📊 Dual DE 파싱 완료: {first_de_info}, {second_de_info}")
+                        return dual_bracket.to_dict()
+                    else:
+                        logger.warning("Dual DE 파싱 실패, tournament_table 단독 파싱으로 fallback")
+
+                logger.info("🏆 tournament_table 구조 감지 - 멀티탭 파서 사용")
+                bracket = await scraper._parse_tournament_table_bracket()
+                return bracket.to_dict()
+
+            # ===== Dual DE 형식 감지 (selector 대기 포함) =====
+            is_dual_de = await scraper.detect_dual_de_format()
+            if is_dual_de:
+                logger.info("First DE + Second DE 파싱 시작...")
+                dual_bracket = await scraper.parse_dual_de_bracket()
+                if dual_bracket and (dual_bracket.first_de or dual_bracket.second_de):
+                    first_de_info = f"first_de={len(dual_bracket.first_de.matches) if dual_bracket.first_de else 0}경기"
+                    second_de_info = f"second_de={len(dual_bracket.second_de.matches) if dual_bracket.second_de else 0}경기"
+                    logger.info(f"📊 Dual DE 파싱 완료: {first_de_info}, {second_de_info}")
+                    return dual_bracket.to_dict()
+                else:
+                    logger.warning("Dual DE 파싱 실패 (데이터 없음), 일반 DE로 fallback")
+
+            # ===== 일반 DE 파싱 =====
             bracket = await scraper.parse_de_bracket()
             return bracket.to_dict()
         except Exception as e:
@@ -1558,6 +2057,48 @@ class KFFFullScraper:
 
         # Fallback to original v3 logic
         try:
+            # ★★★ 0. 대회 진행 중 상태 확인 (v3 fallback에서도 체크) ★★★
+            is_in_progress = await page.evaluate("""
+                () => {
+                    const pageText = document.body?.innerText || '';
+                    // "토너먼트가 진행중인 상태 입니다" 텍스트 확인
+                    if (pageText.includes('토너먼트가 진행중인 상태')) {
+                        return true;
+                    }
+                    // DE 테이블 존재 확인 - 여러 구조 지원
+                    const aTable = document.querySelector('#A_table');
+                    const tournamentTable = document.querySelector('.tournament_table .user_box');
+                    const tournamentContainer = document.querySelector('#tournament_container');
+                    // 어떤 DE 구조라도 있으면 진행 중이 아님
+                    if (aTable || tournamentTable) {
+                        return false;
+                    }
+                    // 컨테이너만 있는 경우: 내부 데이터 확인
+                    if (tournamentContainer) {
+                        const cells = tournamentContainer.querySelectorAll('td');
+                        return cells.length < 5;  // 셀이 거의 없으면 아직 로딩 안됨
+                    }
+                    return true;
+                }
+            """)
+
+            if is_in_progress:
+                logger.warning("⚠️ [v3 fallback] 토너먼트가 진행 중입니다 - DE 데이터 스크래핑 스킵")
+                return {
+                    "bracket_size": 0,
+                    "participant_count": 0,
+                    "starting_round": "",
+                    "rounds": [],
+                    "seeding": [],
+                    "bouts": [],
+                    "bouts_by_round": {},
+                    "final_ranking": [],
+                    "results_by_round": {},
+                    "match_results": [],
+                    "full_bouts": [],
+                    "is_in_progress": True  # 진행 중 플래그
+                }
+
             bracket_data = {
                 "bracket_size": 0,
                 "participant_count": 0,
@@ -1725,6 +2266,8 @@ class KFFFullScraper:
                             let team = '';
                             let score = null;
                             let hasScore = false;
+                            let isForfeit = false;
+                            let forfeitPlayer = null;
 
                             if (paragraphs.length >= 2) {
                                 const infoEl = paragraphs[1].querySelector('span, generic') || paragraphs[1];
@@ -1738,7 +2281,19 @@ class KFFFullScraper:
                                     };
                                     hasScore = true;
                                 } else {
-                                    team = infoText;
+                                    // 🔥 기권 패턴 인식: "선수이름의기권" 또는 "선수이름-기권" 등
+                                    const forfeitMatch = infoText.match(/(.+?)(의기권|의 기권|-기권|\\s기권)$/);
+                                    if (forfeitMatch) {
+                                        isForfeit = true;
+                                        forfeitPlayer = forfeitMatch[1].trim();  // 기권한 선수 이름
+                                        hasScore = true;  // 기권도 결과가 있는 것으로 처리
+                                    } else if (infoText === '기권') {
+                                        // 단순 "기권" 텍스트 - 현재 선수가 기권
+                                        isForfeit = true;
+                                        forfeitPlayer = name;
+                                    } else {
+                                        team = infoText;
+                                    }
                                 }
                             }
 
@@ -1748,7 +2303,9 @@ class KFFFullScraper:
                                 name: name,
                                 team: team,
                                 score: score,
-                                hasScore: hasScore
+                                hasScore: hasScore,
+                                isForfeit: isForfeit,
+                                forfeitPlayer: forfeitPlayer
                             });
                             hasValidEntry = true;
                         });
@@ -1862,6 +2419,8 @@ class KFFFullScraper:
                     bracket_pos = entry['position']
                     winner_name = entry['name']
                     score = entry['score']
+                    is_forfeit = entry.get('isForfeit', False)
+                    forfeit_player = entry.get('forfeitPlayer')
 
                     # 이전 라운드에서 이 bracket_pos의 대진 찾기
                     prev_match = None
@@ -1882,7 +2441,24 @@ class KFFFullScraper:
                     p1 = prev_match.get('player1', {})
                     p2 = prev_match.get('player2', {})
 
-                    if p1 and p1.get('name') == winner_name:
+                    # 🔥 기권 처리: forfeit_player가 있으면 그 선수가 패자
+                    if is_forfeit and forfeit_player:
+                        if p1 and p1.get('name') == forfeit_player:
+                            winner = p2 if p2 else {'name': winner_name, 'seed': bracket_pos, 'team': ''}
+                            loser = p1
+                        elif p2 and p2.get('name') == forfeit_player:
+                            winner = p1 if p1 else {'name': winner_name, 'seed': bracket_pos, 'team': ''}
+                            loser = p2
+                        else:
+                            # 기권자 이름이 매칭 안되면 winner_name으로 승자 결정
+                            if p1 and p1.get('name') == winner_name:
+                                winner = p1
+                                loser = p2
+                            else:
+                                winner = p2 if p2 else {'name': winner_name, 'seed': bracket_pos, 'team': ''}
+                                loser = p1
+                        logger.debug(f"🔥 기권 처리: {forfeit_player} 기권 → {winner.get('name')} 승리")
+                    elif p1 and p1.get('name') == winner_name:
                         winner = p1
                         loser = p2
                     elif p2 and p2.get('name') == winner_name:
@@ -1917,7 +2493,9 @@ class KFFFullScraper:
                         'winnerSeed': winner.get('seed'),
                         'winnerName': winner.get('name'),
                         'isCompleted': True,
-                        'isBye': loser is None
+                        'isBye': loser is None,
+                        'isForfeit': is_forfeit,
+                        'forfeitPlayer': forfeit_player
                     }
                     all_bouts.append(bout)
                     bout_id_counter += 1
@@ -2665,7 +3243,11 @@ class KFFFullScraper:
             else:
                 winner, loser = p2, p1
 
-            full_bouts.append({
+            # 🔥 기권 정보 추가
+            is_forfeit = bout.get('isForfeit', False)
+            forfeit_player = bout.get('forfeitPlayer')
+
+            full_bout = {
                 'table_index': bout.get('tableIndex', 0),
                 'round': bout['round'] + '전',
                 'winner': {
@@ -2684,7 +3266,15 @@ class KFFFullScraper:
                     'winner_score': winner.get('score'),
                     'loser_score': loser.get('score')
                 }
-            })
+            }
+
+            # 🔥 기권 정보 포함
+            if is_forfeit:
+                full_bout['is_forfeit'] = True
+                full_bout['forfeit_player'] = forfeit_player
+                full_bout['match_result'] = 'forfeit'
+
+            full_bouts.append(full_bout)
 
         return full_bouts
 
@@ -2953,6 +3543,9 @@ class KFFFullScraper:
             competitions = competitions[:limit]
 
         # 기존 데이터 로드 (resume 모드)
+        # NOTE: 이 JSON 로드는 스크래퍼 내부 체크포인트용입니다.
+        # 서버 런타임 데이터 소스가 아님 — 서버는 Supabase만 사용합니다.
+        # 스크래핑 중단 후 재개 시 이전 수집 결과를 이어받기 위한 용도입니다.
         if resume_file:
             try:
                 with open(resume_file, 'r', encoding='utf-8') as f:

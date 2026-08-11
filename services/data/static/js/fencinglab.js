@@ -13,17 +13,44 @@ const FencingLab = {
         }
     },
 
-    // 색상 테마
-    colors: {
+    // 테마별 색상 정의
+    _darkColors: {
         green: '#00ff88',
         greenDim: 'rgba(0, 255, 136, 0.2)',
+        greenGradient: ['rgba(0, 255, 136, 0)', 'rgba(0, 255, 136, 0.3)'],
         blue: '#00d4ff',
         blueDim: 'rgba(0, 212, 255, 0.2)',
         red: '#ff4466',
         redDim: 'rgba(255, 68, 102, 0.2)',
         yellow: '#ffcc00',
         text: '#a0a0b0',
-        grid: '#2a2a3a'
+        grid: '#2a2a3a',
+        tooltipBg: '#1a1a24',
+        tooltipBorder: '#00d4ff',
+        tooltipTitle: '#fff',
+        pointBorder: '#0a0a0f'
+    },
+    _lightColors: {
+        green: '#00c471',
+        greenDim: 'rgba(0, 196, 113, 0.12)',
+        greenGradient: ['rgba(0, 196, 113, 0)', 'rgba(0, 196, 113, 0.15)'],
+        blue: '#3182f6',
+        blueDim: 'rgba(49, 130, 246, 0.12)',
+        red: '#f04452',
+        redDim: 'rgba(240, 68, 82, 0.12)',
+        yellow: '#f59f00',
+        text: '#4e5968',
+        grid: '#e5e8eb',
+        tooltipBg: '#ffffff',
+        tooltipBorder: '#e5e8eb',
+        tooltipTitle: '#191f28',
+        pointBorder: '#ffffff'
+    },
+
+    // 현재 테마 감지 후 적절한 색상 반환
+    get colors() {
+        const theme = document.documentElement.getAttribute('data-theme') || 'dark';
+        return theme === 'light' ? this._lightColors : this._darkColors;
     },
 
     // Translate match result for i18n
@@ -61,18 +88,19 @@ const FencingLab = {
                     backgroundColor: (context) => {
                         const chart = context.chart;
                         const {ctx, chartArea} = chart;
-                        if (!chartArea) return this.colors.greenDim;
+                        const colors = FencingLab.colors;
+                        if (!chartArea) return colors.greenDim;
 
                         const gradient = ctx.createLinearGradient(0, chartArea.bottom, 0, chartArea.top);
-                        gradient.addColorStop(0, 'rgba(0, 255, 136, 0)');
-                        gradient.addColorStop(1, 'rgba(0, 255, 136, 0.3)');
+                        gradient.addColorStop(0, colors.greenGradient[0]);
+                        gradient.addColorStop(1, colors.greenGradient[1]);
                         return gradient;
                     },
                     borderColor: this.colors.green,
                     borderWidth: 2,
                     tension: 0.4,
                     pointBackgroundColor: this.colors.green,
-                    pointBorderColor: '#0a0a0f',
+                    pointBorderColor: this.colors.pointBorder,
                     pointBorderWidth: 2,
                     pointRadius: 4,
                     pointHoverRadius: 6
@@ -98,10 +126,10 @@ const FencingLab = {
                 },
                 plugins: {
                     tooltip: {
-                        backgroundColor: '#1a1a24',
-                        borderColor: this.colors.blue,
+                        backgroundColor: this.colors.tooltipBg,
+                        borderColor: this.colors.tooltipBorder,
                         borderWidth: 1,
-                        titleColor: '#fff',
+                        titleColor: this.colors.tooltipTitle,
                         bodyColor: this.colors.text,
                         callbacks: {
                             label: (context) => `승률: ${context.raw}%`
@@ -112,14 +140,19 @@ const FencingLab = {
         });
     },
 
+    SUPPORTED_LANGUAGES: ['ko', 'en', 'ja', 'fr', 'it', 'zh', 'tr'],
+
     /**
-     * Detect current language from URL path
+     * Detect current language: <html lang> (base.html) → URL path → ko
      */
     getCurrentLanguage() {
-        const path = window.location.pathname;
-        if (path.startsWith('/en/')) return 'en';
-        if (path.startsWith('/ko/')) return 'ko';
-        return 'ko'; // default
+        const htmlLang = (document.documentElement.lang || '').slice(0, 2).toLowerCase();
+        if (this.SUPPORTED_LANGUAGES.includes(htmlLang)) return htmlLang;
+
+        const pathLang = window.location.pathname.split('/')[1];
+        if (this.SUPPORTED_LANGUAGES.includes(pathLang)) return pathLang;
+
+        return 'ko';
     },
 
     /**
@@ -151,7 +184,7 @@ const FencingLab = {
      */
     async loadDemoData() {
         try {
-            const response = await fetch('/api/fencinglab/demo');
+            const response = await fetch(`/api/fencinglab/demo?lang=${encodeURIComponent(this.getCurrentLanguage())}`);
             if (!response.ok) throw new Error('Failed to load demo');
             return await response.json();
         } catch (error) {
@@ -386,23 +419,28 @@ const FencingLab = {
 
     /**
      * 데모 섹션 렌더링 (랜딩페이지용)
+     *
+     * 2026-08-06: FencingLab 개편 중이라 이 섹션은 "샘플 화면"으로만 남긴다.
+     * /fencinglab 진입 링크와 카드 hover 이동 효과를 모두 제거해, 눌러도 아무 일이
+     * 일어나지 않는 요소가 눌릴 수 있어 보이지 않게 한다. 데이터는 실제값 그대로.
      */
     async renderDemoSection(containerId) {
         const container = document.getElementById(containerId);
         if (!container) return;
 
         const demo = await this.loadDemoData();
+        const fl = window.i18n?.fencinglab || {};
         if (!demo || !demo.demo_players || demo.demo_players.length === 0) {
-            container.innerHTML = '<p class="fl-text-secondary">데모 데이터를 불러올 수 없습니다.</p>';
+            container.innerHTML = `<p class="fl-text-secondary">${fl.cannot_load_data || '데모 데이터를 불러올 수 없습니다.'}</p>`;
             return;
         }
 
         container.innerHTML = `
-            <div class="fl-demo-section">
+            <div class="fl-demo-section fl-demo-section--sample">
                 <div class="fl-demo-title">
+                    <span class="fm-badge fm-badge--micro fm-badge--outline fl-sample-flag">${fl.sample || '샘플 화면'}</span>
                     <h2>Fencing<span>Lab</span></h2>
-                    <p>실제 데이터 기반 선수 분석</p>
-                    <a href="/fencinglab" class="fl-demo-link">선수 분석 보기 →</a>
+                    <p>${fl.subtitle || '실제 데이터 기반 선수 분석'}</p>
                 </div>
                 <div class="fl-demo-grid" id="demo-cards"></div>
             </div>
@@ -411,7 +449,7 @@ const FencingLab = {
         const cardsContainer = document.getElementById('demo-cards');
         demo.demo_players.forEach((player, idx) => {
             const cardDiv = document.createElement('div');
-            cardDiv.className = 'fl-demo-card';
+            cardDiv.className = 'fl-demo-card fl-demo-card--static';
             cardDiv.innerHTML = `
                 <div class="fl-demo-player">
                     <div class="fl-player-avatar">${player.name[0]}</div>
@@ -423,18 +461,18 @@ const FencingLab = {
                 <div class="fl-demo-stats">
                     <div class="fl-stat">
                         <span class="value">${player.total_matches}</span>
-                        <span class="label">경기</span>
+                        <span class="label">${fl.bouts || '경기'}</span>
                     </div>
                     <div class="fl-stat">
                         <span class="value ${player.win_rate >= 50 ? 'green' : ''}">${player.win_rate}%</span>
-                        <span class="label">승률</span>
+                        <span class="label">${fl.win_rate || '승률'}</span>
                     </div>
                     <div class="fl-stat">
                         <span class="value">${player.pool_win_rate}%</span>
-                        <span class="label">Pool</span>
+                        <span class="label">${fl.pool_rate || 'Pool'}</span>
                     </div>
                 </div>
-                <div class="fl-demo-badge ${player.clutch_grade.includes('강심장') ? 'strong' : ''}">
+                <div class="fl-demo-badge ${player.clutch_grade_key === 'strong' ? 'strong' : ''}">
                     ${player.clutch_grade}
                 </div>
             `;

@@ -3,7 +3,7 @@
 {% block title %}{{ player_name }} - FencingLab{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="/static/css/fencinglab.css">
+<link rel="stylesheet" href="/static/css/fencinglab.css?v=20260603">
 {% endblock %}
 
 {% block content %}
@@ -47,7 +47,7 @@
 
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="/static/js/fencinglab.js"></script>
+<script src="/static/js/fencinglab.js?v=20260603"></script>
 <script>
 const playerName = "{{ player_name }}";
 const urlParams = new URLSearchParams(window.location.search);

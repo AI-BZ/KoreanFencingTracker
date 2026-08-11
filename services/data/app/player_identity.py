@@ -20,34 +20,173 @@ ID 체계 (2글자 국가코드):
 
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set, Tuple
-from datetime import datetime, date
 from collections import defaultdict
 import hashlib
 import re
+import logging
+
+logger = logging.getLogger(__name__)
 
 
-# 소속 유형 판별
+def is_team_event(event_name: str) -> bool:
+    """단체전 이벤트인지 판별.
+
+    단체전 final_rankings의 name 필드에는 팀명(학교/클럽명)이 들어있어
+    개인 선수 프로필로 처리하면 안 됨 (~202개 가짜 선수 프로필 발생 원인).
+
+    Args:
+        event_name: 이벤트 이름 (예: "남자 사브르(단)", "여자 에페 단체")
+
+    Returns:
+        True if team event, False otherwise
+    """
+    return "(단)" in event_name or "단체" in event_name
+
+
+# ============================================================
+# 자동 동명이인 감지 (Automatic Homonym Detection)
+# ============================================================
+# 규칙 우선순위:
+#   Level 1: 같은 대회 + 다른 팀 → 100% 다른 사람 (물리적 불가)
+#   Level 2: 다른 성별 → 100% 다른 사람
+#   Level 3: 나이그룹 역행 → 100% 다른 사람
+#   Level 4: 다른 무기 (cross-time) → 99%+ 다른 사람
+# KNOWN_HOMONYMS는 위 규칙으로 감지 불가한 예외 케이스에만 사용
+# ============================================================
+
+
+# 같은 클럽의 표기 변형 → 정규 표시명 (예: 영문 병기 제거).
+# team_history 그룹화·표시에만 적용. 동명이인 분리(KNOWN_HOMONYMS)는
+# raw 팀명을 그대로 쓰므로 이 정규화의 영향을 받지 않는다.
+TEAM_NAME_CANONICAL = {
+    "에이치펜싱클럽(H FENCING CLUB)": "에이치펜싱클럽",
+}
+
+
+def canonical_team_name(name: str) -> str:
+    """같은 클럽의 표기 변형을 정규 표시명으로 통일."""
+    if not name:
+        return name
+    return TEAM_NAME_CANONICAL.get(name.strip(), name)
+
+
+def detect_homonyms_from_competitions(competitions_data: list) -> Dict[str, Set[str]]:
+    """대회 데이터에서 동명이인을 자동 감지.
+
+    "같은 대회(comp_id) + 다른 팀" 규칙으로 동명이인 이름과 해당 팀 집합을 반환.
+    한 사람이 같은 대회에서 2개 팀으로 출전할 수 없으므로 100% 신뢰할 수 있는 규칙.
+
+    Args:
+        competitions_data: [{competition: {...}, events: [{...}]}] 형태의 대회 데이터
+
+    Returns:
+        {이름: {팀1, 팀2, ...}} — 동명이인으로 확인된 이름별 팀 집합
+        (한 이름에 2개 이상 팀이 있으면 동명이인)
+    """
+    # {name: {comp_id: set(teams)}}
+    name_comp_teams: Dict[str, Dict[str, Set[str]]] = defaultdict(lambda: defaultdict(set))
+
+    for comp_data in competitions_data:
+        comp = comp_data.get("competition", {})
+        comp_id = str(comp.get("id", comp.get("event_cd", "")))
+
+        for event in comp_data.get("events", []):
+            # 단체전 이벤트는 제외 (팀명이 name 필드에 있어 가짜 선수 생성됨)
+            if is_team_event(event.get("name", "")):
+                continue
+            for r in event.get("final_rankings", []):
+                name = (r.get("name") or "").strip()
+                team = (r.get("team") or "").strip()
+                if name and team:
+                    name_comp_teams[name][comp_id].add(team)
+
+    # 같은 대회에서 2개 이상 팀으로 나온 이름 = 동명이인
+    homonyms: Dict[str, Set[str]] = {}
+    for name, comp_teams in name_comp_teams.items():
+        all_teams_for_name: Set[str] = set()
+        is_homonym = False
+        for comp_id, teams in comp_teams.items():
+            if len(teams) > 1:
+                is_homonym = True
+            all_teams_for_name.update(teams)
+        if is_homonym:
+            homonyms[name] = all_teams_for_name
+
+    return homonyms
+
+
+def is_same_date_homonym(name: str, competitions_data: list) -> bool:
+    """특정 이름이 같은 대회에서 다른 팀으로 출전한 적이 있는지 확인."""
+    for comp_data in competitions_data:
+        teams_in_comp: Set[str] = set()
+        for event in comp_data.get("events", []):
+            if is_team_event(event.get("name", "")):
+                continue
+            for r in event.get("final_rankings", []):
+                if (r.get("name") or "").strip() == name:
+                    team = (r.get("team") or "").strip()
+                    if team:
+                        teams_in_comp.add(team)
+        if len(teams_in_comp) > 1:
+            return True
+    return False
+
+
+# 소속 유형 판별 — 패턴 우선순위 (긴 패턴 먼저, 단일글자는 $ anchor)
+# organization_identity.py의 detect_org_type()과 동일한 우선순위
+_TEAM_TYPE_PATTERNS: list = [
+    # 0단계: OB(졸업생/동문) — 대학교 패턴보다 먼저 매칭
+    (r'OB$|OB\b', 'club'),  # "고려대학교OB" → club (졸업생 팀)
+
+    # 1단계: 부속학교 (대학교+고등학교 조합)
+    (r'부속고등학교|부속고|부설고', 'high'),
+    (r'부속중학교|부속중|부설중', 'middle'),
+    (r'부속초등학교', 'elementary'),
+
+    # 2단계: 전체 단어 학교
+    (r'초등학교|초교', 'elementary'),
+    (r'중학교|중학', 'middle'),
+    (r'고등학교|고등|체육고|예술고|과학고|외고|국제고|자사고|특목고|국제학교', 'high'),
+    (r'대학교|대학', 'university'),
+
+    # 3단계: 행정기관/실업팀 (체육회+클럽은 클럽 우선)
+    (r'체육회.*클럽|체육회.*아카데미|체육회.*도장', 'club'),  # "안산시체육회 상록펜싱클럽" → club
+    (r'시청|군청|구청|도청|체육회|체육부대', 'professional'),
+    (r'공사|공단|은행|보험|증권|카드|전력|가스|통신|철도|항공', 'professional'),
+    (r'삼성|현대|LG|SK|롯데|포스코|KT|CJ', 'professional'),
+
+    # 4단계: 협회클럽 복합 패턴 (협회보다 클럽 우선)
+    (r'협회클럽', 'club'),  # "수원시펜싱협회클럽" → club
+    (r'국가대표|대표팀|협회|연맹', 'national'),
+
+    # 5단계: 클럽 키워드 (한글 + 영문)
+    (r'클럽|스포츠클럽|스포츠단|스포츠스쿨|아카데미|도장|체육관|센터|랩|LAB|FC|SC|가르드', 'club'),
+    (r'(?i)CLUB|FENCING\s*CLUB', 'club'),  # 영문 클럽명
+    (r'(?i)INTERNATIONAL\s*SCHOOL|SCHOOL', 'high'),  # 국제학교
+
+    # 6단계 (최후 fallback): 단일글자 + $ anchor
+    (r'여중$|남중$', 'middle'),
+    (r'여고$|남고$', 'high'),
+    (r'중$', 'middle'),
+    (r'고$', 'high'),
+    (r'대$', 'university'),
+]
+
+
 def get_team_type(team: str) -> str:
     """
     소속 유형 판별
-    Returns: 'elementary', 'middle', 'high', 'university', 'club'
+    Returns: 'elementary', 'middle', 'high', 'university', 'professional', 'club'
+
+    우선순위: 부속학교 → 전체단어 학교 → 행정기관 → 클럽 → 단일글자 fallback
     """
     if not team:
         return 'club'
 
-    # 초등학교
-    if re.search(r'초등학교|초교', team):
-        return 'elementary'
-    # 중학교
-    if re.search(r'중학교|중$', team):
-        return 'middle'
-    # 고등학교
-    if re.search(r'고등학교|고$|체고', team):
-        return 'high'
-    # 대학교
-    if re.search(r'대학교|대학$|대$', team):
-        return 'university'
-    # 클럽/동호회
+    for pattern, team_type in _TEAM_TYPE_PATTERNS:
+        if re.search(pattern, team):
+            return team_type
+
     return 'club'
 
 
@@ -57,7 +196,9 @@ SCHOOL_LEVEL = {
     'middle': 2,
     'high': 3,
     'university': 4,
-    'club': 0  # 클럽은 별도 트랙
+    'club': 0,  # 클럽은 별도 트랙
+    'professional': 5,  # 실업팀/시청/기업
+    'national': 5,  # 국가대표/협회
 }
 
 # 나이그룹 레벨 (성장 순서 - 시간이 지나면 레벨이 올라가야 함)
@@ -167,7 +308,7 @@ def is_gender_consistent(records: List[Dict]) -> Tuple[bool, str]:
         male_record = next((r for r in gender_records if r['gender'] == '남자'), None)
         female_record = next((r for r in gender_records if r['gender'] == '여자'), None)
 
-        warning = f"성별 불일치 감지 (동명이인): "
+        warning = "성별 불일치 감지 (동명이인): "
         if male_record and female_record:
             warning += f"남자({male_record['date']}) vs 여자({female_record['date']})"
 
@@ -251,30 +392,74 @@ class PlayerProfile:
         return list(dict.fromkeys([t.team for t in self.team_history]))
 
     def add_team(self, team: str, date_str: str) -> None:
-        """Add or update team affiliation"""
+        """팀 기록 추가 (단순화됨 - rebuild_team_history()로 그룹화)
+
+        모든 기록을 개별적으로 추가합니다.
+        프로필 구축 완료 후 rebuild_team_history()를 호출하여
+        연속된 같은 팀을 그룹화하고 원복 케이스를 처리합니다.
+        """
         if not team:
             return
 
-        # Check if this is a continuation of an existing team
-        for record in self.team_history:
-            if record.team == team:
-                # Update last_seen if this date is later
-                if date_str > record.last_seen:
-                    record.last_seen = date_str
-                elif date_str < record.first_seen:
-                    record.first_seen = date_str
-                record.competition_count += 1
-                return
-
-        # New team - add to history
+        # 무조건 새 기록 추가 (나중에 rebuild_team_history()로 그룹화)
         self.team_history.append(TeamRecord(
             team=team,
             first_seen=date_str,
             last_seen=date_str
         ))
 
-        # Sort by first_seen date
-        self.team_history.sort(key=lambda x: x.first_seen)
+    def rebuild_team_history(self) -> None:
+        """프로필 구축 완료 후 team_history 재구축
+
+        - 날짜순 정렬
+        - 연속된 같은 팀을 하나의 기간으로 그룹화
+        - 원복 케이스(A→B→A)는 별도 기간으로 유지
+
+        예: 최병철(2022-03~2025-07) → 올즈윈(2025-08) → 최병철(2025-10~2026-01)
+        """
+        if not self.team_history:
+            return
+
+        # 날짜순 정렬
+        sorted_records = sorted(self.team_history, key=lambda x: x.first_seen)
+
+        # 연속된 같은 팀 그룹화 (원복 케이스 분리 유지)
+        new_history = []
+        current_period = None
+
+        for record in sorted_records:
+            # 같은 클럽의 표기 변형(예: 영문 병기)을 정규명으로 통일해 그룹화
+            ct = canonical_team_name(record.team)
+            if current_period is None:
+                # 첫 번째 기록
+                current_period = TeamRecord(
+                    team=ct,
+                    team_id=record.team_id,
+                    team_en=record.team_en,
+                    first_seen=record.first_seen,
+                    last_seen=record.last_seen,
+                    competition_count=record.competition_count
+                )
+            elif current_period.team == ct:
+                # 연속된 같은 팀 - 기간 연장
+                current_period.last_seen = record.last_seen
+                current_period.competition_count += record.competition_count
+            else:
+                # 다른 팀 - 현재 기간 저장, 새 기간 시작
+                new_history.append(current_period)
+                current_period = TeamRecord(
+                    team=ct,
+                    team_id=record.team_id,
+                    team_en=record.team_en,
+                    first_seen=record.first_seen,
+                    last_seen=record.last_seen,
+                    competition_count=record.competition_count
+                )
+
+        if current_period:
+            new_history.append(current_period)
+
+        self.team_history = new_history
 
     def check_data_integrity(self) -> Optional[str]:
         """
@@ -367,6 +552,352 @@ class PlayerIdentityResolver:
         },
     }
 
+    # [보조용] 수동 등록 동명이인: 자동 감지(같은 대회 다른 팀)로 잡히지 않는 케이스만.
+    # 대부분의 동명이인은 _find_overlapping_teams()가 자동으로 감지.
+    # 여기는 두 사람이 절대 같은 대회에 나가지 않는 희귀 케이스에만 사용.
+    # Format: name -> [(team_set_a, team_set_b), ...] — 서로 다른 사람의 팀 그룹
+    KNOWN_HOMONYMS = {
+        # Case 71: 김소영 — A(만수여자중학교→가좌고등학교, 진학) vs B(에이치펜싱클럽, 2024.09~)
+        #   에이치펜싱클럽 두 표기(한글/영문병기)는 같은 클럽이므로 B에 함께 둔다.
+        "김소영": [
+            ({"만수여자중학교", "가좌고등학교"},
+             {"에이치펜싱클럽", "에이치펜싱클럽(H FENCING CLUB)"}),
+        ],
+        # Case 1: 이지민 (foil, 여) — 2024 5/6학년 남현희인터내셔널 vs 2025 일반 이글펜싱클럽
+        "이지민": [
+            ({"남현희 인터내셔널펜싱아카데미"},
+             {"이글펜싱클럽", "이글펜싱클럽 전문트레이닝센터 올림픽점"}),
+        ],
+        # Case 2: 김가윤 (foil, 여) — 2024 1/2학년 엔티언펜싱 김포 vs 2025 중등 송정여자중학교
+        "김가윤": [
+            ({"엔티언 펜싱클럽 김포"}, {"송정여자중학교"}),
+        ],
+        # Case 3: 김시우 (foil, 남) — 2023 3/4학년 압구정펜싱클럽 vs 2024 고등 울산산업고등학교
+        "김시우": [
+            ({"압구정펜싱클럽"}, {"울산산업고등학교"}),
+        ],
+        # Case 4: 이준서 (foil, 남) — 2024 3/4학년 평창동펜싱클럽 vs 2025 고등 곤지암고등학교
+        "이준서": [
+            ({"평창동펜싱클럽"}, {"곤지암고등학교"}),
+        ],
+        # Case 5: 김주원 (foil, 남) — 2025 5/6학년 송도펜싱클럽 vs 2026 고등 가림고등학교
+        "김주원": [
+            ({"송도펜싱클럽"}, {"가림고등학교"}),
+        ],
+        # Case 6: 이가연 (foil, 여) — 2025 1/2학년 알레펜싱클럽 vs 2026 5/6학년 비앤케이펜싱클럽
+        "이가연": [
+            ({"알레펜싱클럽"}, {"비앤케이펜싱클럽"}),
+        ],
+        # Case 7: 정하윤 (foil, 여) — 2025 3/4학년 노블레스펜싱클럽 vs 2026 중등 개양중학교
+        "정하윤": [
+            ({"노블레스펜싱클럽"}, {"개양중학교"}),
+        ],
+        # Case 8: 구준영 (sabre, 남) — 2022 1/2학년 아이에프씨제주 vs 2025 고등 더블유펜싱클럽
+        "구준영": [
+            ({"아이에프씨제주"}, {"더블유펜싱클럽"}),
+        ],
+        # Case 9: 박소윤 (여중) — 플뢰레 최병철펜싱클럽/송도펜싱클럽 vs 에페 덕원중학교
+        # 같은 대회 같은 날 다른 종목/팀으로 출전 확인 (2026-03, 2026-04)
+        "박소윤": [
+            ({"최병철펜싱클럽", "송도펜싱클럽"}, {"덕원중학교"}),
+        ],
+
+        # ============================================================
+        # Tier 1: 성별 기반 동명이인 (R10+R13 — 같은 날 남/여 종목 동시 출전)
+        # 2026-05-14 Data Guardian 검증 결과 일괄 등록 (47명)
+        # 증거: DB에서 같은 이름이 같은 대회에서 남자/여자 종목에 각각 출전
+        # ============================================================
+
+        # Case 10: 강민서 — 남(오성고/오성중/서울펜싱클럽, 사브르) vs 여(신수중/마스터펜싱클럽/윈펜싱클럽, 플뢰레/에페)
+        "강민서": [
+            ({"오성고", "오성중", "서울펜싱클럽"},
+             {"신수중", "마스터펜싱클럽", "윈펜싱클럽"}),
+        ],
+        # Case 11: 김도연 — 남(광주체육중/발안바이오과학고/한국체육대, 에페/사브르) vs 여(시지고/이지펜싱클럽/전주호성중, 사브르/플뢰레)
+        "김도연": [
+            ({"광주체육중", "발안바이오과학고", "한국체육대"},
+             {"시지고", "이지펜싱클럽", "전주호성중"}),
+        ],
+        # Case 12: 김민강 — 남(대전매봉중, 사브르) vs 여(하이브펜싱클럽, 플뢰레)
+        "김민강": [
+            ({"대전매봉중"}, {"하이브펜싱클럽"}),
+        ],
+        # Case 13: 김민서 — 남(국군체육부대, 플뢰레) vs 여(K1펜싱클럽/구본길펜싱클럽/부천트윈펜싱클럽/이리북중, 에페)
+        "김민서": [
+            ({"국군체육부대"},
+             {"K1펜싱클럽", "구본길펜싱클럽", "부천트윈펜싱클럽", "이리북중"}),
+        ],
+        # Case 14: 김민솔 — 남(JK펜싱클럽, 초등남에페) vs 여(수원펜싱클럽/예코치펜싱클럽/펜싱레이블, 초등여에페/여일에페)
+        "김민솔": [
+            ({"JK펜싱클럽"},
+             {"수원펜싱클럽", "예코치펜싱클럽", "펜싱레이블"}),
+        ],
+        # Case 15: 김서율 — 남(투셰펜싱클럽, 초등남플뢰레) vs 여(어썸코리아펜싱클럽, 초등여플뢰레)
+        "김서율": [
+            ({"투셰펜싱클럽"}, {"어썸코리아펜싱클럽"}),
+        ],
+        # Case 16: 김서진 — 남(원주중/한국체육대, 에페) vs 여(비앤케이펜싱클럽/서울체육고/은성중, 사브르)
+        "김서진": [
+            ({"원주중", "한국체육대"},
+             {"비앤케이펜싱클럽", "서울체육고", "은성중"}),
+        ],
+        # Case 17: 김성은 — 남(드림펜싱클럽, 플뢰레) vs 여(서울대펜싱부/신동중/중경고, 플뢰레)
+        "김성은": [
+            ({"드림펜싱클럽"},
+             {"서울대펜싱부", "신동중", "중경고"}),
+        ],
+        # Case 18: 김시원 — 남(부산영선중, 플뢰레) vs 여(엔티언펜싱클럽배곧/엔티언펜싱클럽송도, 초등여플뢰레)
+        "김시원": [
+            ({"부산영선중"},
+             {"엔티언펜싱클럽배곧", "엔티언펜싱클럽송도"}),
+        ],
+        # Case 19: 김시윤 — 남(에이치펜싱클럽, 플뢰레) vs 여(위즈펜싱클럽/윤지수펜싱클럽, 사브르)
+        "김시윤": [
+            ({"에이치펜싱클럽"},
+             {"위즈펜싱클럽", "윤지수펜싱클럽"}),
+        ],
+        # Case 20: 김연수 — 남(전북체육고, 플뢰레) vs 여(동의대, 사브르)
+        "김연수": [
+            ({"전북체육고"}, {"동의대"}),
+        ],
+        # Case 21: 김연우 — 남(곤지암중/광주시G-스포츠/센텀펜싱클럽, 플뢰레/에페) vs 여(대전송촌고/우송대/호남대, 사브르/에페)
+        "김연우": [
+            ({"곤지암중", "광주시G-스포츠", "센텀펜싱클럽"},
+             {"대전송촌고", "우송대", "호남대"}),
+        ],
+        # Case 22: 김영현 — 남(대전생활과학고, 플뢰레) vs 여(청라펜싱클럽, 사브르)
+        "김영현": [
+            ({"대전생활과학고"}, {"청라펜싱클럽"}),
+        ],
+        # Case 23: 김윤서 — 남(상록고/동의대, 사브르) vs 여(신수펜싱아카데미/익산시청, 사브르/플뢰레)
+        # 동의대는 남녀 모두 출전 → 성별이 겹치지 않는 팀만 등록 (동의대 제외)
+        "김윤서": [
+            ({"상록고"}, {"신수펜싱아카데미", "익산시청"}),
+        ],
+        # Case 24: 김윤성 — 남(호남대, 사브르) vs 여(봄내중, 에페)
+        "김윤성": [
+            ({"호남대"}, {"봄내중"}),
+        ],
+        # Case 25: 김지우 — 남(경덕중/오성중, 플뢰레/사브르) vs 여(부산체육고/재송여자중, 플뢰레)
+        "김지우": [
+            ({"경덕중", "오성중"},
+             {"부산체육고", "재송여자중"}),
+        ],
+        # Case 26: 김하람 — 남(엔에프에이펜싱아카데미, 초등남플뢰레) vs 여(청라펜싱클럽, 여중사브르)
+        "김하람": [
+            ({"엔에프에이펜싱아카데미"}, {"청라펜싱클럽"}),
+        ],
+        # Case 27: 김현진 — 남(펜싱_아레나, 엘리트플뢰레) vs 여(인천광역시중구청/전남체육고, 플뢰레)
+        "김현진": [
+            ({"펜싱_아레나"},
+             {"인천광역시중구청", "전남체육고"}),
+        ],
+        # Case 28: 남선우 — 남(압구정펜싱클럽, 초등남플뢰레) vs 여(고려대펜싱부, 여일에페)
+        "남선우": [
+            ({"압구정펜싱클럽"}, {"고려대펜싱부"}),
+        ],
+        # Case 29: 박서윤 — 남(부산체육고, 플뢰레) vs 여(계룡중/충남체육고, 에페)
+        "박서윤": [
+            ({"부산체육고"},
+             {"계룡중", "충남체육고"}),
+        ],
+        # Case 30: 박수빈 — 남(가림고, 플뢰레) vs 여(경기도화성시청/스타펜싱아카데미/우송대, 에페/사브르/플뢰레)
+        "박수빈": [
+            ({"가림고"},
+             {"경기도화성시청", "스타펜싱아카데미", "우송대"}),
+        ],
+        # Case 31: 박제이 — 남(광주시G-스포츠클럽, 초등남플뢰레) vs 여(신아람펜싱클럽, 초등여에페)
+        "박제이": [
+            ({"광주시G-스포츠클럽"}, {"신아람펜싱클럽"}),
+        ],
+        # Case 32: 박하온 — 남(센트럴펜싱클럽, 초등남에페) vs 여(사비오펜싱클럽, 초등여사브르)
+        "박하온": [
+            ({"센트럴펜싱클럽"}, {"사비오펜싱클럽"}),
+        ],
+        # Case 33: 유시연 — 남(레이스펜싱클럽, 에페) vs 여((사)부산펜싱클럽/경성전자정보고, 에페)
+        "유시연": [
+            ({"레이스펜싱클럽"},
+             {"(사)부산펜싱클럽", "경성전자정보고"}),
+        ],
+        # Case 34: 윤현서 — 남(어썸코리아펜싱클럽, 초등남플뢰레) vs 여(윤지수펜싱클럽, 초등여사브르)
+        "윤현서": [
+            ({"어썸코리아펜싱클럽"}, {"윤지수펜싱클럽"}),
+        ],
+        # Case 35: 이로은 — 남(은호펜싱클럽, 초등남에페) vs 여(어썸코리아펜싱클럽, 초등여플뢰레)
+        "이로은": [
+            ({"은호펜싱클럽"}, {"어썸코리아펜싱클럽"}),
+        ],
+        # Case 36: 이서윤 — 남(압구정펜싱클럽, 초등남플뢰레) vs 여(광교펜싱클럽/동백중/성남여고/성남여중, 사브르/플뢰레/에페)
+        "이서윤": [
+            ({"압구정펜싱클럽"},
+             {"광교펜싱클럽", "동백중", "성남여고", "성남여중"}),
+        ],
+        # Case 37: 이선우 — 남(전북체육고/전주호성중/풍암고, 플뢰레) vs 여(창문여고/창문여중, 에페)
+        "이선우": [
+            ({"전북체육고", "전주호성중", "풍암고"},
+             {"창문여고", "창문여중"}),
+        ],
+        # Case 38: 이솔 — 남(이글펜싱클럽, 초등남플뢰레) vs 여(춘천스포츠클럽, 초등여사브르)
+        "이솔": [
+            ({"이글펜싱클럽"}, {"춘천스포츠클럽"}),
+        ],
+        # Case 39: 이신희 — 남(구본길펜싱클럽, 초등남사브르) vs 여(강원특별자치도청, 여일에페)
+        "이신희": [
+            ({"구본길펜싱클럽"}, {"강원특별자치도청"}),
+        ],
+        # Case 40: 이윤서 — 남(압구정펜싱클럽, 남중플뢰레) vs 여(광주시G-스포츠/성남여고/한국체육대, 초등여플뢰레/여고플뢰레/여대사브르)
+        "이윤서": [
+            ({"압구정펜싱클럽"},
+             {"광주시G-스포츠", "성남여고", "한국체육대"}),
+        ],
+        # Case 41: 이정원 — 남(K1펜싱클럽/숭실대펜싱부/태화중, 에페) vs 여(춘천여고, 에페)
+        "이정원": [
+            ({"K1펜싱클럽", "숭실대펜싱부", "태화중"},
+             {"춘천여고"}),
+        ],
+        # Case 42: 이주영 — 남(대전생활과학고/한국체육대, 플뢰레) vs 여(대전펜싱클럽, 플뢰레)
+        "이주영": [
+            ({"대전생활과학고", "한국체육대"},
+             {"대전펜싱클럽"}),
+        ],
+        # Case 43: 이준희 — 남(동의대/수원펜싱클럽/충북체육고, 사브르/에페) vs 여(이리여고/호원대, 사브르)
+        "이준희": [
+            ({"동의대", "수원펜싱클럽", "충북체육고"},
+             {"이리여고", "호원대"}),
+        ],
+        # Case 44: 이지우 — 남(태화중, 에페) vs 여(대전문정중/덕원중, 에페)
+        "이지우": [
+            ({"태화중"},
+             {"대전문정중", "덕원중"}),
+        ],
+        # Case 45: 정가온 — 남(인천체육고, 에페) vs 여(경북체육중/케이펜싱클럽, 사브르)
+        "정가온": [
+            ({"인천체육고"},
+             {"경북체육중", "케이펜싱클럽"}),
+        ],
+        # Case 46: 정승원 — 남(앱솔루트펜싱클럽, 플뢰레) vs 여(FENCINGLAB(펜싱랩), 사브르)
+        "정승원": [
+            ({"앱솔루트펜싱클럽"}, {"FENCINGLAB(펜싱랩)"}),
+        ],
+        # Case 47: 정주원 — 남(스킬펜싱클럽/오성고, 초등남플뢰레/남고사브르) vs 여(부천트윈펜싱클럽, 여엘리트에페)
+        "정주원": [
+            ({"스킬펜싱클럽", "오성고"},
+             {"부천트윈펜싱클럽"}),
+        ],
+        # Case 48: 최민서 — 남(대전도시공사/울산고/전북체육고/태화중/펜싱아카데미더원, 플뢰레/에페) vs 여(경남대/시지고/안산시청, 사브르/플뢰레)
+        "최민서": [
+            ({"대전도시공사", "울산고", "전북체육고", "태화중", "펜싱아카데미더원", "하태규의기권"},
+             {"경남대", "시지고", "안산시청"}),
+        ],
+        # Case 49: 최시원 — 남(가좌중/부산체육고/진주제일중, 플뢰레/에페) vs 여(엔에스펜싱클럽, 초등여플뢰레)
+        "최시원": [
+            ({"가좌중", "부산체육고", "진주제일중"},
+             {"엔에스펜싱클럽"}),
+        ],
+        # Case 50: 최유진 — 남(알레펜싱클럽, 초등남플뢰레) vs 여(성남시청, 여일플뢰레)
+        "최유진": [
+            ({"알레펜싱클럽"}, {"성남시청"}),
+        ],
+        # Case 51: 최은서 — 남(남산중, 에페) vs 여(만수여중, 플뢰레)
+        "최은서": [
+            ({"남산중"}, {"만수여중"}),
+        ],
+        # Case 52: 최은수 — 남(월드펜싱클럽/태화중, 초등남에페/남중에페) vs 여(부산광역시거점스포츠클럽, 초등여플뢰레)
+        "최은수": [
+            ({"월드펜싱클럽", "태화중"},
+             {"부산광역시거점스포츠클럽"}),
+        ],
+        # Case 53: 최지안 — 남(알레펜싱클럽, 남고플뢰레) vs 여(동백중/비앤케이펜싱클럽/스킬펜싱클럽/엔에프에이펜싱아카데미, 여중사브르/초등여사브르/초등여플뢰레)
+        "최지안": [
+            ({"알레펜싱클럽"},
+             {"동백중", "비앤케이펜싱클럽", "스킬펜싱클럽", "엔에프에이펜싱아카데미"}),
+        ],
+        # Case 54: 최지우 — 남(한국체육대, 플뢰레) vs 여(서울체육고/서울체육중, 사브르)
+        "최지우": [
+            ({"한국체육대"},
+             {"서울체육고", "서울체육중"}),
+        ],
+        # Case 55: 한지호 — 남(강원체육중/스킬펜싱클럽, 사브르/플뢰레) vs 여(이리북중, 에페)
+        "한지호": [
+            ({"강원체육중", "스킬펜싱클럽"},
+             {"이리북중"}),
+        ],
+        # Case 56: 홍하람 — 남(홍익대사범대부속고, 사브르) vs 여(울산서여중/울산스포츠과학고, 에페)
+        "홍하람": [
+            ({"홍익대사범대부속고"},
+             {"울산서여중", "울산스포츠과학고"}),
+        ],
+
+        # ============================================================
+        # Tier 1 추가: R10 ERROR 잔여 15명 (성별 기반 동명이인)
+        # 2026-05-14 추가 등록
+        # ============================================================
+
+        # Case 57: 김유현 — 남(마운틴체리아카데미) vs 여(청주경덕중학교)
+        "김유현": [
+            ({"마운틴체리아카데미"}, {"청주경덕중학교"}),
+        ],
+        # Case 58: 김지민 — 남(경남대학교) vs 여(재송여자중학교)
+        "김지민": [
+            ({"경남대학교"}, {"재송여자중학교"}),
+        ],
+        # Case 59: 김지현 — 남(비에이블펜싱클럽) vs 여(전남도청/엠디비펜싱클럽)
+        "김지현": [
+            ({"비에이블펜싱클럽"}, {"전남도청", "엠디비펜싱클럽"}),
+        ],
+        # Case 60: 김태린 — 남(신수중학교) vs 여(에이치펜싱클럽)
+        "김태린": [
+            ({"신수중학교"}, {"에이치펜싱클럽"}),
+        ],
+        # Case 61: 김하민 — 남(세인트존스베리아카데미제주/청주대학교) vs 여(페이스튼 센트럴 캠퍼스)
+        "김하민": [
+            ({"세인트존스베리아카데미제주", "청주대학교"},
+             {"페이스튼 센트럴 캠퍼스"}),
+        ],
+        # Case 62: 박서진 — 남(고덕국제펜싱클럽) vs 여(예코치펜싱클럽)
+        "박서진": [
+            ({"고덕국제펜싱클럽"}, {"예코치펜싱클럽"}),
+        ],
+        # Case 63: 박주원 — 남(이리중학교/위즈펜싱클럽) vs 여(두암중학교)
+        "박주원": [
+            ({"이리중학교", "위즈펜싱클럽"}, {"두암중학교"}),
+        ],
+        # Case 64: 박지수 — 남(대전매봉중학교) vs 여(경남대학교)
+        "박지수": [
+            ({"대전매봉중학교"}, {"경남대학교"}),
+        ],
+        # Case 65: 박지호 — 남(엔에스펜싱클럽/에이치펜싱클럽(H FENCING CLUB)/포인트펜싱클럽) vs 여(전남체육고등학교/경해여자중학교)
+        "박지호": [
+            ({"엔에스펜싱클럽", "에이치펜싱클럽(H FENCING CLUB)", "포인트펜싱클럽"},
+             {"전남체육고등학교", "경해여자중학교"}),
+        ],
+        # Case 66: 윤태연 — 남(광주국대펜싱) vs 여(천안두정중학교)
+        "윤태연": [
+            ({"광주국대펜싱"}, {"천안두정중학교"}),
+        ],
+        # Case 67: 이한솔 — 남(부산광역시거점스포츠클럽) vs 여(청심국제고등학교)
+        "이한솔": [
+            ({"부산광역시거점스포츠클럽"}, {"청심국제고등학교"}),
+        ],
+        # Case 68: 임지우 — 남(FENCINGLAB(펜싱랩)) vs 여(윤남진펜싱클럽(천안))
+        "임지우": [
+            ({"FENCINGLAB(펜싱랩)"}, {"윤남진펜싱클럽(천안)"}),
+        ],
+        # Case 69: 정선우 — 남(윤지수펜싱클럽) vs 여(송정여자중학교)
+        "정선우": [
+            ({"윤지수펜싱클럽"}, {"송정여자중학교"}),
+        ],
+        # Case 70: 정재희 — 남(향남중학교) vs 여(국대스포츠클럽)
+        "정재희": [
+            ({"향남중학교"}, {"국대스포츠클럽"}),
+        ],
+        # Case 71: 황승민 — 남(서울시펜싱협회/국민체육진흥공단) vs 여(민족사관고등학교 펜싱부)
+        "황승민": [
+            ({"서울시펜싱협회", "국민체육진흥공단"},
+             {"민족사관고등학교 펜싱부"}),
+        ],
+    }
+
     def __init__(self, country: str = "KO"):
         self.country = country  # 국가 코드 (KO=한국, JP=일본, CN=중국 등)
         self.name_groups: Dict[str, NameGroup] = {}
@@ -379,6 +910,18 @@ class PlayerIdentityResolver:
         # 조직 식별자 (지연 로딩)
         self._org_resolver = None
 
+        # 조직→지역 캐시 (지역 인식 동명이인 분리용)
+        # {org_name: {"province": "서울", "city": "강남", "org_type": "club"}}
+        self._org_region_cache: Dict[str, Dict[str, str]] = {}
+
+    def set_org_region_cache(self, cache: Dict[str, Dict[str, str]]):
+        """Set organization region cache for region-aware identity resolution.
+
+        Args:
+            cache: {org_name: {"province": str, "city": str, "org_type": str}}
+        """
+        self._org_region_cache = cache
+
     def add_competition_data(self, competition_data: Dict) -> None:
         """Add competition data for player extraction"""
         comp = competition_data.get("competition", {})
@@ -390,6 +933,12 @@ class PlayerIdentityResolver:
 
         for event in events:
             event_name = event.get("name", "")
+
+            # 단체전 이벤트는 선수 프로필 생성에서 제외
+            # (팀명이 name 필드에 저장되어 가짜 선수 프로필이 생성됨)
+            if is_team_event(event_name):
+                continue
+
             weapon = event.get("weapon", "")
 
             # Extract age group from event name
@@ -579,7 +1128,12 @@ class PlayerIdentityResolver:
                         else:
                             self._create_single_profile(name, gender_records)
 
-        # Post-resolution: Assign special IDs for reference players
+        # Post-resolution: Rebuild team_history for all profiles
+        # This groups consecutive same-team records and preserves 원복 케이스
+        for profile in self.profiles.values():
+            profile.rebuild_team_history()
+
+        # Assign special IDs for reference players
         return self._assign_special_ids()
 
     def _find_age_regression_split(self, records: List[Dict]) -> Optional[str]:
@@ -855,7 +1409,7 @@ class PlayerIdentityResolver:
 
         Separation indicators:
         1. School-type teams from different schools at same level active simultaneously
-        2. Very long gap (>3 years) between teams with no progression logic
+        2. Same school level (중/고) in different provinces (region-aware, via _org_region_cache)
         """
         team_info = defaultdict(lambda: {"first": None, "last": None, "type": None})
 
@@ -896,6 +1450,14 @@ class PlayerIdentityResolver:
                             # Time overlap at same school level = different people
                             return True
 
+                    # Region check: same school level but different provinces
+                    if self._org_region_cache:
+                        p1 = self._org_region_cache.get(t1, {}).get("province", "")
+                        p2 = self._org_region_cache.get(t2, {}).get("province", "")
+                        if p1 and p2 and p1 != p2:
+                            # Same school level in different provinces = different people
+                            return True
+
         return False
 
     def _create_pseudo_overlapping(self, records: List[Dict]) -> Set[Tuple[str, str]]:
@@ -921,6 +1483,8 @@ class PlayerIdentityResolver:
     def _find_overlapping_teams(self, records: List[Dict]) -> Set[Tuple[str, str]]:
         """
         Find teams that appear in the same competition - indicating different people.
+        Also includes KNOWN_HOMONYMS forced splits.
+        Also detects same-event same-team duplicates (같은 팀 동명이인).
         Returns set of (team1, team2) pairs that are different people.
         """
         overlapping = set()
@@ -940,6 +1504,37 @@ class PlayerIdentityResolver:
                 for i, t1 in enumerate(teams_list):
                     for t2 in teams_list[i+1:]:
                         overlapping.add(tuple(sorted([t1, t2])))
+
+        # Detect same-event same-team duplicates (같은 이벤트에 같은 이름+같은 팀 2회+)
+        # This catches same-team homonyms that can't be auto-separated
+        if records:
+            name = records[0].get("name", "")
+            event_team_count: Dict[str, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
+            for r in records:
+                key = f"{r.get('comp_cd', '')}_{r.get('event_name', '')}"
+                team = r.get("team", "")
+                if team:
+                    event_team_count[key][team] += 1
+            for event_key, team_counts in event_team_count.items():
+                for team, count in team_counts.items():
+                    if count > 1:
+                        logger.warning(
+                            f"[동명이인-같은팀] '{name}' 같은 이벤트({event_key})에 "
+                            f"같은 팀({team})으로 {count}회 등장 → 자동 분리 불가"
+                        )
+
+        # Inject known homonym forced splits
+        if records:
+            name = records[0].get("name", "")
+            if name in self.KNOWN_HOMONYMS:
+                record_teams = {r.get("team", "") for r in records if r.get("team")}
+                for team_group_a, team_group_b in self.KNOWN_HOMONYMS[name]:
+                    present_a = team_group_a & record_teams
+                    present_b = team_group_b & record_teams
+                    if present_a and present_b:
+                        for ta in present_a:
+                            for tb in present_b:
+                                overlapping.add(tuple(sorted([ta, tb])))
 
         return overlapping
 
@@ -1074,7 +1669,7 @@ class PlayerIdentityResolver:
                 def parse_year(d):
                     try:
                         return int(d[:4])
-                    except:
+                    except (ValueError, TypeError, IndexError):
                         return 0
 
                 year1_end = parse_year(range1_end)
@@ -1519,8 +2114,3 @@ class PlayerIdentityResolver:
         if org_resolver:
             return [org.to_dict() for org in org_resolver.search_organizations(query, limit)]
         return []
-
-
-if __name__ == "__main__":
-    print("⚠️ 직접 실행 비활성화됨. 서버 환경에서 테스트하세요.")
-    print("서버는 Supabase에서 데이터를 로드합니다.")

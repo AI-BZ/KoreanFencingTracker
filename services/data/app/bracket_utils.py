@@ -1,14 +1,23 @@
 """
-DE Bracket Data Normalization Utility v2
+DE Bracket Data Normalization Utility v3
 
 새로운 bout 기반 데이터 구조와 기존 레거시 형식 모두 지원.
 - 새 형식: bouts[], bouts_by_round{}
 - 레거시 형식: results_by_round{}, match_results[]
+- Dual DE 형식: first_de, second_de (국가대표 선발전 등)
+
+Dual DE 형식 (국가대표 선발전):
+- First DE (예선 DE): 128강(64경기) → 64강(32경기) = 2라운드, 32명 진출자 선발
+- Second DE (본선 DE): 시드 32명 + First DE 진출자 32명 = 64명
+  → 64강 → 32강 → 16강 → 8강 → 준결승 → 결승
 """
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional, Tuple, Any, Union
 from dataclasses import dataclass, asdict
 from collections import defaultdict
+import logging
 import re
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -33,6 +42,8 @@ class BracketBout:
     winner_name: Optional[str]
     is_completed: bool
     is_bye: bool
+    is_forfeit: bool = False          # 기권 여부
+    forfeit_player: Optional[str] = None  # 기권한 선수 이름
 
     def to_dict(self) -> Dict:
         return asdict(self)
@@ -48,6 +59,7 @@ class NormalizedBracket:
     seeding: List[Dict]           # 시드 배정
     bouts: List[BracketBout]      # 모든 경기
     bouts_by_round: Dict[str, List[BracketBout]]
+    is_in_progress: bool = False  # 대회 진행 중 여부 (DE 결과 불완전)
 
     def to_dict(self) -> Dict:
         return {
@@ -60,12 +72,99 @@ class NormalizedBracket:
             'bouts_by_round': {
                 r: [b.to_dict() for b in bouts]
                 for r, bouts in self.bouts_by_round.items()
-            }
+            },
+            'is_in_progress': self.is_in_progress
         }
+
+
+@dataclass
+class DualDEPlayer:
+    """Dual DE 선수 정보"""
+    seed: int
+    name: str
+    team: str
+    is_seeded: bool = False  # 시드 선수 (First DE 면제)
+    first_de_result: Optional[str] = None  # First DE 결과: 'qualified' or 'eliminated'
+
+    def to_dict(self) -> Dict:
+        return asdict(self)
+
+
+@dataclass
+class NormalizedDualDEBracket:
+    """
+    정규화된 Dual DE 브래킷 구조 (국가대표 선발전 등)
+
+    Dual DE 특성:
+    - First DE (예선 DE): 비시드 선수들의 예선
+      - 128강(64경기) → 64강(32경기) = 2라운드
+      - 32명 진출자 선발
+    - Second DE (본선 DE): 시드 32명 + First DE 진출자 32명 = 64명
+      - 64강 → 32강 → 16강 → 8강 → 준결승 → 결승
+    """
+    format: str = "dual_de"
+
+    # First DE (예선)
+    first_de: Optional[NormalizedBracket] = None
+    first_de_qualifiers: List[DualDEPlayer] = None  # First DE 64강 진출자 32명
+
+    # Second DE (본선)
+    second_de: Optional[NormalizedBracket] = None
+    seeded_players: List[DualDEPlayer] = None  # 시드 선수 32명 (First DE 면제)
+
+    # 상태
+    status: str = "pending"  # pending, first_de_in_progress, first_de_completed, second_de_in_progress, completed
+
+    # 메타 정보
+    total_participants: int = 0
+    seeded_count: int = 0
+    first_de_participant_count: int = 0
+
+    def __post_init__(self):
+        if self.first_de_qualifiers is None:
+            self.first_de_qualifiers = []
+        if self.seeded_players is None:
+            self.seeded_players = []
+
+    def to_dict(self) -> Dict:
+        return {
+            'format': self.format,
+            'first_de': self.first_de.to_dict() if self.first_de else None,
+            'first_de_qualifiers': [p.to_dict() for p in self.first_de_qualifiers],
+            'second_de': self.second_de.to_dict() if self.second_de else None,
+            'seeded_players': [p.to_dict() for p in self.seeded_players],
+            'status': self.status,
+            'total_participants': self.total_participants,
+            'seeded_count': self.seeded_count,
+            'first_de_participant_count': self.first_de_participant_count
+        }
+
+    def is_dual_de(self) -> bool:
+        """Dual DE 형식인지 확인"""
+        return self.format == "dual_de"
+
+    def get_current_phase(self) -> str:
+        """현재 진행 중인 단계 반환"""
+        if self.status == "pending":
+            return "not_started"
+        elif self.status in ("first_de_in_progress", "first_de_completed"):
+            return "first_de"
+        elif self.status in ("second_de_in_progress", "completed"):
+            return "second_de"
+        return "unknown"
+
+    def get_display_name(self, phase: str) -> str:
+        """단계별 표시 이름"""
+        if phase == "first_de":
+            return "예선 DE (32명의 면제자가 있는 예선엘리미나시옹디렉트)"
+        elif phase == "second_de":
+            return "본선 DE (64강)"
+        return phase
 
 
 # 라운드 순서 정의
 ROUND_ORDER = {
+    '256강': 0, '256강전': 0,
     '128강': 1, '128강전': 1,
     '64강': 2, '64강전': 2,
     '32강': 3, '32강전': 3,
@@ -77,6 +176,7 @@ ROUND_ORDER = {
 }
 
 ROUND_DISPLAY_NAMES = {
+    '256강전': '256강', '256강': '256강',
     '128강전': '128강', '128강': '128강',
     '64강전': '64강', '64강': '64강',
     '32강전': '32강', '32강': '32강',
@@ -95,6 +195,7 @@ def normalize_round_name(raw_name: str) -> str:
 
 # bracket_size별 유효한 라운드 목록
 VALID_ROUNDS_BY_BRACKET_SIZE = {
+    256: {'256강', '128강', '64강', '32강', '16강', '8강', '준결승', '결승', '3-4위'},
     128: {'128강', '64강', '32강', '16강', '8강', '준결승', '결승', '3-4위'},
     64: {'64강', '32강', '16강', '8강', '준결승', '결승', '3-4위'},
     32: {'32강', '16강', '8강', '준결승', '결승', '3-4위'},
@@ -371,13 +472,20 @@ def generate_next_round_bouts(
 def fill_missing_rounds(
     bouts_by_round: Dict[str, List['BracketBout']],
     starting_round: str,
-    bracket_size: int
+    bracket_size: int,
+    ensure_all_rounds: bool = False
 ) -> Dict[str, List['BracketBout']]:
     """
     누락된 라운드 자동 생성 (이전 라운드 승자 기반)
 
     시작 라운드부터 결승까지 모든 라운드가 있어야 함.
     누락된 라운드는 이전 라운드의 승자 정보로 생성.
+
+    Args:
+        bouts_by_round: 라운드별 경기 데이터
+        starting_round: 시작 라운드 (예: '64강')
+        bracket_size: 브래킷 크기
+        ensure_all_rounds: True이면 빈 라운드도 모두 생성 (진행 중 대회용)
     """
     rounds_needed = get_rounds_from_start_to_final(starting_round)
 
@@ -397,6 +505,13 @@ def fill_missing_rounds(
             generated = generate_next_round_bouts(round_name, current_bouts, next_round)
             if generated:
                 filled[next_round] = generated
+
+    # ensure_all_rounds=True일 때, 모든 라운드가 존재하도록 보장 (빈 리스트로라도)
+    # 대회 진행 중에도 전체 토너먼트 구조를 표시하기 위함
+    if ensure_all_rounds:
+        for round_name in rounds_needed:
+            if round_name not in filled:
+                filled[round_name] = []
 
     return filled
 
@@ -532,11 +647,11 @@ def get_round_order(round_name: str) -> int:
 
 def get_bracket_size(participant_count: int) -> int:
     """참가자 수에 따른 브래킷 크기 (2의 거듭제곱)"""
-    sizes = [4, 8, 16, 32, 64, 128]
+    sizes = [4, 8, 16, 32, 64, 128, 256]
     for size in sizes:
         if participant_count <= size:
             return size
-    return 128
+    return 256
 
 
 def get_starting_round(bracket_size: int) -> str:
@@ -547,7 +662,8 @@ def get_starting_round(bracket_size: int) -> str:
         16: '16강',
         32: '32강',
         64: '64강',
-        128: '128강'
+        128: '128강',
+        256: '256강'
     }
     return mapping.get(bracket_size, '32강')
 
@@ -571,14 +687,23 @@ def extract_score(score_data: Any) -> Tuple[Optional[int], Optional[int]]:
     return None, None
 
 
-def normalize_bracket_data(de_bracket: Dict) -> NormalizedBracket:
+def normalize_bracket_data(
+    de_bracket: Dict,
+    fill_to_final: bool = True
+) -> Union[NormalizedBracket, 'NormalizedDualDEBracket']:
     """
     DE 브래킷 데이터 정규화
 
+    Args:
+        de_bracket: DE 브래킷 데이터
+        fill_to_final: True면 누락된 라운드를 결승까지 자동 생성
+                       False면 실제 데이터에 있는 라운드만 유지 (Dual DE 서브 브래킷용)
+
     우선순위:
-    1. full_bouts (가장 완전한 데이터 - winner/loser/scores 포함)
-    2. bouts (새로운 형식)
-    3. results_by_round (레거시 - 불완전, 중복 가능)
+    1. Dual DE 형식 감지 → NormalizedDualDEBracket 반환
+    2. full_bouts (가장 완전한 데이터 - winner/loser/scores 포함)
+    3. bouts (새로운 형식)
+    4. results_by_round (레거시 - 불완전, 중복 가능)
     """
     if not de_bracket:
         return NormalizedBracket(
@@ -590,6 +715,10 @@ def normalize_bracket_data(de_bracket: Dict) -> NormalizedBracket:
             bouts=[],
             bouts_by_round={}
         )
+
+    # Dual DE 형식 감지 및 처리
+    if is_dual_de_format(de_bracket):
+        return normalize_dual_de_bracket_data(de_bracket)
 
     # 시딩 정보 추출 및 정리 (name이 있는 플레이어만 포함)
     raw_seeding = de_bracket.get('seeding', [])
@@ -611,7 +740,15 @@ def normalize_bracket_data(de_bracket: Dict) -> NormalizedBracket:
     clean_seeding.sort(key=lambda x: x['seed'])
 
     # participant_count: 원본 데이터 우선, 없으면 seeding 길이 사용
-    participant_count = de_bracket.get('participant_count') or len(clean_seeding)
+    # DB에서 문자열로 저장될 수 있으므로 정수로 변환
+    raw_participant_count = de_bracket.get('participant_count')
+    if raw_participant_count:
+        try:
+            participant_count = int(raw_participant_count)
+        except (ValueError, TypeError):
+            participant_count = len(clean_seeding)
+    else:
+        participant_count = len(clean_seeding)
 
     all_bouts: List[BracketBout] = []
     bouts_by_round: Dict[str, List[BracketBout]] = defaultdict(list)
@@ -700,14 +837,54 @@ def normalize_bracket_data(de_bracket: Dict) -> NormalizedBracket:
     main_rounds = [r for r in sorted_rounds if r not in ('3-4위', '3-4위전', '3위결정전')]
 
     # 브래킷 크기 결정
-    bracket_size = de_bracket.get('bracket_size', 0)
+    # DB에서 문자열로 저장될 수 있으므로 정수로 변환
+    raw_bracket_size = de_bracket.get('bracket_size', 0)
+    try:
+        bracket_size = int(raw_bracket_size) if raw_bracket_size else 0
+    except (ValueError, TypeError):
+        bracket_size = 0
     # bracket_size 검증 및 재계산
     # 저장된 bracket_size가 participant_count에 비해 너무 크면 재계산
     # 예: participant_count=3인데 bracket_size=8이면 → bracket_size=4로 수정
-    if participant_count:
+    # 단, fill_to_final=False (Dual DE 서브 브래킷)의 경우 DB 값 유지
+    # Dual DE의 First DE는 bracket_size=128이지만 실제 참가자가 64명일 수 있음
+    if fill_to_final and participant_count:
         calculated_bracket_size = get_bracket_size(participant_count)
         if not bracket_size or bracket_size > calculated_bracket_size:
             bracket_size = calculated_bracket_size
+
+    # bracket_size 하한 검증: 실제 bout 데이터가 bracket_size보다 큰 브래킷을 요구하는 경우
+    # 예: bracket_size=8인데 bout에 "64강" 라운드가 있으면 → bracket_size=64로 상향
+    # Dual DE Second DE에서 스크래퍼가 bracket_size를 잘못 저장한 경우 방어
+    if bracket_size and all_bouts:
+        # bout 라운드 이름에서 최소 필요 bracket_size 추론
+        # 라운드 이름 → 최소 bracket_size 매핑
+        round_to_min_bracket = {
+            '256강': 256, '128강': 128, '64강': 64, '32강': 32, '16강': 16, '8강': 8,
+        }
+        min_bracket_from_bouts = bracket_size
+        for bout in all_bouts:
+            round_name = normalize_round_name(bout.round)
+            required = round_to_min_bracket.get(round_name, 0)
+            if required > min_bracket_from_bouts:
+                min_bracket_from_bouts = required
+        # bout_id에서도 라운드 추출하여 확인 (bout.round이 부정확할 수 있음)
+        for bout in all_bouts:
+            round_from_id = extract_round_from_bout_id(bout.bout_id)
+            if round_from_id:
+                required = round_to_min_bracket.get(round_from_id, 0)
+                if required > min_bracket_from_bouts:
+                    min_bracket_from_bouts = required
+
+        if min_bracket_from_bouts > bracket_size:
+            logger.warning(
+                "bracket_size 상향 조정: %d → %d (bout 데이터에 '%s' 등 큰 라운드 존재, "
+                "participant_count=%d)",
+                bracket_size, min_bracket_from_bouts,
+                get_starting_round(min_bracket_from_bouts),
+                participant_count
+            )
+            bracket_size = min_bracket_from_bouts
 
     # 시작 라운드
     starting_round = de_bracket.get('starting_round', '')
@@ -715,12 +892,18 @@ def normalize_bracket_data(de_bracket: Dict) -> NormalizedBracket:
         starting_round = main_rounds[0]
 
     # 올바른 시작 라운드 계산 (bracket_size 기반)
-    correct_starting_round = get_starting_round(bracket_size) if bracket_size else starting_round
+    # fill_to_final=False (Dual DE 서브 브래킷)의 경우 DB 값 사용
+    if fill_to_final:
+        correct_starting_round = get_starting_round(bracket_size) if bracket_size else starting_round
+    else:
+        # Dual DE 서브 브래킷은 DB에 저장된 starting_round 사용
+        correct_starting_round = starting_round
 
     # bracket_size에 맞지 않는 라운드를 올바른 라운드로 리매핑
     # 예: bracket_size=16인데 "32강" 데이터가 있으면 → "16강"으로 리매핑
     # 추가로 match_number를 기반으로 올바른 라운드 결정
-    if bracket_size:
+    # fill_to_final=False (Dual DE 서브 브래킷)의 경우 리매핑 스킵 - DB 데이터가 정확함
+    if bracket_size and fill_to_final:
         remapped_bouts_by_round: Dict[str, List[BracketBout]] = {}
         remapped_all_bouts: List[BracketBout] = []
 
@@ -858,8 +1041,11 @@ def normalize_bracket_data(de_bracket: Dict) -> NormalizedBracket:
             main_rounds = [r for r in sorted_rounds if r not in ('3-4위', '3-4위전', '3위결정전')]
 
     # 누락된 라운드 자동 생성 (이전 라운드 승자 기반)
-    if starting_round and bracket_size:
-        bouts_by_round = fill_missing_rounds(bouts_by_round, starting_round, bracket_size)
+    # fill_to_final=False면 실제 데이터에 있는 라운드만 유지 (Dual DE 서브 브래킷용)
+    if fill_to_final and starting_round and bracket_size:
+        bouts_by_round = fill_missing_rounds(
+            bouts_by_round, starting_round, bracket_size, ensure_all_rounds=True
+        )
 
         # all_bouts 재구성
         all_bouts = []
@@ -873,6 +1059,9 @@ def normalize_bracket_data(de_bracket: Dict) -> NormalizedBracket:
         )
         main_rounds = [r for r in sorted_rounds if r not in ('3-4위', '3-4위전', '3위결정전')]
 
+    # is_in_progress: 대회가 진행 중이면 DE 결과가 불완전함
+    is_in_progress = de_bracket.get('is_in_progress', False)
+
     return NormalizedBracket(
         bracket_size=bracket_size,
         participant_count=participant_count,
@@ -880,7 +1069,8 @@ def normalize_bracket_data(de_bracket: Dict) -> NormalizedBracket:
         rounds=main_rounds,
         seeding=clean_seeding,
         bouts=all_bouts,
-        bouts_by_round=dict(bouts_by_round)
+        bouts_by_round=dict(bouts_by_round),
+        is_in_progress=is_in_progress
     )
 
 
@@ -957,6 +1147,8 @@ def _process_full_bouts(full_bouts: List[Dict]) -> Tuple[List[BracketBout], Dict
                 winner_seed_val = bout_data.get('winner_seed')
                 is_bye = bout_data.get('is_bye', False) or bout_data.get('isBye', False)
                 is_completed = bout_data.get('is_completed', False) or bout_data.get('isCompleted', False)
+                is_forfeit = bout_data.get('is_forfeit', False)
+                forfeit_player = bout_data.get('forfeit_player')
                 bout_id = bout_data.get('bout_id', f"{original_round}_{bout_counter:02d}")
                 match_number = bout_data.get('match_number', bout_data.get('matchNumber', match_num))
             else:
@@ -981,6 +1173,8 @@ def _process_full_bouts(full_bouts: List[Dict]) -> Tuple[List[BracketBout], Dict
                     winner_seed_val = bout_data.get('winnerSeed')
                     is_bye = bout_data.get('isBye', False)
                     is_completed = bout_data.get('isCompleted', False)
+                    is_forfeit = bout_data.get('is_forfeit', False) or bout_data.get('isForfeit', False)
+                    forfeit_player = bout_data.get('forfeit_player') or bout_data.get('forfeitPlayer')
                     bout_id = bout_data.get('bout_id', f"{original_round}_{bout_counter:02d}")
                     match_number = bout_data.get('matchNumber', match_num)
                 else:
@@ -1003,6 +1197,8 @@ def _process_full_bouts(full_bouts: List[Dict]) -> Tuple[List[BracketBout], Dict
                     winner_seed_val = p1_seed
                     is_bye = False
                     is_completed = True
+                    is_forfeit = bout_data.get('is_forfeit', False)
+                    forfeit_player = bout_data.get('forfeit_player')
                     bout_id = f"{original_round}_{bout_counter:02d}"
                     match_number = match_num
 
@@ -1033,8 +1229,10 @@ def _process_full_bouts(full_bouts: List[Dict]) -> Tuple[List[BracketBout], Dict
                 player2_score=p2_score,
                 winner_seed=winner_seed_val,
                 winner_name=winner_name_val,
-                is_completed=is_completed or is_bye,  # 부전승은 완료된 것으로 간주
-                is_bye=is_bye
+                is_completed=is_completed or is_bye or is_forfeit,  # 부전승/기권은 완료된 것으로 간주
+                is_bye=is_bye,
+                is_forfeit=is_forfeit,
+                forfeit_player=forfeit_player
             )
 
             all_bouts.append(bout)
@@ -1376,7 +1574,7 @@ def validate_bracket_vs_final_rankings(
                 f'결승 패자({final_loser})가 최종 2위({second_place})와 불일치'
             )
 
-    # 준결승 검증 (3위 공동)
+    # 준결승 검증 (공동 3위)
     semifinal_bouts = bracket.bouts_by_round.get('준결승', [])
     if semifinal_bouts:
         semifinal_losers = []
@@ -1408,13 +1606,13 @@ def compute_full_final_rankings(
     """
     DE 대진표 + Pool 결과에서 전체 최종 순위 계산
 
-    순위 결정 원칙 (펜싱 표준):
+    순위 결정 원칙 (KFF/FIE 표준 - 시드 기반 개별 순위):
     - 1위: 결승 승자
     - 2위: 결승 패자
-    - 3위 (공동): 준결승 패자 2명
-    - 5-8위 (공동): 8강 패자 4명
-    - 9-16위 (공동): 16강 패자 8명
-    - 17-32위 (공동): 32강 패자 16명
+    - 공동 3위: 준결승 패자 2명 (KFF/FIE 표준 - 3-4위전 없음, 동메달)
+    - 5~8위: 8강 패자 4명을 시드(pool 순위) 오름차순 → 5위, 6위, 7위, 8위
+    - 9~16위: 16강 패자 8명을 시드 오름차순 → 9위~16위
+    - 동일 패턴으로 32강(17~32위), 64강(33~64위), 128강(65~128위) 적용
     - 나머지: Pool 순위대로 (DE 진출 못한 선수들)
 
     Returns:
@@ -1432,20 +1630,31 @@ def compute_full_final_rankings(
     final_rankings = []
     assigned_players = set()
 
-    # 라운드별 패자 수집
+    # 라운드별 패자 수집 (시드 정보 포함, 시드 오름차순 정렬)
     def get_losers_from_round(round_name: str) -> List[Dict]:
-        """특정 라운드에서 진 선수들을 반환"""
+        """특정 라운드에서 진 선수들을 시드 오름차순으로 반환"""
         losers = []
         bouts = normalized.bouts_by_round.get(round_name, [])
         for bout in bouts:
             if bout.is_bye:
                 continue
-            # 패자 결정: 승자가 아닌 쪽
             if bout.winner_name:
-                loser_name = bout.player2_name if bout.winner_name == bout.player1_name else bout.player1_name
-                loser_team = bout.player2_team if bout.winner_name == bout.player1_name else bout.player1_team
+                if bout.winner_name == bout.player1_name:
+                    loser_name = bout.player2_name
+                    loser_team = bout.player2_team
+                    loser_seed = bout.player2_seed
+                else:
+                    loser_name = bout.player1_name
+                    loser_team = bout.player1_team
+                    loser_seed = bout.player1_seed
                 if loser_name and loser_name not in assigned_players:
-                    losers.append({"name": loser_name, "team": loser_team or ""})
+                    losers.append({
+                        "name": loser_name,
+                        "team": loser_team or "",
+                        "seed": loser_seed if loser_seed is not None else 9999
+                    })
+        # 시드 오름차순 정렬 (낮은 시드 = 더 높은 순위)
+        losers.sort(key=lambda x: x["seed"])
         return losers
 
     # 2. 결승에서 1, 2위 결정
@@ -1473,7 +1682,7 @@ def compute_full_final_rankings(
                 })
                 assigned_players.add(loser_name)
 
-    # 3. 준결승 패자 = 공동 3위
+    # 3. 준결승 패자 = 공동 3위 (KFF/FIE 표준: 3-4위전 없음, 동메달 2명)
     sf_losers = get_losers_from_round('준결승')
     for loser in sf_losers:
         if loser["name"] not in assigned_players:
@@ -1484,56 +1693,61 @@ def compute_full_final_rankings(
             })
             assigned_players.add(loser["name"])
 
-    # 4. 8강 패자 = 공동 5위
+    # 4. 8강 패자 → 5~8위 (시드 오름차순 개별 순위)
     qf_losers = get_losers_from_round('8강')
-    for loser in qf_losers:
+    rank_start = len(final_rankings) + 1
+    for i, loser in enumerate(qf_losers):
         if loser["name"] not in assigned_players:
             final_rankings.append({
-                "rank": 5,
+                "rank": rank_start + i,
                 "name": loser["name"],
                 "team": loser["team"]
             })
             assigned_players.add(loser["name"])
 
-    # 5. 16강 패자 = 공동 9위
+    # 5. 16강 패자 → 9~16위 (시드 오름차순 개별 순위)
     r16_losers = get_losers_from_round('16강')
-    for loser in r16_losers:
+    rank_start = len(final_rankings) + 1
+    for i, loser in enumerate(r16_losers):
         if loser["name"] not in assigned_players:
             final_rankings.append({
-                "rank": 9,
+                "rank": rank_start + i,
                 "name": loser["name"],
                 "team": loser["team"]
             })
             assigned_players.add(loser["name"])
 
-    # 6. 32강 패자 = 공동 17위
+    # 6. 32강 패자 → 17~32위 (시드 오름차순 개별 순위)
     r32_losers = get_losers_from_round('32강')
-    for loser in r32_losers:
+    rank_start = len(final_rankings) + 1
+    for i, loser in enumerate(r32_losers):
         if loser["name"] not in assigned_players:
             final_rankings.append({
-                "rank": 17,
+                "rank": rank_start + i,
                 "name": loser["name"],
                 "team": loser["team"]
             })
             assigned_players.add(loser["name"])
 
-    # 7. 64강 패자 = 공동 33위
+    # 7. 64강 패자 → 33~64위 (시드 오름차순 개별 순위)
     r64_losers = get_losers_from_round('64강')
-    for loser in r64_losers:
+    rank_start = len(final_rankings) + 1
+    for i, loser in enumerate(r64_losers):
         if loser["name"] not in assigned_players:
             final_rankings.append({
-                "rank": 33,
+                "rank": rank_start + i,
                 "name": loser["name"],
                 "team": loser["team"]
             })
             assigned_players.add(loser["name"])
 
-    # 8. 128강 패자 = 공동 65위
+    # 8. 128강 패자 → 65~128위 (시드 오름차순 개별 순위)
     r128_losers = get_losers_from_round('128강')
-    for loser in r128_losers:
+    rank_start = len(final_rankings) + 1
+    for i, loser in enumerate(r128_losers):
         if loser["name"] not in assigned_players:
             final_rankings.append({
-                "rank": 65,
+                "rank": rank_start + i,
                 "name": loser["name"],
                 "team": loser["team"]
             })
@@ -1572,6 +1786,394 @@ def compute_full_final_rankings(
     final_rankings.sort(key=lambda x: (x["rank"], x["name"]))
 
     return final_rankings
+
+
+# ===== Dual DE 지원 함수들 =====
+
+def is_dual_de_format(de_bracket: Dict) -> bool:
+    """
+    DE 브래킷 데이터가 Dual DE 형식인지 확인
+
+    Dual DE 형식 감지 조건:
+    1. format == "dual_de" 명시
+    2. first_de와 second_de 필드가 둘 다 있음
+    3. schEtc01 selector가 있었음을 나타내는 플래그
+    """
+    if not de_bracket:
+        return False
+
+    # 명시적으로 format이 dual_de인 경우
+    if de_bracket.get('format') == 'dual_de':
+        return True
+
+    # first_de와 second_de 필드가 모두 있는 경우
+    if de_bracket.get('first_de') and de_bracket.get('second_de'):
+        return True
+
+    # seeded_players와 first_de_qualifiers가 있는 경우
+    if de_bracket.get('seeded_players') and de_bracket.get('first_de_qualifiers'):
+        return True
+
+    return False
+
+
+def normalize_dual_de_bracket_data(de_bracket: Dict) -> NormalizedDualDEBracket:
+    """
+    Dual DE 브래킷 데이터 정규화
+
+    Args:
+        de_bracket: Dual DE 형식의 브래킷 데이터
+            - format: "dual_de"
+            - first_de: First DE 브래킷 데이터
+            - second_de: Second DE 브래킷 데이터
+            - seeded_players: 시드 선수 목록 (First DE 면제)
+            - first_de_qualifiers: First DE 진출자 목록
+
+    Returns:
+        NormalizedDualDEBracket: 정규화된 Dual DE 브래킷
+    """
+    if not de_bracket:
+        return NormalizedDualDEBracket()
+
+    # === Distribute top-level bouts to sub-brackets if needed ===
+    # Some dual DE events store all bouts in de_bracket.full_bouts
+    # while first_de.full_bouts and second_de.full_bouts are empty.
+    top_level_bouts = de_bracket.get('full_bouts', [])
+    first_de_raw = de_bracket.get('first_de', {})
+    second_de_raw = de_bracket.get('second_de', {})
+
+    first_de_has_bouts = bool((first_de_raw.get('full_bouts') or []))
+    second_de_has_bouts = bool((second_de_raw.get('full_bouts') or []))
+
+    if top_level_bouts and not first_de_has_bouts and not second_de_has_bouts:
+        second_de_starting = (second_de_raw.get('starting_round') or '64강')
+        round_order = ['256강', '128강', '64강', '32강', '16강', '8강', '준결승', '결승']
+        second_de_idx = round_order.index(second_de_starting) if second_de_starting in round_order else 2
+
+        first_de_bouts = []
+        second_de_bouts = []
+
+        for bout in top_level_bouts:
+            round_name = bout.get('round_name', '')
+            round_idx = round_order.index(round_name) if round_name in round_order else -1
+
+            if round_idx < 0:
+                continue
+
+            if round_idx < second_de_idx:
+                # Rounds before Second DE start → First DE only
+                first_de_bouts.append(bout)
+            elif round_idx > second_de_idx:
+                # Rounds after Second DE start → Second DE only
+                second_de_bouts.append(bout)
+            else:
+                # Shared round (e.g., 64강) → split by match_number
+                second_de_bracket_size = second_de_raw.get('bracket_size', 64)
+                max_second_de_match = second_de_bracket_size // 2
+
+                match_num = bout.get('match_num', 0)
+                if match_num <= max_second_de_match:
+                    second_de_bouts.append(bout)
+                else:
+                    first_de_bouts.append(bout)
+
+        if first_de_bouts:
+            first_de_raw = {**first_de_raw, 'full_bouts': first_de_bouts}
+        if second_de_bouts:
+            second_de_raw = {**second_de_raw, 'full_bouts': second_de_bouts}
+
+    # First DE 정규화 (예선 DE)
+    # fill_to_final=False: First DE는 결승까지 가지 않음, 실제 데이터에 있는 라운드만 유지
+    first_de_data = first_de_raw
+    first_de = normalize_bracket_data(first_de_data, fill_to_final=False) if first_de_data else None
+
+    # First DE에서 Second DE 시작 라운드 이후의 라운드 제거
+    # First DE는 128강 → 64강만 있고, 64강 승자가 Second DE로 진출
+    # 32강 이후는 Second DE에서 진행되므로 First DE에서 제거
+    if first_de:
+        second_de_starting = (de_bracket.get('second_de') or {}).get('starting_round', '64강')
+        first_de_allowed_rounds = []
+
+        # Second DE 시작 라운드까지 First DE에 포함 (동일 라운드 포함)
+        # 예: Second DE가 64강에서 시작하면, First DE는 128강, 64강 포함 (64강 승자가 Second DE 진출)
+        # 예: Second DE가 32강에서 시작하면, First DE는 128강, 64강, 32강 포함
+        round_order_map = {'256강': 0, '128강': 1, '64강': 2, '32강': 3, '16강': 4, '8강': 5, '준결승': 6, '결승': 7}
+        second_de_order = round_order_map.get(second_de_starting, 2)  # 기본값: 64강(2)
+
+        for round_name in first_de.rounds:
+            round_order = round_order_map.get(round_name, 99)
+            # Second DE 시작 라운드까지 포함 (<=)
+            if round_order <= second_de_order:
+                first_de_allowed_rounds.append(round_name)
+
+        # 라운드 및 bouts_by_round 필터링
+        if first_de_allowed_rounds:
+            filtered_bouts_by_round = {
+                r: first_de.bouts_by_round.get(r, [])
+                for r in first_de_allowed_rounds
+            }
+            filtered_bouts = []
+            for round_bouts in filtered_bouts_by_round.values():
+                filtered_bouts.extend(round_bouts)
+
+            first_de = NormalizedBracket(
+                bracket_size=first_de.bracket_size,
+                participant_count=first_de.participant_count,
+                starting_round=first_de.starting_round,
+                rounds=first_de_allowed_rounds,
+                seeding=first_de.seeding,
+                bouts=filtered_bouts,
+                bouts_by_round=filtered_bouts_by_round,
+                is_in_progress=first_de.is_in_progress
+            )
+
+    # Second DE 정규화 (본선 DE)
+    # fill_to_final=True: Second DE는 결승까지 진행되므로 모든 라운드 표시
+    second_de_data = second_de_raw
+    second_de = normalize_bracket_data(second_de_data, fill_to_final=True) if second_de_data else None
+
+    # 시드 선수 처리 (First DE 면제)
+    # Dual DE 형식에서 시드 선수는 seed 1-32만 해당 (나머지는 First DE 참가)
+    seeded_players = []
+    for player in de_bracket.get('seeded_players', []):
+        seed_num = player.get('seed', 0)
+        # seed 1-32만 시드 선수로 처리 (First DE 면제)
+        if seed_num <= 32:
+            seeded_players.append(DualDEPlayer(
+                seed=seed_num,
+                name=player.get('name', ''),
+                team=player.get('team', ''),
+                is_seeded=True,
+                first_de_result=None  # 시드 선수는 First DE 참가 안함
+            ))
+
+    # First DE 진출자 처리
+    first_de_qualifiers = []
+    for player in de_bracket.get('first_de_qualifiers', []):
+        first_de_qualifiers.append(DualDEPlayer(
+            seed=player.get('seed', 0),
+            name=player.get('name', ''),
+            team=player.get('team', ''),
+            is_seeded=False,
+            first_de_result='qualified'
+        ))
+
+    # First DE에서 진출자 자동 추출 (명시적 목록이 없는 경우)
+    if not first_de_qualifiers and first_de:
+        first_de_qualifiers = _extract_first_de_qualifiers_from_bracket(first_de)
+
+    # 상태 결정
+    status = _determine_dual_de_status(first_de, second_de)
+
+    # 메타 정보 계산
+    seeded_count = len(seeded_players)
+    first_de_participant_count = first_de.participant_count if first_de else 0
+    total_participants = seeded_count + first_de_participant_count
+
+    return NormalizedDualDEBracket(
+        format="dual_de",
+        first_de=first_de,
+        first_de_qualifiers=first_de_qualifiers,
+        second_de=second_de,
+        seeded_players=seeded_players,
+        status=status,
+        total_participants=total_participants,
+        seeded_count=seeded_count,
+        first_de_participant_count=first_de_participant_count
+    )
+
+
+def _extract_first_de_qualifiers_from_bracket(first_de: NormalizedBracket) -> List[DualDEPlayer]:
+    """
+    First DE 브래킷에서 진출자(64강 승자 32명) 추출
+
+    First DE 구조:
+    - 128강(64경기) → 64강(32경기)
+    - 64강 승자 32명이 Second DE로 진출
+    """
+    qualifiers = []
+
+    # 64강 경기에서 승자 추출 (First DE의 마지막 라운드)
+    r64_bouts = first_de.bouts_by_round.get('64강', [])
+
+    if r64_bouts:
+        for bout in r64_bouts:
+            if bout.winner_name and bout.is_completed:
+                # 승자 팀 결정
+                if bout.winner_name == bout.player1_name:
+                    winner_team = bout.player1_team
+                else:
+                    winner_team = bout.player2_team or ''
+
+                qualifiers.append(DualDEPlayer(
+                    seed=bout.winner_seed or 0,
+                    name=bout.winner_name,
+                    team=winner_team,
+                    is_seeded=False,
+                    first_de_result='qualified'
+                ))
+
+    # 64강 경기가 없으면 32강에서 추출 시도 (폴백)
+    if not qualifiers:
+        r32_bouts = first_de.bouts_by_round.get('32강', [])
+        for bout in r32_bouts:
+            if bout.winner_name and bout.is_completed:
+                if bout.winner_name == bout.player1_name:
+                    winner_team = bout.player1_team
+                else:
+                    winner_team = bout.player2_team or ''
+
+                qualifiers.append(DualDEPlayer(
+                    seed=bout.winner_seed or 0,
+                    name=bout.winner_name,
+                    team=winner_team,
+                    is_seeded=False,
+                    first_de_result='qualified'
+                ))
+
+    return qualifiers
+
+
+def _determine_dual_de_status(
+    first_de: Optional[NormalizedBracket],
+    second_de: Optional[NormalizedBracket]
+) -> str:
+    """
+    Dual DE 상태 결정
+
+    상태:
+    - pending: 시작 전
+    - first_de_in_progress: First DE 진행 중
+    - first_de_completed: First DE 완료 (Second DE 시작 전)
+    - second_de_in_progress: Second DE 진행 중
+    - completed: 전체 완료
+    """
+    if not first_de and not second_de:
+        return "pending"
+
+    # First DE 상태 확인
+    first_de_has_bouts = first_de and len(first_de.bouts) > 0
+    first_de_complete = False
+
+    if first_de_has_bouts:
+        # 64강 경기가 모두 완료되었는지 확인
+        r64_bouts = first_de.bouts_by_round.get('64강', [])
+        if r64_bouts:
+            completed_r64 = sum(1 for b in r64_bouts if b.is_completed)
+            first_de_complete = completed_r64 == len(r64_bouts) and len(r64_bouts) >= 32
+
+    # Second DE 상태 확인
+    second_de_has_bouts = second_de and len(second_de.bouts) > 0
+    second_de_complete = False
+
+    if second_de_has_bouts:
+        # 결승 경기가 완료되었는지 확인
+        final_bouts = second_de.bouts_by_round.get('결승', [])
+        if final_bouts:
+            second_de_complete = any(b.is_completed for b in final_bouts)
+
+    # 상태 결정
+    if second_de_complete:
+        return "completed"
+    elif second_de_has_bouts and not second_de_complete:
+        return "second_de_in_progress"
+    elif first_de_complete and not second_de_has_bouts:
+        return "first_de_completed"
+    elif first_de_has_bouts and not first_de_complete:
+        return "first_de_in_progress"
+    else:
+        return "pending"
+
+
+def get_dual_de_combined_seeding(dual_de: NormalizedDualDEBracket) -> List[Dict]:
+    """
+    Dual DE의 Second DE 시딩 목록 생성
+
+    시드 배치:
+    - 시드 1-32: 시드 선수 (First DE 면제)
+    - 시드 33-64: First DE 진출자 32명
+
+    실제로는 Second DE에서 시드 선수와 First DE 진출자가 만나도록 배치됨
+    """
+    combined = []
+
+    # 시드 선수 (1-32번 시드)
+    for i, player in enumerate(dual_de.seeded_players, 1):
+        combined.append({
+            'seed': i,
+            'name': player.name,
+            'team': player.team,
+            'source': 'seeded',
+            'first_de_rank': None
+        })
+
+    # First DE 진출자 (33-64번 시드 - 실제로는 First DE 순위 기반)
+    for i, player in enumerate(dual_de.first_de_qualifiers, 33):
+        combined.append({
+            'seed': i,
+            'name': player.name,
+            'team': player.team,
+            'source': 'first_de_qualifier',
+            'first_de_rank': player.seed  # First DE에서의 순위
+        })
+
+    return combined
+
+
+def validate_dual_de_bracket(dual_de: NormalizedDualDEBracket) -> Dict[str, Any]:
+    """
+    Dual DE 브래킷 데이터 검증
+
+    검증 항목:
+    1. 시드 선수 수 확인 (32명 예상)
+    2. First DE 진출자 수 확인 (32명 예상)
+    3. Second DE 참가자 수 확인 (64명 예상)
+    4. 각 DE 브래킷의 무결성
+    """
+    issues = []
+    warnings = []
+
+    # 시드 선수 수 확인
+    seeded_count = len(dual_de.seeded_players)
+    if seeded_count != 32:
+        if seeded_count == 0:
+            issues.append("시드 선수 없음 (예상: 32명)")
+        else:
+            warnings.append(f"시드 선수 {seeded_count}명 (예상: 32명)")
+
+    # First DE 진출자 수 확인
+    qualifier_count = len(dual_de.first_de_qualifiers)
+    if qualifier_count != 32 and dual_de.status in ('first_de_completed', 'second_de_in_progress', 'completed'):
+        warnings.append(f"First DE 진출자 {qualifier_count}명 (예상: 32명)")
+
+    # First DE 검증
+    if dual_de.first_de:
+        first_de_validation = validate_bracket(dual_de.first_de)
+        if not first_de_validation['valid']:
+            for issue in first_de_validation['issues']:
+                issues.append(f"First DE: {issue}")
+
+    # Second DE 검증
+    if dual_de.second_de:
+        second_de_validation = validate_bracket(dual_de.second_de)
+        if not second_de_validation['valid']:
+            for issue in second_de_validation['issues']:
+                issues.append(f"Second DE: {issue}")
+
+        # Second DE 참가자 수 확인
+        if dual_de.second_de.participant_count != 64:
+            warnings.append(
+                f"Second DE 참가자 {dual_de.second_de.participant_count}명 (예상: 64명)"
+            )
+
+    return {
+        'valid': len(issues) == 0,
+        'issues': issues,
+        'warnings': warnings,
+        'status': dual_de.status,
+        'seeded_count': seeded_count,
+        'qualifier_count': qualifier_count
+    }
 
 
 # 레거시 호환성을 위한 별칭

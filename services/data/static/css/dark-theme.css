@@ -38,6 +38,15 @@
     --warning-color: #f59e0b;
     --danger-color: #ef4444;
     --info-color: #3b82f6;
+
+    /* Legacy aliases (style.css is no longer linked, so these would otherwise
+       resolve to nothing in dark theme). Mapped onto the taegeuk palette. */
+    --primary-color: var(--accent-primary);
+    --secondary-color: var(--text-secondary);
+    --accent-color: var(--accent-primary);
+    --text-color: var(--text-primary);
+    --text-light: var(--text-muted);
+    --background: var(--bg-primary);
 }
 
 /* Reset & Base */
@@ -52,7 +61,7 @@ html {
 }
 
 body {
-    font-family: 'Pretendard Variable', 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    font-family: var(--fm-font-primary, 'Pretendard Variable', 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif);
     background: var(--bg-primary);
     color: var(--text-primary);
     line-height: 1.6;
@@ -69,7 +78,15 @@ body {
     width: 100%;
     height: 100%;
     z-index: -2;
+    /* PNG fallback first, then image-set so WebP-capable browsers pick the
+       55KB version instead of the 1.4MB PNG. Order matters: a browser that
+       does not understand image-set keeps the preceding declaration. */
     background-image: url('/static/images/fencer-bg.png');
+    background-image: -webkit-image-set(url('/static/images/fencer-bg.webp') 1x);
+    background-image: image-set(
+        url('/static/images/fencer-bg.webp') type('image/webp'),
+        url('/static/images/fencer-bg.png') type('image/png')
+    );
     background-size: cover;
     background-position: center top;
     background-repeat: no-repeat;
@@ -139,24 +156,49 @@ body {
 }
 
 .logo-text {
-    background: linear-gradient(135deg, var(--text-primary), var(--accent-gold));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    color: var(--text-primary);
+    font-weight: 800;
 }
 
+/* Logo Image - Responsive */
+/* <picture> is inline by default; as a flex item it would add a baseline gap. */
+.logo picture,
+.mobile-menu-header picture {
+    display: flex;
+    align-items: center;
+}
+
+.logo-img {
+    height: 36px;
+    width: auto;
+    object-fit: contain;
+    transition: all 0.3s ease;
+}
+
+.logo:hover .logo-img {
+    filter: drop-shadow(0 0 8px var(--glow-primary));
+}
+
+/* nav-links absorbs the free space, so the bar reads as two groups:
+   [logo · nav-links] ......... [search · login · language]
+   Auto margins are consumed before justify-content, so space-between above has
+   nothing left to scatter. */
 .nav-links {
     display: flex;
-    gap: 8px;
+    gap: 4px;
+    margin-right: auto;
 }
 
 .nav-links a {
     color: var(--text-secondary);
     text-decoration: none;
-    padding: 8px 16px;
-    border-radius: 8px;
+    padding: 8px 12px;
+    border-radius: var(--fm-radius-sm);
     font-size: 0.9rem;
     font-weight: 500;
+    /* A nav label must never break mid-phrase — "Points de sélection" used to
+       wrap onto two lines and stretch the whole bar to 62px. */
+    white-space: nowrap;
     transition: all 0.3s ease;
     border: 1px solid transparent;
 }
@@ -167,11 +209,14 @@ body {
     border-color: var(--border-light);
 }
 
+/* Right-cluster controls share one height (36px) so the bar has a single
+   baseline instead of three: search input, login button, language switcher. */
 .search-box input {
-    padding: 10px 18px;
+    height: 36px;
+    padding: 0 16px;
     border: 1px solid var(--border-color);
-    border-radius: 25px;
-    width: 220px;
+    border-radius: var(--fm-radius-sm);
+    width: 200px;
     font-size: 0.9rem;
     background: rgba(255, 255, 255, 0.05);
     color: var(--text-primary);
@@ -187,46 +232,205 @@ body {
     outline: none;
     border-color: var(--accent-primary);
     background: rgba(255, 255, 255, 0.08);
-    box-shadow: 0 0 20px var(--glow-primary);
+    box-shadow: 0 0 0 3px var(--glow-primary);
 }
 
-/* Auth Navigation */
+/* Auth Navigation — sits in the right cluster by DOM order (base.html),
+   between the search box and the language switcher. No auto margin: one used
+   to live here and shoved the CTA into the middle of the navigation. */
 .auth-nav {
-    margin-left: auto;
+    display: flex;
+    align-items: center;
 }
 
 .auth-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 10px 20px;
-    border-radius: 25px;
+    height: 36px;
+    padding: 0 18px;
+    border-radius: var(--fm-radius-sm);
     text-decoration: none;
     font-size: 0.9rem;
     font-weight: 600;
-    transition: all 0.3s ease;
+    line-height: 1;
+    white-space: nowrap;
+    transition: background 0.2s ease, box-shadow 0.2s ease;
 }
 
 .login-btn {
-    background: linear-gradient(135deg, var(--accent-primary), #a02320);
+    background: var(--accent-primary);
     color: white;
     border: none;
-    box-shadow: 0 4px 15px var(--glow-primary);
 }
 
 .login-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 25px var(--glow-primary);
+    background: var(--fm-accent-primary-hover);
+    box-shadow: 0 2px 10px var(--glow-primary);
 }
 
 .profile-btn {
-    background: var(--accent-gold);
-    color: var(--bg-primary);
-    min-width: 42px;
-    height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--accent-secondary, #1e3a8a);
+    color: #fff;
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    max-width: 36px;
+    min-height: 36px;
+    max-height: 36px;
+    flex-shrink: 0;
+    padding: 0 !important;
+    border-radius: 50%;   /* avatar — intentionally circular, not on the radius scale */
+    font-weight: 600;
+    font-size: 0.85rem;
+    letter-spacing: 0;
+    line-height: 1;
+    box-sizing: border-box;
+    cursor: pointer;
+    position: relative;
+    border: 2px solid transparent;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+.profile-btn:hover {
+    border-color: rgba(255,255,255,0.3);
+    box-shadow: 0 0 0 4px rgba(255,255,255,0.08);
+}
+
+.profile-dropdown {
+    position: fixed;
+    background: var(--bg-secondary, #1e1e2e);
+    border: 1px solid var(--border-color, #333);
+    border-radius: var(--fm-radius-md);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.35);
+    min-width: 260px;
+    max-width: calc(100vw - 16px);
     padding: 0;
+    display: none;
+    z-index: 10001;
+}
+.profile-dropdown.open { display: block; }
+
+.profile-dropdown-header {
+    padding: 20px 16px 16px;
+    border-bottom: 1px solid var(--border-color, #333);
+    text-align: center;
+}
+.profile-dropdown-avatar {
+    width: 56px;
+    height: 56px;
     border-radius: 50%;
+    background: var(--accent-secondary, #1e3a8a);
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
     font-weight: 700;
+    margin-bottom: 8px;
+}
+.profile-dropdown-name {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--text-primary, #fff);
+}
+.profile-dropdown-email {
+    font-size: 0.8rem;
+    color: var(--text-muted, #999);
+    margin-top: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.profile-dropdown-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.profile-dropdown-links {
+    padding: 8px 0;
+}
+.profile-dropdown-links a {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    color: var(--text-primary, #fff);
+    text-decoration: none;
+    font-size: 0.88rem;
+    transition: background 0.15s;
+}
+.profile-dropdown-links a:hover {
+    background: rgba(255,255,255,0.06);
+}
+.profile-dropdown-links a svg {
+    width: 18px;
+    height: 18px;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    flex-shrink: 0;
+}
+.pd-info-card {
+    margin: 6px 12px;
+    padding: 10px 12px;
+    background: rgba(255,255,255,0.04);
+    border-radius: var(--fm-radius-sm);
+    border: 1px solid rgba(255,255,255,0.06);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.pd-info-row, .pd-fav-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.pd-info-icon {
+    font-size: 0.85rem;
+    width: 20px;
+    text-align: center;
+    flex-shrink: 0;
+    opacity: 0.5;
+}
+.pd-info-label {
+    font-size: 0.82rem;
+    color: var(--text-primary, #fff);
+    font-weight: 500;
+}
+.pd-fav-list {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 2px;
+    min-width: 0;
+}
+.pd-fav-name {
+    font-size: 0.8rem;
+    color: var(--text-primary, #fff);
+    text-decoration: none;
+    white-space: nowrap;
+}
+.pd-fav-name:hover {
+    color: #c9302c;
+}
+.pd-fav-sep {
+    color: var(--text-muted, #666);
+    font-size: 0.7rem;
+    margin: 0 2px;
+}
+.pd-fav-more {
+    font-size: 0.75rem;
+    color: var(--text-muted, #888);
+}
+.profile-dropdown-divider {
+    height: 1px;
+    background: var(--border-color, #333);
+    margin: 0;
 }
 
 /* =====================================================
@@ -248,7 +452,7 @@ body {
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     border: 1px solid var(--border-color);
-    border-radius: 20px;
+    border-radius: var(--fm-radius-md);
     margin-bottom: 30px;
 }
 
@@ -256,10 +460,7 @@ body {
     font-size: 2.8rem;
     font-weight: 800;
     margin-bottom: 15px;
-    background: linear-gradient(135deg, var(--text-primary), var(--accent-gold));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    color: var(--text-primary);
     letter-spacing: -0.03em;
 }
 
@@ -282,7 +483,7 @@ body {
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     padding: 28px;
-    border-radius: 16px;
+    border-radius: var(--fm-radius-md);
     text-align: center;
     border: 1px solid var(--border-color);
     transition: all 0.3s ease;
@@ -298,7 +499,7 @@ body {
     font-size: 2.2rem;
     font-weight: 800;
     color: var(--accent-gold);
-    font-family: 'Inter', sans-serif;
+    font-family: var(--fm-font-primary, 'Pretendard Variable', 'Pretendard', -apple-system, sans-serif);
 }
 
 .stat-label {
@@ -320,7 +521,7 @@ body {
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     padding: 24px;
-    border-radius: 16px;
+    border-radius: var(--fm-radius-md);
     border: 1px solid var(--border-color);
 }
 
@@ -342,7 +543,7 @@ body {
 .filter-group input {
     padding: 12px 16px;
     border: 1px solid var(--border-color);
-    border-radius: 10px;
+    border-radius: var(--fm-radius-sm);
     font-size: 0.95rem;
     min-width: 150px;
     background: var(--bg-secondary);
@@ -356,7 +557,7 @@ body {
 .filter-group input:focus {
     outline: none;
     border-color: var(--accent-primary);
-    box-shadow: 0 0 15px var(--glow-primary);
+    box-shadow: 0 0 0 3px var(--glow-primary);
 }
 
 .filter-group select option {
@@ -376,7 +577,7 @@ body {
     background: var(--bg-card);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
-    border-radius: 16px;
+    border-radius: var(--fm-radius-md);
     overflow: hidden;
     border: 1px solid var(--border-color);
     border-collapse: separate;
@@ -437,13 +638,19 @@ body {
 
 /* Status Badge */
 .status-badge {
-    display: inline-block;
-    padding: 5px 14px;
-    border-radius: 20px;
-    font-size: 0.78rem;
+    display: inline-flex;
+    padding: var(--fm-badge-pad-md);
+    border-radius: var(--fm-radius-pill);
+    font-size: var(--fm-badge-fs-md);
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.03em;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    white-space: nowrap;
+    box-sizing: border-box;
+    height: var(--fm-badge-height);
 }
 
 .status-finished {
@@ -485,7 +692,7 @@ body {
     border: 1px solid var(--border-color);
     background: var(--bg-card);
     color: var(--text-secondary);
-    border-radius: 10px;
+    border-radius: var(--fm-radius-sm);
     cursor: pointer;
     font-family: inherit;
     font-weight: 500;
@@ -533,7 +740,7 @@ body {
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     padding: 35px;
-    border-radius: 20px;
+    border-radius: var(--fm-radius-md);
     margin-bottom: 30px;
     border: 1px solid var(--border-color);
 }
@@ -586,7 +793,7 @@ body {
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     padding: 22px;
-    border-radius: 14px;
+    border-radius: var(--fm-radius-md);
     cursor: pointer;
     transition: all 0.3s ease;
     border: 1px solid var(--border-color);
@@ -610,29 +817,41 @@ body {
     flex-wrap: wrap;
 }
 
+/* Event tags share one geometry; only colour distinguishes them. They sit in a
+   row of three, so any difference in height or padding reads as a mistake. */
 .weapon-tag, .gender-tag, .type-tag {
-    padding: 4px 12px;
-    border-radius: 20px;
-    font-size: 0.78rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    height: var(--fm-badge-height);
+    padding: var(--fm-badge-pad-md);
+    border-radius: var(--fm-radius-pill);
+    font-size: var(--fm-badge-fs-md);
     font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
 }
 
+/* Taegeuk palette only — these were blue/pink/violet, and the violet in
+   particular is on the banned list in CLAUDE.md. Blue / red / neutral keeps
+   the three distinguishable without inventing brand colours. */
 .weapon-tag {
-    background: rgba(30, 58, 138, 0.2);
-    color: #60a5fa;
-    border: 1px solid rgba(30, 58, 138, 0.4);
+    background: rgba(96, 133, 235, 0.18);
+    color: #a8c0f5;
+    border: 1px solid rgba(96, 133, 235, 0.3);
 }
 
 .gender-tag {
-    background: rgba(219, 39, 119, 0.15);
-    color: #f472b6;
-    border: 1px solid rgba(219, 39, 119, 0.3);
+    background: rgba(201, 48, 44, 0.18);
+    color: #f0a6a3;
+    border: 1px solid rgba(201, 48, 44, 0.3);
 }
 
 .type-tag {
-    background: rgba(139, 92, 246, 0.15);
-    color: #a78bfa;
-    border: 1px solid rgba(139, 92, 246, 0.3);
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-light);
 }
 
 /* =====================================================
@@ -650,7 +869,7 @@ body {
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     padding: 28px;
-    border-radius: 16px;
+    border-radius: var(--fm-radius-md);
     margin-bottom: 25px;
     border: 1px solid var(--border-color);
 }
@@ -675,10 +894,10 @@ body {
 }
 
 .pool-header {
-    background: linear-gradient(135deg, var(--accent-primary), #a02320);
+    background: var(--accent-primary);
     color: white;
     padding: 12px 18px;
-    border-radius: 10px 10px 0 0;
+    border-radius: var(--fm-radius-md) var(--fm-radius-md) 0 0;
     font-weight: 600;
 }
 
@@ -714,7 +933,7 @@ body {
 .result-table .rank {
     font-weight: 800;
     color: var(--accent-gold);
-    font-family: 'Inter', sans-serif;
+    font-family: var(--fm-font-primary, 'Pretendard Variable', 'Pretendard', -apple-system, sans-serif);
 }
 
 /* =====================================================
@@ -743,7 +962,7 @@ body {
     flex: 1;
     padding: 16px 24px;
     border: 2px solid var(--border-color);
-    border-radius: 14px;
+    border-radius: var(--fm-radius-sm);
     font-size: 1rem;
     background: var(--bg-card);
     color: var(--text-primary);
@@ -758,13 +977,13 @@ body {
 .search-form input:focus {
     border-color: var(--accent-primary);
     outline: none;
-    box-shadow: 0 0 25px var(--glow-primary);
+    box-shadow: 0 0 0 3px var(--glow-primary);
 }
 
 .btn {
     padding: 16px 32px;
     border: none;
-    border-radius: 14px;
+    border-radius: var(--fm-radius-sm);
     font-size: 1rem;
     font-family: inherit;
     font-weight: 600;
@@ -773,7 +992,7 @@ body {
 }
 
 .btn-primary {
-    background: linear-gradient(135deg, var(--accent-primary), #a02320);
+    background: var(--accent-primary);
     color: white;
     box-shadow: 0 4px 20px var(--glow-primary);
 }
@@ -788,7 +1007,7 @@ body {
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     padding: 28px;
-    border-radius: 16px;
+    border-radius: var(--fm-radius-md);
     border: 1px solid var(--border-color);
 }
 
@@ -862,14 +1081,336 @@ body {
 }
 
 /* =====================================================
-   RESPONSIVE
+   RESPONSIVE - Mobile First Approach
    ===================================================== */
-@media (max-width: 768px) {
-    .parallax-bg {
-        background-attachment: scroll;
+
+/* Mid desktop. The five nav labels run noticeably longer in en/fr/it/tr than in
+   ko, so the bar needs tightening before it reaches the laptop breakpoint.
+   (769-1024px is handled by the existing block further down, which would
+   otherwise override anything set here.) */
+@media (min-width: 1025px) and (max-width: 1200px) {
+    .navbar .container {
+        gap: 10px;
+        flex-wrap: nowrap;
     }
 
-    /* Mobile navbar - fixed at top, not sticky */
+    .nav-links a {
+        padding: 8px 8px;
+        font-size: 0.85rem;
+    }
+
+    .search-box input {
+        width: 150px;
+    }
+
+    .auth-btn {
+        padding: 0 14px;
+    }
+}
+
+/* Extra Small Devices (phones, 375px and up) */
+@media (max-width: 480px) {
+    .parallax-bg {
+        background-attachment: scroll;
+        /* 416x640 crop — 14.5KB instead of 55KB on the connection that needs it most */
+        background-image: url('/static/images/fencer-bg.png');
+        background-image: -webkit-image-set(url('/static/images/fencer-bg-mobile.webp') 1x);
+        background-image: image-set(
+            url('/static/images/fencer-bg-mobile.webp') type('image/webp'),
+            url('/static/images/fencer-bg.png') type('image/png')
+        );
+    }
+
+    /* Mobile navbar */
+    .navbar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        padding: 8px 0;
+    }
+
+    .navbar .container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+        padding: 0 12px;
+    }
+
+    .navbar .logo {
+        font-size: 0.9rem;
+        flex-shrink: 0;
+        order: 0;
+    }
+
+    .logo-icon {
+        font-size: 1.2rem;
+        margin-right: 6px;
+    }
+
+    .logo-text {
+        display: none;
+    }
+
+    /* Mobile logo image - smaller size */
+    .logo-img {
+        height: 24px;
+    }
+
+    .auth-nav {
+        margin-left: auto;
+        order: 1;
+        flex-shrink: 0;
+    }
+
+    .login-btn {
+        padding: 6px 14px;
+        font-size: 0.75rem;
+        white-space: nowrap;
+        line-height: 1;
+        height: 28px;
+    }
+
+    .profile-btn {
+        width: 30px;
+        height: 30px;
+        min-width: 30px;
+        max-width: 30px;
+        min-height: 30px;
+        max-height: 30px;
+        font-size: 0.75rem;
+    }
+    .profile-dropdown {
+        min-width: 240px;
+    }
+
+    .nav-links {
+        width: 100%;
+        justify-content: center;
+        order: 2;
+        gap: 2px;
+    }
+
+    .nav-links a {
+        padding: 5px 8px;
+        font-size: 0.75rem;
+    }
+
+    .search-box {
+        width: 100%;
+        order: 3;
+    }
+
+    .search-box input {
+        width: 100%;
+        padding: 8px 12px;
+        font-size: 0.8rem;
+    }
+
+    .main-content {
+        padding-top: 100px;
+        padding-bottom: 20px;
+    }
+
+    .container {
+        padding: 0 10px;
+    }
+
+    /* Hero section */
+    .hero {
+        padding: 25px 15px;
+        border-radius: var(--fm-radius-md);
+        margin-bottom: 15px;
+    }
+
+    .hero h1 {
+        font-size: 1.4rem;
+        line-height: 1.3;
+    }
+
+    .hero p {
+        font-size: 0.85rem;
+    }
+
+    /* Filters */
+    .filters {
+        flex-direction: column;
+        padding: 12px;
+        gap: 10px;
+    }
+
+    .filter-group select,
+    .filter-group input,
+    .search-filter input {
+        width: 100%;
+        min-width: unset;
+        padding: 10px 12px;
+        font-size: 0.85rem;
+    }
+
+    /* Data Table */
+    .data-table {
+        font-size: 0.75rem;
+    }
+
+    .data-table th,
+    .data-table td {
+        padding: 8px 6px;
+    }
+
+    /* Result Table - Mobile Optimization */
+    .result-table {
+        font-size: 0.75rem;
+        display: block;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .result-table th,
+    .result-table td {
+        padding: 8px 6px;
+        white-space: nowrap;
+    }
+
+    .result-table .player-name {
+        white-space: nowrap;
+        max-width: 80px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .result-table td:nth-child(3) {
+        /* Team column - allow truncation */
+        max-width: 100px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    /* Pool/DE Table wrapper for horizontal scroll */
+    .pool-table,
+    .de-bracket-container,
+    .ranking-table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        margin: 0 -10px;
+        padding: 0 10px;
+    }
+
+    /* Competition Header */
+    .competition-header {
+        padding: 15px;
+        border-radius: var(--fm-radius-md);
+        margin-bottom: 15px;
+    }
+
+    .competition-header h1 {
+        font-size: 1.2rem;
+        line-height: 1.3;
+    }
+
+    .competition-meta {
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .meta-item {
+        font-size: 0.8rem;
+    }
+
+    /* Events Grid */
+    .events-grid {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    .event-card {
+        padding: 15px;
+        border-radius: var(--fm-radius-md);
+    }
+
+    .event-name {
+        font-size: 0.9rem;
+    }
+
+    .event-details {
+        gap: 5px;
+    }
+
+    .weapon-tag, .gender-tag, .type-tag {
+        height: auto;
+        padding: var(--fm-badge-pad-sm);
+        font-size: var(--fm-badge-fs-sm);
+    }
+
+    /* Search Form */
+    .search-form {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .search-form input,
+    .btn {
+        width: 100%;
+    }
+
+    .search-form input {
+        padding: 12px 16px;
+        font-size: 0.9rem;
+    }
+
+    .btn {
+        padding: 12px 20px;
+        font-size: 0.9rem;
+    }
+
+    /* Stats Summary */
+    .stats-summary {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+    }
+
+    .stat-card {
+        padding: 15px;
+    }
+
+    .stat-value {
+        font-size: 1.5rem;
+    }
+
+    .stat-label {
+        font-size: 0.75rem;
+    }
+
+    /* Breadcrumb */
+    .breadcrumb {
+        font-size: 0.75rem;
+        padding: 10px 0;
+    }
+
+    /* Footer */
+    .footer {
+        padding: 20px 0;
+    }
+
+    .footer p {
+        font-size: 0.8rem;
+    }
+}
+
+/* Small Devices (landscape phones, 481px to 768px) */
+@media (min-width: 481px) and (max-width: 768px) {
+    .parallax-bg {
+        background-attachment: scroll;
+        background-image: url('/static/images/fencer-bg.png');
+        background-image: -webkit-image-set(url('/static/images/fencer-bg-mobile.webp') 1x);
+        background-image: image-set(
+            url('/static/images/fencer-bg-mobile.webp') type('image/webp'),
+            url('/static/images/fencer-bg.png') type('image/png')
+        );
+    }
+
     .navbar {
         position: fixed;
         top: 0;
@@ -885,7 +1426,6 @@ body {
         align-items: center;
     }
 
-    /* First row: Logo + Login button */
     .navbar .logo {
         font-size: 1rem;
         flex-shrink: 0;
@@ -893,10 +1433,14 @@ body {
     }
 
     .logo-text {
-        display: none; /* Hide text, show only icon on mobile */
+        display: none;
     }
 
-    /* Login button - next to logo, not full width */
+    /* Tablet logo image */
+    .logo-img {
+        height: 28px;
+    }
+
     .auth-nav {
         margin-left: auto;
         order: 1;
@@ -910,12 +1454,15 @@ body {
     }
 
     .profile-btn {
-        min-width: 36px;
-        height: 36px;
-        font-size: 0.85rem;
+        width: 32px;
+        height: 32px;
+        min-width: 32px;
+        max-width: 32px;
+        min-height: 32px;
+        max-height: 32px;
+        font-size: 0.8rem;
     }
 
-    /* Second row: Nav links */
     .nav-links {
         width: 100%;
         justify-content: center;
@@ -928,7 +1475,6 @@ body {
         font-size: 0.85rem;
     }
 
-    /* Third row: Search box */
     .search-box {
         width: 100%;
         order: 3;
@@ -940,7 +1486,6 @@ body {
         font-size: 0.85rem;
     }
 
-    /* Add padding to main content for fixed navbar */
     .main-content {
         padding-top: 120px;
     }
@@ -984,7 +1529,8 @@ body {
     }
 
     .events-grid {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
     }
 
     .search-form {
@@ -994,6 +1540,76 @@ body {
     .search-form input,
     .btn {
         width: 100%;
+    }
+}
+
+/* Medium Devices (tablets, 769px to 1024px) */
+@media (min-width: 769px) and (max-width: 1024px) {
+    /* Tightest desktop row. Verified to stay on one line in all 7 languages —
+       fr ("Classements"/"Points de sélection") is the widest and still clears
+       the container. Keep these values in step with the 1025-1200px block. */
+    .navbar .container {
+        gap: 8px;
+        flex-wrap: nowrap;
+    }
+
+    .logo-text {
+        display: inline;
+    }
+
+    .nav-links {
+        gap: 2px;
+    }
+
+    .nav-links a {
+        padding: 8px 6px;
+        font-size: 0.8rem;
+    }
+
+    .search-box input {
+        width: 130px;
+    }
+
+    .auth-btn {
+        padding: 0 12px;
+        font-size: 0.85rem;
+    }
+
+    .main-content {
+        padding-top: 85px;
+    }
+
+    .hero h1 {
+        font-size: 2.2rem;
+    }
+
+    .events-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 15px;
+    }
+
+    .competition-header h1 {
+        font-size: 1.6rem;
+    }
+
+    .data-table {
+        font-size: 0.9rem;
+    }
+
+    .data-table th,
+    .data-table td {
+        padding: 14px 12px;
+    }
+}
+
+/* Large Devices (desktops, 1025px and up) */
+@media (min-width: 1025px) {
+    .main-content {
+        padding-top: 85px;
+    }
+
+    .events-grid {
+        grid-template-columns: repeat(3, 1fr);
     }
 }
 
@@ -1037,23 +1653,23 @@ body {
    ===================================================== */
 
 /* Ensure all card-like elements use dark semi-transparent backgrounds */
-.stat-card,
-.event-card,
-.filters,
-.competition-header,
-.event-results,
-.search-results,
-.tabs,
-.pool-container,
-.tournament-container,
-.de-match-card,
-.podium-section,
-.podium-box,
-.final-table,
-.stat-card-large,
-.history-section,
-.result-card,
-.strength-card {
+[data-theme="dark"] .stat-card,
+[data-theme="dark"] .event-card,
+[data-theme="dark"] .filters,
+[data-theme="dark"] .competition-header,
+[data-theme="dark"] .event-results,
+[data-theme="dark"] .search-results,
+[data-theme="dark"] .tabs,
+[data-theme="dark"] .pool-container,
+[data-theme="dark"] .tournament-container,
+[data-theme="dark"] .de-match-card,
+[data-theme="dark"] .podium-section,
+[data-theme="dark"] .podium-box,
+[data-theme="dark"] .final-table,
+[data-theme="dark"] .stat-card-large,
+[data-theme="dark"] .history-section,
+[data-theme="dark"] .result-card,
+[data-theme="dark"] .strength-card {
     background: var(--bg-card) !important;
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
@@ -1061,218 +1677,282 @@ body {
 }
 
 /* Override any remaining white backgrounds */
-.tabs {
+[data-theme="dark"] .tabs {
     background: rgba(18, 18, 26, 0.9) !important;
+    /* Ensure tabs stay below search autocomplete dropdown */
+    position: relative;
+    z-index: 50;
 }
 
-.pool-container,
-.tournament-container {
+[data-theme="dark"] .pool-container,
+[data-theme="dark"] .tournament-container {
     background: rgba(18, 18, 26, 0.85) !important;
 }
 
-.de-match-card {
+[data-theme="dark"] .de-match-card {
     background: rgba(26, 26, 37, 0.9) !important;
 }
 
-.podium-section {
+[data-theme="dark"] .podium-section {
     background: rgba(18, 18, 26, 0.8) !important;
 }
 
-.podium-box {
+[data-theme="dark"] .podium-box {
     background: rgba(26, 26, 37, 0.9) !important;
     color: var(--text-primary);
 }
 
-/* Gold/Silver/Bronze podium boxes keep their gradients */
-.podium-place.first .podium-box {
-    background: linear-gradient(135deg, rgba(255, 215, 0, 0.8), rgba(255, 165, 0, 0.8)) !important;
-    color: #1a1a25;
+/* Podium boxes take the medal tokens flat; dark text clears 4.5:1 on all three */
+[data-theme="dark"] .podium-place.first .podium-box {
+    background: var(--fm-medal-gold, #d4a574) !important;
+    color: #241a0e;
 }
 
-.podium-place.second .podium-box {
-    background: linear-gradient(135deg, rgba(192, 192, 192, 0.8), rgba(160, 160, 160, 0.8)) !important;
-    color: #1a1a25;
+[data-theme="dark"] .podium-place.second .podium-box {
+    background: var(--fm-medal-silver, #9ca3af) !important;
+    color: #16181c;
 }
 
-.podium-place.third .podium-box {
-    background: linear-gradient(135deg, rgba(205, 127, 50, 0.8), rgba(139, 69, 19, 0.8)) !important;
-    color: white;
+[data-theme="dark"] .podium-place.third .podium-box {
+    background: var(--fm-medal-bronze, #cd7f32) !important;
+    color: #241a0e;
 }
 
-.final-table {
+[data-theme="dark"] .final-table {
     background: rgba(18, 18, 26, 0.85) !important;
 }
 
-.final-table th {
+[data-theme="dark"] .final-table th {
     background: var(--accent-primary) !important;
     color: white !important;
 }
 
-.final-table td {
+[data-theme="dark"] .final-table td {
     background: transparent !important;
     border-bottom: 1px solid var(--border-color) !important;
 }
 
-.history-section {
+[data-theme="dark"] .history-section {
     background: rgba(18, 18, 26, 0.85) !important;
 }
 
-.result-card-header {
+[data-theme="dark"] .result-card-header {
     background: rgba(26, 26, 37, 0.9) !important;
 }
 
-.result-card-header:hover {
+[data-theme="dark"] .result-card-header:hover {
     background: rgba(35, 35, 50, 0.95) !important;
 }
 
-.result-card-detail {
+[data-theme="dark"] .result-card-detail {
     background: rgba(18, 18, 26, 0.9) !important;
 }
 
 /* Pool selector and buttons */
-.pool-selector,
-.de-round-tabs {
+[data-theme="dark"] .pool-selector,
+[data-theme="dark"] .de-round-tabs {
     background: rgba(26, 26, 37, 0.85) !important;
 }
 
-.pool-btn,
-.de-round-tab {
+[data-theme="dark"] .pool-btn,
+[data-theme="dark"] .de-round-tab {
     background: rgba(18, 18, 26, 0.9) !important;
     color: var(--text-secondary) !important;
     border: 1px solid var(--border-color) !important;
 }
 
-.pool-btn:hover,
-.de-round-tab:hover {
+[data-theme="dark"] .pool-btn:hover,
+[data-theme="dark"] .de-round-tab:hover {
     border-color: var(--accent-primary) !important;
     color: var(--accent-primary) !important;
 }
 
-.pool-btn.active,
-.de-round-tab.active {
+[data-theme="dark"] .pool-btn.active,
+[data-theme="dark"] .de-round-tab.active {
     background: var(--accent-primary) !important;
     color: white !important;
     border-color: var(--accent-primary) !important;
 }
 
+/* 내 선수 풀 강조 (dark) — dark .pool-btn 이 !important 라 동일하게 override */
+[data-theme="dark"] .pool-btn.my-player-pool {
+    border-color: var(--accent-primary, #c9302c) !important;
+    box-shadow: inset 0 0 0 1px var(--accent-primary, #c9302c) !important;
+    color: var(--accent-primary, #c9302c) !important;
+    font-weight: 700 !important;
+}
+
+[data-theme="dark"] .pool-btn.my-player-pool.active {
+    color: #fff !important;
+    box-shadow: 0 0 0 2px rgba(201, 48, 44, 0.45) !important;
+}
+
+[data-theme="dark"] .my-player-pool-bar {
+    background: rgba(201, 48, 44, 0.12);
+    border-color: rgba(201, 48, 44, 0.35);
+}
+
+[data-theme="dark"] .my-player-pool-bar .mpp-item {
+    color: var(--text-secondary, #9b9bab);
+    background: rgba(255, 255, 255, 0.04);
+}
+
 /* Seeding content */
-.seeding-content {
+[data-theme="dark"] .seeding-content {
     background: rgba(26, 26, 37, 0.85) !important;
 }
 
-.seeding-item {
+[data-theme="dark"] .seeding-item {
     background: rgba(18, 18, 26, 0.9) !important;
     border-color: var(--border-color) !important;
 }
 
 /* Stats summary box */
-.stats-summary-box {
+[data-theme="dark"] .stats-summary-box {
     background: rgba(26, 26, 37, 0.85) !important;
 }
 
 /* Matrix table cells */
-.matrix-table .player-col,
-.matrix-table .team-col,
-.matrix-table .stats-col {
+[data-theme="dark"] .matrix-table .player-col,
+[data-theme="dark"] .matrix-table .team-col,
+[data-theme="dark"] .matrix-table .stats-col {
     background: rgba(26, 26, 37, 0.9) !important;
 }
 
-.matrix-table .self {
+[data-theme="dark"] .matrix-table .self {
     background: rgba(50, 50, 60, 0.9) !important;
 }
 
 /* Result table cells */
-.result-table th {
+[data-theme="dark"] .result-table th {
     background: rgba(26, 26, 37, 0.95) !important;
     color: var(--text-secondary) !important;
 }
 
-.result-table td {
+[data-theme="dark"] .result-table td {
     background: rgba(18, 18, 26, 0.8) !important;
 }
 
 /* Bout and detail items */
-.bout-list-header,
-.bout-detail-item,
-.pool-summary,
-.tournament-progress {
+[data-theme="dark"] .bout-list-header,
+[data-theme="dark"] .bout-detail-item,
+[data-theme="dark"] .pool-summary,
+[data-theme="dark"] .tournament-progress {
     background: rgba(26, 26, 37, 0.85) !important;
 }
 
-.bout-score {
+[data-theme="dark"] .bout-score {
     background: rgba(35, 35, 50, 0.9) !important;
 }
 
 /* Opponent table */
-.opponent-table {
+[data-theme="dark"] .opponent-table {
     background: rgba(18, 18, 26, 0.85) !important;
 }
 
-.opponent-table th {
+[data-theme="dark"] .opponent-table th {
     background: rgba(26, 26, 37, 0.95) !important;
 }
 
-.opponent-detail {
+[data-theme="dark"] .opponent-detail {
     background: rgba(26, 26, 37, 0.85) !important;
 }
 
-.opponent-match-item {
+[data-theme="dark"] .opponent-match-item {
     background: rgba(18, 18, 26, 0.9) !important;
 }
 
 /* =====================================================
    UNIVERSAL DARK CARD OVERRIDE
-   Forces all pages to use consistent dark theme cards
+   Forces dark theme pages to use consistent dark cards
+   SCOPED to [data-theme="dark"] to avoid breaking light theme
    ===================================================== */
 
-/* Global card background override - targets all common card patterns */
-.card,
-.stat-card,
-.player-card,
-.event-card,
-.lesson-card,
-.member-card,
-.competition-card,
-.result-card,
-.info-card,
-.data-card,
-.summary-card,
-.stats-card,
-[class*="-card"],
-[class*="card-"] {
-    background: rgba(18, 18, 26, 0.85) !important;
-    backdrop-filter: blur(10px) !important;
-    -webkit-backdrop-filter: blur(10px) !important;
-    border: 1px solid rgba(255, 255, 255, 0.08) !important;
-    color: var(--text-primary) !important;
+/* Card surface override — CARD CONTAINERS ONLY.
+   Do NOT reintroduce wildcard selectors such as [class*="card-"]: those match
+   every inner element of a card (.comp-card-name, .comp-card-meta, ...) and draw
+   a border + backdrop-filter on each one, stacking nested boxes inside one card.
+   Grid wrappers (.comp-cards, .event-cards, .ranking-cards) must stay out too —
+   they are layout containers, not surfaces. Add new card containers by name. */
+[data-theme="dark"] .card,
+[data-theme="dark"] .stat-card,
+[data-theme="dark"] .stat-card-large,
+[data-theme="dark"] .hero-stat-card,
+[data-theme="dark"] .stats-hero-card,
+[data-theme="dark"] .h2h-stat-card,
+[data-theme="dark"] .pool-stat-card,
+[data-theme="dark"] .player-card,
+[data-theme="dark"] .player-result-card,
+[data-theme="dark"] .fl-player-card,
+[data-theme="dark"] .h2h-player-card,
+[data-theme="dark"] .event-card,
+[data-theme="dark"] .comp-card,
+[data-theme="dark"] .comp-result-card,
+[data-theme="dark"] .competition-card,
+[data-theme="dark"] .result-card,
+[data-theme="dark"] .lesson-card,
+[data-theme="dark"] .member-card,
+[data-theme="dark"] .info-card,
+[data-theme="dark"] .pd-info-card,
+[data-theme="dark"] .data-card,
+[data-theme="dark"] .summary-card,
+[data-theme="dark"] .stats-card,
+[data-theme="dark"] .dashboard-card,
+[data-theme="dark"] .section-card,
+[data-theme="dark"] .selection-card,
+[data-theme="dark"] .selection-points-card,
+[data-theme="dark"] .guest-sel-card,
+[data-theme="dark"] .ranking-card,
+[data-theme="dark"] .ranking-preview-card,
+[data-theme="dark"] .preview-card,
+[data-theme="dark"] .live-card,
+[data-theme="dark"] .upcoming-card,
+[data-theme="dark"] .match-card,
+[data-theme="dark"] .method-card,
+[data-theme="dark"] .strength-card,
+[data-theme="dark"] .record-card,
+[data-theme="dark"] .profile-card,
+[data-theme="dark"] .register-card,
+[data-theme="dark"] .verification-card,
+[data-theme="dark"] .welcome-card,
+[data-theme="dark"] .onboarding-card,
+[data-theme="dark"] .auth-card,
+[data-theme="dark"] .checkin-card,
+[data-theme="dark"] .favorite-card,
+[data-theme="dark"] .fl-insight-card,
+[data-theme="dark"] .fl-demo-card,
+[data-theme="dark"] .weapon-gender-card,
+[data-theme="dark"] .clickable-card {
+    background: rgba(18, 18, 26, 0.85);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: var(--text-primary);
 }
 
-/* Card headers */
-.card-header,
-[class*="-card-header"],
-[class*="card-header"] {
-    background: rgba(26, 26, 37, 0.95) !important;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
-    color: var(--text-primary) !important;
+/* Card headers — the generic .card-header only. Component-specific headers
+   (.result-card-header, .sel-card-header, ...) style themselves. */
+[data-theme="dark"] .card-header {
+    background: rgba(26, 26, 37, 0.95);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    color: var(--text-primary);
 }
 
 /* Card bodies */
-.card-body,
-[class*="-card-body"],
-[class*="card-body"] {
-    background: transparent !important;
-    color: var(--text-primary) !important;
+[data-theme="dark"] .card-body {
+    background: transparent;
+    color: var(--text-primary);
 }
 
 /* Section containers with white backgrounds */
-.section,
-.content-section,
-.main-section,
-.info-section,
-.stats-section,
-.filter-section,
-.search-section,
-.results-section {
+[data-theme="dark"] .section,
+[data-theme="dark"] .content-section,
+[data-theme="dark"] .main-section,
+[data-theme="dark"] .info-section,
+[data-theme="dark"] .stats-section,
+[data-theme="dark"] .filter-section,
+[data-theme="dark"] .search-section,
+[data-theme="dark"] .results-section {
     background: rgba(18, 18, 26, 0.85) !important;
     backdrop-filter: blur(10px) !important;
     -webkit-backdrop-filter: blur(10px) !important;
@@ -1280,42 +1960,42 @@ body {
 }
 
 /* Tables */
-table,
-.data-table,
-.stats-table,
-.result-table,
-.ranking-table {
+[data-theme="dark"] table,
+[data-theme="dark"] .data-table,
+[data-theme="dark"] .stats-table,
+[data-theme="dark"] .result-table,
+[data-theme="dark"] .ranking-table {
     background: transparent !important;
     border-collapse: collapse !important;
 }
 
-table th,
-.data-table th,
-.stats-table th {
+[data-theme="dark"] table th,
+[data-theme="dark"] .data-table th,
+[data-theme="dark"] .stats-table th {
     background: rgba(26, 26, 37, 0.95) !important;
     color: var(--text-secondary) !important;
     border-color: rgba(255, 255, 255, 0.08) !important;
 }
 
-table td,
-.data-table td,
-.stats-table td {
+[data-theme="dark"] table td,
+[data-theme="dark"] .data-table td,
+[data-theme="dark"] .stats-table td {
     background: rgba(18, 18, 26, 0.5) !important;
     color: var(--text-primary) !important;
     border-color: rgba(255, 255, 255, 0.05) !important;
 }
 
-table tr:hover td {
+[data-theme="dark"] table tr:hover td {
     background: rgba(26, 26, 37, 0.7) !important;
 }
 
 /* Remove table borders for cleaner look */
-table,
-table th,
-table td,
-.data-table,
-.data-table th,
-.data-table td {
+[data-theme="dark"] table,
+[data-theme="dark"] table th,
+[data-theme="dark"] table td,
+[data-theme="dark"] .data-table,
+[data-theme="dark"] .data-table th,
+[data-theme="dark"] .data-table td {
     border: none !important;
 }
 
@@ -1328,8 +2008,8 @@ table td,
 }
 
 /* FencingLab player cards */
-.fl-player-card,
-.fl-player-preview {
+[data-theme="dark"] .fl-player-card,
+[data-theme="dark"] .fl-player-preview {
     background: rgba(18, 18, 26, 0.85) !important;
     backdrop-filter: blur(10px) !important;
     -webkit-backdrop-filter: blur(10px) !important;
@@ -1337,132 +2017,133 @@ table td,
 }
 
 /* Autocomplete and dropdown */
-.autocomplete-dropdown,
-.autocomplete-results,
-.dropdown-menu,
-.search-results {
+[data-theme="dark"] .autocomplete-dropdown,
+[data-theme="dark"] .autocomplete-results,
+[data-theme="dark"] .dropdown-menu,
+[data-theme="dark"] .search-results {
     background: rgba(18, 18, 26, 0.95) !important;
     border: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
 
-.autocomplete-item,
-.autocomplete-item:hover,
-.dropdown-item,
-.dropdown-item:hover {
+[data-theme="dark"] .autocomplete-item,
+[data-theme="dark"] .autocomplete-item:hover,
+[data-theme="dark"] .dropdown-item,
+[data-theme="dark"] .dropdown-item:hover {
     background: rgba(26, 26, 37, 0.9) !important;
     color: var(--text-primary) !important;
 }
 
-.autocomplete-item:hover,
-.dropdown-item:hover {
+[data-theme="dark"] .autocomplete-item:hover,
+[data-theme="dark"] .dropdown-item:hover {
     background: rgba(201, 48, 44, 0.2) !important;
 }
 
 /* Forms and inputs */
-input,
-textarea,
-select {
+[data-theme="dark"] input,
+[data-theme="dark"] textarea,
+[data-theme="dark"] select {
     background: rgba(26, 26, 37, 0.9) !important;
     color: var(--text-primary) !important;
     border: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
 
-input:focus,
-textarea:focus,
-select:focus {
+[data-theme="dark"] input:focus,
+[data-theme="dark"] textarea:focus,
+[data-theme="dark"] select:focus {
     border-color: var(--accent-primary) !important;
     outline: none !important;
     box-shadow: 0 0 0 2px rgba(201, 48, 44, 0.2) !important;
 }
 
-input::placeholder,
-textarea::placeholder {
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder {
     color: var(--text-muted) !important;
 }
 
 /* Buttons - preserve accent colors but ensure dark backgrounds */
-.btn,
-button:not(.filter-btn):not(.active) {
+[data-theme="dark"] .btn,
+[data-theme="dark"] button:not(.filter-btn):not(.active) {
     background: rgba(26, 26, 37, 0.9) !important;
     color: var(--text-primary) !important;
     border: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
 
 /* Primary/accent buttons */
-.btn-primary,
-.btn-accent,
-button.primary,
-button[type="submit"] {
-    background: linear-gradient(135deg, var(--accent-primary) 0%, #a02622 100%) !important;
+[data-theme="dark"] .btn-primary,
+[data-theme="dark"] .btn-accent,
+[data-theme="dark"] button.primary,
+[data-theme="dark"] button[type="submit"] {
+    background: var(--accent-primary) !important;
     color: white !important;
     border: none !important;
 }
 
 /* Modal and popup backgrounds */
-.modal,
-.modal-content,
-.popup,
-.popup-content,
-.dialog,
-.dialog-content {
+[data-theme="dark"] .modal,
+[data-theme="dark"] .modal-content,
+[data-theme="dark"] .popup,
+[data-theme="dark"] .popup-content,
+[data-theme="dark"] .dialog,
+[data-theme="dark"] .dialog-content {
     background: rgba(18, 18, 26, 0.98) !important;
     border: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
 
 /* Tags and badges - ensure visibility */
-.tag,
-.badge,
-.label,
-.chip {
+[data-theme="dark"] .tag,
+[data-theme="dark"] .badge,
+[data-theme="dark"] .label,
+[data-theme="dark"] .chip {
     background: rgba(26, 26, 37, 0.9) !important;
     color: var(--text-primary) !important;
     border: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
 
 /* Weapon tags with specific colors */
-.tag-weapon,
-.weapon-tag {
+[data-theme="dark"] .tag-weapon,
+[data-theme="dark"] .weapon-tag {
     background: rgba(212, 165, 116, 0.2) !important;
     color: var(--accent-gold) !important;
     border: 1px solid rgba(212, 165, 116, 0.3) !important;
 }
 
 /* Text colors override */
-h1, h2, h3, h4, h5, h6,
-.title,
-.heading {
+[data-theme="dark"] h1, [data-theme="dark"] h2, [data-theme="dark"] h3,
+[data-theme="dark"] h4, [data-theme="dark"] h5, [data-theme="dark"] h6,
+[data-theme="dark"] .title,
+[data-theme="dark"] .heading {
     color: var(--text-primary) !important;
 }
 
-p,
-.text,
-.description,
-.content {
+[data-theme="dark"] p,
+[data-theme="dark"] .text,
+[data-theme="dark"] .description,
+[data-theme="dark"] .content {
     color: var(--text-secondary) !important;
 }
 
-.muted,
-.subtitle,
-.meta {
+[data-theme="dark"] .muted,
+[data-theme="dark"] .subtitle,
+[data-theme="dark"] .meta {
     color: var(--text-muted) !important;
 }
 
 /* Rankings page specific */
-.rankings-container,
-.rankings-section,
-.ranking-card,
-.ranking-list {
+[data-theme="dark"] .rankings-container,
+[data-theme="dark"] .rankings-section,
+[data-theme="dark"] .ranking-card,
+[data-theme="dark"] .ranking-list {
     background: rgba(18, 18, 26, 0.85) !important;
     backdrop-filter: blur(10px) !important;
     -webkit-backdrop-filter: blur(10px) !important;
 }
 
 /* Club pages specific */
-.club-card,
-.member-list,
-.attendance-card,
-.lesson-list,
-.fee-card {
+[data-theme="dark"] .club-card,
+[data-theme="dark"] .member-list,
+[data-theme="dark"] .attendance-card,
+[data-theme="dark"] .lesson-list,
+[data-theme="dark"] .fee-card {
     background: rgba(18, 18, 26, 0.85) !important;
     backdrop-filter: blur(10px) !important;
     -webkit-backdrop-filter: blur(10px) !important;
@@ -1470,10 +2151,10 @@ p,
 }
 
 /* Auth pages specific */
-.auth-card,
-.login-card,
-.register-card,
-.auth-form {
+[data-theme="dark"] .auth-card,
+[data-theme="dark"] .login-card,
+[data-theme="dark"] .register-card,
+[data-theme="dark"] .auth-form {
     background: rgba(18, 18, 26, 0.9) !important;
     backdrop-filter: blur(15px) !important;
     -webkit-backdrop-filter: blur(15px) !important;
@@ -1481,28 +2162,621 @@ p,
 }
 
 /* Chat page specific */
-.chat-container,
-.chat-messages,
-.chat-input-area,
-.message-item {
+[data-theme="dark"] .chat-container,
+[data-theme="dark"] .chat-messages,
+[data-theme="dark"] .chat-input-area,
+[data-theme="dark"] .message-item {
     background: rgba(18, 18, 26, 0.85) !important;
 }
 
-.message-user {
+[data-theme="dark"] .message-user {
     background: rgba(201, 48, 44, 0.2) !important;
     border: 1px solid rgba(201, 48, 44, 0.3) !important;
 }
 
-.message-assistant {
+[data-theme="dark"] .message-assistant {
     background: rgba(26, 26, 37, 0.9) !important;
     border: 1px solid rgba(255, 255, 255, 0.08) !important;
 }
 
 /* Search page specific */
-.search-container,
-.search-results-container,
-.player-search-card {
+[data-theme="dark"] .search-container,
+[data-theme="dark"] .search-results-container,
+[data-theme="dark"] .player-search-card {
     background: rgba(18, 18, 26, 0.85) !important;
     backdrop-filter: blur(10px) !important;
     -webkit-backdrop-filter: blur(10px) !important;
+}
+
+/* ==================== Player & Team Clickable Links (Dark Theme) ==================== */
+
+/* Player links hover - gold accent for dark theme */
+.player-link:hover {
+    color: var(--accent-gold, #d4a574) !important;
+}
+
+/* Team links hover - gold accent for dark theme */
+.team-link:hover {
+    color: var(--accent-gold, #d4a574) !important;
+}
+
+/* Team history links in dark theme */
+.team-history-item .team-link {
+    color: var(--text-primary, #fff);
+}
+
+.team-history-item .team-link:hover {
+    color: var(--accent-gold, #d4a574);
+}
+
+/* Podium team links in dark theme */
+.podium-team .team-link {
+    color: var(--text-secondary, #b4b4c4);
+}
+
+.podium-team .team-link:hover {
+    color: var(--accent-gold, #d4a574);
+}
+
+/* ==================== Stage-wise Win Rate (Dark Theme) ==================== */
+
+.stage-winrate-container {
+    padding: 15px 0;
+}
+
+.stage-label {
+    color: var(--text-primary, #ffffff);
+}
+
+.stage-bar-container {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.stage-bar.rate-high {
+    background: #1e9e4a;  /* Green for 70%+ */
+}
+
+.stage-bar.rate-mid {
+    background: #e0930b;  /* Amber for 40-70% */
+}
+
+.stage-bar.rate-low {
+    background: #c9302c;  /* Red for <40% */
+}
+
+.stage-bar.final-bar {
+    background: var(--fm-medal-gold, #d4a574);
+}
+
+.stage-count {
+    color: var(--text-muted, #6b6b7b);
+}
+
+/* Date Range Filter - Dark Theme */
+.date-range-filter {
+    background: var(--bg-tertiary, #1a1a2e);
+    border: 1px solid var(--border-color, #2d2d44);
+}
+
+.date-range-filter label {
+    color: var(--text-primary, #ffffff);
+}
+
+.date-range-filter select,
+.date-range-filter input[type="month"] {
+    background: var(--bg-secondary, #16213e);
+    border-color: var(--border-color, #2d2d44);
+    color: var(--text-primary, #ffffff);
+}
+
+.date-range-filter .filter-btn {
+    background: var(--accent-primary, #c9302c);
+}
+
+.date-range-filter .filter-btn:hover {
+    background: var(--accent-primary-hover, #a02724);
+}
+
+.date-range-filter .reset-btn {
+    background: var(--bg-tertiary, #1a1a2e);
+    border: 1px solid var(--border-color, #2d2d44);
+}
+
+.filter-period-display {
+    color: var(--text-muted, #6b6b7b);
+}
+
+.stage-rate {
+    color: var(--text-primary, #ffffff);
+}
+
+.stage-record {
+    color: var(--text-muted, #6b6b7b);
+}
+
+.no-data-message {
+    color: var(--text-muted, #6b6b7b);
+}
+
+/* ==================== LIGHT THEME OVERRIDES (Toss-style) ==================== */
+/* 언어별 테마: ko/ja/zh → light, en/fr/it/tr → dark */
+
+/* --- CSS Variable Overrides --- */
+[data-theme="light"] {
+    --bg-primary: #ffffff;
+    --bg-secondary: #f5f5f7;
+    --bg-tertiary: #f0f0f5;
+    --bg-card: #ffffff;
+    --bg-card-hover: #f9f9fb;
+    --text-primary: #191f28;
+    --text-secondary: #4e5968;
+    --text-muted: #8b95a1;
+    --text-accent: #c9302c;
+    --border-color: #e5e8eb;
+    --border-light: #d1d6db;
+    --glow-primary: transparent;
+    --glow-secondary: transparent;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+    --shadow-lg: 0 8px 24px rgba(0,0,0,0.12);
+    --accent-gold: #1e3a8a;
+    /* Legacy style.css variables → Toss-style mapping */
+    --primary-color: #c9302c;
+    --secondary-color: #4e5968;
+    --accent-color: #c9302c;
+    --text-color: #191f28;
+    --text-light: #8b95a1;
+    --background: #f5f5f7;
+}
+
+/* Light theme zeroes out --glow-primary, so focus rings need their own colour
+   here or the only focus cue left is the 1px border. */
+[data-theme="light"] .search-box input:focus,
+[data-theme="light"] .search-form input:focus,
+[data-theme="light"] .filter-group select:focus,
+[data-theme="light"] .filter-group input:focus {
+    box-shadow: 0 0 0 3px rgba(201, 48, 44, 0.28);
+}
+
+/* --- Body & Background --- */
+[data-theme="light"] body {
+    background: #ffffff;
+    color: #191f28;
+}
+
+/* Light theme keeps the fencer backdrop instead of hiding it, washed out to a
+   near-white haze: the silhouette only reads around the hero and is gone by the
+   time the page scrolls into content. Body background stays behind the parallax
+   (it propagates to the canvas), so the image shows through the page gutters
+   while every content surface below stays opaque. */
+[data-theme="light"] .parallax-bg {
+    filter: grayscale(0.25);
+}
+
+/* 다크 테마(0.75→0.98)와 같은 커브로 이미지가 뚜렷하게 보이도록 */
+[data-theme="light"] .parallax-overlay {
+    background: linear-gradient(
+        180deg,
+        rgba(250, 251, 252, 0.72) 0%,
+        rgba(250, 251, 252, 0.82) 30%,
+        rgba(250, 251, 252, 0.92) 60%,
+        rgba(250, 251, 252, 0.97) 100%
+    );
+}
+
+[data-theme="light"] .main-content {
+    color: #191f28;
+}
+
+/* --- Navbar --- */
+[data-theme="light"] .navbar {
+    background: rgba(255,255,255,0.92) !important;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid #e5e8eb !important;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+
+[data-theme="light"] .logo-text {
+    color: #191f28 !important;
+}
+
+[data-theme="light"] .logo-icon {
+    filter: none;
+}
+
+[data-theme="light"] .logo:hover .logo-img {
+    filter: none;
+}
+
+[data-theme="light"] .nav-links a {
+    color: #4e5968;
+}
+
+[data-theme="light"] .nav-links a:hover {
+    color: #191f28;
+    background: #f5f5f7;
+    border-color: #e5e8eb;
+}
+
+[data-theme="light"] .search-box input {
+    background: #f5f5f7;
+    color: #191f28;
+    border-color: #e5e8eb;
+}
+
+[data-theme="light"] .search-box input::placeholder {
+    color: #8b95a1;
+}
+
+[data-theme="light"] .search-box input:focus {
+    border-color: #c9302c;
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(201, 48, 44, 0.1);
+}
+
+/* --- Auth Button --- */
+[data-theme="light"] .profile-btn {
+    background: #1e3a8a;
+    color: #fff;
+}
+[data-theme="light"] .profile-btn:hover {
+    border-color: rgba(30,58,138,0.2);
+    box-shadow: 0 0 0 4px rgba(30,58,138,0.08);
+}
+[data-theme="light"] .profile-dropdown {
+    background: #fff;
+    border-color: #e5e7eb;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+}
+[data-theme="light"] .profile-dropdown-header {
+    border-bottom-color: #e5e7eb;
+}
+[data-theme="light"] .profile-dropdown-name {
+    color: #1f2937;
+}
+[data-theme="light"] .profile-dropdown-email {
+    color: #6b7280;
+}
+[data-theme="light"] .profile-dropdown-links a {
+    color: #1f2937;
+}
+[data-theme="light"] .profile-dropdown-links a:hover {
+    background: #f3f4f6;
+}
+[data-theme="light"] .profile-dropdown-divider {
+    background: #e5e7eb;
+}
+[data-theme="light"] .pd-info-card {
+    background: #f8f9fa;
+    border-color: #e5e7eb;
+}
+[data-theme="light"] .pd-info-label {
+    color: #1f2937;
+}
+[data-theme="light"] .pd-fav-name {
+    color: #1f2937;
+}
+[data-theme="light"] .pd-fav-name:hover {
+    color: #c9302c;
+}
+[data-theme="light"] .pd-fav-sep {
+    color: #d1d5db;
+}
+[data-theme="light"] .pd-fav-more {
+    color: #9ca3af;
+}
+
+/* --- Hero Section --- */
+[data-theme="light"] .hero {
+    background: #ffffff !important;
+    border: 1px solid #e5e8eb !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06) !important;
+    backdrop-filter: none !important;
+    color: #191f28 !important;
+}
+
+[data-theme="light"] .hero h1 {
+    color: #191f28 !important;
+}
+
+[data-theme="light"] .hero p {
+    color: #4e5968 !important;
+    opacity: 1 !important;
+}
+
+/* --- Stat Cards --- */
+[data-theme="light"] .stat-card {
+    background: #ffffff !important;
+    border: 1px solid #e5e8eb !important;
+    backdrop-filter: none !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+[data-theme="light"] .stat-card:hover {
+    box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+    border-color: #d1d6db !important;
+}
+
+[data-theme="light"] .stat-value {
+    color: #c9302c;
+}
+
+[data-theme="light"] .stat-label {
+    color: #8b95a1;
+}
+
+/* --- Cards (generic) --- */
+[data-theme="light"] .event-card,
+[data-theme="light"] .competition-header,
+[data-theme="light"] .event-results,
+[data-theme="light"] .search-results {
+    background: #ffffff !important;
+    border: 1px solid #e5e8eb !important;
+    backdrop-filter: none !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+[data-theme="light"] .event-card:hover {
+    box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+    border-color: #c9302c !important;
+}
+
+/* --- Filters (dark-theme.css) --- */
+[data-theme="light"] .filters {
+    background: #ffffff !important;
+    border: 1px solid #e5e8eb !important;
+    backdrop-filter: none !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+[data-theme="light"] .filter-group label {
+    color: #4e5968;
+}
+
+[data-theme="light"] .filter-group select,
+[data-theme="light"] .filter-group input {
+    background: #f5f5f7 !important;
+    color: #191f28 !important;
+    border-color: #e5e8eb !important;
+}
+
+[data-theme="light"] .filter-group select option {
+    background: #ffffff;
+    color: #191f28;
+}
+
+[data-theme="light"] .filter-group select:focus,
+[data-theme="light"] .filter-group input:focus {
+    box-shadow: 0 0 0 3px rgba(201, 48, 44, 0.1) !important;
+}
+
+/* --- Data Table --- */
+[data-theme="light"] .data-table {
+    background: #ffffff !important;
+    border: 1px solid #e5e8eb !important;
+    backdrop-filter: none !important;
+}
+
+[data-theme="light"] .data-table th {
+    background: #f5f5f7 !important;
+    color: #4e5968 !important;
+    border-color: #e5e8eb !important;
+}
+
+[data-theme="light"] .data-table td {
+    background: transparent !important;
+    color: #191f28 !important;
+    border-color: #f0f0f5 !important;
+}
+
+[data-theme="light"] .data-table tbody tr:hover td {
+    background: #f9f9fb !important;
+}
+
+[data-theme="light"] .comp-name {
+    color: #191f28;
+}
+
+[data-theme="light"] .comp-name:hover {
+    color: #c9302c;
+}
+
+[data-theme="light"] .comp-date {
+    color: #8b95a1;
+}
+
+[data-theme="light"] .comp-events {
+    color: #1e3a8a;
+}
+
+/* --- Result Table --- */
+[data-theme="light"] .result-table th {
+    background: #f5f5f7 !important;
+    color: #4e5968 !important;
+    border-color: #e5e8eb !important;
+}
+
+[data-theme="light"] .result-table td {
+    background: #ffffff !important;
+    color: #191f28 !important;
+    border-color: #f0f0f5 !important;
+}
+
+[data-theme="light"] .result-table .player-name {
+    color: #191f28;
+}
+
+[data-theme="light"] .result-table .rank {
+    color: #c9302c;
+}
+
+[data-theme="light"] .event-results h3 {
+    color: #191f28;
+    border-bottom-color: #e5e8eb;
+}
+
+[data-theme="light"] .pool-header {
+    background: #c9302c;
+}
+
+/* --- Competition Header --- */
+[data-theme="light"] .competition-header h1 {
+    color: #191f28;
+}
+
+[data-theme="light"] .meta-item {
+    color: #8b95a1;
+}
+
+[data-theme="light"] .meta-item strong {
+    color: #191f28;
+}
+
+/* --- Event Tags (light-friendly) --- */
+[data-theme="light"] .weapon-tag {
+    background: rgba(30, 58, 138, 0.08);
+    color: #1e3a8a;
+    border-color: rgba(30, 58, 138, 0.2);
+}
+
+[data-theme="light"] .gender-tag {
+    background: rgba(201, 48, 44, 0.08);
+    color: #a82824;
+    border-color: rgba(201, 48, 44, 0.15);
+}
+
+[data-theme="light"] .type-tag {
+    background: rgba(0, 0, 0, 0.05);
+    color: #4e5968;
+    border-color: rgba(0, 0, 0, 0.1);
+}
+
+/* --- Pagination --- */
+[data-theme="light"] .pagination button {
+    background: #ffffff;
+    border-color: #e5e8eb;
+    color: #4e5968;
+}
+
+[data-theme="light"] .pagination button:hover {
+    background: #f5f5f7;
+    color: #191f28;
+    border-color: #d1d6db;
+}
+
+[data-theme="light"] .pagination button.active {
+    background: #c9302c;
+    color: #ffffff;
+    border-color: #c9302c;
+    box-shadow: 0 2px 8px rgba(201, 48, 44, 0.2);
+}
+
+/* --- Breadcrumb --- */
+[data-theme="light"] .breadcrumb {
+    color: #8b95a1;
+}
+
+[data-theme="light"] .breadcrumb a {
+    color: #1e3a8a;
+}
+
+[data-theme="light"] .breadcrumb a:hover {
+    color: #191f28;
+}
+
+/* --- Search Section --- */
+[data-theme="light"] .search-section h1 {
+    color: #191f28;
+}
+
+[data-theme="light"] .search-form input {
+    background: #ffffff;
+    color: #191f28;
+    border-color: #e5e8eb;
+}
+
+[data-theme="light"] .search-form input::placeholder {
+    color: #8b95a1;
+}
+
+[data-theme="light"] .search-form input:focus {
+    border-color: #c9302c;
+    box-shadow: 0 0 0 3px rgba(201, 48, 44, 0.1);
+}
+
+/* --- Events Section --- */
+[data-theme="light"] .events-section h2 {
+    color: #191f28;
+}
+
+[data-theme="light"] .event-name {
+    color: #191f28 !important;
+}
+
+[data-theme="light"] .event-details .weapon-tag,
+[data-theme="light"] .event-details .gender-tag,
+[data-theme="light"] .event-details .type-tag {
+    border: none;
+}
+
+/* --- Footer --- */
+[data-theme="light"] .footer {
+    background: #f5f5f7;
+    color: #4e5968;
+    border-top: 1px solid #e5e8eb;
+}
+
+[data-theme="light"] .footer a {
+    color: #1e3a8a;
+}
+
+/* --- Mobile Bottom Nav --- */
+[data-theme="light"] .mobile-bottom-nav {
+    background: rgba(255,255,255,0.95) !important;
+    border-top: 1px solid #e5e8eb !important;
+    box-shadow: 0 -1px 4px rgba(0,0,0,0.04);
+}
+
+[data-theme="light"] .bnav-item {
+    color: #8b95a1;
+}
+
+[data-theme="light"] .bnav-item.active {
+    color: #c9302c;
+}
+
+/* --- Mobile Menu --- */
+[data-theme="light"] .mobile-menu-overlay {
+    background: #ffffff !important;
+}
+
+[data-theme="light"] .mobile-menu-links a {
+    color: #191f28;
+    border-bottom-color: #f0f0f5;
+}
+
+[data-theme="light"] .mobile-menu-links a svg {
+    stroke: #4e5968;
+}
+
+/* --- Status Badges --- */
+[data-theme="light"] .status-finished {
+    background: rgba(16, 185, 129, 0.08);
+    border-color: rgba(16, 185, 129, 0.2);
+}
+
+[data-theme="light"] .status-ongoing {
+    background: rgba(245, 158, 11, 0.08);
+    border-color: rgba(245, 158, 11, 0.2);
+}
+
+/* --- Scrollbar --- */
+[data-theme="light"] ::-webkit-scrollbar-track {
+    background: #ffffff;
+}
+
+[data-theme="light"] ::-webkit-scrollbar-thumb {
+    background: #d1d6db;
+    border: 2px solid #ffffff;
 }

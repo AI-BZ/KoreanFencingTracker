@@ -123,9 +123,17 @@ async def get_player_stats(
     Pool 승률, DE 진출률, 평균 라운드 진출 등 상세 통계를 조회합니다.
     """
     stats = await player_service.get_player_stats(player_id)
+
+    # 선수 이름 조회
+    player_name = await player_service.get_player_name(player_id)
+
+    # 메달 수
+    medals = await player_service._get_medal_counts(player_id)
+
     return {
         "player_id": player_id,
-        "player_name": "",  # 서비스에서 추가 필요
+        "player_name": player_name or "",
+        "medal_count": medals.get("gold", 0) + medals.get("silver", 0) + medals.get("bronze", 0),
         **stats
     }
 
@@ -297,13 +305,68 @@ async def get_upcoming_competitions(
     """
     예정 대회 + 참가 선수
 
-    다가오는 대회 목록과 클럽 소속 선수들의 예상 참가 현황.
+    다가오는 대회 목록과 클럽 소속 선수들의 참가 현황.
     대회비/출장비 정산 연동용.
     """
-    # TODO: 대회 일정 + 참가자 관리 기능 연동
+    from .service import get_supabase_client
+    from datetime import date as date_type
+
+    supabase = get_supabase_client()
+    today_str = date_type.today().isoformat()
+
+    # 예정 대회 조회
+    entries_response = supabase.table("competition_entries").select(
+        "id, competition_id, competition_name, competition_date, competition_location, "
+        "status, entry_fee_total, travel_expense_total, accommodation_total, other_expense_total"
+    ).eq("organization_id", member.organization_id).gte(
+        "competition_date", today_str
+    ).in_(
+        "status", ["planning", "registered", "in_progress"]
+    ).order("competition_date", desc=False).limit(10).execute()
+
+    upcoming = []
+    for entry in (entries_response.data or []):
+        # 참가자 목록 조회
+        participants_response = supabase.table("competition_participants").select(
+            "member_id, event_name, entry_fee, travel_expense, accommodation, other_expense, "
+            "payment_status, members!competition_participants_member_id_fkey(full_name)"
+        ).eq("competition_entry_id", entry["id"]).execute()
+
+        participants = []
+        for p in (participants_response.data or []):
+            member_info = p.get("members", {}) or {}
+            individual_total = (
+                p.get("entry_fee", 0) + p.get("travel_expense", 0) +
+                p.get("accommodation", 0) + p.get("other_expense", 0)
+            )
+            participants.append({
+                "member_id": p["member_id"],
+                "member_name": member_info.get("full_name", "Unknown"),
+                "event_name": p.get("event_name"),
+                "total_cost": individual_total,
+                "payment_status": p.get("payment_status", "pending")
+            })
+
+        total_cost = (
+            entry.get("entry_fee_total", 0) + entry.get("travel_expense_total", 0) +
+            entry.get("accommodation_total", 0) + entry.get("other_expense_total", 0)
+        )
+
+        upcoming.append({
+            "id": entry["id"],
+            "competition_id": entry.get("competition_id"),
+            "competition_name": entry["competition_name"],
+            "competition_date": entry["competition_date"],
+            "competition_location": entry.get("competition_location"),
+            "status": entry["status"],
+            "total_cost": total_cost,
+            "participant_count": len(participants),
+            "participants": participants
+        })
+
     return {
-        "message": "대회 참가 관리 기능과 연동 예정",
-        "upcoming": []
+        "total": len(upcoming),
+        "upcoming": upcoming
     }
 
 
@@ -387,7 +450,7 @@ async def sync_players_from_competition(
     - 코치 이상 권한 필요
     """
     # 조직 이름 조회
-    from database.supabase_client import get_supabase_client
+    from .service import get_supabase_client
     supabase = get_supabase_client()
     org_response = supabase.table("organizations").select("name").eq(
         "id", member.organization_id

@@ -12,11 +12,9 @@ Test cases:
 - 공하이 ↔ Hai Gong (FencingTracker ID: 100370147)
 """
 
-import re
 import json
-import hashlib
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple, Set
+from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 import httpx
 from pathlib import Path
@@ -395,17 +393,27 @@ class InternationalDataManager:
     Manager for international fencing data integration.
 
     Features:
-    1. Korean → English name conversion
+    1. Korean → English name conversion (romanization)
     2. Name verification against FIE/FencingTracker
     3. International record lookup
-    4. Data caching
+    4. Local file cache for romanization results
+
+    데이터 소스 계층:
+    - Primary: Supabase players.translations.en (서버 런타임 캐시)
+    - Secondary: data/international_cache/name_mappings.json (로컬 파일 캐시)
+    - Fallback: 알고리즘 로마자 변환 (romanize_korean_name)
+
+    name_mappings.json은 로컬 캐시 파일로, 새 이름의 로마자 변환 결과를
+    저장합니다. 서버 시작 시 build_player_translation_cache()가 Supabase에서
+    players.translations.en을 로드하므로, 이 파일은 보조 캐시 역할입니다.
     """
 
     def __init__(self, cache_dir: str = "data/international_cache"):
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
-        # Load name mappings
+        # Local file cache for romanization results
+        # NOTE: This is a secondary cache. Primary source is Supabase players.translations.en
         self.name_mappings_file = self.cache_dir / "name_mappings.json"
         self.name_mappings = self._load_name_mappings()
 
@@ -414,16 +422,23 @@ class InternationalDataManager:
         self.fie = FIEClient()
 
     def _load_name_mappings(self) -> Dict:
-        """Load saved name mappings."""
+        """Load saved name mappings from local file cache."""
         if self.name_mappings_file.exists():
-            with open(self.name_mappings_file, 'r', encoding='utf-8') as f:
-                return json.load(f)
+            try:
+                with open(self.name_mappings_file, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except (json.JSONDecodeError, OSError) as e:
+                print(f"Warning: name_mappings.json 로드 실패 (무시): {e}")
+                return {}
         return {}
 
     def _save_name_mappings(self):
-        """Save name mappings to file."""
-        with open(self.name_mappings_file, 'w', encoding='utf-8') as f:
-            json.dump(self.name_mappings, f, ensure_ascii=False, indent=2)
+        """Save name mappings to local file cache."""
+        try:
+            with open(self.name_mappings_file, 'w', encoding='utf-8') as f:
+                json.dump(self.name_mappings, f, ensure_ascii=False, indent=2)
+        except OSError as e:
+            print(f"Warning: name_mappings.json 저장 실패 (무시): {e}")
 
     def get_english_name(self, korean_name: str, auto_verify: bool = False) -> Optional[EnglishNameCandidate]:
         """

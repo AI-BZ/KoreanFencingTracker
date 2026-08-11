@@ -5,10 +5,9 @@ Stage 2: Technical Validation (기술적 검증)
 Stage 3: Business Logic Validation (비즈니스 로직 검증)
 """
 
-from typing import List, Dict, Any, Optional, Type, TypeVar
+from typing import List, Dict, Any, Optional, TypeVar
 from pydantic import ValidationError as PydanticValidationError
-from datetime import datetime, date
-from loguru import logger
+from datetime import datetime
 import re
 
 from .schemas import (
@@ -22,7 +21,6 @@ from .schemas import (
     ValidationSeverity,
     Gender,
     Weapon,
-    AgeGroup,
 )
 
 T = TypeVar("T")

@@ -16,12 +16,6 @@ import json
 import os
 
 from .schemas import (
-    PipelineData,
-    PlayerSchema,
-    MatchSchema,
-    EventSchema,
-    CompetitionSchema,
-    RankingSchema,
     ValidationResult,
     ValidationError,
     ValidationSeverity,

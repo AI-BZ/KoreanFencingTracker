@@ -52,9 +52,9 @@ class ValidationResult(BaseModel):
 
 class Weapon(str, Enum):
     """무기 종류"""
-    FOIL = "플뢰레"
-    EPEE = "에페"
-    SABRE = "사브르"
+    FOIL = "foil"
+    EPEE = "epee"
+    SABRE = "sabre"
     UNKNOWN = "unknown"
     
     @classmethod

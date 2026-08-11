@@ -3,78 +3,405 @@
 {% block title %}Korean Fencing Tracker - Player Search{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="/static/css/fencinglab.css">
+<link rel="stylesheet" href="/static/css/fencinglab.css?v=20260603">
 <style>
-    /* Hero - 투명 배경, 테두리 없음 */
+    /* Hero - 좌정렬 스플릿: 카피 + 검색 CTA | 실데이터 스탯.
+       투명 배경, 테두리 없음. 위계는 장식이 아니라 타입 대비로만 */
     .hero {
-        background: transparent !important;
-        border: none !important;
-        color: white;
-        padding: 3rem 0;
-        text-align: center;
+        --fm-hero-rule: rgba(255, 255, 255, 0.14);
+        background: transparent;
+        border: none;
+        border-radius: 0;
+        box-shadow: none;
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+        margin-bottom: 0;
+        color: var(--fm-text-primary);
+        padding: clamp(1.75rem, 4.5vw, 3.25rem) 0 2rem;
+        text-align: left;
+    }
+    .hero-grid {
+        display: grid;
+        grid-template-columns: 1.2fr 0.8fr;
+        gap: clamp(1.75rem, 5vw, 4rem);
+        align-items: end;
     }
     .hero h1 {
-        font-size: 2.5rem;
-        margin-bottom: 0.5rem;
+        font-size: clamp(2rem, 5.4vw, 3.4rem);
+        font-weight: 900;
+        letter-spacing: -0.03em;
+        line-height: 1.12;
+        text-wrap: balance;
+        margin: 0 0 0.7rem;
+        color: var(--fm-text-primary);
+    }
+    .hero h1:lang(ko), .hero h1:lang(ja), .hero h1:lang(zh) {
+        line-height: 1.24;
+        letter-spacing: -0.015em;
+        word-break: keep-all;
     }
     .hero p {
-        opacity: 0.8;
-        font-size: 1.1rem;
+        opacity: 1;
+        color: var(--fm-text-muted);
+        font-size: clamp(0.95rem, 2.2vw, 1.125rem);
+        line-height: 1.55;
+        max-width: 46ch;
+        margin: 0 0 1.6rem;
+        word-break: keep-all;
     }
 
-    /* NOW 배너 - 진행 중인 대회 */
-    .live-competitions {
-        background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
-        padding: 1rem 0;
+    /* 히어로 스탯 패널 - 실데이터(대회/경기/선수). 컴포넌트 .hero-stat-*와 이름 충돌 방지 */
+    .fm-hero-stats {
+        display: flex;
+        flex-direction: column;
+        border-top: 2px solid var(--fm-accent-primary, #c9302c);
+        position: relative;
+    }
+    .fm-hero-stat {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 0.7rem 0;
+        border-bottom: 1px solid var(--fm-hero-rule);
+    }
+    .fm-hero-stat-value {
+        font-size: clamp(1.9rem, 3.6vw, 2.75rem);
+        line-height: 1;
+        color: var(--fm-text-primary);
+        font-variant-numeric: tabular-nums lining-nums;
+    }
+    .fm-hero-stat-label {
+        color: var(--fm-text-muted);
+        white-space: nowrap;
+    }
+
+    /* ============================================================
+       MOTION — 진입 1회 연출 · 스크롤 리빌 · 마이크로 인터랙션
+
+       규칙: CSS 기본 상태 = 최종 상태. 인라인 스크립트가 파싱 시점에
+       :root[data-motion="on"]을 붙였을 때만 초기 상태로 되돌린 뒤 애니메이트한다.
+       스크립트가 죽거나 CDN이 막히거나 reduced-motion이면 속성이 없으므로
+       숨겨지는 것이 하나도 없다. opacity:0을 기본값으로 두지 않는 이유.
+       ============================================================ */
+    @keyframes fmWordIn {
+        from { opacity: 0; transform: translateY(0.42em); filter: blur(5px); }
+        to   { opacity: 1; transform: none; filter: blur(0); }
+    }
+    @keyframes fmWordInLite {
+        from { opacity: 0; transform: translateY(0.3em); }
+        to   { opacity: 1; transform: none; }
+    }
+    @keyframes fmRise {
+        from { opacity: 0; transform: translateY(14px); }
+        to   { opacity: 1; transform: none; }
+    }
+    @keyframes fmRuleDraw {
+        from { transform: scaleX(0); }
+        to   { transform: scaleX(1); }
+    }
+    @keyframes fmBgSettle {
+        from { transform: scale(1.055); }
+        to   { transform: scale(1); }
+    }
+    @keyframes fmDdayPop {
+        from { transform: scale(1.07); }
+        to   { transform: scale(1); }
+    }
+
+    /* 배경이 함께 안착한다 — 진입의 무게중심. 요소 하나짜리 GPU transform */
+    :root[data-motion="on"] .parallax-bg {
+        animation: fmBgSettle 1.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+
+    /* 1) 헤드라인 단어 스태거. 지연은 JS가 --fm-d로 주입하며 누적 상한 0.6s.
+          공백이 없는 ja/zh는 단어가 1개라 통짜 블록으로 자연 동작한다 */
+    :root[data-motion="on"] .hero h1[data-ready="anim"] .hero-word {
+        display: inline-block;
+        animation: fmWordIn 0.62s cubic-bezier(0.16, 1, 0.3, 1) var(--fm-d, 0s) both;
+    }
+    /* 2) 서브텍스트 → 검색창 → 스탯 순 케스케이드 */
+    :root[data-motion="on"] .hero p {
+        animation: fmRise 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.30s both;
+    }
+    :root[data-motion="on"] .hero .player-search {
+        animation: fmRise 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.38s both;
+    }
+    :root[data-motion="on"] .fm-hero-stat {
+        animation: fmRise 0.55s cubic-bezier(0.16, 1, 0.3, 1) 0.52s both;
+    }
+    :root[data-motion="on"] .fm-hero-stat:nth-child(2) { animation-delay: 0.60s; }
+    :root[data-motion="on"] .fm-hero-stat:nth-child(3) { animation-delay: 0.68s; }
+
+    /* 3) 스탯 상단 레드 룰이 좌→우로 그려진다. 2px border는 자리를 그대로 지키고
+          색만 오버레이에 넘기므로 레이아웃은 변하지 않는다 (CLS 0) */
+    :root[data-motion="on"] .fm-hero-stats { border-top-color: transparent; }
+    :root[data-motion="on"] .fm-hero-stats::before {
+        content: '';
+        position: absolute;
+        left: 0; right: 0; top: -2px;
+        height: 2px;
+        background: var(--fm-accent-primary, #c9302c);
+        transform-origin: left center;
+        animation: fmRuleDraw 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.44s both;
+    }
+
+    /* 4) 스크롤 리빌 — 요소당 1회. 스태거 지연은 JS가 인라인 transition-delay로 준다 */
+    :root[data-motion="on"] .fm-reveal {
+        opacity: 0;
+        transform: translateY(18px);
+        transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1),
+                    transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    :root[data-motion="on"] .fm-reveal.is-in {
+        opacity: 1;
+        transform: none;
+    }
+    /* D-day 숫자는 카드가 들어온 직후 아주 짧게만 안착한다 */
+    :root[data-motion="on"] .fm-reveal.is-in .upcoming-card-status .status {
+        animation: fmDdayPop 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+
+    /* 데이터 목록(검색 결과·일정 카드)은 스태거하지 않는다. 사용자가 결과를 기다리는
+       영역이라 순차 등장이 곧 로딩 지연으로 읽힌다. 그룹 전체가 한 번에 짧게 뜬다. */
+    :root[data-motion="on"] .fm-group-fade {
+        animation: fmGroupFade 0.14s ease-out both;
+    }
+    @keyframes fmGroupFade {
+        from { opacity: 0; }
+        to   { opacity: 1; }
+    }
+
+    /* 5) 마이크로 인터랙션 */
+    .search-input {
+        transition: border-color 0.2s ease, box-shadow 0.2s ease,
+                    transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .search-input:focus {
+        transform: translateY(-1px);
+        box-shadow: 0 0 0 4px rgba(201, 48, 44, 0.16);
+    }
+    .event-card {
+        transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .event-card:hover { box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28); }
+
+    /* 모바일: blur를 빼고 이동 거리를 줄이며 배경 스케일은 생략한다 */
+    @media (max-width: 768px) {
+        :root[data-motion="on"] .hero h1[data-ready="anim"] .hero-word {
+            animation-name: fmWordInLite;
+            animation-duration: 0.5s;
+        }
+        :root[data-motion="on"] .parallax-bg { animation: none; }
+        :root[data-motion="on"] .fm-reveal { transform: translateY(12px); }
+    }
+
+    /* reduced-motion에서는 인라인 스크립트가 data-motion을 아예 붙이지 않는다.
+       아래는 로드 후 설정이 바뀌는 경우까지 막는 방어선 — 느린 버전이 아니라 무모션 */
+    @media (prefers-reduced-motion: reduce) {
+        :root[data-motion="on"] .parallax-bg,
+        :root[data-motion="on"] .hero h1[data-ready="anim"] .hero-word,
+        :root[data-motion="on"] .hero p,
+        :root[data-motion="on"] .hero .player-search,
+        :root[data-motion="on"] .fm-hero-stat,
+        :root[data-motion="on"] .fm-reveal,
+        :root[data-motion="on"] .fm-group-fade,
+        :root[data-motion="on"] .fm-reveal.is-in .upcoming-card-status .status {
+            animation: none !important;
+            transition: none !important;
+            opacity: 1 !important;
+            transform: none !important;
+            filter: none !important;
+        }
+        :root[data-motion="on"] .fm-hero-stats {
+            border-top-color: var(--fm-accent-primary, #c9302c) !important;
+        }
+        :root[data-motion="on"] .fm-hero-stats::before { display: none !important; }
+        .search-input:focus { transform: none; }
+    }
+
+    /* ============================================================
+       아이콘 시스템 — Phosphor regular 지오메트리, currentColor 단일 패밀리.
+       크기는 부모 font-size(1em)를 따르며, 필요한 곳에서만 개별 지정한다.
+       ============================================================ */
+    .fm-icon {
+        width: 1em;
+        height: 1em;
+        display: inline-block;
+        vertical-align: -0.14em;
+        flex-shrink: 0;
+        fill: currentColor;
+    }
+
+    /* ============================================================
+       경기 일정 밴드 — 진행 중(LIVE)과 예정 대회를 하나의 태극 네이비
+       풀블리드 밴드에 모은다. 두 상태는 카드 안의 상태 칩으로만 갈린다.
+       competitions.html의 UPCOMING 스트립과 같은 계열이므로 값을 옮길 때
+       양쪽을 함께 볼 것.
+       ============================================================ */
+    .fm-schedule-band {
+        background: linear-gradient(135deg, #1e3a8a 0%, #16306e 100%);
+        padding: 1.5rem 0 1.75rem;
         margin-bottom: 0;
     }
-    .live-header {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 0.5rem;
-        margin-bottom: 0.8rem;
-    }
-    .live-badge {
-        background: white;
-        color: #ee5a24;
-        padding: 0.3rem 0.8rem;
-        border-radius: 20px;
+    .fm-schedule-title {
+        margin: 0 0 1rem;
+        font-size: 0.82rem;
         font-weight: 700;
-        font-size: 0.85rem;
-        animation: pulse 2s infinite;
-        display: flex;
-        align-items: center;
-        gap: 0.4rem;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.78);
     }
-    .live-badge::before {
-        content: '';
-        width: 8px;
-        height: 8px;
-        background: #ee5a24;
-        border-radius: 50%;
-        animation: blink 1s infinite;
+    .fm-schedule-band .live-competitions,
+    .fm-schedule-band .upcoming-competitions {
+        background: none;
+        padding: 0;
+        margin: 0;
     }
+    .fm-schedule-band .upcoming-competitions { margin-top: 1rem; }
+
     @keyframes pulse {
         0%, 100% { transform: scale(1); }
         50% { transform: scale(1.05); }
     }
     @keyframes blink {
         0%, 100% { opacity: 1; }
-        50% { opacity: 0.3; }
+        50% { opacity: 0.25; }
     }
-    .live-title {
-        color: white;
-        font-size: 1.1rem;
-        font-weight: 600;
-    }
-    .live-cards {
+
+    .live-cards,
+    .upcoming-cards {
         display: flex;
         gap: 1rem;
         justify-content: center;
         flex-wrap: wrap;
     }
-    .live-card {
+    .live-card,
+    .upcoming-card {
+        background: rgba(18, 18, 26, 0.95);
+        border-radius: 12px;
+        padding: 0;
+        display: flex;
+        align-items: stretch;
+        cursor: pointer;
+        transition: transform 0.2s, box-shadow 0.2s;
+        text-decoration: none;
+        color: inherit;
+        min-width: 320px;
+        max-width: 450px;
+        overflow: hidden;
+    }
+    .live-card:hover,
+    .upcoming-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.4);
+    }
+    .live-card-icon,
+    .upcoming-card-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 56px;
+        flex-shrink: 0;
+    }
+    .upcoming-card-icon {
+        background: rgba(96, 165, 250, 0.14);
+    }
+    .upcoming-card-icon svg {
+        width: 24px;
+        height: 24px;
+        stroke: #93b4f5;
+        stroke-width: 1.5;
+        fill: none;
+    }
+    /* 진행 중 카드만 레드 틴트 — 표면에서도 상태가 읽히게 */
+    .live-card-icon {
+        background: rgba(201, 48, 44, 0.2);
+        color: #ff9a96;
+    }
+    .live-card-icon .fm-icon { width: 24px; height: 24px; }
+
+    .live-card-info,
+    .upcoming-card-info {
+        flex: 1;
+        padding: 1rem 1.2rem;
+        min-width: 0;
+    }
+    .live-card-info h4,
+    .upcoming-card-info h4 {
+        margin: 0 0 0.3rem 0;
+        font-size: 0.95rem;
+        color: #fff;
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .live-card-info p,
+    .upcoming-card-info p {
+        margin: 0;
+        font-size: 0.8rem;
+        color: rgba(255, 255, 255, 0.62);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .live-card-status,
+    .upcoming-card-status {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 0.8rem 1rem;
+        background: rgba(255, 255, 255, 0.03);
+        min-width: 80px;
+        flex-shrink: 0;
+    }
+    /* LIVE 칩 — 실제 진행 상태이므로 이 페이지에서 유일하게 점멸 도트를 쓴다 */
+    .live-card-status .status-live {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.22rem 0.6rem;
+        border-radius: 999px;
+        background: rgba(201, 48, 44, 0.24);
+        color: #ff9a96;
+        font-size: 0.7rem;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+    }
+    .live-card-status .status-live::before {
+        content: '';
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #ff6b66;
+        animation: blink 1.4s infinite;
+    }
+    /* 스코어보드 숫자: D-day/날짜는 순수 latin이라 콘덴스드 페이스를 요소 전체에 적용.
+       콘덴스드는 좁게 흐르므로 사이즈를 조금 올리고 자간은 양수만 준다. */
+    .upcoming-card-status .status {
+        font-family: var(--fm-font-display);
+        font-weight: 700;
+        font-size: 1.35rem;
+        line-height: 1;
+        letter-spacing: 0.04em;
+        color: #ff8080;
+    }
+    .live-card-status .date,
+    .upcoming-card-status .date {
+        font-family: var(--fm-font-display);
+        font-weight: 600;
+        letter-spacing: 0.01em;
+        font-variant-numeric: lining-nums;
+        font-size: 0.7rem;
+        color: rgba(255, 255, 255, 0.6);
+        margin-top: 0.25rem;
+    }
+
+    /* 내 리그 이벤트 카드 — live-card와 동일한 규격 */
+    .my-league-card {
         background: rgba(255,255,255,0.95);
         border-radius: 12px;
         padding: 1rem 1.5rem;
@@ -87,75 +414,85 @@
         color: inherit;
         min-width: 280px;
     }
-    .live-card:hover {
+    .my-league-card:hover {
         transform: translateY(-3px);
         box-shadow: 0 8px 25px rgba(0,0,0,0.2);
     }
-    .live-card-icon {
-        font-size: 2rem;
+    .ml-card-left { flex-shrink: 0; }
+    .ml-badge {
+        background: #c9302c;
+        color: #fff;
+        font-size: 0.7rem;
+        font-weight: 700;
+        padding: 0.3rem 0.65rem;
+        border-radius: 8px;
+        letter-spacing: 0.3px;
+        white-space: nowrap;
     }
-    .live-card-info h4 {
+    .ml-card-body {
+        flex: 1;
+        min-width: 0;
+    }
+    .ml-card-title {
         margin: 0 0 0.3rem 0;
         font-size: 1rem;
+        font-weight: 700;
         color: #333;
     }
-    .live-card-info p {
+    .ml-detail {
         margin: 0;
         font-size: 0.85rem;
         color: #666;
     }
-    .live-card-status {
+    .ml-podium {
+        display: flex;
+        gap: 0.6rem;
+        flex-wrap: wrap;
+    }
+    .ml-medal {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        font-size: 0.8rem;
+        font-weight: 500;
+        white-space: nowrap;
+    }
+    .ml-medal .fm-icon { width: 0.95rem; height: 0.95rem; }
+    .ml-medal.gold { color: #b8860b; }
+    .ml-medal.silver { color: #6b7280; }
+    .ml-medal.bronze { color: #a0522d; }
+    .ml-card-right {
         margin-left: auto;
-        text-align: right;
-    }
-    .live-card-status .status {
-        font-size: 0.75rem;
-        padding: 0.2rem 0.5rem;
-        border-radius: 10px;
-        font-weight: 600;
-    }
-    .status-live {
-        background: #d4edda;
-        color: #155724;
-    }
-    .status-upcoming {
-        background: #fff3cd;
-        color: #856404;
-    }
-    .live-card-status .date {
-        font-size: 0.75rem;
-        color: #999;
-        margin-top: 0.2rem;
-    }
-    .live-hidden {
-        display: none;
+        font-size: 1.5rem;
+        color: #ccc;
+        flex-shrink: 0;
     }
 
-    /* 선수 검색 - 다크 반투명 */
+    /* 선수 검색 - 히어로의 주 CTA. 카드 크롬 없이 입력창 자체가 위계를 갖는다 */
     .player-search {
-        background: rgba(18, 18, 26, 0.85) !important;
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
-        padding: 2rem;
-        border-radius: 12px;
-        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: transparent;
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+        padding: 0;
+        border-radius: 0;
+        border: none;
         box-shadow: none;
-        margin: 2rem 0;
-    }
-    .player-search h2 {
-        color: white;
+        margin: 0;
+        position: relative;
+        z-index: 1000;
     }
     .search-input-wrapper {
         position: relative;
-        max-width: 500px;
-        margin: 0 auto;
+        max-width: 520px;
+        margin: 0;
     }
     .search-input {
         width: 100%;
-        padding: 1rem 1.5rem;
-        font-size: 1.1rem;
-        border: 1px solid rgba(255, 255, 255, 0.15);
-        border-radius: 30px;
+        height: 56px;
+        padding: 0 1.35rem;
+        font-size: 1.05rem;
+        border: 1px solid rgba(255, 255, 255, 0.22);
+        border-radius: 10px;
         outline: none;
         transition: border-color 0.2s;
         box-sizing: border-box;
@@ -163,11 +500,12 @@
         color: white;
     }
     .search-input::placeholder {
-        color: rgba(255, 255, 255, 0.5);
+        color: rgba(255, 255, 255, 0.62);
     }
     .search-input:focus {
         border-color: #c9302c;
-        box-shadow: 0 0 15px rgba(201, 48, 44, 0.3);
+        outline: 2px solid #c9302c;
+        outline-offset: 2px;
     }
     .search-suggestions {
         position: absolute;
@@ -181,7 +519,7 @@
         max-height: 300px;
         overflow-y: auto;
         display: none;
-        z-index: 100;
+        z-index: 99999;
         box-shadow: 0 4px 15px rgba(0,0,0,0.15);
     }
     .search-suggestions.show {
@@ -226,6 +564,8 @@
         border: 1px solid rgba(255, 255, 255, 0.08);
         box-shadow: none;
         margin: 2rem 0;
+        position: relative;
+        z-index: 1;
     }
     .filter-section h3 {
         margin-bottom: 1.5rem;
@@ -289,17 +629,18 @@
     }
     .btn-search {
         padding: 0.75rem 2rem;
-        background: linear-gradient(135deg, #c9302c, #a02320);
+        background: #c9302c;
         color: white;
         border: none;
         border-radius: 25px;
         cursor: pointer;
         font-size: 1rem;
         font-weight: 600;
-        transition: all 0.2s;
+        transition: background 0.2s, transform 0.2s, box-shadow 0.2s;
         box-shadow: 0 4px 15px rgba(201, 48, 44, 0.3);
     }
     .btn-search:hover {
+        background: #a82824;
         transform: translateY(-2px);
         box-shadow: 0 6px 20px rgba(201, 48, 44, 0.4);
     }
@@ -319,8 +660,8 @@
         transition: all 0.2s;
     }
     .btn-clear:hover {
-        border-color: #dc3545;
-        color: #dc3545;
+        border-color: #c9302c;
+        color: #e04b45;
     }
 
     /* 결과 섹션 */
@@ -474,20 +815,28 @@
     .competition-item:last-child {
         border-bottom: none;
     }
+    .competition-item-meta {
+        font-size: 0.85rem;
+        color: var(--fm-text-muted);
+    }
+    .competition-item-date {
+        text-align: right;
+        color: var(--fm-text-muted);
+    }
 
     /* 로딩 */
     .loading {
         text-align: center;
         padding: 2rem;
-        color: #666;
+        color: var(--fm-text-muted);
     }
     .loading::after {
         content: '';
         display: inline-block;
         width: 20px;
         height: 20px;
-        border: 2px solid #ddd;
-        border-top-color: #007bff;
+        border: 2px solid var(--fm-border-light);
+        border-top-color: #c9302c;
         border-radius: 50%;
         animation: spin 1s linear infinite;
         margin-left: 0.5rem;
@@ -528,18 +877,26 @@
     }
 
     /* 선택된 필터 표시 */
+    .active-filters-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin: 1rem 0;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
     .active-filters {
         display: flex;
         flex-wrap: wrap;
         gap: 0.5rem;
-        margin-bottom: 1rem;
+        flex: 1;
     }
     .active-filter-tag {
         display: inline-flex;
         align-items: center;
         gap: 0.5rem;
         padding: 0.4rem 0.8rem;
-        background: #007bff;
+        background: #1e3a8a;
         color: white;
         border-radius: 20px;
         font-size: 0.85rem;
@@ -552,129 +909,1692 @@
         opacity: 1;
     }
 
+    /* Advanced Search Toggle */
+    .advanced-search-toggle {
+        background: transparent;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: rgba(255, 255, 255, 0.7);
+        padding: 0.4rem 1rem;
+        border-radius: 20px;
+        cursor: pointer;
+        font-size: 0.85rem;
+        white-space: nowrap;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+    }
+    .advanced-search-toggle:hover {
+        border-color: #c9302c;
+        color: #c9302c;
+    }
+    .advanced-search-toggle .toggle-arrow {
+        transition: transform 0.3s;
+        font-size: 0.7rem;
+    }
+    .advanced-search-toggle.expanded .toggle-arrow {
+        transform: rotate(180deg);
+    }
+
+    /* Collapsible Filter Section */
+    .filter-section-collapsible {
+        max-height: 0;
+        overflow: hidden;
+        opacity: 0;
+        transition: opacity 0.18s ease;
+    }
+    .filter-section-collapsible.expanded {
+        max-height: none;
+        opacity: 1;
+    }
+
+    /* Live/Upcoming pinned event cards — 사이드 탭 대신 배경 틴트로 상태 표시 */
+    .event-card-live {
+        background: rgba(201, 48, 44, 0.1);
+        border-color: rgba(201, 48, 44, 0.35);
+        text-decoration: none;
+        color: inherit;
+        display: flex;
+    }
+    .event-card-upcoming {
+        background: rgba(30, 58, 138, 0.14);
+        border-color: rgba(30, 58, 138, 0.4);
+        text-decoration: none;
+        color: inherit;
+        display: flex;
+    }
+    .live-indicator {
+        background: #c9302c;
+        color: white;
+        padding: 0.15rem 0.5rem;
+        border-radius: 10px;
+        font-size: 0.7rem;
+        font-weight: 700;
+        letter-spacing: 0.07em;
+        margin-right: 0.5rem;
+        animation: pulse 2s infinite;
+    }
+    .upcoming-indicator {
+        background: #1e3a8a;
+        color: white;
+        padding: 0.15rem 0.5rem;
+        border-radius: 10px;
+        font-size: 0.7rem;
+        margin-right: 0.5rem;
+    }
+
+    /* Auto-load preference description */
+    .auto-loaded-desc {
+        color: rgba(255, 255, 255, 0.5);
+        font-size: 0.8rem;
+        margin-top: 0.25rem;
+    }
+
+    @media (min-width: 769px) {
+        /* 언어별 헤드라인 길이 차이로 아래 블록이 튀지 않도록 2줄 분량만 확보 (height 금지) */
+        .hero h1 { min-height: 2.24em; }
+        .hero h1:lang(ko), .hero h1:lang(ja), .hero h1:lang(zh) { min-height: 2.48em; }
+    }
+
     @media (max-width: 768px) {
-        .hero h1 { font-size: 1.8rem; }
-        .event-card { flex-direction: column; align-items: flex-start; }
-        .event-date { text-align: left; margin-top: 0.5rem; }
+        .hero-grid { grid-template-columns: 1fr; gap: 1.5rem; align-items: start; }
+        .search-input-wrapper { max-width: none; }
+        .fm-hero-stats { flex-direction: row; }
+        .fm-hero-stat {
+            flex: 1;
+            flex-direction: column;
+            align-items: flex-start;
+            justify-content: flex-start;
+            gap: 0.2rem;
+            padding: 0.6rem 0.75rem 0.6rem 0;
+            border-bottom: none;
+        }
+        .fm-hero-stat + .fm-hero-stat {
+            border-left: 1px solid var(--fm-hero-rule);
+            padding-left: 0.75rem;
+        }
+        .fm-hero-stat-value { font-size: 1.65rem; }
+        /* 검색 결과 카드도 대회 목록과 같은 기준으로 압축한다 */
+        .event-cards { gap: 0.6rem; }
+        .event-card {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.35rem;
+            padding: 0.85rem 1rem;
+        }
+        .event-name { font-size: 1rem; margin-bottom: 0.2rem; }
+        .event-meta { font-size: 0.8rem; }
+        .event-tags { margin-top: 0.4rem; gap: 0.35rem; }
+        .event-date { text-align: left; margin-top: 0; font-size: 0.8rem; }
         .filter-grid { grid-template-columns: 1fr; }
+    }
+
+    /* ==================== LIGHT THEME (Toss-style) ====================
+       !important는 dark-theme.css의 [data-theme="light"] .hero/.player-search
+       규칙이 !important로 선언돼 있어 유지가 필요하다 */
+    [data-theme="light"] .hero {
+        --fm-hero-rule: #e5e8eb;
+        background: transparent !important;
+        border: none !important;
+        color: #191f28 !important;
+        box-shadow: none !important;
+        backdrop-filter: none !important;
+    }
+    [data-theme="light"] .hero h1 {
+        color: #191f28 !important;
+    }
+    [data-theme="light"] .hero p {
+        color: #4e5968 !important;
+        opacity: 1 !important;
+    }
+    [data-theme="light"] .fm-hero-stat-value {
+        color: #191f28;
+    }
+    [data-theme="light"] .fm-hero-stat-label {
+        color: #4e5968;
+    }
+
+    /* Player Search */
+    [data-theme="light"] .player-search {
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        backdrop-filter: none !important;
+    }
+    [data-theme="light"] .search-input {
+        background: #ffffff !important;
+        color: #191f28 !important;
+        border: 1px solid #d1d6db !important;
+    }
+    [data-theme="light"] .search-input::placeholder {
+        color: #6b7280 !important;
+    }
+    [data-theme="light"] .search-input:focus {
+        border-color: #c9302c !important;
+        outline: 2px solid #c9302c;
+        outline-offset: 2px;
+        background: #ffffff !important;
+    }
+
+    /* Event Selection / Filter Section */
+    [data-theme="light"] .filter-section {
+        background: #ffffff !important;
+        border: 1px solid #e5e8eb !important;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.06) !important;
+        backdrop-filter: none !important;
+    }
+    [data-theme="light"] .filter-section h3 {
+        color: #191f28 !important;
+    }
+    [data-theme="light"] .filter-group {
+        background: #f5f5f7 !important;
+        border: 1px solid #e5e8eb !important;
+    }
+    [data-theme="light"] .filter-group label {
+        color: #4e5968 !important;
+    }
+    [data-theme="light"] .filter-btn {
+        background: #ffffff !important;
+        color: #4e5968 !important;
+        border: 1px solid #d1d6db !important;
+    }
+    [data-theme="light"] .filter-btn:hover {
+        border-color: #c9302c !important;
+        color: #c9302c !important;
+        background: rgba(201,48,44,0.04) !important;
+    }
+    [data-theme="light"] .filter-btn.active {
+        background: #c9302c !important;
+        color: #ffffff !important;
+        border-color: #c9302c !important;
+    }
+    [data-theme="light"] .filter-btn.weapon-foil.active { background: #e74c3c !important; border-color: #e74c3c !important; color: #fff !important; }
+    [data-theme="light"] .filter-btn.weapon-epee.active { background: #3498db !important; border-color: #3498db !important; color: #fff !important; }
+    [data-theme="light"] .filter-btn.weapon-sabre.active { background: #2ecc71 !important; border-color: #2ecc71 !important; color: #fff !important; }
+
+    /* Filter Actions */
+    [data-theme="light"] .filter-actions {
+        border-top-color: #e5e8eb !important;
+    }
+    [data-theme="light"] .btn-clear {
+        color: #4e5968 !important;
+        border-color: #d1d6db !important;
+    }
+    [data-theme="light"] .btn-clear:hover {
+        color: #c9302c !important;
+        border-color: #c9302c !important;
+    }
+
+    /* Filter Prompt (empty state) */
+    [data-theme="light"] .filter-prompt {
+        background: #f5f5f7 !important;
+        border: 1px solid #e5e8eb !important;
+        color: #4e5968 !important;
+    }
+    [data-theme="light"] .filter-prompt h4 {
+        color: #191f28 !important;
+    }
+    [data-theme="light"] .filter-prompt p {
+        color: #8b95a1 !important;
+    }
+
+    /* Results */
+    [data-theme="light"] .results-header h3 {
+        color: #191f28 !important;
+    }
+    [data-theme="light"] .results-count {
+        color: #8b95a1 !important;
+    }
+
+    /* Event Cards */
+    [data-theme="light"] .event-card {
+        background: #ffffff !important;
+        border: 1px solid #e5e8eb !important;
+        backdrop-filter: none !important;
+    }
+    [data-theme="light"] .event-card:hover {
+        border-color: #c9302c !important;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.08) !important;
+    }
+    [data-theme="light"] .event-name {
+        color: #191f28 !important;
+    }
+    [data-theme="light"] .event-meta {
+        color: #8b95a1 !important;
+    }
+    [data-theme="light"] .event-date {
+        color: #8b95a1 !important;
+    }
+    [data-theme="light"] .event-year {
+        color: #c9302c !important;
+    }
+
+    /* Competitions Toggle (accordion) */
+    [data-theme="light"] .competitions-toggle {
+        background: #ffffff !important;
+        border: 1px solid #e5e8eb !important;
+        backdrop-filter: none !important;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.06) !important;
+    }
+    [data-theme="light"] .toggle-header {
+        color: #191f28 !important;
+    }
+    [data-theme="light"] .toggle-header:hover {
+        background: #f5f5f7 !important;
+    }
+    [data-theme="light"] .competition-item {
+        color: #191f28 !important;
+        border-bottom-color: #f0f0f5 !important;
+    }
+    [data-theme="light"] .competition-item:hover {
+        background: #f5f5f7 !important;
+    }
+
+    /* Page Buttons */
+    [data-theme="light"] .page-btn {
+        background: #ffffff !important;
+        color: #4e5968 !important;
+        border-color: #d1d6db !important;
+    }
+    [data-theme="light"] .page-btn:hover {
+        border-color: #c9302c !important;
+        color: #c9302c !important;
+    }
+    [data-theme="light"] .page-btn.active {
+        background: #c9302c !important;
+        color: #ffffff !important;
+        border-color: #c9302c !important;
+    }
+
+    /* 경기 일정 카드 - light. 밴드는 두 테마 모두 네이비로 남고 카드만 뒤집힌다
+       (competitions.html의 UPCOMING 스트립과 동일 규칙) */
+    [data-theme="light"] .live-card,
+    [data-theme="light"] .upcoming-card {
+        background: #ffffff;
+        border: 1px solid #e5e8eb;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+    [data-theme="light"] .live-card:hover,
+    [data-theme="light"] .upcoming-card:hover {
+        box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+        border-color: #c9302c;
+    }
+    [data-theme="light"] .upcoming-card-icon {
+        background: rgba(30, 58, 138, 0.08);
+    }
+    [data-theme="light"] .upcoming-card-icon svg {
+        stroke: #1e3a8a;
+    }
+    [data-theme="light"] .live-card-icon {
+        background: rgba(201, 48, 44, 0.09);
+        color: #a82824;
+    }
+    [data-theme="light"] .live-card-info h4,
+    [data-theme="light"] .upcoming-card-info h4 {
+        color: #191f28;
+    }
+    [data-theme="light"] .live-card-info p,
+    [data-theme="light"] .upcoming-card-info p {
+        color: #5f6773;
+    }
+    [data-theme="light"] .live-card-status,
+    [data-theme="light"] .upcoming-card-status {
+        background: #f5f5f7;
+    }
+    [data-theme="light"] .upcoming-card-status .status {
+        color: #c9302c;
+    }
+    [data-theme="light"] .live-card-status .status-live {
+        background: rgba(201, 48, 44, 0.1);
+        color: #a82824;
+    }
+    [data-theme="light"] .live-card-status .status-live::before {
+        background: #c9302c;
+    }
+    [data-theme="light"] .live-card-status .date,
+    [data-theme="light"] .upcoming-card-status .date {
+        color: #5f6773;
+    }
+
+    /* Light theme: Advanced Search Toggle */
+    [data-theme="light"] .advanced-search-toggle {
+        border-color: #d1d6db !important;
+        color: #4e5968 !important;
+    }
+    [data-theme="light"] .advanced-search-toggle:hover {
+        border-color: #c9302c !important;
+        color: #c9302c !important;
+    }
+
+    /* Light theme: Auto-loaded desc */
+    [data-theme="light"] .auto-loaded-desc {
+        color: #8b95a1 !important;
+    }
+
+    /* Light theme: Live/Upcoming pinned cards (배경 틴트) */
+    [data-theme="light"] .event-card-live {
+        background: rgba(201, 48, 44, 0.07) !important;
+        border-color: rgba(201, 48, 44, 0.3) !important;
+    }
+    [data-theme="light"] .event-card-upcoming {
+        background: rgba(30, 58, 138, 0.06) !important;
+        border-color: rgba(30, 58, 138, 0.28) !important;
+    }
+
+    /* ============================================================
+       Non-blocking sport selector (replaces the full-screen wall)
+       Reuses #onboarding-overlay markup + selection logic; only the
+       outer container presentation changes: no dim, no page block.
+       ============================================================ */
+    .onboarding-overlay {
+        position: fixed;
+        inset: auto;
+        right: 24px;
+        bottom: 24px;
+        left: auto;
+        top: auto;
+        z-index: 2400;
+        /* !important beats the light-theme scrim in mobile-ux.css — this sheet
+           is non-blocking, so any container background paints as a stray slab. */
+        background: transparent !important;
+        padding: 0;
+        display: block;
+        visibility: hidden;
+        opacity: 1;
+        pointer-events: none;   /* container never blocks the page */
+    }
+    .onboarding-overlay.visible {
+        display: block;
+        visibility: visible;
+        opacity: 1;
+    }
+    /* The card is the only interactive surface */
+    .onboarding-overlay .onboarding-card {
+        pointer-events: auto;
+        width: 372px;
+        max-width: calc(100vw - 48px);
+        margin: 0;
+        padding: 22px 22px 18px;
+        text-align: left;
+        border-radius: var(--fm-radius-md);
+        background: var(--fm-bg-secondary) !important;
+        border: 1px solid var(--fm-border-light) !important;
+        color: var(--fm-text-primary);
+        transform: translateY(14px) scale(0.985);
+        opacity: 0;
+        transition: transform 0.34s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.28s ease;
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.34), 0 2px 6px rgba(0, 0, 0, 0.22) !important;
+    }
+    [data-theme="light"] .onboarding-overlay .onboarding-card {
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.06) !important;
+    }
+    .onboarding-overlay.visible .onboarding-card {
+        transform: translateY(0) scale(1);
+        opacity: 1;
+    }
+
+    /* Close affordance (persists across both steps) */
+    .fm-sheet-close {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        width: 44px;
+        height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: none;
+        background: transparent;
+        color: inherit;
+        opacity: 0.55;
+        font-size: 1.6rem;
+        line-height: 1;
+        border-radius: var(--fm-radius-sm);
+        cursor: pointer;
+        transition: opacity 0.15s ease, background 0.15s ease;
+        -webkit-tap-highlight-color: transparent;
+        z-index: 2;
+    }
+    .fm-sheet-close:hover { opacity: 1; background: rgba(127, 127, 127, 0.12); }
+    .fm-sheet-close:focus-visible {
+        outline: 2px solid var(--fm-accent-primary, #c9302c);
+        outline-offset: 2px;
+        opacity: 1;
+    }
+    /* Grab handle — mobile bottom-sheet only */
+    .fm-sheet-handle { display: none; }
+
+    /* Mobile: bottom sheet, reachable one-handed */
+    @media (max-width: 768px) {
+        .onboarding-overlay {
+            right: 0;
+            bottom: 0;
+            left: 0;
+            top: auto;
+        }
+        .onboarding-overlay .onboarding-card {
+            width: 100%;
+            max-width: 100%;
+            border-radius: var(--fm-radius-md) var(--fm-radius-md) 0 0;
+            border-bottom: 0 !important;
+            /* clear the fixed bottom nav so the card's own controls stay tappable */
+            padding: 18px 20px calc(72px + env(safe-area-inset-bottom));
+            transform: translateY(100%);
+            box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.34) !important;
+        }
+        [data-theme="light"] .onboarding-overlay .onboarding-card {
+            box-shadow: 0 -8px 26px rgba(0, 0, 0, 0.14) !important;
+        }
+        .onboarding-overlay.visible .onboarding-card {
+            transform: translateY(0) scale(1);
+        }
+        .fm-sheet-handle {
+            display: block;
+            width: 40px;
+            height: 4px;
+            border-radius: 999px;
+            background: currentColor;
+            opacity: 0.22;
+            margin: -6px auto 14px;
+        }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .onboarding-overlay .onboarding-card { transition: opacity 0.2s ease; transform: none; }
+        .onboarding-overlay.visible .onboarding-card { transform: none; }
+    }
+
+    /* ============================================================
+       Sport selector — interior visual language
+       Same tokens as the rest of the page (radius sm for controls,
+       md for the panel, brand red for the selected state). Scoped to
+       #onboarding-overlay so it outranks the legacy !important light
+       overrides in mobile-ux.css / components.css.
+       All class names and IDs are load-bearing for mobile-ux.js.
+       ============================================================ */
+
+    /* Heading block — left-aligned, hero-adjacent hierarchy */
+    #onboarding-overlay .onboarding-title {
+        margin: 0 44px 4px 0;   /* keeps clear of the close button */
+        font-size: 1.125rem;
+        font-weight: 800;
+        line-height: 1.3;
+        letter-spacing: -0.02em;
+        color: var(--fm-text-primary) !important;
+    }
+    #onboarding-overlay .onboarding-subtitle {
+        margin: 0 0 16px;
+        font-size: 0.8125rem;
+        line-height: 1.45;
+        font-weight: 500;
+        color: var(--fm-text-secondary) !important;
+    }
+
+    /* Choice grids */
+    #onboarding-overlay .weapon-gender-grid,
+    #onboarding-overlay .age-group-grid {
+        gap: 8px;
+        margin-bottom: 14px;
+    }
+    #onboarding-overlay .weapon-gender-card,
+    #onboarding-overlay .age-group-choice {
+        display: inline-flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        min-height: 58px;
+        padding: 10px 6px;
+        border: 1px solid var(--fm-border-light) !important;
+        border-radius: var(--fm-radius-sm);
+        background: var(--fm-bg-input) !important;
+        color: var(--fm-text-secondary) !important;
+        box-shadow: none;
+        transform: none;
+        transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    }
+    #onboarding-overlay .age-group-choice {
+        min-height: 48px;
+        font-size: 0.875rem;
+        font-weight: 600;
+    }
+    /* Gender reads as an eyebrow above the weapon name; the 3×2 grid
+       already encodes weapon (column) × gender (row). */
+    #onboarding-overlay .weapon-gender-card .gender-label {
+        font-size: 0.625rem;
+        font-weight: 600;
+        letter-spacing: 0.09em;
+        text-transform: uppercase;
+        opacity: 1;
+        color: var(--fm-text-muted);
+    }
+    #onboarding-overlay .weapon-gender-card .weapon-name {
+        font-size: 0.875rem;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        line-height: 1.2;
+        color: var(--fm-text-primary);
+    }
+
+    #onboarding-overlay .weapon-gender-card:hover,
+    #onboarding-overlay .age-group-choice:hover {
+        border-color: var(--fm-accent-primary) !important;
+        background: rgba(201, 48, 44, 0.08) !important;
+        color: var(--fm-text-primary) !important;
+    }
+    #onboarding-overlay .weapon-gender-card.selected,
+    #onboarding-overlay .age-group-choice.selected {
+        background: var(--fm-accent-primary) !important;
+        border-color: var(--fm-accent-primary) !important;
+        color: #ffffff !important;
+        transform: none;   /* no scale: it clipped inside the tight grid */
+        box-shadow: 0 2px 8px rgba(201, 48, 44, 0.28);
+    }
+    #onboarding-overlay .weapon-gender-card.selected .weapon-name { color: #ffffff; }
+    #onboarding-overlay .weapon-gender-card.selected .gender-label { color: rgba(255, 255, 255, 0.92); }
+    /* Focus ring uses the secondary accent so it never reads as "selected"
+       (selected = solid red fill). Two states, two signals. */
+    #onboarding-overlay .weapon-gender-card:focus-visible,
+    #onboarding-overlay .age-group-choice:focus-visible,
+    #onboarding-overlay .onboarding-cta:focus-visible,
+    #onboarding-overlay .onboarding-skip:focus-visible {
+        outline: 2px solid var(--fm-accent-secondary, #1e3a8a);
+        outline-offset: 2px;
+    }
+
+    /* Step 2 context chip — carries the step-1 pick forward.
+       font-size:0 on the wrapper drops the decorative em-dashes that
+       mobile-ux.js injects around the span. */
+    #onboarding-overlay .onboarding-step2-header {
+        font-size: 0;
+        margin: 0 0 14px;
+        min-height: 24px;
+    }
+    #onboarding-overlay .onboarding-step2-selected {
+        display: inline-flex;
+        align-items: center;
+        height: 24px;
+        padding: 0 10px;
+        border: 1px solid rgba(201, 48, 44, 0.35);
+        border-radius: var(--fm-radius-pill);
+        background: rgba(201, 48, 44, 0.16);
+        color: var(--fm-text-primary) !important;
+        font-size: 0.75rem;
+        font-weight: 700;
+        line-height: 1;
+        white-space: nowrap;
+    }
+
+    /* Primary action + skip */
+    #onboarding-overlay .onboarding-cta {
+        padding: 12px;
+        min-height: 46px;
+        margin-bottom: 4px;
+        border-radius: var(--fm-radius-sm);
+        background: var(--fm-accent-primary);
+        font-size: 0.9375rem;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        transition: background 0.15s ease, opacity 0.15s ease;
+    }
+    #onboarding-overlay .onboarding-cta:not(:disabled):hover {
+        background: var(--fm-accent-primary-hover);
+        opacity: 1;
+    }
+    #onboarding-overlay .onboarding-skip {
+        display: block;
+        margin: 0;
+        padding: 8px 0;
+        min-height: 40px;
+        font-size: 0.8125rem;
+        font-weight: 500;
+        text-align: left;
+        color: var(--fm-text-muted) !important;
+    }
+    #onboarding-overlay .onboarding-skip:hover {
+        color: var(--fm-text-secondary) !important;
+        text-decoration: underline;
+    }
+
+    /* Narrow phones: 3×2 → 2×3, matching mobile-ux.css's breakpoint */
+    @media (max-width: 320px) {
+        #onboarding-overlay .weapon-gender-grid { grid-template-columns: 1fr 1fr; }
+    }
+
+    /* Persistent opener chip near the search/filter area */
+    .fm-sport-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.5rem 0.95rem;
+        min-height: 40px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        background: rgba(255, 255, 255, 0.06);
+        color: rgba(255, 255, 255, 0.9);
+        font-size: 0.85rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+        -webkit-tap-highlight-color: transparent;
+    }
+    .fm-sport-chip:hover {
+        border-color: var(--fm-accent-primary, #c9302c);
+        background: rgba(201, 48, 44, 0.12);
+        transform: translateY(-1px);
+    }
+    .fm-sport-chip:focus-visible {
+        outline: 2px solid var(--fm-accent-primary, #c9302c);
+        outline-offset: 2px;
+    }
+    .fm-sport-chip .fm-sport-chip-icon { font-size: 0.95rem; }
+    [data-theme="light"] .fm-sport-chip {
+        border-color: #e5e8eb;
+        background: #fff;
+        color: #4e5968;
+    }
+    [data-theme="light"] .fm-sport-chip:hover {
+        border-color: var(--fm-accent-primary, #c9302c);
+        background: rgba(201, 48, 44, 0.05);
+        color: #191f28;
+    }
+
+    /* Quiet text link that reopens the selector, sitting in the ranking-preview
+       header. The whole preview section is hidden until preferences exist, so
+       the link never shows to a user who has not onboarded. */
+    .fm-prefs-edit {
+        margin-left: auto;
+        padding: 0.25rem 0.1rem;
+        border: 0;
+        background: none;
+        color: var(--fm-text-muted, #8b95a1);
+        font-family: inherit;
+        font-size: 0.78rem;
+        font-weight: 600;
+        text-decoration: underline;
+        text-underline-offset: 3px;
+        cursor: pointer;
+        -webkit-tap-highlight-color: transparent;
+    }
+    .fm-prefs-edit:hover {
+        color: var(--fm-accent-primary, #c9302c);
+    }
+    .fm-prefs-edit:focus-visible {
+        outline: 2px solid var(--fm-accent-primary, #c9302c);
+        outline-offset: 2px;
+        border-radius: 4px;
+    }
+    [data-theme="light"] .fm-prefs-edit {
+        color: #6b7684;
+    }
+
+    /* Friendly events error / empty states (reuse .filter-prompt theming) */
+    .events-retry { margin-top: 1.25rem; }
+
+    /* ============================================================
+       선발 포인트 — 비대칭 스플릿. 좌(꿈나무, 레드)가 주, 우(청소년 대표,
+       네이비)가 부. 두 패널이 같은 크기·같은 구조로 반복되지 않게 한다.
+       ============================================================ */
+    .selection-banners {
+        display: grid;
+        grid-template-columns: 1.6fr 1fr;
+        gap: 1rem;
+        margin: 2rem 0;
+        align-items: stretch;
+    }
+    .selection-card {
+        display: flex;
+        flex-direction: column;
+        border-radius: 12px;
+        color: #fff;
+        text-decoration: none;
+        transition: transform 0.18s ease, box-shadow 0.18s ease;
+    }
+    .selection-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+    }
+    .selection-card:focus-visible {
+        outline: 2px solid #fff;
+        outline-offset: 3px;
+    }
+    .selection-card--youth {
+        background: #c9302c;
+        padding: 2.25rem 2rem;
+    }
+    .selection-card--national {
+        background: #1e3a8a;
+        padding: 1.5rem 1.4rem;
+        justify-content: center;
+    }
+    .selection-card-icon {
+        color: rgba(255, 255, 255, 0.85);
+        margin-bottom: 0.85rem;
+    }
+    .selection-card--youth .selection-card-icon .fm-icon { width: 2.1rem; height: 2.1rem; }
+    .selection-card--national .selection-card-icon { margin-bottom: 0.6rem; }
+    .selection-card--national .selection-card-icon .fm-icon { width: 1.4rem; height: 1.4rem; }
+    .selection-card h3 {
+        margin: 0 0 0.6rem;
+        font-size: 1.6rem;
+        font-weight: 800;
+        line-height: 1.2;
+        letter-spacing: -0.02em;
+        color: #fff;
+    }
+    .selection-card h4 {
+        margin: 0 0 0.4rem;
+        font-size: 1.05rem;
+        font-weight: 700;
+        line-height: 1.3;
+        letter-spacing: -0.01em;
+        color: #fff;
+    }
+    .selection-card p {
+        margin: 0 0 1.5rem;
+        font-size: 0.95rem;
+        line-height: 1.55;
+        color: rgba(255, 255, 255, 0.92);   /* 레드 패널 위 본문 4.5:1 확보 */
+    }
+    .selection-card--national p {
+        margin-bottom: 1rem;
+        font-size: 0.85rem;
+        color: rgba(255, 255, 255, 0.88);
+    }
+    /* 주 CTA: 채워진 흰 버튼 / 부 CTA: 밑줄 링크 — 위계를 형태로 구분 */
+    .selection-cta {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        margin-top: auto;
+        align-self: flex-start;
+        padding: 0.7rem 1.4rem;
+        border-radius: 999px;
+        background: #fff;
+        color: #a82824;
+        font-weight: 700;
+        font-size: 0.92rem;
+        transition: background 0.18s ease, color 0.18s ease;
+    }
+    .selection-card--youth:hover .selection-cta {
+        background: #2b0f0e;
+        color: #fff;
+    }
+    .selection-cta--quiet {
+        padding: 0;
+        border-radius: 0;
+        background: none;
+        color: #fff;
+        font-size: 0.85rem;
+        font-weight: 600;
+        text-decoration: underline;
+        text-underline-offset: 4px;
+    }
+    .selection-card--national:hover .selection-cta--quiet {
+        background: none;
+        color: rgba(255, 255, 255, 0.82);
+    }
+    .selection-cta .fm-icon { width: 0.9em; height: 0.9em; transform: rotate(-90deg); }
+    @media (max-width: 720px) {
+        .selection-banners { grid-template-columns: 1fr; }
+        .selection-card--youth { padding: 1.75rem 1.4rem; }
+        .selection-card h3 { font-size: 1.35rem; }
+    }
+
+    /* 네이비 밴드 위에서는 내 리그 카드도 대회 카드와 같은 표면을 쓴다.
+       라이브/예정 두 리스트 모두에 붙으므로 선택자를 함께 유지할 것 */
+    .live-cards .my-league-card,
+    .upcoming-cards .my-league-card {
+        background: rgba(18, 18, 26, 0.95);
+    }
+    [data-theme="light"] .live-cards .my-league-card,
+    [data-theme="light"] .upcoming-cards .my-league-card {
+        background: #ffffff;
+        border: 1px solid #e5e8eb;
+    }
+    .live-cards .ml-card-title,
+    .upcoming-cards .ml-card-title { color: #fff; }
+    .live-cards .ml-detail,
+    .upcoming-cards .ml-detail { color: rgba(255, 255, 255, 0.62); }
+    .live-cards .ml-card-right,
+    .upcoming-cards .ml-card-right { color: rgba(255, 255, 255, 0.35); }
+    [data-theme="light"] .live-cards .ml-card-title,
+    [data-theme="light"] .upcoming-cards .ml-card-title { color: #191f28; }
+    [data-theme="light"] .live-cards .ml-detail,
+    [data-theme="light"] .upcoming-cards .ml-detail { color: #5f6773; }
+    [data-theme="light"] .live-cards .ml-card-right,
+    [data-theme="light"] .upcoming-cards .ml-card-right { color: #8b95a1; }
+    .live-cards .ml-medal.gold,
+    .upcoming-cards .ml-medal.gold { color: var(--fm-medal-gold, #b8860b); }
+    .live-cards .ml-medal.silver,
+    .upcoming-cards .ml-medal.silver { color: var(--fm-medal-silver, #6b7280); }
+    .live-cards .ml-medal.bronze,
+    .upcoming-cards .ml-medal.bronze { color: var(--fm-medal-bronze, #a0522d); }
+    [data-theme="light"] .live-cards .ml-medal.gold,
+    [data-theme="light"] .upcoming-cards .ml-medal.gold { color: #8a6410; }
+    [data-theme="light"] .live-cards .ml-medal.silver,
+    [data-theme="light"] .upcoming-cards .ml-medal.silver { color: #5b6270; }
+    [data-theme="light"] .live-cards .ml-medal.bronze,
+    [data-theme="light"] .upcoming-cards .ml-medal.bronze { color: #8a4520; }
+
+    /* ============================================================
+       팔로우 선수 — 보더로만 구분되는 칩 스트립. 목록이 비면 섹션 전체가
+       사라진다(mobile-ux.js가 .has-follows를 토글, 기본은 display:none).
+       ============================================================ */
+    #followedPlayersSection.followed-players-section {
+        background: none;
+        border: 0;
+        border-radius: 0;
+        padding: 0;
+        margin-bottom: 1.5rem;
+    }
+    .fm-follow-strip {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem 1.1rem;
+        flex-wrap: wrap;
+        padding: 0.9rem 0;
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .fm-follow-strip .followed-players-title {
+        margin-bottom: 0;
+        flex-shrink: 0;
+    }
+    .fm-follow-strip .followed-players-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+    .fm-follow-strip .followed-player-chip { margin: 0; }
+    [data-theme="light"] .fm-follow-strip {
+        border-top-color: #e5e8eb;
+        border-bottom-color: #e5e8eb;
+    }
+    [data-theme="light"] .fm-follow-strip .followed-players-title { color: #6b7684; }
+
+    /* ============================================================
+       아이콘 배치 — 기존 이모지 자리를 그대로 넘겨받되 크기/색만 조정
+       ============================================================ */
+    .ranking-preview-trophy,
+    .ranking-preview-hint-icon {
+        display: inline-flex;
+        align-items: center;
+        color: #f0c040;               /* 미리보기 타이틀과 같은 톤 */
+    }
+    .fm-sport-chip .fm-sport-chip-icon {
+        display: inline-flex;
+        align-items: center;
+        font-size: 1rem;
+    }
+    .filter-prompt-icon {
+        display: flex;
+        justify-content: center;
+        color: rgba(255, 255, 255, 0.45);
+        margin-bottom: 1rem;
+    }
+    .filter-prompt-icon .fm-icon { width: 2.5rem; height: 2.5rem; }
+    .filter-prompt-icon--warn { color: #e0736f; }
+    [data-theme="light"] .filter-prompt-icon { color: #7b8592; }
+    [data-theme="light"] .filter-prompt-icon--warn { color: #c9302c; }
+    /* 열림 상태에서 캐럿을 뒤집는 기존 토글 규칙은 래퍼 span에 그대로 걸린다 */
+    .advanced-search-toggle .toggle-arrow,
+    .toggle-header .toggle-icon {
+        display: inline-flex;
+        align-items: center;
+    }
+    .advanced-search-toggle .toggle-arrow .fm-icon { width: 0.85rem; height: 0.85rem; }
+    .toggle-header .toggle-icon .fm-icon { width: 1.1rem; height: 1.1rem; }
+
+    /* 선호 리그 폴백 스트립 — display는 JS가 제어하므로 정렬만 CSS로 */
+    .fm-prefs-fallback { text-align: right; }
+
+    /* 검색 제안: 결과 없음 */
+    .suggestion-empty { color: var(--fm-text-muted, #8b95a1); }
+
+    /* ==================================================================
+       홈 하단 — FencingLab 샘플 + Analytics 티저 (2026-08-06)
+
+       FencingLab은 개편 중이라 진입점을 닫아 뒀다. 남은 데모 카드는 "샘플 화면"
+       이라는 것만 알리는 정적 요소이므로, 눌릴 수 있어 보이게 만드는 hover 이동과
+       글로우를 걷어낸다 (누를 수 있어 보이는데 안 눌리는 게 가장 나쁜 상태).
+       ================================================================== */
+    .fl-demo-section--sample { padding-bottom: 2rem; }
+
+    .fl-demo-card--static { cursor: default; }
+
+    /* hover는 rest와 완전히 같아야 한다. fencinglab.css의 hover 규칙이 테마별로
+       따로 있으므로(0,3,0) 여기서도 테마별로 같은 특이도로 되돌린다. */
+    .fl-demo-card--static:hover {
+        transform: none;
+        box-shadow: none;
+        border-color: var(--fl-border);
+    }
+
+    /* 각 테마의 rest 값과 정확히 같아야 한다:
+       dark  → dark-theme.css의 [data-theme="dark"] .fl-demo-card
+       light → fencinglab.css의 [data-theme="light"] .fl-demo-card */
+    [data-theme="dark"] .fl-demo-card--static:hover {
+        transform: none;
+        box-shadow: none;
+        border-color: rgba(255, 255, 255, 0.08);
+    }
+
+    [data-theme="light"] .fl-demo-card--static:hover {
+        transform: none;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+        border-color: #e5e8eb;
+    }
+
+    .fl-sample-flag {
+        margin-bottom: 0.85rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+
+    /* Analytics 티저 — 링크 없는 순수 예고.
+       차트 이미지가 다크 배경이라 프레임은 두 테마 모두 다크로 고정한다. */
+    .fm-analytics-teaser {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 1rem clamp(1rem, 4vw, 2rem) 4rem;
+    }
+
+    .fm-analytics-teaser__head {
+        max-width: 44rem;
+        margin: 0 auto 2rem;
+        text-align: center;
+    }
+
+    .fm-analytics-teaser__flag { letter-spacing: 0.06em; }
+
+    .fm-analytics-teaser__head h2 {
+        margin: 0.85rem 0 0;
+        font-size: clamp(1.3rem, 3.2vw, 1.9rem);
+        font-weight: 800;
+        letter-spacing: -0.02em;
+        line-height: 1.25;
+        color: var(--fm-text-primary);
+    }
+
+    .fm-analytics-teaser__head p {
+        margin: 0.65rem 0 0;
+        font-size: 0.95rem;
+        line-height: 1.65;
+        color: var(--fm-text-secondary);
+    }
+
+    .fm-analytics-teaser__grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
+        gap: 1.5rem;
+    }
+
+    .fm-analytics-shot {
+        margin: 0;
+        min-width: 0;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        border-radius: var(--fm-radius-md);
+        background: #12131a;
+        box-shadow: 0 12px 32px rgba(10, 10, 24, 0.20);
+    }
+
+    .fm-analytics-shot img {
+        display: block;
+        width: 100%;
+        height: auto;
+        aspect-ratio: 614 / 300;
+    }
+
+    .fm-analytics-shot figcaption {
+        padding: 0.95rem 1.1rem 1.1rem;
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .fm-analytics-shot__title {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 0.75rem;
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: #e6e7f0;
+    }
+
+    .fm-analytics-shot__score {
+        flex: none;
+        font-size: 1.4rem;
+        font-weight: 700;
+        color: #ffffff;
+    }
+
+    .fm-analytics-shot__stats {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0.75rem;
+        margin: 0.9rem 0 0;
+    }
+
+    .fm-analytics-shot__stats > div { min-width: 0; }
+
+    .fm-analytics-shot__stats dt {
+        margin: 0;
+        font-size: 0.66rem;
+        line-height: 1.35;
+        letter-spacing: 0.03em;
+        color: #9195a8;
+        overflow-wrap: anywhere;
+    }
+
+    .fm-analytics-shot__stats dd {
+        margin: 0.25rem 0 0;
+        font-size: 1.15rem;
+        line-height: 1.1;
+        color: #f1f2f8;
     }
 </style>
 {% endblock %}
 
 {% block content %}
+<!-- Onboarding Overlay (first visit) -->
+<div class="onboarding-overlay" id="onboarding-overlay" role="dialog" aria-modal="false" aria-label="{{ i18n.common.mobile.select_category|default('나의 종목을 선택하세요') }}">
+    <div class="onboarding-card">
+        <div class="fm-sheet-handle" aria-hidden="true"></div>
+        <button type="button" class="fm-sheet-close" aria-label="{{ i18n.common.common.close|default('닫기') }}" onclick="dismissSportSheet()">&times;</button>
+        <!-- Step 1: Weapon + Gender (3×2 grid) -->
+        <div class="onboarding-step active" id="onboarding-step1">
+            <h2 class="onboarding-title" id="onboarding-title"
+                data-copy-fresh="{{ i18n.common.mobile.welcome_title|default('FencingMind에 오신 걸 환영합니다!') }}"
+                data-copy-return="{{ _t('선호 리그 변경') }}">{{ i18n.common.mobile.welcome_title|default('FencingMind에 오신 걸 환영합니다!') }}</h2>
+            <p class="onboarding-subtitle" id="onboarding-subtitle"
+               data-copy-fresh="{{ i18n.common.mobile.select_category|default('나의 종목을 선택하세요') }}"
+               data-copy-return="{{ _t('언제든 다시 바꿀 수 있습니다') }}">{{ i18n.common.mobile.select_category|default('나의 종목을 선택하세요') }}</p>
+            <div class="weapon-gender-grid">
+                <button type="button" class="weapon-gender-card" onclick="selectWeaponGender(this,'foil','남')">
+                    <span class="gender-label">{{ i18n.common.gender.male|default('Men') }}</span>
+                    <span class="weapon-name">{{ i18n.common.weapons.foil|default('Foil') }}</span>
+                </button>
+                <button type="button" class="weapon-gender-card" onclick="selectWeaponGender(this,'epee','남')">
+                    <span class="gender-label">{{ i18n.common.gender.male|default('Men') }}</span>
+                    <span class="weapon-name">{{ i18n.common.weapons.epee|default('Epee') }}</span>
+                </button>
+                <button type="button" class="weapon-gender-card" onclick="selectWeaponGender(this,'sabre','남')">
+                    <span class="gender-label">{{ i18n.common.gender.male|default('Men') }}</span>
+                    <span class="weapon-name">{{ i18n.common.weapons.sabre|default('Sabre') }}</span>
+                </button>
+                <button type="button" class="weapon-gender-card" onclick="selectWeaponGender(this,'foil','여')">
+                    <span class="gender-label">{{ i18n.common.gender.female|default('Women') }}</span>
+                    <span class="weapon-name">{{ i18n.common.weapons.foil|default('Foil') }}</span>
+                </button>
+                <button type="button" class="weapon-gender-card" onclick="selectWeaponGender(this,'epee','여')">
+                    <span class="gender-label">{{ i18n.common.gender.female|default('Women') }}</span>
+                    <span class="weapon-name">{{ i18n.common.weapons.epee|default('Epee') }}</span>
+                </button>
+                <button type="button" class="weapon-gender-card" onclick="selectWeaponGender(this,'sabre','여')">
+                    <span class="gender-label">{{ i18n.common.gender.female|default('Women') }}</span>
+                    <span class="weapon-name">{{ i18n.common.weapons.sabre|default('Sabre') }}</span>
+                </button>
+            </div>
+            <button type="button" class="onboarding-skip" onclick="skipOnboarding()">{{ i18n.common.mobile.skip|default('건너뛰기') }}</button>
+        </div>
+
+        <!-- Step 2: Age Group (2×2 grid) -->
+        <div class="onboarding-step" id="onboarding-step2">
+            <h2 class="onboarding-title">{{ i18n.common.mobile.select_league|default('리그를 선택하세요') }}</h2>
+            <!-- Progress context: shows the weapon/gender picked in step 1.
+                 mobile-ux.js fills this with "&mdash; <span class=onboarding-step2-selected>…</span> &mdash;";
+                 the decorative dashes are suppressed via font-size:0 on the wrapper. -->
+            <div class="onboarding-step2-header" id="onboarding-step2-label"></div>
+            <div class="age-group-grid">
+                <button type="button" class="age-group-choice" onclick="selectAgeGroup(this,'elementary')">{{ i18n.common.mobile.league_elementary|default('초등부') }}</button>
+                <button type="button" class="age-group-choice" onclick="selectAgeGroup(this,'middle_school')">{{ i18n.common.mobile.league_middle|default('중등부') }}</button>
+                <button type="button" class="age-group-choice" onclick="selectAgeGroup(this,'high_school')">{{ i18n.common.mobile.league_high|default('고등부') }}</button>
+                <button type="button" class="age-group-choice" onclick="selectAgeGroup(this,'senior')">{{ i18n.common.mobile.league_senior|default('일반부') }}</button>
+            </div>
+            <button type="button" class="onboarding-cta" id="onboarding-cta" onclick="completeOnboarding()" disabled>{{ i18n.common.mobile.start|default('시작하기') }} &rarr;</button>
+            <button type="button" class="onboarding-skip" onclick="skipOnboarding()">{{ i18n.common.mobile.skip_age|default('건너뛰기 - 전체 보기') }}</button>
+        </div>
+    </div>
+</div>
+
 <div class="hero">
     <div class="container">
-        <h1>{{ i18n.common.site.title|default('Korean Fencing Tracker') }}</h1>
-        <p>{{ i18n.common.site.description|default('Track and analyze your fencing competition records') }}</p>
+        <div class="hero-grid">
+            <div class="hero-copy">
+                <h1 id="hero-headline">{{ _t("이름 하나로 펜싱 기록 전부 확인하세요") }}</h1>
+                <p>{{ _t("선수 이름으로 검색하면 대회 결과, 랭킹, 상대 전적까지 바로 확인할 수 있습니다") }}</p>
+
+                <!-- Player Search: 히어로의 주 CTA -->
+                <div class="player-search">
+                    <div class="search-input-wrapper">
+                        <input type="text" class="search-input" id="player-search"
+                               aria-label="{{ i18n.common.home.player_search|default('Player Search') }}"
+                               placeholder="{{ i18n.common.home.player_search_placeholder|default('Enter player name...') }}" autocomplete="off">
+                        <div class="search-suggestions" id="search-suggestions"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 실데이터 스탯: /api/status로 갱신, 실패 시 마크업의 폴백값 유지 -->
+            {# 히어로 스탯 라벨은 개수를 세는 복수형이라 공용 키를 쓰지 않는다.
+               _t("대회")/_t("선수")는 표 헤더용 단수(Competition/Player)이고,
+               _t("경기")는 "12 bouts"처럼 숫자 뒤에 붙는 카운터 접미사(" bouts")다. #}
+            {% set _stat_labels = {
+                'ko': ['대회', '경기', '선수'],
+                'en': ['Competitions', 'Bouts', 'Players'],
+                'fr': ['Compétitions', 'Assauts', 'Tireurs'],
+                'it': ['Competizioni', 'Assalti', 'Schermitori'],
+                'ja': ['大会', '試合', '選手'],
+                'zh': ['赛事', '比赛', '选手'],
+                'tr': ['Yarışmalar', 'Maçlar', 'Sporcular']
+            } %}
+            {% set stat_label = _stat_labels.get(lang|default('ko'), _stat_labels['en']) %}
+            <div class="fm-hero-stats">
+                <div class="fm-hero-stat">
+                    <span class="fm-hero-stat-value fm-num" id="hero-stat-competitions">148</span>
+                    <span class="fm-hero-stat-label fm-label">{{ stat_label[0] }}</span>
+                </div>
+                <div class="fm-hero-stat">
+                    <span class="fm-hero-stat-value fm-num" id="hero-stat-matches">51,848</span>
+                    <span class="fm-hero-stat-label fm-label">{{ stat_label[1] }}</span>
+                </div>
+                <div class="fm-hero-stat">
+                    <span class="fm-hero-stat-value fm-num" id="hero-stat-players">5,320</span>
+                    <span class="fm-hero-stat-label fm-label">{{ stat_label[2] }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+(function () {
+    var root = document.documentElement;
+    var reduce = false;
+    try { reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+    // 이 한 줄이 모든 모션 CSS의 스위치다. 붙지 않으면 페이지는 정적인 최종 상태 그대로.
+    var motion = !reduce;
+    if (motion) root.setAttribute('data-motion', 'on');
+
+    /* ---------- 헤드라인 단어 스태거 ----------
+       공백이 없는 로케일(ja/zh)은 단어가 1개라 통짜 블록 페이드업이 된다. */
+    var h = document.getElementById('hero-headline');
+    if (motion && h) {
+        var text = (h.textContent || '').trim();
+        var words = text ? text.split(/\s+/) : [];
+        if (words.length) {
+            var frag = document.createDocumentFragment();
+            for (var i = 0; i < words.length; i++) {
+                var span = document.createElement('span');
+                span.className = 'hero-word';
+                span.textContent = words[i];
+                // 누적 상한 0.6s — 헤드라인이 긴 로케일에서도 진입이 늘어지지 않는다
+                span.style.setProperty('--fm-d', Math.min(i * 0.04, 0.6) + 's');
+                frag.appendChild(span);
+                if (i < words.length - 1) frag.appendChild(document.createTextNode(' '));
+            }
+            h.textContent = '';
+            h.appendChild(frag);
+            h.setAttribute('data-ready', 'anim');
+        }
+    }
+
+    /* ---------- 스탯 카운트업 ----------
+       카운트업은 페이지당 딱 한 번만 돈다. 히어로 진입(0.52s)까지가 /api/status를
+       기다리는 창이고, 그 안에 오면 실제값으로 센다. 늦게 오면 진행 중인 카운트의
+       목표만 갈아끼우거나(재시작 아님) 연출 없이 숫자만 교체한다.
+       예전에는 폴백값으로 한 번, 응답 후 또 한 번 세서 숫자가 두 번 움직였다 —
+       서버가 느린 날에는 20초 뒤에 다시 움직여 "끊긴다"는 인상을 줬다. */
+    var STAT_IDS = { competitions: 'hero-stat-competitions', matches: 'hero-stat-matches', players: 'hero-stat-players' };
+    var current = {};
+    var running = {};      // el.id → 카운트 rAF 루프가 도는 중인가
+    var animTarget = {};   // el.id → 그 루프가 향하는 목표(최신값이 이긴다)
+
+    // 최종값이 차지할 폭을 먼저 확보해 카운트 도중 자리가 흔들리지 않게 한다
+    function reserveWidth(el, target) {
+        var prev = el.textContent;
+        el.textContent = target.toLocaleString();
+        var w = el.getBoundingClientRect().width;
+        el.textContent = prev;
+        if (w) {
+            var now = parseFloat(el.style.minWidth) || 0;
+            if (w > now) el.style.minWidth = Math.ceil(w) + 'px';
+        }
+    }
+
+    function countTo(el, target) {
+        if (!el || !isFinite(target) || target <= 0) return;
+        animTarget[el.id] = target;
+        if (!motion) { current[el.id] = target; el.textContent = target.toLocaleString(); return; }
+        reserveWidth(el, target);
+        var from = current[el.id] != null ? current[el.id] : 0;
+        if (from === target) { el.textContent = target.toLocaleString(); return; }
+        if (running[el.id]) return;   // 이미 도는 루프가 새 목표를 읽는다 — 재시작하지 않는다
+        running[el.id] = true;
+        var t0 = 0;
+        var DUR = 1100;
+        function step(ts) {
+            if (!t0) t0 = ts;
+            var p = Math.min((ts - t0) / DUR, 1);
+            var eased = 1 - Math.pow(1 - p, 4);
+            var goal = animTarget[el.id];
+            var v = p < 1 ? Math.round(from + (goal - from) * eased) : goal;
+            current[el.id] = v;
+            el.textContent = v.toLocaleString();
+            if (p < 1) requestAnimationFrame(step);
+            else running[el.id] = false;
+        }
+        requestAnimationFrame(step);
+    }
+
+    var fallbackTargets = {};
+    Object.keys(STAT_IDS).forEach(function (key) {
+        var el = document.getElementById(STAT_IDS[key]);
+        if (!el) return;
+        var n = Number((el.textContent || '').replace(/[^0-9]/g, ''));
+        if (isFinite(n) && n > 0) fallbackTargets[key] = n;
+    });
+
+    var apiStats = null;   // /api/status 응답 (도착 전 null)
+    var started = false;   // 카운트업이 이미 시작됐는가
+
+    function targetFor(key) {
+        if (apiStats) {
+            var n = Number(apiStats[key]);
+            if (isFinite(n) && n > 0) return n;
+        }
+        return fallbackTargets[key];
+    }
+
+    // 유일한 시작 지점. 이 시점에 응답이 와 있으면 실제값으로, 아니면 폴백값으로 센다.
+    function startCount() {
+        if (started) return;
+        started = true;
+        Object.keys(fallbackTargets).forEach(function (key) {
+            countTo(document.getElementById(STAT_IDS[key]), targetFor(key));
+        });
+    }
+
+    // 늦게 도착한 실제값 — 두 번째 애니메이션은 만들지 않는다.
+    // 카운트가 도는 중이면 목표만 갈아끼우고, 끝났으면 숫자만 조용히 바꾼다.
+    // 폴백값과 실제값이 같으면(정상 상태) 아무 일도 일어나지 않는다.
+    function adoptLate() {
+        Object.keys(STAT_IDS).forEach(function (key) {
+            var el = document.getElementById(STAT_IDS[key]);
+            if (!el) return;
+            var n = targetFor(key);
+            if (!isFinite(n) || n <= 0) return;
+            reserveWidth(el, n);
+            if (running[el.id]) { animTarget[el.id] = n; return; }
+            if (current[el.id] === n) return;
+            current[el.id] = n;
+            animTarget[el.id] = n;
+            el.textContent = n.toLocaleString();
+        });
+    }
+
+    if (motion) {
+        // 폭을 먼저 잡아둔 뒤 0으로 되돌린다. 스탯 자체는 0.52s까지 아직 안 보인다.
+        Object.keys(fallbackTargets).forEach(function (key) {
+            var el = document.getElementById(STAT_IDS[key]);
+            reserveWidth(el, fallbackTargets[key]);
+            current[el.id] = 0;
+            el.textContent = '0';
+        });
+        setTimeout(startCount, 520);
+    } else {
+        // 무모션: 마크업의 폴백값이 이미 최종 상태다. 실제값이 오면 조용히 교체된다.
+        started = true;
+        Object.keys(fallbackTargets).forEach(function (key) {
+            var el = document.getElementById(STAT_IDS[key]);
+            if (el) current[el.id] = fallbackTargets[key];
+        });
+    }
+
+    fetch('/api/status').then(function (res) {
+        return res.ok ? res.json() : null;
+    }).then(function (data) {
+        if (!data) return;
+        apiStats = data;
+        // 아직 시작 전이면 startCount()가 실제값을 쓴다. 이미 시작했으면 조용히 반영.
+        if (started) adoptLate();
+    }).catch(function () { /* 폴백값 유지 */ });
+
+    /* ---------- 스크롤 리빌 ----------
+       .fm-reveal          → 요소 자신이 1회 등장
+       [data-fm-stagger]   → 직계 자식들이 40ms 간격으로 순차 등장 (프로모 배너 전용.
+                             검색 결과·일정 카드 같은 데이터 목록에는 쓰지 않는다)
+       엔진은 motion.dev inView가 준비되면 그쪽, 아니면 네이티브 IntersectionObserver.
+       scroll 이벤트는 쓰지 않는다. */
+    var engine = null;
+    var pending = [];
+    var io = null;
+    var hasIO = typeof IntersectionObserver === 'function';
+
+    function markIn(el, delayMs) {
+        if (!el || el.classList.contains('is-in')) return;
+        if (delayMs) el.style.transitionDelay = delayMs + 'ms';
+        el.classList.add('is-in');
+    }
+
+    function ensureIO() {
+        if (io) return io;
+        io = new IntersectionObserver(function (entries) {
+            entries.forEach(function (e) {
+                if (e.isIntersecting) {
+                    io.unobserve(e.target);   // 재진입 시 반복하지 않는다
+                    markIn(e.target, Number(e.target.getAttribute('data-fm-delay')) || 0);
+                } else if (e.boundingClientRect.bottom < 0) {
+                    io.unobserve(e.target);
+                    settleNow(e.target);      // 이미 지나친 위치라면 연출 없이 확정
+                }
+            });
+        }, { rootMargin: '0px 0px -8% 0px', threshold: 0.04 });
+        return io;
+    }
+
+    // 사용자가 이미 스크롤로 지나친 뒤 도착한 콘텐츠는 숨긴 채 남으면 안 된다.
+    // 뒤늦게 페이드인시키지도 않는다 — 그 자리에 이미 있었던 것처럼 확정한다.
+    function settleNow(el) {
+        if (!el || el.classList.contains('is-in')) return;
+        el.style.transitionDelay = '0s';
+        el.style.transition = 'none';
+        el.classList.add('is-in');
+        requestAnimationFrame(function () { el.style.transition = ''; });
+    }
+
+    function observe(el) {
+        if (!hasIO) { markIn(el); return; }
+        if (el.getBoundingClientRect().bottom < 0) { settleNow(el); return; }
+        var lib = window.__fmMotionLib;
+        if (engine === 'lib' && lib && lib.inView) {
+            var done = false, stop = null;
+            stop = lib.inView(el, function () {
+                if (done) return;
+                done = true;
+                markIn(el, Number(el.getAttribute('data-fm-delay')) || 0);
+                setTimeout(function () { if (stop) stop(); }, 0);
+            }, { margin: '0px 0px -8% 0px' });
+            return;
+        }
+        ensureIO().observe(el);
+    }
+
+    function scan() {
+        if (!motion) return;
+        if (!engine) { pending.push(scan); return; }   // 엔진 결정 전이면 보류
+        var groups = document.querySelectorAll('[data-fm-stagger]');
+        for (var g = 0; g < groups.length; g++) {
+            var kids = groups[g].children;
+            var lib = (engine === 'lib') && window.__fmMotionLib;
+            var st = lib && lib.stagger ? lib.stagger(0.04) : null;
+            for (var k = 0; k < kids.length; k++) {
+                if (kids[k].classList.contains('fm-reveal')) continue;
+                var d = st ? Math.round(st(k, kids.length) * 1000) : k * 40;
+                kids[k].setAttribute('data-fm-delay', Math.min(d, 240));
+                kids[k].classList.add('fm-reveal');
+            }
+        }
+        var targets = document.querySelectorAll('.fm-reveal:not(.is-in):not([data-fm-seen])');
+        for (var i = 0; i < targets.length; i++) {
+            targets[i].setAttribute('data-fm-seen', '1');
+            observe(targets[i]);
+        }
+    }
+
+    function setEngine(name) {
+        if (engine) return;
+        engine = name;
+        var q = pending;
+        pending = [];
+        q.forEach(function (fn) { fn(); });
+        scan();
+    }
+
+    function ready(fn) {
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn);
+        else fn();
+    }
+
+    if (motion) {
+        // motion.dev가 700ms 안에 안 오면(차단·오프라인·구형 브라우저) 네이티브로 간다.
+        document.addEventListener('fm:motion-lib', function () { setEngine('lib'); });
+        setTimeout(function () { setEngine('io'); }, 700);
+
+        // 이 스크립트는 파싱 도중(히어로 직후)에 실행되므로 아래 카드 컨테이너들은
+        // 아직 존재하지 않는다. DOM이 끝난 뒤에 붙여야 감시가 실제로 걸린다.
+        // 데이터 목록이 새로 채워졌을 때의 등장 연출. 카드 하나하나가 아니라
+        // 그룹이 통째로 0.14s 페이드한다 — 결과가 "순차적으로 도착하는" 인상을 주지 않는다.
+        function groupFade(node) {
+            if (!node || node.querySelector('.loading')) return;   // 로딩 플레이스홀더는 건너뛴다
+            node.classList.remove('fm-group-fade');
+            void node.offsetWidth;                                  // reflow로 애니메이션 재시작
+            node.classList.add('fm-group-fade');
+        }
+
+        ready(function () {
+            scan();
+            // 동적으로 채워지는 카드 컨테이너만 좁게 감시한다 (body 전체 관찰 금지)
+            if (typeof MutationObserver === 'function') {
+                ['live-cards', 'upcoming-cards', 'event-cards'].forEach(function (id) {
+                    var n = document.getElementById(id);
+                    if (!n) return;
+                    var mo = new MutationObserver(function () {
+                        if (mo._q) return;
+                        mo._q = true;
+                        requestAnimationFrame(function () { mo._q = false; groupFade(n); scan(); });
+                    });
+                    mo.observe(n, { childList: true });
+                });
+            }
+        });
+    }
+})();
+</script>
+<script type="module">
+// motion.dev — 스크롤 리빌의 1순위 엔진. 실패하면 위 인라인 스크립트가 700ms 뒤
+// 네이티브 IntersectionObserver로 넘어가므로 콘텐츠는 어떤 경우에도 보인다.
+// 히어로 진입 연출은 애초에 CSS 키프레임이라 이 모듈과 무관하게 동작한다.
+(async function () {
+    if (document.documentElement.getAttribute('data-motion') !== 'on') return;
+    try {
+        const { inView, stagger } = await import('https://cdn.jsdelivr.net/npm/motion@11/+esm');
+        window.__fmMotionLib = { inView, stagger };
+        document.dispatchEvent(new Event('fm:motion-lib'));
+    } catch (e) { /* 폴백이 이미 무장되어 있다 */ }
+})();
+</script>
+
+<!-- Fallback league-edit entry: 미리보기가 숨겨진 상태(나이그룹 미선택 등)에서도
+     온보딩된 사용자가 선호 리그를 다시 고를 수 있어야 한다 -->
+<div class="fm-prefs-fallback" id="fm-prefs-fallback" style="display:none;">
+    <div class="container">
+        <button type="button" class="fm-prefs-edit" onclick="fmOpenSportSelector()">{{ _t("선호 리그 변경") }}</button>
+    </div>
+</div>
+<script>
+(function () {
+    try {
+        var p = JSON.parse(localStorage.getItem('fm_preferences') || 'null');
+        var fb = document.getElementById('fm-prefs-fallback');
+        if (!p || !p.onboarded || !fb) return;
+        // 미리보기 카드가 실제로 뜨는 경우(무기+성별+나이그룹 완비)에는 카드 내 버튼이 있으므로 숨김 유지
+        var hasFullPrefs = p.weapon && p.gender && p.age_group;
+        if (!hasFullPrefs) fb.style.display = '';
+    } catch (e) {}
+})();
+</script>
+
+<!-- Ranking Preview (온보딩 후 또는 재방문 시 - Hero 바로 아래) -->
+<div class="ranking-preview-section" id="ranking-preview-section" style="display:none;">
+    <div class="container">
+        <div class="ranking-preview-card">
+            <div class="ranking-preview-header">
+                <span class="ranking-preview-trophy"><svg class="fm-icon" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M232,64H208V48a8,8,0,0,0-8-8H56a8,8,0,0,0-8,8V64H24A16,16,0,0,0,8,80V96a40,40,0,0,0,40,40h3.65A80.13,80.13,0,0,0,120,191.61V216H96a8,8,0,0,0,0,16h64a8,8,0,0,0,0-16H136V191.58c31.94-3.23,58.44-25.64,68.08-55.58H208a40,40,0,0,0,40-40V80A16,16,0,0,0,232,64ZM48,120A24,24,0,0,1,24,96V80H48v32q0,4,.39,8Zm144-8.9c0,35.52-29,64.64-64,64.9a64,64,0,0,1-64-64V56H192ZM232,96a24,24,0,0,1-24,24h-.5a81.81,81.81,0,0,0,.5-8.9V80h24Z"/></svg></span>
+                <span class="ranking-preview-title" id="ranking-preview-title"></span>
+                <button type="button" class="fm-prefs-edit" onclick="fmOpenSportSelector()">{{ _t("선호 리그 변경") }}</button>
+            </div>
+            <div class="ranking-preview-body" id="ranking-preview-body">
+                <div class="ranking-preview-loading" id="ranking-preview-loading">
+                    {{ i18n.common.common.loading|default('Loading...') }}
+                </div>
+            </div>
+            <div class="ranking-preview-footer">
+                <a class="ranking-preview-view-all" id="ranking-preview-link" href="#">
+                    {{ i18n.common.home.ranking_preview.view_all|default('View Full Rankings') }} &rarr;
+                </a>
+            </div>
+            <div class="ranking-preview-login-hint" id="ranking-preview-login-hint" style="display:none;">
+                <span class="ranking-preview-hint-icon"><svg class="fm-icon" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M176,232a8,8,0,0,1-8,8H88a8,8,0,0,1,0-16h80A8,8,0,0,1,176,232Zm40-128a87.55,87.55,0,0,1-33.64,69.21A16.24,16.24,0,0,0,176,186v6a16,16,0,0,1-16,16H96a16,16,0,0,1-16-16v-6a16,16,0,0,0-6.23-12.66A87.59,87.59,0,0,1,40,104.49C39.74,56.83,78.26,17.14,125.88,16A88,88,0,0,1,216,104Zm-16,0a72,72,0,0,0-73.74-72c-39,.92-70.47,33.39-70.26,72.39a71.65,71.65,0,0,0,27.64,56.3A32,32,0,0,1,96,186v6h64v-6a32.15,32.15,0,0,1,12.47-25.35A71.65,71.65,0,0,0,200,104Zm-16.11-9.34a57.6,57.6,0,0,0-46.56-46.55,8,8,0,0,0-2.66,15.78c16.57,2.79,30.63,16.85,33.44,33.45A8,8,0,0,0,176,104a9,9,0,0,0,1.35-.11A8,8,0,0,0,183.89,94.66Z"/></svg></span>
+                <span class="ranking-preview-hint-text">{{ i18n.common.home.ranking_preview.login_hint|default('Sign in to see player names and teams.') }}</span>
+                <a class="ranking-preview-login-btn" href="/auth/login">{{ i18n.common.home.ranking_preview.login_btn|default('Sign In') }}</a>
+            </div>
+        </div>
     </div>
 </div>
 
-<!-- NOW: Live Competitions Banner -->
-<div class="live-competitions" id="live-competitions">
+<!-- 경기 일정: 진행 중(LIVE) + 예정 대회를 하나의 네이비 밴드에 모은다.
+     각 그룹의 ID는 기존 JS(loadUpcomingCompetitions 등)가 display를 제어하므로
+     그대로 두고, 바깥 밴드만 fmShowScheduleBand()로 함께 노출한다. -->
+<section class="fm-schedule-band" id="fm-schedule-band" style="display: none;" aria-labelledby="fm-schedule-title">
     <div class="container">
-        <div class="live-header">
-            <span class="live-badge">NOW</span>
-            <span class="live-title">{{ i18n.common.live.title|default('Live Competitions') }}</span>
+        <h2 class="fm-schedule-title fm-reveal" id="fm-schedule-title">{{ _t("경기 일정") }}</h2>
+
+        <div class="live-competitions" id="live-competitions" style="display: none;">
+            <div class="live-cards" id="live-cards">
+                <!-- 동적으로 로드됨 -->
+            </div>
         </div>
-        <div class="live-cards" id="live-cards">
-            <!-- 익산 U17/U20 -->
-            <a href="/competition/iksan-u17-u20" class="live-card" id="live-u17">
-                <div class="live-card-icon">🏆</div>
-                <div class="live-card-info">
-                    <h4>{{ i18n.common.live.iksan_international|default('2025 익산 국제 펜싱선수권') }}</h4>
-                    <p>{{ i18n.common.live.u17_u20_events|default('U17 / U20 (남녀 3종목)') }}</p>
-                </div>
-                <div class="live-card-status">
-                    <span class="status status-live">{{ i18n.common.live.status_live|default('LIVE') }}</span>
-                    <div class="date">12.16 - 12.21</div>
-                </div>
-            </a>
-            <!-- 익산 U13/U11/U9 -->
-            <a href="/competition/iksan-u13" class="live-card" id="live-u13">
-                <div class="live-card-icon">⚔️</div>
-                <div class="live-card-info">
-                    <h4>{{ i18n.common.live.iksan_international|default('2025 익산 국제 펜싱선수권') }}</h4>
-                    <p>{{ i18n.common.live.u13_u11_u9_events|default('U13 / U11 / U9 (남녀 3종목)') }}</p>
-                </div>
-                <div class="live-card-status">
-                    <span class="status status-upcoming">{{ i18n.common.live.status_upcoming|default('D-1') }}</span>
-                    <div class="date">12.20 - 12.21</div>
-                </div>
-            </a>
+
+        <div class="upcoming-competitions" id="upcoming-competitions" style="display: none;">
+            <div class="upcoming-cards" id="upcoming-cards">
+                <!-- 동적으로 로드됨 -->
+            </div>
+        </div>
+    </div>
+</section>
+
+{% if access_level is defined and access_level != "guest" %}
+<!-- Favorites Dashboard (member+: 대회 공지 바로 아래) -->
+<div class="favorites-dashboard" id="favoritesDashboard" style="display:none;">
+    <div class="container">
+        <div class="favorites-header">
+            <h3>{{ _t('내 선수') }}</h3>
+            <button class="fav-expand-btn" id="favExpandBtn" style="display:none;" onclick="toggleFavoriteExpand()">
+                {{ _t('더보기') }} (<span id="favMoreCount"></span>)
+            </button>
+        </div>
+        <div class="favorites-cards" id="favoritesCards"></div>
+    </div>
+</div>
+{% else %}
+<!-- Followed Players (guest: localStorage chips).
+     .followed-players-section이 있어야 mobile-ux.js가 토글하는 .has-follows가
+     먹는다 — 팔로우가 없으면 라벨만 남지 않고 섹션 전체가 숨겨진다. -->
+<div class="favorites-dashboard followed-players-section" id="followedPlayersSection">
+    <div class="container">
+        <div class="fm-follow-strip">
+            <span class="followed-players-title">{{ _t('팔로우 선수') }}</span>
+            <div class="followed-players-list"></div>
         </div>
     </div>
 </div>
+{% endif %}
 
 <div class="container">
-    <!-- Player Search -->
-    <div class="player-search">
-        <h2 style="text-align: center; margin-bottom: 1.5rem;">{{ i18n.common.home.player_search|default('Player Search') }}</h2>
-        <div class="search-input-wrapper">
-            <input type="text" class="search-input" id="player-search"
-                   placeholder="{{ i18n.common.home.player_search_placeholder|default('Enter player name...') }}" autocomplete="off">
-            <div class="search-suggestions" id="search-suggestions"></div>
-        </div>
+
+    <!-- 선발 포인트 — 비대칭 스플릿. 꿈나무(레드)가 주, 청소년 대표(네이비)가 부 -->
+    <div class="selection-banners" data-fm-stagger>
+        <a class="selection-card selection-card--youth" href="/{{ lang|default('ko') }}/selection/kkumnamu/summary">
+            <span class="selection-card-icon" aria-hidden="true"><svg class="fm-icon" viewBox="0 0 256 256" focusable="false"><path d="M247.63,47.89a8,8,0,0,0-7.52-7.52c-51.76-3-93.32,12.74-111.18,42.22-11.8,19.49-11.78,43.16-.16,65.74a71.34,71.34,0,0,0-14.17,27L98.33,159c7.82-16.33,7.52-33.35-1-47.49-13.2-21.79-43.67-33.47-81.5-31.25a8,8,0,0,0-7.52,7.52c-2.23,37.83,9.46,68.3,31.25,81.5A45.82,45.82,0,0,0,63.44,176,54.58,54.58,0,0,0,87,170.33l25,25V224a8,8,0,0,0,16,0V194.51a55.61,55.61,0,0,1,12.27-35,73.91,73.91,0,0,0,33.31,8.4,60.9,60.9,0,0,0,31.83-8.86C234.89,141.21,250.67,99.65,247.63,47.89ZM47.81,155.6C32.47,146.31,23.79,124.32,24,96c28.32-.24,50.31,8.47,59.6,23.81,4.85,8,5.64,17.33,2.46,26.94L61.65,122.34a8,8,0,0,0-11.31,11.31l24.41,24.41C65.14,161.24,55.82,160.45,47.81,155.6Zm149.31-10.22c-13.4,8.11-29.15,8.73-45.15,2l53.69-53.7a8,8,0,0,0-11.31-11.31L140.65,136c-6.76-16-6.15-31.76,2-45.15,13.94-23,47-35.82,89.33-34.83C232.94,98.34,220.14,131.44,197.12,145.38Z"/></svg></span>
+            <h3>{{ _t("꿈나무 선발 포인트") }}</h3>
+            <p>{{ _t("중1 기간 대회 성적으로 꿈나무 선발 포인트를 확인하세요") }}</p>
+            <span class="selection-cta">
+                {{ _t("꿈나무 포인트 보기") }}
+                <svg class="fm-icon" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg>
+            </span>
+        </a>
+        <a class="selection-card selection-card--national" href="/{{ lang|default('ko') }}/selection/national-team/summary">
+            <span class="selection-card-icon" aria-hidden="true"><svg class="fm-icon" viewBox="0 0 256 256" focusable="false"><path d="M232,64H208V48a8,8,0,0,0-8-8H56a8,8,0,0,0-8,8V64H24A16,16,0,0,0,8,80V96a40,40,0,0,0,40,40h3.65A80.13,80.13,0,0,0,120,191.61V216H96a8,8,0,0,0,0,16h64a8,8,0,0,0,0-16H136V191.58c31.94-3.23,58.44-25.64,68.08-55.58H208a40,40,0,0,0,40-40V80A16,16,0,0,0,232,64ZM48,120A24,24,0,0,1,24,96V80H48v32q0,4,.39,8Zm144-8.9c0,35.52-29,64.64-64,64.9a64,64,0,0,1-64-64V56H192ZM232,96a24,24,0,0,1-24,24h-.5a81.81,81.81,0,0,0,.5-8.9V80h24Z"/></svg></span>
+            <h4>{{ _t("청소년 대표 선발 포인트") }}</h4>
+            <p>{{ _t("중2~고3 대회 성적으로 청소년 대표 선발 포인트를 확인하세요") }}</p>
+            <span class="selection-cta selection-cta--quiet">{{ _t("청소년 대표 포인트 보기") }}</span>
+        </a>
     </div>
 
-    <!-- Event Selection -->
-    <div class="filter-section">
-        <h3>{{ i18n.common.home.event_selection|default('Event Selection') }}</h3>
+    <!-- Active Filter Tags + Advanced Search Toggle (always visible) -->
+    <div class="active-filters-bar" id="active-filters-bar">
+        <button type="button" class="fm-sport-chip" id="fm-sport-chip" onclick="fmOpenSportSelector()">
+            <span class="fm-sport-chip-icon" aria-hidden="true"><svg class="fm-icon" viewBox="0 0 256 256" focusable="false"><path d="M221.87,83.16A104.1,104.1,0,1,1,195.67,49l22.67-22.68a8,8,0,0,1,11.32,11.32l-96,96a8,8,0,0,1-11.32-11.32l27.72-27.72a40,40,0,1,0,17.87,31.09,8,8,0,1,1,16-.9,56,56,0,1,1-22.38-41.65L184.3,60.39a87.88,87.88,0,1,0,23.13,29.67,8,8,0,0,1,14.44-6.9Z"/></svg></span>
+            <span>{{ i18n.common.mobile.set_my_sport|default('내 종목 설정') }}</span>
+        </button>
+        <div class="active-filters" id="active-filters"></div>
+        <button class="advanced-search-toggle" id="advanced-search-toggle">
+            {{ i18n.common.home.advanced_search|default('Advanced Search') }}
+            <span class="toggle-arrow" aria-hidden="true"><svg class="fm-icon" viewBox="0 0 256 256" focusable="false"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg></span>
+        </button>
+    </div>
 
-        <div class="filter-grid">
-            <div class="filter-group">
-                <label>{{ i18n.common.filters.weapon|default('Weapon') }}</label>
-                <div class="filter-buttons" id="filter-weapons">
-                    <button class="filter-btn weapon-foil" data-filter="weapon" data-value="플러레">{{ i18n.common.weapons.foil|default('Foil') }}</button>
-                    <button class="filter-btn weapon-epee" data-filter="weapon" data-value="에뻬">{{ i18n.common.weapons.epee|default('Epee') }}</button>
-                    <button class="filter-btn weapon-sabre" data-filter="weapon" data-value="사브르">{{ i18n.common.weapons.sabre|default('Sabre') }}</button>
+    <!-- Collapsible Filter Section -->
+    <div class="filter-section-collapsible" id="filter-section-collapsible">
+        <div class="filter-section">
+            <h3>{{ i18n.common.home.event_selection|default('Event Selection') }}</h3>
+
+            <div class="filter-grid">
+                <div class="filter-group">
+                    <label>{{ i18n.common.filters.weapon|default('Weapon') }}</label>
+                    <div class="filter-buttons" id="filter-weapons">
+                        <button class="filter-btn weapon-foil" data-filter="weapon" data-value="foil">{{ i18n.common.weapons.foil|default('Foil') }}</button>
+                        <button class="filter-btn weapon-epee" data-filter="weapon" data-value="epee">{{ i18n.common.weapons.epee|default('Epee') }}</button>
+                        <button class="filter-btn weapon-sabre" data-filter="weapon" data-value="sabre">{{ i18n.common.weapons.sabre|default('Sabre') }}</button>
+                    </div>
+                </div>
+
+                <div class="filter-group">
+                    <label>{{ i18n.common.filters.gender|default('Gender') }}</label>
+                    <div class="filter-buttons" id="filter-genders">
+                        <button class="filter-btn" data-filter="gender" data-value="남">{{ i18n.common.gender.male|default('Men') }}</button>
+                        <button class="filter-btn" data-filter="gender" data-value="여">{{ i18n.common.gender.female|default('Women') }}</button>
+                    </div>
+                </div>
+
+                <div class="filter-group">
+                    <label>{{ i18n.common.filters.age_group|default('Event') }}</label>
+                    <div class="filter-buttons" id="filter-ages"></div>
+                </div>
+
+                <div class="filter-group">
+                    <label>{{ i18n.common.filters.season|default('Season') }}</label>
+                    <div class="filter-buttons" id="filter-years"></div>
+                </div>
+
+                <div class="filter-group">
+                    <label>{{ i18n.common.filters.event_type|default('Type') }}</label>
+                    <div class="filter-buttons" id="filter-types">
+                        <button class="filter-btn" data-filter="event_type" data-value="개인">{{ i18n.common.event_type.individual|default('Individual') }}</button>
+                        <button class="filter-btn" data-filter="event_type" data-value="단체">{{ i18n.common.event_type.team|default('Team') }}</button>
+                    </div>
                 </div>
             </div>
 
-            <div class="filter-group">
-                <label>{{ i18n.common.filters.gender|default('Gender') }}</label>
-                <div class="filter-buttons" id="filter-genders">
-                    <button class="filter-btn" data-filter="gender" data-value="남">{{ i18n.common.gender.male|default('Men') }}</button>
-                    <button class="filter-btn" data-filter="gender" data-value="여">{{ i18n.common.gender.female|default('Women') }}</button>
-                </div>
+            <div class="filter-actions">
+                <button class="btn-search" id="search-events" disabled>{{ i18n.common.search.button|default('Search') }}</button>
+                <button class="btn-clear" id="clear-filters">{{ i18n.common.search.reset|default('Reset') }}</button>
             </div>
-
-            <div class="filter-group">
-                <label>{{ i18n.common.filters.age_group|default('Event') }}</label>
-                <div class="filter-buttons" id="filter-ages"></div>
-            </div>
-
-            <div class="filter-group">
-                <label>{{ i18n.common.filters.season|default('Season') }}</label>
-                <div class="filter-buttons" id="filter-years"></div>
-            </div>
-
-            <div class="filter-group">
-                <label>{{ i18n.common.filters.event_type|default('Type') }}</label>
-                <div class="filter-buttons" id="filter-types">
-                    <button class="filter-btn" data-filter="event_type" data-value="개인">{{ i18n.common.event_type.individual|default('Individual') }}</button>
-                    <button class="filter-btn" data-filter="event_type" data-value="단체">{{ i18n.common.event_type.team|default('Team') }}</button>
-                </div>
-            </div>
-        </div>
-
-        <div class="filter-actions">
-            <button class="btn-search" id="search-events" disabled>{{ i18n.common.search.button|default('Search') }}</button>
-            <button class="btn-clear" id="clear-filters">{{ i18n.common.search.reset|default('Reset') }}</button>
         </div>
     </div>
 
     <!-- Event Results -->
     <div class="results-section">
-        <div class="results-header">
+        <div class="results-header fm-reveal">
             <div>
                 <h3>{{ i18n.common.home.search_results|default('Search Results') }}</h3>
-                <div class="active-filters" id="active-filters"></div>
+                <div class="auto-loaded-desc" id="auto-loaded-desc" style="display:none;"></div>
             </div>
             <span class="results-count" id="results-count"></span>
         </div>
         <div class="event-cards" id="event-cards">
             <div class="filter-prompt">
-                <div class="filter-prompt-icon">🎯</div>
+                <div class="filter-prompt-icon" aria-hidden="true"><svg class="fm-icon" viewBox="0 0 256 256" focusable="false"><path d="M221.87,83.16A104.1,104.1,0,1,1,195.67,49l22.67-22.68a8,8,0,0,1,11.32,11.32l-96,96a8,8,0,0,1-11.32-11.32l27.72-27.72a40,40,0,1,0,17.87,31.09,8,8,0,1,1,16-.9,56,56,0,1,1-22.38-41.65L184.3,60.39a87.88,87.88,0,1,0,23.13,29.67,8,8,0,0,1,14.44-6.9Z"/></svg></div>
                 <h4>{{ i18n.common.home.select_event|default('Select an Event') }}</h4>
                 <p>{{ i18n.common.home.select_event_desc|default('Select one or more filters above (Weapon, Gender, Event, Season, Type) to view matching events.') }}</p>
             </div>
@@ -686,29 +2606,85 @@
     <div class="competitions-toggle">
         <div class="toggle-header" id="competitions-toggle">
             <span>{{ i18n.common.home.view_by_competition|default('View by Competition') }}</span>
-            <span class="toggle-icon" id="toggle-icon">▼</span>
+            <span class="toggle-icon" id="toggle-icon" aria-hidden="true"><svg class="fm-icon" viewBox="0 0 256 256" focusable="false"><path d="M213.66,101.66l-80,80a8,8,0,0,1-11.32,0l-80-80A8,8,0,0,1,53.66,90.34L128,164.69l74.34-74.35a8,8,0,0,1,11.32,11.32Z"/></svg></span>
         </div>
         <div class="competitions-list" id="competitions-list"></div>
     </div>
 </div>
 
-<!-- FencingLab Demo Section -->
+<!-- FencingLab Demo Section — 개편 중이라 클릭 불가 샘플로만 표시 (2026-08-06) -->
 <div id="fencinglab-demo"></div>
+
+<!-- Analytics 티저: 다음 서비스 예고. 아직 공개 전이므로 링크를 걸지 않는다 (2026-08-06) -->
+<section class="fm-analytics-teaser" aria-labelledby="analytics-teaser-title">
+    <div class="fm-analytics-teaser__head">
+        <span class="fm-badge fm-badge--micro fm-badge--tint fm-analytics-teaser__flag">{{ _t('개발 중') }}</span>
+        <h2 id="analytics-teaser-title">{{ _t('경기 영상 AI 분석, 개발 중입니다') }}</h2>
+        <p>{{ _t('실제 경기 영상에서 터치 시점과 공격 성공 여부를 자동으로 판정합니다. 곧 공개합니다.') }}</p>
+    </div>
+
+    <div class="fm-analytics-teaser__grid">
+        {# 수치는 analytics.fencingmind.ai/gallery의 해당 분석 결과와 일치시킬 것.
+           차트 이미지에 최종 스코어와 터치 수가 그대로 보이므로, 캡션이 다른 경기의
+           수치이면 바로 들통난다 (2026-08-06 실제로 사브르 카드에서 한 번 어긋났음). #}
+        <figure class="fm-analytics-shot">
+            <img src="/static/images/analytics-preview/foil_chart.webp?v=20260807a"
+                 alt="{{ _t('주니어 플뢰레 결승') }} 15-7 {{ _t('스코어 타임라인 차트') }}"
+                 width="614" height="300" loading="lazy" decoding="async">
+            <figcaption>
+                <span class="fm-analytics-shot__title">
+                    {{ _t('주니어 플뢰레 결승') }}
+                    <b class="fm-num fm-analytics-shot__score">15-7</b>
+                </span>
+                <dl class="fm-analytics-shot__stats">
+                    <div><dt>{{ _t('터치') }}</dt><dd class="fm-num">22</dd></div>
+                    <div><dt>{{ _t('교환') }}</dt><dd class="fm-num">75</dd></div>
+                    <div><dt>{{ _t('경기 시간') }}</dt><dd class="fm-num">11:49</dd></div>
+                </dl>
+            </figcaption>
+        </figure>
+
+        <figure class="fm-analytics-shot">
+            <img src="/static/images/analytics-preview/sabre_chart.webp?v=20260807a"
+                 alt="{{ _t('주니어 사브르 본선') }} 10-15 {{ _t('스코어 타임라인 차트') }}"
+                 width="614" height="300" loading="lazy" decoding="async">
+            <figcaption>
+                <span class="fm-analytics-shot__title">
+                    {{ _t('주니어 사브르 본선') }}
+                    <b class="fm-num fm-analytics-shot__score">10-15</b>
+                </span>
+                <dl class="fm-analytics-shot__stats">
+                    <div><dt>{{ _t('터치') }}</dt><dd class="fm-num">22</dd></div>
+                    <div><dt>{{ _t('교환') }}</dt><dd class="fm-num">63</dd></div>
+                    <div><dt>{{ _t('경기 시간') }}</dt><dd class="fm-num">9:35</dd></div>
+                </dl>
+            </figcaption>
+        </figure>
+    </div>
+</section>
 {% endblock %}
 
 {% block extra_js %}
 <script>
 // i18n translations from server
+// Current language from server
+const currentLang = '{{ lang }}';
+
 const i18n = {
     age_groups: {
         Y8: '{{ i18n.common.age_groups.Y8|default("Y8 (Elem 1-2)") }}',
         Y10: '{{ i18n.common.age_groups.Y10|default("Y10 (Elem 3-4)") }}',
         Y12: '{{ i18n.common.age_groups.Y12|default("Y12 (Elem 5-6)") }}',
+        Y14: '{{ i18n.common.age_groups.Y14|default("Y14 (Middle School)") }}',
+        Cadet: '{{ i18n.common.age_groups.Cadet|default("Cadet (High School)") }}',
+        Junior: '{{ i18n.common.age_groups.Junior|default("Junior (University)") }}',
+        Veteran: '{{ i18n.common.age_groups.Veteran|default("Senior") }}',
+        National: '{{ i18n.common.age_groups.National|default("National Team") }}',
+        U9: '{{ i18n.common.age_groups.U9|default("U9") }}',
+        U11: '{{ i18n.common.age_groups.U11|default("U11") }}',
         U13: '{{ i18n.common.age_groups.U13|default("U13") }}',
-        U15: '{{ i18n.common.age_groups.U15|default("U15 (Middle School)") }}',
         U17: '{{ i18n.common.age_groups.U17|default("U17") }}',
-        U20: '{{ i18n.common.age_groups.U20|default("U20") }}',
-        senior: '{{ i18n.common.age_groups.senior|default("Senior") }}'
+        U20: '{{ i18n.common.age_groups.U20|default("U20") }}'
     },
     weapons: {
         foil: '{{ i18n.common.weapons.foil|default("Foil") }}',
@@ -730,7 +2706,17 @@ const i18n = {
         no_team: '{{ i18n.common.home.no_team|default("No team") }}',
         records: '{{ i18n.common.home.records|default("records") }}',
         select_event: '{{ i18n.common.home.select_event|default("Select an Event") }}',
-        select_event_desc: '{{ i18n.common.home.select_event_desc|default("Select one or more filters above (Weapon, Gender, Event, Season, Type) to view matching events.") }}'
+        select_event_desc: '{{ i18n.common.home.select_event_desc|default("Select one or more filters above (Weapon, Gender, Event, Season, Type) to view matching events.") }}',
+        advanced_search: '{{ i18n.common.home.advanced_search|default("Advanced Search") }}',
+        auto_loaded_desc: '{{ i18n.common.home.auto_loaded_desc|default("Showing events based on your preferences") }}'
+    },
+    ranking_preview: {
+        title: '{{ i18n.common.home.ranking_preview.title|default("TOP 3") }}',
+        view_all: '{{ i18n.common.home.ranking_preview.view_all|default("View Full Rankings") }}',
+        login_hint: '{{ i18n.common.home.ranking_preview.login_hint|default("Sign in to see player names and teams.") }}',
+        login_btn: '{{ i18n.common.home.ranking_preview.login_btn|default("Sign In") }}',
+        no_data: '{{ i18n.common.home.ranking_preview.no_data|default("No ranking data available") }}',
+        loading: '{{ i18n.common.home.ranking_preview.loading|default("Loading rankings...") }}'
     },
     common: {
         loading: '{{ i18n.common.common.loading|default("Loading...") }}'
@@ -744,24 +2730,28 @@ const i18n = {
     }
 };
 
-// Age Group Labels (using i18n)
+// Age Group Labels (using i18n) — KFA/FIE standard codes
 const AGE_GROUP_LABELS = {
     'Y8': i18n.age_groups.Y8,
     'Y10': i18n.age_groups.Y10,
     'Y12': i18n.age_groups.Y12,
+    'Y14': i18n.age_groups.Y14,
+    'Cadet': i18n.age_groups.Cadet,
+    'Junior': i18n.age_groups.Junior,
+    'Veteran': i18n.age_groups.Veteran,
+    'National': i18n.age_groups.National,
+    'U9': i18n.age_groups.U9,
+    'U11': i18n.age_groups.U11,
     'U13': i18n.age_groups.U13,
-    'U15': i18n.age_groups.U15,
     'U17': i18n.age_groups.U17,
-    'U20': i18n.age_groups.U20,
-    'Senior': i18n.age_groups.senior,
-    'senior': i18n.age_groups.senior
+    'U20': i18n.age_groups.U20
 };
 
 // Weapon display mapping (using i18n)
 const WEAPON_DISPLAY = {
-    '플러레': i18n.weapons.foil,
-    '에뻬': i18n.weapons.epee,
-    '사브르': i18n.weapons.sabre
+    'foil': i18n.weapons.foil,
+    'epee': i18n.weapons.epee,
+    'sabre': i18n.weapons.sabre
 };
 
 // Gender display mapping (using i18n)
@@ -796,7 +2786,208 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadCompetitions();
     setupEventListeners();
     updateSearchButton();
+
+    // Auto-load events from onboarding preferences
+    autoLoadFromPreferences();
+
+    // 재방문자: 저장된 선호도로 랭킹 프리뷰 표시
+    try {
+        var savedPrefs = localStorage.getItem('fm_preferences');
+        if (savedPrefs) {
+            var p = JSON.parse(savedPrefs);
+            if (p && p.onboarded && p.weapon && p.gender && p.age_group) {
+                fetchAndRenderRankingPreview(p.weapon, p.gender, p.age_group);
+            }
+        }
+    } catch (e) { /* ignore */ }
+
+    // 선호도가 없으면 빈 안내 대신 최근 대회를 기본으로 보여준다
+    if (!localStorage.getItem('fm_preferences')) {
+        loadDefaultCompetitions();
+    }
+
+    // 스크롤 1화면 지점에서 1회만 비차단 종목 선택 시트를 노출
+    initSportSheetReveal();
 });
+
+// Auto-load events based on onboarding preferences
+function autoLoadFromPreferences() {
+    const AGE_MAP = {
+        elementary: 'Y12',
+        middle_school: 'Y14',
+        high_school: 'Cadet',
+        senior: 'Veteran'
+    };
+
+    try {
+        const raw = localStorage.getItem('fm_preferences');
+        if (!raw) return;
+        const prefs = JSON.parse(raw);
+        if (!prefs || !prefs.onboarded || !prefs.weapon || !prefs.gender) return;
+
+        // Set filters from preferences
+        state.filters.weapon = prefs.weapon;
+        state.filters.gender = prefs.gender;
+        if (prefs.age_group && AGE_MAP[prefs.age_group]) {
+            state.filters.age_group = AGE_MAP[prefs.age_group];
+        }
+        // Keep year=null to show all recent events (current+last year naturally via sort)
+        state.filters.year = null;
+        state.filters.event_type = '개인';
+
+        // Activate corresponding filter buttons visually
+        activateFilterButtons();
+
+        // Show auto-loaded description
+        var descEl = document.getElementById('auto-loaded-desc');
+        if (descEl) {
+            descEl.textContent = i18n.home.auto_loaded_desc;
+            descEl.style.display = '';
+        }
+
+        // Load events immediately
+        state.page = 1;
+        loadEvents();
+    } catch(e) { /* ignore parse errors */ }
+}
+
+// 선호 리그 매칭 이벤트를 배너 대회에서 찾아 카드 추가
+function appendMyLeagueCard(compEventCd, targetContainer) {
+    var AGE_MAP = { elementary: 'Y12', middle_school: 'Y14', high_school: 'Cadet', senior: 'Veteran' };
+    try {
+        var raw = localStorage.getItem('fm_preferences');
+        if (!raw) return;
+        var prefs = JSON.parse(raw);
+        if (!prefs || !prefs.weapon || !prefs.gender) return;
+
+        var weapon = prefs.weapon;
+        var gender = prefs.gender;
+        var ageCode = prefs.age_group ? (AGE_MAP[prefs.age_group] || prefs.age_group) : '';
+
+        var params = new URLSearchParams();
+        params.append('weapon', weapon);
+        params.append('gender', gender);
+        params.append('per_page', '100');
+        params.append('lang', document.documentElement.lang || 'ko');
+
+        fetch('/api/events?' + params.toString())
+            .then(function(r) { return r.ok ? r.json() : null; })
+            .then(function(data) {
+                if (!data || !data.events) return;
+                var matched = data.events.filter(function(ev) {
+                    return ev.event_cd === compEventCd && ev.event_type === '개인';
+                });
+                var best = null;
+                if (ageCode) {
+                    best = matched.find(function(ev) { return ev.age_group === ageCode; });
+                }
+                if (!best && matched.length > 0) best = matched[0];
+                if (!best) return;
+
+                var url = '/competition/' + encodeURIComponent(compEventCd) +
+                    '?event=' + encodeURIComponent(best.sub_event_cd);
+
+                fetch('/api/event-summary/' + encodeURIComponent(best.sub_event_cd))
+                    .then(function(r2) { return r2.ok ? r2.json() : null; })
+                    .then(function(summary) {
+                        var total = summary ? summary.total_participants : 0;
+                        var top3 = summary ? summary.top3 : [];
+                        var status = summary ? summary.status : 'upcoming';
+
+                        // 메달은 .ml-medal의 gold/silver/bronze 색이 순위를 나르므로
+                        // 아이콘은 하나(Phosphor medal)를 currentColor로 재사용한다
+                        var medalSvg = '<svg class="fm-icon" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M216,96A88,88,0,1,0,72,163.83V240a8,8,0,0,0,11.58,7.16L128,225l44.43,22.21A8.07,8.07,0,0,0,176,248a8,8,0,0,0,8-8V163.83A87.85,87.85,0,0,0,216,96ZM56,96a72,72,0,1,1,72,72A72.08,72.08,0,0,1,56,96ZM168,227.06l-36.43-18.21a8,8,0,0,0-7.16,0L88,227.06V174.37a87.89,87.89,0,0,0,80,0ZM128,152A56,56,0,1,0,72,96,56.06,56.06,0,0,0,128,152Zm0-96A40,40,0,1,1,88,96,40,40,0,0,1,128,56Z"/></svg> ';
+
+                        var detailHtml = '';
+                        if (status === 'finished' && top3.length >= 3) {
+                            detailHtml =
+                                '<div class="ml-podium">' +
+                                    '<span class="ml-medal gold">' + medalSvg + top3[0].name + '</span> ' +
+                                    '<span class="ml-medal silver">' + medalSvg + top3[1].name + '</span> ' +
+                                    '<span class="ml-medal bronze">' + medalSvg + top3[2].name + '</span>' +
+                                '</div>';
+                        } else if (total > 0) {
+                            detailHtml = '<div class="ml-detail"><span class="fm-num fm-num--semi">' + total + '</span>{{ _t("명 참가") }}</div>';
+                        }
+
+                        _renderMyLeagueCard(targetContainer, compEventCd, url, best.name, detailHtml);
+                    })
+                    .catch(function() {
+                        _renderMyLeagueCard(targetContainer, compEventCd, url, best.name, '');
+                    });
+            })
+            .catch(function() {});
+    } catch(e) {}
+}
+
+function _renderMyLeagueCard(container, eventCd, url, eventName, detailHtml) {
+    // 같은 대회의 리그 카드가 이미 붙어 있으면 중복 삽입 방지
+    if (eventCd && container.querySelector('.my-league-card[data-ml-anchor="' + eventCd + '"]')) {
+        return;
+    }
+    var leagueLabel = '{{ _t("내 리그") }}';
+    var card = document.createElement('a');
+    card.className = 'my-league-card';
+    if (eventCd) card.setAttribute('data-ml-anchor', eventCd);
+    card.href = url;
+    card.innerHTML =
+        '<div class="ml-card-left">' +
+            '<span class="ml-badge">' + leagueLabel + '</span>' +
+        '</div>' +
+        '<div class="ml-card-body">' +
+            '<div class="ml-card-title">' + eventName + '</div>' +
+            detailHtml +
+        '</div>' +
+        '<div class="ml-card-right">&rsaquo;</div>';
+    // 해당 대회 카드 바로 뒤(이미 붙은 같은 대회 리그카드가 있으면 그 뒤)에 삽입
+    var anchor = eventCd ? container.querySelector('[data-comp-anchor="' + eventCd + '"]') : null;
+    if (anchor) {
+        var insertAfter = anchor;
+        var sib = anchor.nextElementSibling;
+        while (sib && sib.classList.contains('my-league-card') &&
+               sib.getAttribute('data-ml-anchor') === eventCd) {
+            insertAfter = sib;
+            sib = sib.nextElementSibling;
+        }
+        insertAfter.insertAdjacentElement('afterend', card);
+    } else {
+        // 앵커를 못 찾으면 기존 동작대로 맨 뒤에 추가 (비동기 타이밍 안전장치)
+        container.appendChild(card);
+    }
+}
+
+// Activate filter buttons to match current state (visual sync)
+function activateFilterButtons() {
+    // Clear all active states first
+    document.querySelectorAll('.filter-btn[data-filter]').forEach(btn => {
+        btn.classList.remove('active');
+    });
+
+    // Activate matching buttons
+    if (state.filters.weapon) {
+        var btn = document.querySelector('.filter-btn[data-filter="weapon"][data-value="' + state.filters.weapon + '"]');
+        if (btn) btn.classList.add('active');
+    }
+    if (state.filters.gender) {
+        var btn = document.querySelector('.filter-btn[data-filter="gender"][data-value="' + state.filters.gender + '"]');
+        if (btn) btn.classList.add('active');
+    }
+    if (state.filters.age_group) {
+        var btn = document.querySelector('.filter-btn[data-filter="age_group"][data-value="' + state.filters.age_group + '"]');
+        if (btn) btn.classList.add('active');
+    }
+    if (state.filters.year) {
+        var btn = document.querySelector('.filter-btn[data-filter="year"][data-value="' + state.filters.year + '"]');
+        if (btn) btn.classList.add('active');
+    }
+    if (state.filters.event_type) {
+        var btn = document.querySelector('.filter-btn[data-filter="event_type"][data-value="' + state.filters.event_type + '"]');
+        if (btn) btn.classList.add('active');
+    }
+
+    updateSearchButton();
+    updateActiveFilters();
+}
 
 // 필터 옵션 로드
 async function loadFilters() {
@@ -810,16 +3001,17 @@ async function loadFilters() {
             `<button class="filter-btn" data-filter="age_group" data-value="${age}">${AGE_GROUP_LABELS[age] || age}</button>`
         ).join('');
 
-        // Season (연도) - 현재 연도 기본 선택
+        // Season (연도) - 자동로드 시 연도 미선택 (최근 이벤트 표시)
         const currentYear = new Date().getFullYear();
         const yearsDiv = document.getElementById('filter-years');
+        const hasPrefs = !!localStorage.getItem('fm_preferences');
         yearsDiv.innerHTML = data.years.map(year => {
-            const isCurrentYear = year === currentYear;
+            const isCurrentYear = year === currentYear && !hasPrefs;
             return `<button class="filter-btn${isCurrentYear ? ' active' : ''}" data-filter="year" data-value="${year}">${year}</button>`;
         }).join('');
 
-        // 현재 연도가 데이터에 있으면 기본 선택
-        if (data.years.includes(currentYear)) {
+        // 자동로드 아닐 때만 현재 연도 기본 선택
+        if (!hasPrefs && data.years.includes(currentYear)) {
             state.filters.year = currentYear;
         }
 
@@ -830,6 +3022,9 @@ async function loadFilters() {
         // 기본 선택 상태 반영
         updateSearchButton();
         updateActiveFilters();
+
+        // Signal that filter buttons are ready in DOM
+        document.dispatchEvent(new Event('filtersReady'));
     } catch (e) {
         console.error('Filters error:', e);
     }
@@ -899,7 +3094,7 @@ async function loadEvents() {
     if (!hasFilter) {
         cardsDiv.innerHTML = `
             <div class="filter-prompt">
-                <div class="filter-prompt-icon">🎯</div>
+                <div class="filter-prompt-icon" aria-hidden="true"><svg class="fm-icon" viewBox="0 0 256 256" focusable="false"><path d="M221.87,83.16A104.1,104.1,0,1,1,195.67,49l22.67-22.68a8,8,0,0,1,11.32,11.32l-96,96a8,8,0,0,1-11.32-11.32l27.72-27.72a40,40,0,1,0,17.87,31.09,8,8,0,1,1,16-.9,56,56,0,1,1-22.38-41.65L184.3,60.39a87.88,87.88,0,1,0,23.13,29.67,8,8,0,0,1,14.44-6.9Z"/></svg></div>
                 <h4>${i18n.home.select_event}</h4>
                 <p>${i18n.home.select_event_desc}</p>
             </div>
@@ -916,28 +3111,48 @@ async function loadEvents() {
         const params = new URLSearchParams();
         params.append('page', state.page);
         params.append('per_page', state.perPage);
+        params.append('lang', currentLang);  // Add language parameter
 
         for (const [key, value] of Object.entries(state.filters)) {
             if (value) params.append(key, value);
         }
 
         const res = await fetch('/api/events?' + params.toString());
+        if (!res.ok) throw new Error('HTTP ' + res.status);
         const data = await res.json();
 
         document.getElementById('results-count').textContent =
             i18n.home.total_count.replace('{count}', data.total.toLocaleString());
 
         if (data.events.length === 0) {
-            cardsDiv.innerHTML = '<div style="text-align: center; padding: 2rem; color: #666;">' + i18n.home.no_results + '</div>';
-            document.getElementById('pagination').innerHTML = '';
+            renderEventsEmpty();
             return;
         }
 
-        cardsDiv.innerHTML = data.events.map(event => `
-            <div class="event-card" onclick="location.href='/competition/${event.event_cd}?event=${event.sub_event_cd}'" style="cursor: pointer;">
+        // Build set of live competition IDs for badge display
+        const liveCompIds = new Set(_liveCompetitions.map(c => c.comp_idx || c.event_cd));
+        const upcomingCompIds = new Set(_upcomingCompetitions.map(c => c.comp_idx || c.event_cd));
+
+        // Track which live/upcoming competitions have events in results
+        const _liveCompsInResults = new Set();
+        const _upcomingCompsInResults = new Set();
+        data.events.forEach(event => {
+            if (liveCompIds.has(event.event_cd)) _liveCompsInResults.add(event.event_cd);
+            if (upcomingCompIds.has(event.event_cd)) _upcomingCompsInResults.add(event.event_cd);
+        });
+
+        cardsDiv.innerHTML = data.events.map(event => {
+            const isLive = liveCompIds.has(event.event_cd);
+            const isUpcoming = upcomingCompIds.has(event.event_cd);
+            const liveComp = isLive ? _liveCompetitions.find(c => (c.comp_idx || c.event_cd) === event.event_cd) : null;
+            const upComp = isUpcoming ? _upcomingCompetitions.find(c => (c.comp_idx || c.event_cd) === event.event_cd) : null;
+            const cardClass = isLive ? 'event-card event-card-live' : (isUpcoming ? 'event-card event-card-upcoming' : 'event-card');
+            const badge = isLive ? '<span class="live-indicator">LIVE</span> ' : (isUpcoming && upComp ? `<span class="upcoming-indicator fm-num">D-${upComp.days_until}</span> ` : '');
+            return `
+            <div class="${cardClass}" onclick="location.href='/competition/${event.event_cd}?event=${event.sub_event_cd}'" style="cursor: pointer;">
                 <div class="event-info">
-                    <div class="event-name">${event.name}</div>
-                    <div class="event-meta">${event.competition_name}</div>
+                    <div class="event-name">${badge}${_tr_event(event.name)}</div>
+                    <div class="event-meta">${_tr_comp(event.competition_name)}</div>
                     <div class="event-tags">
                         ${event.weapon ? `<span class="tag tag-weapon">${WEAPON_DISPLAY[event.weapon] || event.weapon}</span>` : ''}
                         ${event.gender ? `<span class="tag tag-gender">${GENDER_DISPLAY[event.gender] || event.gender}</span>` : ''}
@@ -946,34 +3161,150 @@ async function loadEvents() {
                     </div>
                 </div>
                 <div class="event-date">
-                    <div class="event-year">${event.year}</div>
-                    <div>${event.competition_date}</div>
+                    <div class="event-year fm-num">${event.year}</div>
+                    <div class="fm-num fm-num--semi">${event.competition_date}</div>
                 </div>
-            </div>
-        `).join('');
+            </div>`;
+        }).join('');
+
+        // Prepend live/upcoming competition cards only for those NOT already in event results
+        if (state.page === 1) {
+            prependLiveUpcomingCards(_liveCompsInResults, _upcomingCompsInResults);
+        }
 
         // 페이지네이션
         renderPagination(data.page, data.total_pages);
     } catch (e) {
         console.error('Events error:', e);
-        cardsDiv.innerHTML = '<div style="color: red; text-align: center; padding: 2rem;">' + i18n.home.data_load_failed + '</div>';
+        renderEventsError(loadEvents);
+    }
+}
+
+// 최근 대회 기본 뷰 — 필터/선호 없이 첫 진입 시 빈 안내 대신 표시
+async function loadDefaultCompetitions() {
+    if (state.hasSearched) return;
+    const cardsDiv = document.getElementById('event-cards');
+    if (!cardsDiv) return;
+    cardsDiv.innerHTML = '<div class="loading">' + i18n.common.loading.replace('...', '') + '</div>';
+    try {
+        const res = await fetch('/api/competitions?per_page=6&lang=' + currentLang);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        if (state.hasSearched) return;  // 로딩 중 사용자가 검색했으면 덮어쓰지 않음
+        const comps = (data.competitions || []).slice(0, 6);
+        if (comps.length === 0) { renderEventsEmpty(); return; }
+
+        const descEl = document.getElementById('auto-loaded-desc');
+        if (descEl) { descEl.textContent = '{{ _t("최근 대회") }}'; descEl.style.display = ''; }
+
+        cardsDiv.innerHTML = comps.map(comp => `
+            <a href="/competition/${encodeURIComponent(comp.event_cd)}" class="event-card">
+                <div class="event-info">
+                    <div class="event-name">${_tr_comp(comp.name)}</div>
+                    <div class="event-meta"><span class="fm-num fm-num--semi">${comp.event_count || 0}</span> ${i18n.table.event}</div>
+                </div>
+                <div class="event-date">
+                    <div class="fm-num fm-num--semi">${comp.start_date || ''}</div>
+                </div>
+            </a>`).join('');
+        document.getElementById('results-count').textContent = '';
+        document.getElementById('pagination').innerHTML = '';
+    } catch (e) {
+        console.warn('Default competitions load failed:', e);
+        renderEventsError(loadDefaultCompetitions);
+    }
+}
+
+// 결과 없음 — 친근한 빈 상태
+function renderEventsEmpty() {
+    const cardsDiv = document.getElementById('event-cards');
+    if (!cardsDiv) return;
+    cardsDiv.innerHTML = `
+        <div class="filter-prompt">
+            <div class="filter-prompt-icon" aria-hidden="true"><svg class="fm-icon" viewBox="0 0 256 256" focusable="false"><path d="M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z"/></svg></div>
+            <h4>${i18n.home.no_results}</h4>
+            <p>{{ i18n.common.home.no_results_desc|default(_t('필터를 바꾸거나 최근 대회를 둘러보세요.')) }}</p>
+        </div>`;
+    document.getElementById('pagination').innerHTML = '';
+}
+
+// 실제 로드 실패 — 재시도 버튼을 갖춘 에러 상태 (front door에 맨 에러 문자열 금지)
+function renderEventsError(retryFn) {
+    const cardsDiv = document.getElementById('event-cards');
+    if (!cardsDiv) return;
+    cardsDiv.innerHTML = `
+        <div class="filter-prompt">
+            <div class="filter-prompt-icon filter-prompt-icon--warn" aria-hidden="true"><svg class="fm-icon" viewBox="0 0 256 256" focusable="false"><path d="M236.8,188.09,149.35,36.22h0a24.76,24.76,0,0,0-42.7,0L19.2,188.09a23.51,23.51,0,0,0,0,23.72A24.35,24.35,0,0,0,40.55,224h174.9a24.35,24.35,0,0,0,21.33-12.19A23.51,23.51,0,0,0,236.8,188.09ZM222.93,203.8a8.5,8.5,0,0,1-7.48,4.2H40.55a8.5,8.5,0,0,1-7.48-4.2,7.59,7.59,0,0,1,0-7.72L120.52,44.21a8.75,8.75,0,0,1,15,0l87.45,151.87A7.59,7.59,0,0,1,222.93,203.8ZM120,144V104a8,8,0,0,1,16,0v40a8,8,0,0,1-16,0Zm20,36a12,12,0,1,1-12-12A12,12,0,0,1,140,180Z"/></svg></div>
+            <h4>{{ i18n.common.home.load_error_title|default('불러오지 못했어요') }}</h4>
+            <p>{{ i18n.common.home.load_error_desc|default('네트워크가 불안정할 수 있어요. 잠시 후 다시 시도해 주세요.') }}</p>
+            <button type="button" class="btn-search events-retry">{{ i18n.common.home.retry|default('다시 시도') }}</button>
+        </div>`;
+    document.getElementById('results-count').textContent = '';
+    document.getElementById('pagination').innerHTML = '';
+    const btn = cardsDiv.querySelector('.events-retry');
+    if (btn && typeof retryFn === 'function') {
+        btn.addEventListener('click', () => retryFn());
+    }
+}
+
+// Prepend live/upcoming competition cards at top of event results
+// Skip competitions whose individual events are already shown in the list
+function prependLiveUpcomingCards(liveCompsInResults, upcomingCompsInResults) {
+    const cardsDiv = document.getElementById('event-cards');
+    if (!cardsDiv) return;
+    liveCompsInResults = liveCompsInResults || new Set();
+    upcomingCompsInResults = upcomingCompsInResults || new Set();
+    let pinnedHtml = '';
+
+    _liveCompetitions.forEach(comp => {
+        const compId = comp.comp_idx || comp.event_cd;
+        // Skip if individual events from this competition are already in the event list
+        if (liveCompsInResults.has(compId)) return;
+        pinnedHtml += `<a href="/competition/${compId}" class="event-card event-card-live">
+            <div class="event-info">
+                <div class="event-name"><span class="live-indicator">LIVE</span> ${_tr_comp(comp.name)}</div>
+                <div class="event-meta"><span class="fm-num fm-num--semi">Day ${comp.day_number}/${comp.total_days}</span> ${comp.venue ? '• ' + comp.venue : ''}</div>
+            </div>
+            <div class="event-date">
+                <div class="fm-num fm-num--semi">${formatDateRange(comp.start_date, comp.end_date)}</div>
+            </div>
+        </a>`;
+    });
+
+    _upcomingCompetitions.slice(0, 3).forEach(comp => {
+        const compId = comp.comp_idx || comp.event_cd;
+        // Skip if individual events from this competition are already in the event list
+        if (upcomingCompsInResults.has(compId)) return;
+        pinnedHtml += `<a href="/competition/${compId}" class="event-card event-card-upcoming">
+            <div class="event-info">
+                <div class="event-name"><span class="upcoming-indicator fm-num">D-${comp.days_until}</span> ${_tr_comp(comp.name)}</div>
+                <div class="event-meta">${comp.venue || ''}</div>
+            </div>
+            <div class="event-date">
+                <div class="fm-num fm-num--semi">${formatDateRange(comp.start_date, comp.end_date)}</div>
+            </div>
+        </a>`;
+    });
+
+    if (pinnedHtml) {
+        cardsDiv.insertAdjacentHTML('afterbegin', pinnedHtml);
     }
 }
 
 // 대회 목록 로드
 async function loadCompetitions() {
     try {
-        const res = await fetch('/api/competitions?per_page=100');
+        const res = await fetch('/api/competitions?per_page=100&lang=' + currentLang);
         const data = await res.json();
 
         const listDiv = document.getElementById('competitions-list');
         listDiv.innerHTML = data.competitions.map(comp => `
             <div class="competition-item" onclick="location.href='/competition/${comp.event_cd}'">
                 <div>
-                    <strong>${comp.name}</strong>
-                    <div style="font-size: 0.85rem; color: #666;">${comp.event_count} ${i18n.table.event}</div>
+                    <strong>${_tr_comp(comp.name)}</strong>
+                    <div class="competition-item-meta"><span class="fm-num fm-num--semi">${comp.event_count}</span> ${i18n.table.event}</div>
                 </div>
-                <div style="text-align: right; color: #666;">
+                <div class="competition-item-date fm-num fm-num--semi">
                     ${comp.start_date || ''}
                 </div>
             </div>
@@ -1023,6 +3354,14 @@ function goToPage(page) {
 
 // 이벤트 리스너
 function setupEventListeners() {
+    // Advanced Search toggle
+    document.getElementById('advanced-search-toggle').addEventListener('click', () => {
+        const collapsible = document.getElementById('filter-section-collapsible');
+        const toggleBtn = document.getElementById('advanced-search-toggle');
+        collapsible.classList.toggle('expanded');
+        toggleBtn.classList.toggle('expanded');
+    });
+
     // 필터 버튼 (이벤트 위임)
     document.querySelector('.filter-section').addEventListener('click', (e) => {
         const btn = e.target.closest('.filter-btn[data-filter]');
@@ -1066,16 +3405,10 @@ function setupEventListeners() {
         updateSearchButton();
         updateActiveFilters();
 
-        // Reset to initial state
-        document.getElementById('event-cards').innerHTML = `
-            <div class="filter-prompt">
-                <div class="filter-prompt-icon">🎯</div>
-                <h4>${i18n.home.select_event}</h4>
-                <p>${i18n.home.select_event_desc}</p>
-            </div>
-        `;
+        // Reset to default view (recent competitions) instead of a bare empty prompt
         document.getElementById('results-count').textContent = '';
         document.getElementById('pagination').innerHTML = '';
+        loadDefaultCompetitions();
     });
 
     // 대회 토글
@@ -1106,15 +3439,15 @@ function setupEventListeners() {
                 const data = await res.json();
 
                 if (data.results.length === 0) {
-                    suggestions.innerHTML = '<div class="suggestion-item"><span style="color: #666;">' + i18n.home.no_results + '</span></div>';
+                    suggestions.innerHTML = '<div class="suggestion-item"><span class="suggestion-empty">' + i18n.home.no_results + '</span></div>';
                 } else {
                     suggestions.innerHTML = data.results.map(p => `
                         <div class="suggestion-item" onclick="goToPlayer('${p.name.replace(/'/g, "\\'")}')">
                             <div>
-                                <div class="suggestion-name">${p.name}</div>
+                                <div class="suggestion-name">${p.display_name || p.name}</div>
                                 <div class="suggestion-team">${p.teams.join(', ') || i18n.home.no_team}</div>
                             </div>
-                            <span class="suggestion-count">${p.record_count} ${i18n.home.records}</span>
+                            <span class="suggestion-count"><span class="fm-num fm-num--semi">${p.record_count}</span> ${i18n.home.records}</span>
                         </div>
                     `).join('');
                 }
@@ -1147,55 +3480,440 @@ function goToPlayer(name) {
     location.href = '/player/' + encodeURIComponent(name);
 }
 
-// NOW 배너: 진행 중인 대회 상태 업데이트
-document.addEventListener('DOMContentLoaded', function() {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+// 경기 일정 밴드: 동적 데이터 로드
+// live/upcoming 중 어느 쪽이든 데이터가 들어오면 바깥 네이비 밴드를 노출한다
+function fmShowScheduleBand() {
+    const band = document.getElementById('fm-schedule-band');
+    if (band) band.style.display = '';
+}
 
-    const competitions = [
-        {
-            id: 'live-u17',
-            start: new Date('2025-12-16'),
-            end: new Date('2025-12-21')
-        },
-        {
-            id: 'live-u13',
-            start: new Date('2025-12-20'),
-            end: new Date('2025-12-21')
+// 진행 중 대회 ID 추적 (중복 방지)
+const _ongoingCompIds = new Set();
+// Store live/upcoming data globally for event results integration
+let _liveCompetitions = [];
+let _upcomingCompetitions = [];
+
+document.addEventListener('DOMContentLoaded', async function() {
+    try {
+        const response = await fetch('/api/competitions/live?lang=' + currentLang);
+        const data = await response.json();
+
+        const liveBanner = document.getElementById('live-competitions');
+        const liveCards = document.getElementById('live-cards');
+        const upcomingBanner = document.getElementById('upcoming-competitions');
+        const upcomingCards = document.getElementById('upcoming-cards');
+
+        // 진행 중인 대회 표시 + ID 기록
+        if (data.ongoing && data.ongoing.length > 0) {
+            _liveCompetitions = data.ongoing;
+            liveBanner.style.display = 'block';
+            fmShowScheduleBand();
+            data.ongoing.forEach(comp => {
+                _ongoingCompIds.add(comp.event_cd);
+                if (comp.comp_idx) _ongoingCompIds.add(comp.comp_idx);
+            });
+            liveCards.innerHTML = data.ongoing.map(comp => `
+                <a href="/competition/${comp.comp_idx || comp.event_cd}" class="live-card" data-comp-anchor="${comp.event_cd}">
+                    <div class="live-card-icon" aria-hidden="true"><svg class="fm-icon" viewBox="0 0 256 256" focusable="false"><path d="M232,64H208V48a8,8,0,0,0-8-8H56a8,8,0,0,0-8,8V64H24A16,16,0,0,0,8,80V96a40,40,0,0,0,40,40h3.65A80.13,80.13,0,0,0,120,191.61V216H96a8,8,0,0,0,0,16h64a8,8,0,0,0,0-16H136V191.58c31.94-3.23,58.44-25.64,68.08-55.58H208a40,40,0,0,0,40-40V80A16,16,0,0,0,232,64ZM48,120A24,24,0,0,1,24,96V80H48v32q0,4,.39,8Zm144-8.9c0,35.52-29,64.64-64,64.9a64,64,0,0,1-64-64V56H192ZM232,96a24,24,0,0,1-24,24h-.5a81.81,81.81,0,0,0,.5-8.9V80h24Z"/></svg></div>
+                    <div class="live-card-info">
+                        <h4>${_tr_comp(comp.name)}</h4>
+                        <p><span class="fm-num fm-num--semi">Day ${comp.day_number}/${comp.total_days}</span> ${comp.venue ? '• ' + comp.venue : ''}</p>
+                    </div>
+                    <div class="live-card-status">
+                        <span class="status status-live">LIVE</span>
+                        <div class="date fm-num fm-num--semi">${formatDateRange(comp.start_date, comp.end_date)}</div>
+                    </div>
+                </a>
+            `).join('');
+            // 각 live 대회에 선호 리그 이벤트 카드 추가
+            data.ongoing.forEach(comp => {
+                appendMyLeagueCard(comp.event_cd, liveCards);
+            });
         }
-    ];
 
-    let visibleCount = 0;
-
-    competitions.forEach(comp => {
-        const card = document.getElementById(comp.id);
-        if (!card) return;
-
-        const statusEl = card.querySelector('.status');
-        const isLive = today >= comp.start && today <= comp.end;
-        const isUpcoming = today < comp.start;
-        const isEnded = today > comp.end;
-
-        if (isEnded) {
-            card.style.display = 'none';
-        } else if (isLive) {
-            statusEl.textContent = 'LIVE';
-            statusEl.className = 'status status-live';
-            visibleCount++;
-        } else if (isUpcoming) {
-            const daysUntil = Math.ceil((comp.start - today) / (1000 * 60 * 60 * 24));
-            statusEl.textContent = daysUntil === 0 ? 'TODAY' : `D-${daysUntil}`;
-            statusEl.className = 'status status-upcoming';
-            visibleCount++;
+        // 예정 대회 표시 (7일 이내, 진행 중 제외)
+        if (data.upcoming && data.upcoming.length > 0) {
+            const filteredUpcoming = data.upcoming.filter(comp =>
+                !_ongoingCompIds.has(comp.event_cd) && !_ongoingCompIds.has(comp.comp_idx)
+            );
+            _upcomingCompetitions = filteredUpcoming;
+            if (filteredUpcoming.length > 0) {
+                upcomingBanner.style.display = 'block';
+                fmShowScheduleBand();
+                upcomingCards.innerHTML = filteredUpcoming.map(comp => `
+                    <a href="/competition/${comp.comp_idx || comp.event_cd}" class="upcoming-card" data-comp-anchor="${comp.event_cd}">
+                        <div class="upcoming-card-icon">
+                            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M12 2L4 6v6c0 5.55 3.84 10.74 8 12 4.16-1.26 8-6.45 8-12V6l-8-4z"/>
+                                <path d="M9 12l2 2 4-4"/>
+                            </svg>
+                        </div>
+                        <div class="upcoming-card-info">
+                            <h4>${_tr_comp(comp.name)}</h4>
+                            <p>${comp.venue || ''}</p>
+                        </div>
+                        <div class="upcoming-card-status">
+                            <span class="status fm-num">D-${comp.days_until}</span>
+                            <div class="date fm-num fm-num--semi">${formatDateRange(comp.start_date, comp.end_date)}</div>
+                        </div>
+                    </a>
+                `).join('');
+                // 각 upcoming 대회에 선호 리그 이벤트 카드 추가
+                filteredUpcoming.forEach(comp => {
+                    appendMyLeagueCard(comp.event_cd, upcomingCards);
+                });
+            }
         }
-    });
 
-    // 모든 대회 종료 시 배너 숨김
-    const banner = document.getElementById('live-competitions');
-    if (visibleCount === 0 && banner) {
-        banner.style.display = 'none';
+        // 예정 대회도 로드 (30일 이내)
+        await loadUpcomingCompetitions();
+
+    } catch (error) {
+        console.error('Failed to load live competitions:', error);
     }
 });
+
+// 30일 이내 예정 대회 로드 (진행 중/이미 표시된 대회 제외)
+async function loadUpcomingCompetitions() {
+    try {
+        const response = await fetch('/api/competitions/upcoming?days=30&limit=5&lang=' + currentLang);
+        const data = await response.json();
+
+        const upcomingBanner = document.getElementById('upcoming-competitions');
+        const upcomingCards = document.getElementById('upcoming-cards');
+
+        if (data.upcoming && data.upcoming.length > 0) {
+            const hasExistingCards = upcomingCards.querySelector('.upcoming-card') !== null;
+
+            // 진행 중 대회 + 이미 표시된 7일 이내 대회 제외
+            const additionalComps = data.upcoming.filter(comp =>
+                !_ongoingCompIds.has(comp.event_cd) &&
+                !_ongoingCompIds.has(comp.comp_idx) &&
+                (hasExistingCards ? comp.days_until > 7 : true)
+            );
+
+            if (additionalComps.length > 0) {
+                upcomingBanner.style.display = 'block';
+                fmShowScheduleBand();
+                const newHtml = additionalComps.slice(0, 5).map(comp => `
+                    <a href="/competition/${comp.comp_idx || comp.event_cd}" class="upcoming-card" data-comp-anchor="${comp.event_cd}">
+                        <div class="upcoming-card-icon">
+                            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <rect x="3" y="4" width="18" height="18" rx="2"/>
+                                <path d="M16 2v4M8 2v4M3 10h18"/>
+                                <path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/>
+                            </svg>
+                        </div>
+                        <div class="upcoming-card-info">
+                            <h4>${_tr_comp(comp.name)}</h4>
+                            <p>${comp.venue || ''}</p>
+                        </div>
+                        <div class="upcoming-card-status">
+                            <span class="status fm-num">D-${comp.days_until}</span>
+                            <div class="date fm-num fm-num--semi">${formatDateRange(comp.start_date, comp.end_date)}</div>
+                        </div>
+                    </a>
+                `).join('');
+
+                if (hasExistingCards) {
+                    // innerHTML += 는 컨테이너를 통째로 재파싱하여 비동기로 붙은
+                    // .my-league-card를 덮어쓰므로, 기존 DOM을 보존하는 방식으로 추가
+                    upcomingCards.insertAdjacentHTML('beforeend', newHtml);
+                } else {
+                    upcomingCards.innerHTML = newHtml;
+                }
+                // 각 upcoming 대회에 선호 리그 이벤트 카드 추가
+                additionalComps.slice(0, 5).forEach(comp => {
+                    appendMyLeagueCard(comp.event_cd, upcomingCards);
+                });
+            }
+        }
+    } catch (error) {
+        console.error('Failed to load upcoming competitions:', error);
+    }
+}
+
+// 날짜 범위 포맷팅
+function formatDateRange(startDate, endDate) {
+    if (!startDate) return '';
+    const start = new Date(startDate);
+    const end = endDate ? new Date(endDate) : start;
+
+    const startMonth = start.getMonth() + 1;
+    const startDay = start.getDate();
+    const endMonth = end.getMonth() + 1;
+    const endDay = end.getDate();
+
+    if (startMonth === endMonth && startDay === endDay) {
+        return `${startMonth}.${startDay}`;
+    }
+    return `${startMonth}.${startDay} - ${endMonth}.${endDay}`;
+}
+
+// ==================== Ranking Preview ====================
+// Age group key → API code mapping
+const RANKING_AGE_MAP = {
+    elementary: 'E3',
+    middle_school: 'MS',
+    high_school: 'HS',
+    senior: 'SR'
+};
+
+// Age groups that require category parameter
+const RANKING_CATEGORY_AGES = ['MS', 'HS', 'UNI', 'SR'];
+
+// Onboarding age_group key → display label (use i18n weapons/gender already defined)
+const RANKING_AGE_DISPLAY = {
+    elementary: i18n.age_groups.Y12 || 'Elementary',
+    middle_school: i18n.age_groups.Y14 || 'Middle School',
+    high_school: i18n.age_groups.Cadet || 'High School',
+    senior: i18n.age_groups.Veteran || 'Senior'
+};
+
+const MEDAL_ICONS = ['&#129351;', '&#129352;', '&#129353;'];  // gold, silver, bronze
+
+async function fetchAndRenderRankingPreview(weapon, gender, ageGroupKey) {
+    var section = document.getElementById('ranking-preview-section');
+    if (!section) return;
+    if (!weapon || !gender) return;
+
+    var ageCode = ageGroupKey ? RANKING_AGE_MAP[ageGroupKey] : null;
+    if (!ageCode) {
+        // No age group selected (skip or elementary not mapped) — hide section
+        section.style.display = 'none';
+        return;
+    }
+
+    section.style.display = '';
+
+    // Build title: "Weapon Gender AgeGroup TOP 3"
+    var weaponLabel = WEAPON_DISPLAY[weapon] || weapon;
+    var genderLabel = GENDER_DISPLAY[gender] || gender;
+    var ageLabel = RANKING_AGE_DISPLAY[ageGroupKey] || ageCode;
+    var titleEl = document.getElementById('ranking-preview-title');
+    if (titleEl) {
+        titleEl.textContent = weaponLabel + ' ' + genderLabel + ' ' + ageLabel + '  ' + (i18n.ranking_preview ? i18n.ranking_preview.title : 'TOP 3');
+    }
+
+    // Show loading
+    var bodyEl = document.getElementById('ranking-preview-body');
+    var loadingEl = document.getElementById('ranking-preview-loading');
+    if (loadingEl) loadingEl.style.display = '';
+    bodyEl.querySelectorAll('.ranking-preview-row').forEach(function(r) { r.remove(); });
+
+    // Build API URL
+    var params = new URLSearchParams();
+    params.append('weapon', weapon);
+    params.append('gender', gender);
+    params.append('age_group', ageCode);
+    if (RANKING_CATEGORY_AGES.indexOf(ageCode) !== -1) {
+        params.append('category', 'PRO');
+    }
+    params.append('per_page', '3');
+    params.append('lang', currentLang);
+
+    // Build "View All" link
+    var linkEl = document.getElementById('ranking-preview-link');
+    if (linkEl) {
+        var linkParams = new URLSearchParams();
+        linkParams.append('weapon', weapon);
+        linkParams.append('gender', gender);
+        linkParams.append('age_group', ageCode);
+        if (RANKING_CATEGORY_AGES.indexOf(ageCode) !== -1) {
+            linkParams.append('category', 'PRO');
+        }
+        linkEl.href = '/' + currentLang + '/rankings?' + linkParams.toString();
+    }
+
+    try {
+        var res = await fetch('/api/rankings?' + params.toString());
+        var data = await res.json();
+
+        if (loadingEl) loadingEl.style.display = 'none';
+
+        if (!data.rankings || data.rankings.length === 0) {
+            bodyEl.innerHTML = '<div class="ranking-preview-empty">' + (i18n.ranking_preview ? i18n.ranking_preview.no_data : 'No ranking data available') + '</div>';
+            document.getElementById('ranking-preview-login-hint').style.display = 'none';
+            return;
+        }
+
+        var hasBlurred = false;
+        var html = '';
+        data.rankings.forEach(function(entry, idx) {
+            var medal = MEDAL_ICONS[idx] || (idx + 1);
+            var isBlurred = entry.blurred === true;
+            if (isBlurred) hasBlurred = true;
+
+            var nameText = entry.display_name || entry.name;
+            var teamText = (entry.display_teams && entry.display_teams.length > 0) ? entry.display_teams[0] : (entry.teams && entry.teams.length > 0 ? entry.teams[0] : '');
+            var pointsText = entry.points.toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1}) + ' pt';
+
+            var nameClass = isBlurred ? 'ranking-preview-name blurred-text' : 'ranking-preview-name';
+            var teamClass = isBlurred ? 'ranking-preview-team blurred-text' : 'ranking-preview-team';
+
+            // Wrap name in link if not blurred
+            var nameHtml = isBlurred
+                ? '<span class="' + nameClass + '">' + nameText + '</span>'
+                : '<a href="/player/' + encodeURIComponent(entry.name) + '" class="' + nameClass + '">' + nameText + '</a>';
+
+            html += '<div class="ranking-preview-row">' +
+                '<span class="ranking-preview-medal">' + medal + '</span>' +
+                nameHtml +
+                '<span class="' + teamClass + '">' + teamText + '</span>' +
+                '<span class="ranking-preview-points fm-num">' + pointsText + '</span>' +
+                '</div>';
+        });
+
+        bodyEl.innerHTML = html;
+
+        // Show/hide login hint
+        var hintEl = document.getElementById('ranking-preview-login-hint');
+        if (hintEl) {
+            hintEl.style.display = hasBlurred ? '' : 'none';
+        }
+    } catch (e) {
+        console.error('Ranking preview error:', e);
+        if (loadingEl) loadingEl.style.display = 'none';
+        section.style.display = 'none';
+    }
+}
+
+// ============================================================
+// Non-blocking sport selector controller
+// Reuses #onboarding-overlay + mobile-ux.js selection logic
+// (selectWeaponGender / selectAgeGroup / completeOnboarding /
+//  skipOnboarding), changing only WHEN/HOW the selector appears.
+// ============================================================
+
+// Neutralize the legacy full-screen blocking auto-reveal (mobile-ux.js).
+// Runs at parse time, before mobile-ux's DOMContentLoaded handler calls it.
+window.showOnboardingHook = function () {};
+
+var FM_SEEN_KEY = 'fm_onboard_seen';
+
+function fmIsOnboarded() {
+    try {
+        var p = JSON.parse(localStorage.getItem('fm_preferences') || 'null');
+        return !!(p && p.onboarded);
+    } catch (e) { return false; }
+}
+
+function fmSheetEl() { return document.getElementById('onboarding-overlay'); }
+
+// Reset the two-step card back to step 1 (for reopening via the chip)
+function resetSportSteps() {
+    var step1 = document.getElementById('onboarding-step1');
+    var step2 = document.getElementById('onboarding-step2');
+    if (step1) { step1.classList.remove('slide-out'); step1.classList.add('active'); }
+    if (step2) { step2.classList.remove('active', 'slide-in'); }
+    document.querySelectorAll(
+        '#onboarding-overlay .weapon-gender-card.selected, #onboarding-overlay .age-group-choice.selected'
+    ).forEach(function (c) { c.classList.remove('selected'); });
+    var cta = document.getElementById('onboarding-cta');
+    if (cta) cta.disabled = true;
+}
+
+// Step-1 copy depends on why the sheet opened: a first-time visitor is being
+// welcomed, a returning one is editing a choice they already made.
+function fmApplySelectorCopy() {
+    var returning = fmIsOnboarded();
+    ['onboarding-title', 'onboarding-subtitle'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        var next = el.getAttribute(returning ? 'data-copy-return' : 'data-copy-fresh');
+        if (next) el.textContent = next;
+    });
+}
+
+// Holds the one-time scroll auto-reveal listener so we can tear it down
+var _fmRevealHandler = null;
+function fmCancelReveal() {
+    if (_fmRevealHandler) {
+        window.removeEventListener('scroll', _fmRevealHandler);
+        _fmRevealHandler = null;
+    }
+}
+
+function openSportSelector() {
+    var sheet = fmSheetEl();
+    if (!sheet) return;
+    fmCancelReveal();   // any open (manual or auto) retires the auto-reveal
+    resetSportSteps();
+    fmApplySelectorCopy();
+    sheet.classList.add('visible');
+    // Move focus into the sheet for keyboard users. Prefer the card that is
+    // already selected: focusing the first card instead makes the focus ring
+    // read as a second selection.
+    setTimeout(function () {
+        var target = sheet.querySelector('.weapon-gender-card.selected')
+                  || sheet.querySelector('.weapon-gender-card');
+        if (target) target.focus();
+    }, 60);
+}
+window.openSportSelector = openSportSelector;
+
+function dismissSportSheet() {
+    var sheet = fmSheetEl();
+    if (sheet) sheet.classList.remove('visible');
+    try { localStorage.setItem(FM_SEEN_KEY, '1'); } catch (e) {}
+}
+window.dismissSportSheet = dismissSportSheet;
+
+// Esc closes the sheet
+document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+        var sheet = fmSheetEl();
+        if (sheet && sheet.classList.contains('visible')) dismissSportSheet();
+    }
+});
+
+// Click-outside closes the sheet (non-blocking: the page still gets the click)
+document.addEventListener('click', function (e) {
+    var sheet = fmSheetEl();
+    if (!sheet || !sheet.classList.contains('visible')) return;
+    if (e.target.closest('.onboarding-card')) return;   // clicks inside the card
+    if (e.target.closest('.fm-sport-chip')) return;      // the opener itself
+    if (e.target.closest('.fm-prefs-edit')) return;      // "선호 리그 변경" opener
+    dismissSportSheet();
+});
+
+// One-time auto-reveal after the user scrolls ~1 viewport past the hero
+function initSportSheetReveal() {
+    if (fmIsOnboarded()) return;                    // returning user with prefs
+    if (localStorage.getItem(FM_SEEN_KEY)) return;  // already seen / dismissed
+    _fmRevealHandler = function onScroll() {
+        // Re-check at fire time: prefs set or already seen → retire quietly
+        if (fmIsOnboarded() || localStorage.getItem(FM_SEEN_KEY)) { fmCancelReveal(); return; }
+        var threshold = Math.max(window.innerHeight * 0.85, 320);
+        if (window.scrollY > threshold) {
+            try { localStorage.setItem(FM_SEEN_KEY, '1'); } catch (e) {}
+            openSportSelector();   // this also calls fmCancelReveal()
+        }
+    };
+    window.addEventListener('scroll', _fmRevealHandler, { passive: true });
+}
+
+// FencingLab i18n setup
+window.i18n = {
+    fencinglab: {
+        subtitle: '{{ i18n.common.fencinglab.subtitle|default("실제 데이터 기반 선수 분석") }}',
+        // 개편 중이라 데모 카드는 샘플 표시만 하고 /fencinglab 링크는 걸지 않는다 (2026-08-06)
+        sample: '{{ _t("샘플 화면") }}',
+        bouts: '{{ i18n.common.fencinglab.bouts|default("경기") }}',
+        win_rate: '{{ i18n.common.fencinglab.win_rate|default("승률") }}',
+        pool_rate: '{{ i18n.common.fencinglab.pool_rate|default("Pool") }}',
+        strong_heart: '{{ i18n.common.fencinglab.strong_heart|default("강심장") }}',
+        avg: '{{ i18n.common.fencinglab.avg|default("평균") }}',
+        total_bouts: '{{ i18n.common.fencinglab.total_bouts|default("총 경기") }}',
+        performance_by_type: '{{ i18n.common.fencinglab.performance_by_type|default("경기 유형별 성적") }}',
+        close_match_analysis: '{{ i18n.common.fencinglab.close_match_analysis|default("접전 분석 (1점차 경기)") }}',
+        avg_win_margin: '{{ i18n.common.fencinglab.avg_win_margin|default("평균 승리 점수차") }}',
+        avg_loss_margin: '{{ i18n.common.fencinglab.avg_loss_margin|default("평균 패배 점수차") }}',
+        match_ending_type: '{{ i18n.common.fencinglab.match_ending_type|default("경기 종료 유형") }}',
+        recent_matches: '{{ i18n.common.fencinglab.recent_matches|default("최근 경기 기록") }}',
+        cannot_load_data: '{{ i18n.common.fencinglab.cannot_load_data|default("데이터를 불러올 수 없습니다.") }}',
+    }
+};
 
 // FencingLab Demo Section
 document.addEventListener('DOMContentLoaded', function() {
@@ -1205,12 +3923,20 @@ document.addEventListener('DOMContentLoaded', function() {
     script1.onload = function() {
         // Then load FencingLab
         const script2 = document.createElement('script');
-        script2.src = '/static/js/fencinglab.js';
+        script2.src = '/static/js/fencinglab.js?v=20260806e';
         script2.onload = function() {
-            // Render demo section
-            if (window.FencingLab) {
-                FencingLab.renderDemoSection('fencinglab-demo');
-            }
+            // Render demo section; hide cleanly if there is nothing to show
+            if (!window.FencingLab) return;
+            var demoEl = document.getElementById('fencinglab-demo');
+            Promise.resolve(FencingLab.renderDemoSection('fencinglab-demo'))
+                .then(function() {
+                    if (demoEl && !demoEl.querySelector('.fl-demo-card')) {
+                        demoEl.style.display = 'none';
+                    }
+                })
+                .catch(function() {
+                    if (demoEl) demoEl.style.display = 'none';
+                });
         };
         document.head.appendChild(script2);
     };

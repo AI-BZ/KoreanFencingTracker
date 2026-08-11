@@ -11,7 +11,7 @@ from loguru import logger
 from .config import scraper_config, Endpoints
 from .models import (
     Competition, Event, Player, Match, Ranking,
-    CompetitionListResponse, CompetitionStatus
+    CompetitionListResponse
 )
 
 
@@ -259,8 +259,15 @@ class KFFClient:
 
         try:
             json_data = json.loads(response)
+            # 응답 형식: {"_TfEnterPlayerList": [...]} 또는 직접 배열
+            if isinstance(json_data, dict):
+                player_list = json_data.get("_TfEnterPlayerList", [])
+            elif isinstance(json_data, list):
+                player_list = json_data
+            else:
+                player_list = []
             players = []
-            for item in json_data:
+            for item in player_list:
                 players.append(Player(
                     player_name=item.get("plyNm", ""),
                     team_name=item.get("teamNm"),

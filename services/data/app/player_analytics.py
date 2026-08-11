@@ -11,7 +11,6 @@ FencingLab - 선수 경기 분석 엔진 v3
 - 평균 점수차
 """
 
-import json
 from typing import Optional, List, Dict, Tuple
 from dataclasses import dataclass, field, asdict
 from collections import defaultdict
@@ -87,32 +86,52 @@ class MatchResult:
     round_name: str  # "Pool 1", "32강전", "결승전" 등
     opponent_name: str
     opponent_team: str
-    player_score: int
-    opponent_score: int
+    # 부전승·기권·미완료 경기는 점수가 없을 수 있다 (None)
+    player_score: Optional[int]
+    opponent_score: Optional[int]
     is_win: bool
     is_pool: bool  # Pool(5점제) vs DE(15점제)
     date: str = ""
     event_cd: str = ""  # 이벤트 페이지 링크용
 
     @property
-    def score_diff(self) -> int:
-        """점수차 (양수=승리, 음수=패배)"""
+    def has_scores(self) -> bool:
+        """점수가 기록된 경기인지 (점수 기반 분석 대상 여부)"""
+        return self.player_score is not None and self.opponent_score is not None
+
+    @property
+    def score_diff(self) -> Optional[int]:
+        """점수차 (양수=승리, 음수=패배). 점수 미기록 시 None"""
+        if not self.has_scores:
+            return None
         return self.player_score - self.opponent_score
 
     @property
+    def score_display(self) -> str:
+        """표시용 점수 문자열. 점수 미기록 시 '-'"""
+        if not self.has_scores:
+            return "-"
+        return f"{self.player_score}:{self.opponent_score}"
+
+    @property
     def is_clutch(self) -> bool:
-        """1점 차 접전 경기인지"""
-        return abs(self.score_diff) == 1
+        """1점 차 접전 경기인지 (점수를 모르면 접전으로 세지 않음)"""
+        diff = self.score_diff
+        return diff is not None and abs(diff) == 1
 
     @property
     def is_timeout(self) -> bool:
         """시간종료 경기인지 (목표점 미도달: Pool 5점, DE 15점)"""
+        if not self.has_scores:
+            return False
         max_score = 5 if self.is_pool else 15
         return max(self.player_score, self.opponent_score) < max_score
 
     @property
     def is_fullscore(self) -> bool:
         """풀스코어 경기인지 (목표점 도달: Pool 5점, DE 15점)"""
+        if not self.has_scores:
+            return False
         max_score = 5 if self.is_pool else 15
         return max(self.player_score, self.opponent_score) >= max_score
 
@@ -747,7 +766,7 @@ class FencingLabAnalyzer:
                 "event_cd": m.event_cd,
                 "round": m.round_name,
                 "opponent": m.opponent_name,
-                "score": f"{m.player_score}:{m.opponent_score}",
+                "score": m.score_display,
                 "result": win_text if m.is_win else loss_text,
                 "type": "Pool" if m.is_pool else "DE",
                 "date": m.date
@@ -826,9 +845,10 @@ class FencingLabAnalyzer:
             analytics.finish_type_insight = get_analytics_text("mostly_fullscore", lang)
 
     def _analyze_margin(self, analytics: PlayerAnalytics, matches: List[MatchResult]):
-        """점수차 분석"""
-        wins = [m for m in matches if m.is_win]
-        losses = [m for m in matches if not m.is_win]
+        """점수차 분석 (점수 미기록 경기는 평균/압승 집계에서 제외)"""
+        scored = [m for m in matches if m.has_scores]
+        wins = [m for m in scored if m.is_win]
+        losses = [m for m in scored if not m.is_win]
 
         if wins:
             analytics.avg_win_margin = round(sum(m.score_diff for m in wins) / len(wins), 1)
@@ -859,7 +879,7 @@ class FencingLabAnalyzer:
                 "event": m.event_name,
                 "round": m.round_name,
                 "opponent": m.opponent_name,
-                "score": f"{m.player_score}:{m.opponent_score}",
+                "score": m.score_display,
                 "result": "승" if m.is_win else "패",
                 "type": "Pool" if m.is_pool else "DE",
                 "date": m.date
