@@ -316,6 +316,15 @@ tr.player-highlighted td {
     font-size: 1em;
 }
 
+/* 같은 풀에 내 선수가 둘 이상일 때만 붙는 "누구 기준" 표시 */
+.h2h-badge__who {
+    margin-right: 5px;
+    padding-right: 5px;
+    border-right: 1px solid currentColor;
+    opacity: 0.65;
+    font-weight: 600;
+}
+
 /* 대진표 노드는 이름/소속이 세로로 쌓인다 → 배지는 아래 줄 왼쪽 정렬 */
 .player-info-tree .h2h-badge,
 .player-details .h2h-badge {
@@ -2156,7 +2165,8 @@ function _getMyPlayerLocal() {
         var p = JSON.parse(raw);
         if (p && p.name) {
             var ko = String(p.name).trim();
-            return { ko: ko, display: (typeof _tr_player === 'function' ? _tr_player(ko) : ko) || ko };
+            return { ko: ko, display: (typeof _tr_player === 'function' ? _tr_player(ko) : ko) || ko,
+                     team: String(p.team || '').trim() };
         }
     } catch (e) {}
     return null;
@@ -2176,16 +2186,21 @@ window.getMyPlayerNames = function() {
     var mp = _getMyPlayerLocal();
     function finish(favList) {
         var out = [], seen = {};
-        function add(ko, display) {
+        function add(ko, display, team) {
             var key = (ko == null ? '' : String(ko)).trim();
             if (!key) return;
             var lk = key.toLowerCase();
-            if (seen[lk]) return;
-            seen[lk] = true;
-            out.push({ ko: key, display: (display || (typeof _tr_player === 'function' ? _tr_player(key) : key) || key) });
+            if (seen[lk]) {
+                // 소속은 아는 쪽이 이긴다 — 동명이인 판정에 쓰인다
+                if (team && !seen[lk].team) seen[lk].team = String(team).trim();
+                return;
+            }
+            seen[lk] = { ko: key, display: (display || (typeof _tr_player === 'function' ? _tr_player(key) : key) || key),
+                         team: String(team || '').trim() };
+            out.push(seen[lk]);
         }
-        (favList || []).forEach(function(f) { add(f.player_name, f.display_name); }); // Favorites 우선
-        if (mp) add(mp.ko, mp.display);                                              // 그다음 My Player
+        (favList || []).forEach(function(f) { add(f.player_name, f.display_name, f.team); }); // Favorites 우선
+        if (mp) add(mp.ko, mp.display, mp.team);                                              // 그다음 My Player
         _myPlayerNamesCache = out;
         return out;
     }
@@ -2683,9 +2698,10 @@ window.DERoute = (function() {
 // 비동기 — 도착하면 배지를 채우고, 실패하면 기존 화면 그대로 둔다.
 // ==========================================
 window.EventH2H = (function() {
-    var _map = null;        // { 한글이름: record }
-    var _byText = null;     // { 표시명(소문자): 한글이름 }
-    var _me = null;         // { ko, team }
+    // 내 선수는 여러 명일 수 있다. 선수마다 자기 전적표를 따로 들고 다닌다.
+    // { ko, team, map: {상대한글: record}, byText: {표시명(소문자): 상대한글}, self: {표기(소문자): true} }
+    var _players = [];
+    var _signature = '';    // 마지막으로 조회한 내 선수 목록 (재조회 판단용)
     var _inflight = false;
 
     function esc(s) { return (typeof _mpEscapeHtml === 'function') ? _mpEscapeHtml(s) : String(s == null ? '' : s); }
@@ -2717,7 +2733,9 @@ window.EventH2H = (function() {
         return lines.join('\n');
     }
 
-    function badgeHtml(ko, rec) {
+    // whoKo: 이 배지가 어느 내 선수 기준인지. showWho 가 켜지면 이름을 앞에 붙인다
+    // (한 화면에 내 선수가 둘 이상 섞일 때만).
+    function badgeHtml(ko, rec, whoKo, showWho) {
         var inner;
         if (!rec || rec.first_meeting) {
             inner = esc(t('첫 대결'));
@@ -2725,69 +2743,115 @@ window.EventH2H = (function() {
             inner = '<span class="fm-num">' + rec.wins + '</span>' + esc(t('승')) +
                     '&nbsp;<span class="fm-num">' + rec.losses + '</span>' + esc(t('패'));
         }
-        return '<span class="fm-badge fm-badge--micro fm-badge--pill h2h-badge ' + stateClass(rec) + '"' +
-               ' title="' + esc(tooltip(ko, rec)) + '">' + inner + '</span>';
+        if (showWho && whoKo) inner = '<span class="h2h-badge__who">' + esc(trP(whoKo)) + '</span>' + inner;
+        return '<span data-h2h-who="' + esc(whoKo || '') + '"' +
+               ' class="fm-badge fm-badge--micro fm-badge--pill h2h-badge ' + stateClass(rec) + '"' +
+               ' title="' + esc(tooltip2(showWho ? whoKo : '', ko, rec)) + '">' + inner + '</span>';
     }
 
-    // 내 선수 이름 후보 (한글 원문 + 로마자 표기). DOM 텍스트는 언어에 따라 달라진다.
-    function meNames() {
+    function tooltip2(whoKo, ko, rec) {
+        var s = tooltip(ko, rec);
+        return whoKo ? (trP(whoKo) + ' ' + t('기준') + '\n' + s) : s;
+    }
+
+    // 표시 이름 후보 (한글 원문 + 로마자). DOM 텍스트는 언어에 따라 달라진다.
+    function nameKeys(ko) {
         var out = {};
-        if (_me && _me.ko) {
-            out[norm(_me.ko)] = true;
-            var d = trP(_me.ko);
-            if (d) out[norm(d)] = true;
-        }
+        if (!ko) return out;
+        out[norm(ko)] = true;
+        var d = trP(ko);
+        if (d) out[norm(d)] = true;
         return out;
     }
 
-    function lookup(text) {
-        if (!_byText) return null;
-        var ko = _byText[norm(text)];
-        return ko ? { ko: ko, rec: _map[ko] } : null;
+    function lookupIn(entry, text) {
+        var ko = entry.byText[norm(text)];
+        return ko ? { ko: ko, rec: entry.map[ko] } : null;
     }
 
-    function buildIndex(data) {
-        _map = (data && data.opponents) || {};
-        _byText = {};
-        Object.keys(_map).forEach(function(ko) {
-            _byText[norm(ko)] = ko;
+    function buildIndex(entry, data) {
+        // 즐겨찾기로 들어온 선수는 소속을 모른다 → 서버가 확정한 소속을 받아 동명이인 판정에 쓴다
+        if (!entry.team && data && data.team) entry.team = String(data.team).trim();
+        entry.map = (data && data.opponents) || {};
+        entry.byText = {};
+        Object.keys(entry.map).forEach(function(ko) {
+            entry.byText[norm(ko)] = ko;
             var d = trP(ko);
-            if (d) _byText[norm(d)] = ko;
+            if (d) entry.byText[norm(d)] = ko;
         });
+        entry.self = nameKeys(entry.ko);
     }
+
+    function ready() { return _players.filter(function(e) { return e.map; }); }
 
     // ---- Pool 탭: 내 선수가 속한 풀의 나머지 선수 행에 배지 ----
-    function applyPools() {
-        if (!_map) return;
-        var mine = meNames();
-        document.querySelectorAll('.pool-item[data-pool-id]').forEach(function(poolEl) {
-            var rows = poolEl.querySelectorAll('.pool-standings-table tbody tr');
-            if (!rows.length) return;
-            // 내 선수가 없는 풀은 건드리지 않는다 (다른 풀의 동명이인 오배지 방지)
-            var hasMe = false;
-            for (var i = 0; i < rows.length; i++) {
-                var link = rows[i].querySelector('td.player-name a');
-                if (link && mine[norm(link.textContent)]) { hasMe = true; break; }
-            }
-            if (!hasMe) return;
+    // 풀 행에서 소속을 읽는다. 표시 텍스트는 번역되므로 링크의 team 파라미터(원문)를 쓴다.
+    function rowTeam(row) {
+        var a = row.querySelector('td.player-name a');
+        var href = a ? (a.getAttribute('href') || '') : '';
+        var m = href.match(/[?&]team=([^&]*)/);
+        if (!m) return '';
+        try { return norm(decodeURIComponent(m[1])); } catch (e) { return norm(m[1]); }
+    }
 
-            rows.forEach(function(row) {
+    function applyPools() {
+        var entries = ready();
+        if (!entries.length) return;
+        var pools = [];
+        document.querySelectorAll('.pool-item[data-pool-id]').forEach(function(poolEl) {
+            var rows = [].slice.call(poolEl.querySelectorAll('.pool-standings-table tbody tr'));
+            if (!rows.length) return;
+            pools.push({ el: poolEl, rows: rows, labels: rows.map(function(row) {
+                var a = row.querySelector('td.player-name a');
                 var cell = row.querySelector('td.player-name');
-                if (!cell || cell.querySelector('.h2h-badge')) return;
-                var a = cell.querySelector('a');
-                var label = a ? a.textContent : cell.textContent;
-                if (mine[norm(label)]) return;   // 내 선수 본인 행에는 표시하지 않음
-                var hit = lookup(label);
-                if (!hit || (hit.rec.contexts || []).indexOf('pool') < 0) return;
-                cell.insertAdjacentHTML('beforeend', badgeHtml(hit.ko, hit.rec));
+                return a ? a.textContent : (cell ? cell.textContent : '');
+            }), teams: rows.map(rowTeam) });
+        });
+        if (!pools.length) return;
+
+        // 동명이인 대비: 이름+소속이 정확히 맞는 행이 어딘가에 있으면 소속까지 맞는 행만 내 선수로 본다.
+        // (소속을 모르거나 맞는 행이 없으면 이름만으로 판정 — 배지를 통째로 잃는 것보다 낫다)
+        entries.forEach(function(e) {
+            var team = norm(e.team);
+            e._strict = !!team && pools.some(function(p) {
+                return p.labels.some(function(l, i) { return e.self[norm(l)] && p.teams[i] === team; });
+            });
+        });
+        function isMine(e, p, i) {
+            if (!e.self[norm(p.labels[i])]) return false;
+            return e._strict ? (p.teams[i] === norm(e.team)) : true;
+        }
+
+        pools.forEach(function(p) {
+            var owners = entries.filter(function(e) {
+                return p.labels.some(function(_, i) { return isMine(e, p, i); });
+            });
+            if (!owners.length) return;
+            var multi = owners.length > 1;   // 한 풀에 내 선수가 둘 이상이면 누구 기준인지 밝힌다
+            // 앞선 응답으로 이미 붙은 배지에는 접두사가 없다 → 기준이 늘어났으면 다시 그린다
+            var existing = p.el.querySelectorAll('.h2h-badge');
+            if (multi && existing.length && !p.el.querySelector('.h2h-badge__who')) {
+                existing.forEach(function(b) { b.remove(); });
+            }
+
+            p.rows.forEach(function(row, idx) {
+                var cell = row.querySelector('td.player-name');
+                if (!cell) return;
+                owners.forEach(function(e) {
+                    if (isMine(e, p, idx)) return;                   // 본인 행에는 자기 기준 배지 없음
+                    if (cell.querySelector('[data-h2h-who="' + e.ko + '"]')) return;
+                    var hit = lookupIn(e, p.labels[idx]);
+                    if (!hit || (hit.rec.contexts || []).indexOf('pool') < 0) return;
+                    cell.insertAdjacentHTML('beforeend', badgeHtml(hit.ko, hit.rec, e.ko, multi));
+                });
             });
         });
     }
 
     // ---- DE 대진표: 내 선수가 낀 경기의 상대에게 배지 ----
     function applyBracket() {
-        if (!_map || !_me) return;
-        var mine = meNames();
+        var entries = ready();
+        if (!entries.length) return;
         document.querySelectorAll('.bracket-match, .match-card').forEach(function(matchEl) {
             var slots = matchEl.querySelectorAll('.match-player, .card-player');
             if (slots.length !== 2) return;
@@ -2796,30 +2860,42 @@ window.EventH2H = (function() {
                 var el = slots[i].querySelector('.player-name');
                 labels.push(el ? el.textContent : '');
             }
-            var meIdx = mine[norm(labels[0])] ? 0 : (mine[norm(labels[1])] ? 1 : -1);
-            if (meIdx < 0) return;
-            var oppSlot = slots[1 - meIdx];
-            if (oppSlot.querySelector('.h2h-badge')) return;
-            var nameEl = oppSlot.querySelector('.player-name');
-            if (!nameEl) return;
-            var hit = lookup(labels[1 - meIdx]);
-            if (!hit) return;
-            // 이름/소속 묶음 뒤에 붙인다. 이름 바로 뒤에 끼우면 소속과 이름 사이가 벌어진다.
-            var box = oppSlot.querySelector('.player-info-tree, .player-details');
-            if (box) box.insertAdjacentHTML('beforeend', badgeHtml(hit.ko, hit.rec));
-            else nameEl.insertAdjacentHTML('afterend', badgeHtml(hit.ko, hit.rec));
+            // 내 선수끼리 붙는 경기면 양쪽 다 표시한다 (각자 상대 기준).
+            entries.forEach(function(e) {
+                var meIdx = e.self[norm(labels[0])] ? 0 : (e.self[norm(labels[1])] ? 1 : -1);
+                if (meIdx < 0) return;
+                var oppSlot = slots[1 - meIdx];
+                if (oppSlot.querySelector('[data-h2h-who="' + e.ko + '"]')) return;
+                var nameEl = oppSlot.querySelector('.player-name');
+                if (!nameEl) return;
+                var hit = lookupIn(e, labels[1 - meIdx]);
+                if (!hit) return;
+                var showWho = entries.some(function(o) {
+                    return o !== e && (o.self[norm(labels[0])] || o.self[norm(labels[1])]);
+                });
+                var html = badgeHtml(hit.ko, hit.rec, e.ko, showWho);
+                // 이름/소속 묶음 뒤에 붙인다. 이름 바로 뒤에 끼우면 소속과 이름 사이가 벌어진다.
+                var box = oppSlot.querySelector('.player-info-tree, .player-details');
+                if (box) box.insertAdjacentHTML('beforeend', html);
+                else nameEl.insertAdjacentHTML('afterend', html);
+            });
         });
     }
 
     // ---- 선수 루트 위젯: 표시 중인 선수가 내 선수일 때만 상대 노드에 배지 ----
     function applyRoute() {
-        if (!_map) return;
+        var entries = ready();
+        if (!entries.length) return;
         var body = document.getElementById('de-route-body');
         if (!body) return;
         var who = body.querySelector('.drt-name');
-        var mine = meNames();
-        if (!who || !mine[norm(who.textContent)]) return;   // 다른 선수 루트를 보는 중이면 표시 안 함
-        var keys = Object.keys(_map);
+        if (!who) return;
+        var label = norm(who.textContent);
+        // 지금 보고 있는 루트의 주인공이 내 선수일 때만 표시 (다른 선수 루트에는 붙이지 않음)
+        var e = null;
+        for (var k = 0; k < entries.length; k++) { if (entries[k].self[label]) { e = entries[k]; break; } }
+        if (!e) return;
+        var keys = Object.keys(e.map);
         body.querySelectorAll('.drt-node .drt-vs').forEach(function(el) {
             if (el.querySelector('.h2h-badge')) return;
             var txt = el.textContent || '';
@@ -2827,7 +2903,7 @@ window.EventH2H = (function() {
                 var ko = keys[i];
                 var disp = trP(ko);
                 if ((disp && txt.indexOf(disp) >= 0) || txt.indexOf(ko) >= 0) {
-                    el.insertAdjacentHTML('beforeend', ' ' + badgeHtml(ko, _map[ko]));
+                    el.insertAdjacentHTML('beforeend', ' ' + badgeHtml(ko, e.map[ko], e.ko, false));
                     break;
                 }
             }
@@ -2841,7 +2917,7 @@ window.EventH2H = (function() {
     }
 
     function clear() {
-        _map = null; _byText = null; _me = null;
+        _players = []; _signature = '';
         document.querySelectorAll('.h2h-badge').forEach(function(b) { b.remove(); });
     }
 
@@ -2855,39 +2931,54 @@ window.EventH2H = (function() {
         return null;
     }
 
-    function _fetchFor(me) {
-        _me = me;
-        _inflight = true;
+    // 내 선수 전원: localStorage 의 지정 선수 + 즐겨찾기. 중복은 이름으로 제거하고,
+    // 소속을 아는 쪽(localStorage)을 우선한다.
+    function _collect() {
+        var out = [], seen = {};
+        function add(ko, team) {
+            var key = norm(ko);
+            if (!key) return;
+            if (seen[key]) { if (team && !seen[key].team) seen[key].team = team; return; }
+            seen[key] = { ko: String(ko).trim(), team: String(team || '').trim(), map: null, byText: null, self: null };
+            out.push(seen[key]);
+        }
+        var me = _localMe();
+        if (me) add(me.ko, me.team);
+        var favs = (typeof getMyPlayerNamesSync === 'function') ? getMyPlayerNamesSync() : [];
+        favs.forEach(function(f) { add(f.ko, f.team); });
+        if (typeof getMyPlayerNames !== 'function') return Promise.resolve(out);
+        return getMyPlayerNames().then(function(names) {
+            (names || []).forEach(function(n) { add(n.ko, n.team); });
+            return out;
+        }).catch(function() { return out; });
+    }
+
+    function _fetchFor(entry) {
         var url = '/api/events/' + encodeURIComponent(SUB_EVENT_CD) +
-                  '/head-to-head?player=' + encodeURIComponent(me.ko) +
-                  (me.team ? '&team=' + encodeURIComponent(me.team) : '');
-        fetch(url)
+                  '/head-to-head?player=' + encodeURIComponent(entry.ko) +
+                  (entry.team ? '&team=' + encodeURIComponent(entry.team) : '');
+        return fetch(url)
             .then(function(r) { return r.ok ? r.json() : null; })
             .then(function(d) {
-                _inflight = false;
                 if (!d) return;
-                buildIndex(d);
-                applyAll();
+                buildIndex(entry, d);
+                applyAll();   // 도착하는 대로 화면에 얹는다 (전원 대기하지 않음)
             })
-            .catch(function() { _inflight = false; });
+            .catch(function() {});
     }
 
     function load(force) {
         if (!SUB_EVENT_CD || _inflight) return;
-        var me = _localMe();
-        if (me) {
-            if (!force && _me && _me.ko === me.ko && _me.team === me.team && _map) { applyAll(); return; }
+        _inflight = true;
+        _collect().then(function(list) {
+            var sig = list.map(function(e) { return e.ko + '@' + e.team; }).sort().join('|');
+            if (!force && sig === _signature && _players.length) { _inflight = false; applyAll(); return; }
+            _signature = sig;
+            _players = list;
             document.querySelectorAll('.h2h-badge').forEach(function(b) { b.remove(); });
-            _fetchFor(me);
-            return;
-        }
-        // localStorage 내 선수가 없으면 즐겨찾기 선수로 대체 (소속은 알 수 없음)
-        if (typeof getMyPlayerNames === 'function') {
-            getMyPlayerNames().then(function(names) {
-                if (!names || !names.length || _localMe()) return;
-                _fetchFor({ ko: names[0].ko, team: '' });
-            });
-        }
+            if (!list.length) { _inflight = false; return; }
+            Promise.all(list.map(_fetchFor)).then(function() { _inflight = false; applyAll(); });
+        }).catch(function() { _inflight = false; });
     }
 
     function init() {
