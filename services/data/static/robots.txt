@@ -1,0 +1,101 @@
+# robots.txt — data.fencingmind.ai
+# 최종 수정: 2026-08-14
+#
+# 방침: 선수 프로필(/player/)은 요청 1건당 서버 연산이 커서(≈1.8s) 크롤러가
+# 대량으로 훑으면 사이트 전체 응답이 밀린다. 그래서 검색 유입을 실제로
+# 만들어 주는 검색엔진(Google/Bing/Naver/Daum)에만 열어 두고, 나머지
+# 크롤러에게는 닫는다. SEO 분석용 봇은 전면 차단한다.
+
+# ---------------------------------------------------------------------------
+# 기본 그룹 — 아래에 별도 그룹이 없는 모든 크롤러
+# (AI 크롤러 GPTBot / Amazonbot / Applebot / ClaudeBot 등이 여기에 해당)
+# ---------------------------------------------------------------------------
+User-agent: *
+Crawl-delay: 10
+
+# 연산 비용이 큰 경로
+Disallow: /player/
+Disallow: /*/player/
+Disallow: /fencinglab
+Disallow: /*/fencinglab
+Disallow: /selection/
+Disallow: /*/selection/
+Disallow: /search
+Disallow: /*/search
+
+# 로그인·API·클럽 관리 — 크롤링해도 의미 없는 경로
+Disallow: /api/
+Disallow: /auth/
+Disallow: /*/auth/
+Disallow: /club/
+Disallow: /*/club/
+
+# 필터 조합(쿼리스트링) URL — 같은 내용이 조합 수만큼 늘어난다
+Disallow: /*?
+
+# 허용(명시적 Disallow가 없으므로 기본 허용):
+#   /              홈
+#   /ko/ /en/ /ja/ /fr/ /it/ /zh/ /tr/   언어별 홈
+#   /competitions, /rankings, /competition/{id}  및 각 언어 프리픽스 버전
+
+# ---------------------------------------------------------------------------
+# 검색엔진 — 선수 프로필까지 허용 (검색 유입의 장기 자산)
+# Google/Bing/Naver(Yeti)/Daum은 크롤링 속도를 스스로 조절하고,
+# 실측상 요청량도 적다(2개월간 Googlebot 228건, bingbot 235건).
+# ---------------------------------------------------------------------------
+User-agent: Googlebot
+User-agent: Googlebot-Image
+User-agent: Googlebot-News
+User-agent: Bingbot
+User-agent: Yeti
+User-agent: Daum
+User-agent: Daumoa
+User-agent: NaverBot
+
+Disallow: /api/
+Disallow: /auth/
+Disallow: /*/auth/
+Disallow: /club/
+Disallow: /*/club/
+Disallow: /fencinglab
+Disallow: /*/fencinglab
+Disallow: /search
+Disallow: /*/search
+Disallow: /*?
+Crawl-delay: 5
+
+# ---------------------------------------------------------------------------
+# SEO 분석·백링크 수집 봇 — 전면 차단
+# 검색 유입에 기여하지 않으면서 트래픽만 만든다.
+# (실측 2026-06-15 ~ 08-14: SemrushBot 140,745건 / DotBot 7,968건 /
+#  MJ12bot 1,431건, 이 중 /player/ 요청이 88,455건)
+# ---------------------------------------------------------------------------
+User-agent: SemrushBot
+Disallow: /
+
+User-agent: AhrefsBot
+Disallow: /
+
+User-agent: MJ12bot
+Disallow: /
+
+User-agent: DotBot
+Disallow: /
+
+User-agent: PetalBot
+Disallow: /
+
+User-agent: Bytespider
+Disallow: /
+
+User-agent: BLEXBot
+Disallow: /
+
+User-agent: SeekportBot
+Disallow: /
+
+User-agent: DataForSeoBot
+Disallow: /
+
+User-agent: serpstatbot
+Disallow: /

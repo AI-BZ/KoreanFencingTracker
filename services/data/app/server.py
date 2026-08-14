@@ -2024,14 +2024,86 @@ def load_data():
         _selection_calculator = None
 
     # 데이터 무결성 검증 (백그라운드 스레드에서 실행 — 서버 시작을 블로킹하지 않음)
+    #
+    # 검증은 순수 CPU 작업이라 별도 스레드에 있어도 GIL을 통해 요청 처리와 경쟁한다.
+    # 예전에는 기동 직후부터 약 10분간 한 스레드가 CPU를 100% 점유해서 응답이
+    # 1.6~1.8초로 밀리고 Cloudflare 1033이 발생했다. 그래서 두 가지를 건다:
+    #   1) 워밍업/초기 트래픽과 겹치지 않게 VALIDATION_DELAY_SEC(기본 300초) 후 시작
+    #   2) VALIDATION_CPU_DUTY(기본 0.25)만큼만 CPU를 쓰도록 중간중간 sleep
     import threading
+    import time as _time
+
+    if os.getenv("ENABLE_STARTUP_VALIDATION", "true").lower() != "true":
+        logger.info("[DataValidator] ENABLE_STARTUP_VALIDATION=false — 시작 시 검증 건너뜀")
+        return
+
+    def _env_float(name: str, default: float) -> float:
+        try:
+            return float(os.getenv(name, str(default)))
+        except (TypeError, ValueError):
+            logger.warning(f"{name} 값이 숫자가 아님 — 기본값 {default} 사용")
+            return default
+
+    validation_delay = max(_env_float("VALIDATION_DELAY_SEC", 300.0), 0.0)
+    cpu_duty = min(max(_env_float("VALIDATION_CPU_DUTY", 0.25), 0.05), 1.0)
+    work_slice = 0.05  # 0.05초 일한 뒤 duty에 맞춰 쉰다
 
     def _run_startup_validation():
         try:
+            if validation_delay > 0:
+                logger.info(
+                    f"[DataValidator] {validation_delay:.0f}초 후 검증 시작 "
+                    f"(CPU duty {cpu_duty:.0%})"
+                )
+                _time.sleep(validation_delay)
+
             from app.data_validator import DataValidator
+
+            class _ThrottledValidator(DataValidator):
+                """검증 도중 CPU를 양보하는 래퍼.
+
+                DataValidator 본체는 건드리지 않고, 이벤트/선수 단위로 호출되는
+                메서드를 감싸 duty cycle만 강제한다. 검증 로직과 결과는 그대로다.
+                부모에서 메서드 이름이 바뀌면 이 오버라이드는 호출되지 않아
+                CPU 양보만 사라지고 검증 자체는 정상 동작한다.
+                """
+
+                def __init__(self, *args, **kwargs):
+                    super().__init__(*args, **kwargs)
+                    self._slice_started = _time.monotonic()
+
+                def _yield_cpu(self):
+                    elapsed = _time.monotonic() - self._slice_started
+                    if elapsed < work_slice:
+                        return
+                    if cpu_duty < 1.0:
+                        _time.sleep(elapsed * (1.0 / cpu_duty - 1.0))
+                    self._slice_started = _time.monotonic()
+
+                # 이벤트당 1회 호출되는 지점 (약 2,800회)
+                def _check_r14_same_event_duplicate_names(self, *args, **kwargs):
+                    result = super()._check_r14_same_event_duplicate_names(*args, **kwargs)
+                    self._yield_cpu()
+                    return result
+
+                # 선수당 1회 호출되는 지점 (약 12,000회) — 검증 시간의 대부분
+                def _validate_player_records(self, *args, **kwargs):
+                    result = super()._validate_player_records(*args, **kwargs)
+                    self._yield_cpu()
+                    return result
+
+            for hook in ("_check_r14_same_event_duplicate_names", "_validate_player_records"):
+                if not hasattr(DataValidator, hook):
+                    logger.warning(
+                        f"[DataValidator] {hook}()가 없어 CPU 양보 훅이 동작하지 않는다 "
+                        f"— 검증이 CPU를 독점할 수 있음"
+                    )
+
             logger.info("[DataValidator] 백그라운드 검증 시작...")
-            validator = DataValidator(get_competitions(), org_cache=_org_region_cache)
+            started_at = _time.monotonic()
+            validator = _ThrottledValidator(get_competitions(), org_cache=_org_region_cache)
             issues = validator.validate_all()
+            logger.info(f"[DataValidator] 검증 소요 {(_time.monotonic() - started_at):.0f}초")
             errors = [i for i in issues if i.severity == "ERROR"]
             warnings = [i for i in issues if i.severity == "WARNING"]
 
@@ -2089,6 +2161,23 @@ def get_competition(event_cd: str) -> Optional[Dict]:
 
 
 # ==================== API Endpoints ====================
+
+@app.get("/robots.txt", include_in_schema=False)
+async def robots_txt():
+    """크롤러 규칙 파일.
+
+    이 라우트가 없으면 /robots.txt가 `/{lang}/` 라우트의 slash 리다이렉트에
+    걸려 307 → /robots.txt/ → 홈 HTML을 반환한다. 크롤러는 규칙을 못 읽는다.
+    """
+    from fastapi.responses import FileResponse, PlainTextResponse
+
+    robots_path = STATIC_DIR / "robots.txt"
+    if not robots_path.is_file():
+        # 파일이 없어도 홈 HTML을 주지는 않는다 — 최소 규칙이라도 내려준다.
+        logger.warning(f"robots.txt 파일 없음: {robots_path}")
+        return PlainTextResponse("User-agent: *\nCrawl-delay: 10\n")
+    return FileResponse(robots_path, media_type="text/plain; charset=utf-8")
+
 
 @app.get("/", response_class=HTMLResponse)
 async def home_redirect(request: Request):
@@ -6874,18 +6963,37 @@ async def competition_detail_page(request: Request, event_cd: str, event: Option
             if _ranking_calculator and selected_event.get("pool_rounds"):
                 ev_weapon = selected_event.get("weapon", "")
                 ev_gender = selected_event.get("gender", "")
-                ev_age_fie = get_event_age_group_fie(selected_event)
-                if not ev_age_fie or ev_age_fie == 'NT':
-                    ev_age_fie = extract_age_group(selected_event.get("name", ""))
-                legacy_codes = get_matching_legacy_codes(ev_age_fie)
-                ev_age = legacy_codes[0] if legacy_codes else ev_age_fie
-                ev_cat = "PRO" if ev_age in CATEGORY_APPLICABLE_AGE_GROUPS else None
+                # 국가대표 선발전은 중등부터 일반부까지 한 이벤트에서 겨루므로
+                # 나이리그 랭킹으로는 맞출 수 없다. 이벤트명("여자 플러레(개)")에
+                # 나이 정보가 없어 이전에는 Veteran(SR)으로 떨어졌고, 그 결과
+                # 참가자 대부분이 SR 목록에 없어 순위가 비어 보였다.
+                # 순수 선발전(NATIONAL)과 "겸 국가대표선발"(ELITE) 모두 해당한다.
+                # 후자는 대회명에 '국가대표'가 들어가고 NT 전체 랭킹에도 집계되므로,
+                # NT 랭킹 조회 조건(national_team_only)과 같은 기준을 쓴다.
+                is_national = (
+                    classify_competition_level(comp_name) == 'NATIONAL'
+                    or '국가대표' in (comp_name or '')
+                )
+                if is_national:
+                    ev_age, ev_cat, nt_only = 'NT', None, True
+                else:
+                    ev_age_fie = get_event_age_group_fie(selected_event)
+                    if not ev_age_fie or ev_age_fie == 'NT':
+                        ev_age_fie = extract_age_group(selected_event.get("name", ""))
+                    legacy_codes = get_matching_legacy_codes(ev_age_fie)
+                    ev_age = legacy_codes[0] if legacy_codes else ev_age_fie
+                    ev_cat = "PRO" if ev_age in CATEGORY_APPLICABLE_AGE_GROUPS else None
+                    nt_only = False
                 comp_year = int(comp.get("competition", {}).get("start_date", "2026")[:4])
                 if ev_weapon and ev_gender:
                     try:
+                        rk_kwargs = {}
+                        if nt_only:
+                            rk_kwargs["national_team_only"] = True
                         rk_list = _ranking_calculator.calculate_rankings(
                             weapon=ev_weapon, gender=ev_gender,
-                            age_group=ev_age, category=ev_cat, year=comp_year
+                            age_group=ev_age, category=ev_cat, year=comp_year,
+                            **rk_kwargs
                         )
                         for idx, rk in enumerate(rk_list):
                             rank = rk.current_rank if rk.current_rank else idx + 1
