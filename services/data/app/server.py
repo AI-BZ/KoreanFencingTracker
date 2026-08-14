@@ -60,7 +60,7 @@ from ranking.team_ranking import (
 )
 
 # 선수 식별 시스템
-from app.player_identity import PlayerIdentityResolver, is_team_event
+from app.player_identity import PlayerIdentityResolver, is_team_event, canonical_team_name
 
 # 조직 유형 분류 (org_type audit)
 from app.organization_identity import detect_org_type
@@ -7005,7 +7005,10 @@ async def competition_detail_page(request: Request, event_cd: str, event: Option
                             pool_ranking_map[rk.player_name] = {
                                 "rank": rank,
                                 "best_rank": best_rank,
-                                "points": rk.total_points
+                                "points": rk.total_points,
+                                # 동명이인 확인용. 이름만으로 붙이면 남의 순위가
+                                # 표시될 수 있어 소속으로 한 번 더 확인한다.
+                                "teams": [canonical_team_name(t) for t in (rk.teams or []) if t],
                             }
                     except Exception:
                         pass
@@ -7014,6 +7017,14 @@ async def competition_detail_page(request: Request, event_cd: str, event: Option
                 for pool in selected_event["pool_rounds"]:
                     for p in pool.get("results", []):
                         prk = pool_ranking_map.get(p.get("name", ""))
+                        # 이름이 같아도 소속이 다르면 다른 사람이다. 랭킹 쪽 소속이
+                        # 비어 있거나 참가자 소속을 모르면 확인할 방법이 없으므로
+                        # 그때는 통과시킨다. 확인 가능한데 어긋나면 표시하지 않는다.
+                        if prk:
+                            rk_teams = prk.get("teams") or []
+                            p_team = canonical_team_name(p.get("team") or "")
+                            if rk_teams and p_team and p_team not in rk_teams:
+                                prk = None
                         if prk:
                             p["league_rank"] = prk["rank"]
                             p["league_best"] = prk["best_rank"]
