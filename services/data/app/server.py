@@ -8,6 +8,7 @@ Korean Fencing Tracker - FastAPI 웹 서버
 """
 import os
 import re
+import time
 from contextlib import asynccontextmanager
 from datetime import date, datetime
 from typing import List, Optional, Dict, Any, Set
@@ -4562,6 +4563,232 @@ async def api_de_results(
     }
 
 
+# ==================== Event Head-to-Head (종목 내 상대 전적) ====================
+# "내 선수"를 고르면 이 종목의 풀 동료 / DE 상대와의 과거 전적을 한 번에 내려준다.
+# calculate_head_to_head()는 전 대회를 스캔하므로 상대마다 호출하면 안 된다.
+# 반드시 1회 호출 → 이 종목에 등장하는 상대만 골라낸다.
+
+_EVENT_H2H_CACHE: Dict[str, tuple] = {}
+_EVENT_H2H_TTL = 60.0   # 대회 진행 중 새 경기가 곧 반영되도록 짧게
+_EVENT_H2H_CACHE_MAX = 256
+
+
+def _eh2h_find_event(sub_event_cd: str) -> tuple:
+    """sub_event_cd로 (competition, event) 조회"""
+    for comp in get_competitions():
+        for event in comp.get("events", []):
+            if event.get("sub_event_cd") == sub_event_cd:
+                return comp, event
+    return None, None
+
+
+def _eh2h_is_me(name: Any, team: Any, my_name: str, my_team_canon: str) -> bool:
+    """이 종목 안에서 내 선수인지 판정.
+
+    소속이 비어 있으면 이름만으로 인정(관대). 소속이 있는데 다르면 동명이인으로 본다.
+    """
+    if str(name or "").strip() != my_name:
+        return False
+    if not my_team_canon:
+        return True
+    t = canonical_team_name(str(team or "").strip())
+    return (not t) or t == my_team_canon
+
+
+def _eh2h_collect_opponents(event: Dict, my_name: str, my_team_canon: str) -> Dict[str, Dict]:
+    """이 종목에서 내 선수가 만나는(만난) 상대 목록.
+
+    Returns: {상대이름: {"team": 소속, "contexts": set(["pool","de"])}}
+    """
+    opponents: Dict[str, Dict] = {}
+
+    def _add(name: Any, team: Any, ctx: str):
+        n = str(name or "").strip()
+        if not n or n == my_name or n.lower() == "none":
+            return
+        entry = opponents.setdefault(n, {"team": "", "contexts": set()})
+        entry["contexts"].add(ctx)
+        if not entry["team"] and team:
+            entry["team"] = str(team).strip()
+
+    # 1) Pool: 내 선수가 속한 풀의 나머지 전원
+    for pool in event.get("pool_rounds", []) or []:
+        results = pool.get("results", []) or []
+        if not any(_eh2h_is_me(p.get("name"), p.get("team"), my_name, my_team_canon)
+                   for p in results if isinstance(p, dict)):
+            continue
+        for p in results:
+            if isinstance(p, dict):
+                _add(p.get("name"), p.get("team"), "pool")
+
+    # 2) DE: 내 선수가 실제로 붙은(붙을) 상대
+    de_bracket = event.get("de_bracket", {})
+    if isinstance(de_bracket, dict):
+        for bout in _get_full_bouts_from_de_bracket(de_bracket) or []:
+            if not isinstance(bout, dict) or bout.get("is_bye"):
+                continue
+            p1, p2 = bout.get("player1_name"), bout.get("player2_name")
+            t1, t2 = bout.get("player1_team"), bout.get("player2_team")
+            if _eh2h_is_me(p1, t1, my_name, my_team_canon):
+                _add(p2, t2, "de")
+            elif _eh2h_is_me(p2, t2, my_name, my_team_canon):
+                _add(p1, t1, "de")
+
+    return opponents
+
+
+def _eh2h_team_in_event(event: Dict, name: str) -> str:
+    """소속을 못 받았을 때, 이 종목의 명단에서 소속을 알아낸다.
+
+    같은 이름이 서로 다른 소속으로 두 번 나오면 진짜 모호한 경우이므로 포기한다.
+    """
+    teams = set()
+    for pool in event.get("pool_rounds", []) or []:
+        for p in pool.get("results", []) or []:
+            if isinstance(p, dict) and str(p.get("name") or "").strip() == name and p.get("team"):
+                teams.add(str(p["team"]).strip())
+    if not teams:
+        for p in event.get("participants", []) or []:
+            if isinstance(p, dict) and str(p.get("name") or "").strip() == name and p.get("team"):
+                teams.add(str(p["team"]).strip())
+    return teams.pop() if len(teams) == 1 else ""
+
+
+def _eh2h_profile_teams(name: str, team: str) -> Optional[Set[str]]:
+    """동명이인이 있을 때만 해당 인물의 소속 이력 집합을 돌려준다.
+
+    소속은 시간에 따라 바뀌므로(중학교 → 고등학교) 현재 소속 하나로 거르면
+    과거 전적이 통째로 사라진다. 프로필의 팀 이력 전체를 쓴다.
+    """
+    if not _identity_resolver or not name:
+        return None
+    try:
+        profiles = _identity_resolver.get_players_by_name(name)
+    except Exception:
+        return None
+    if not profiles or len(profiles) <= 1:
+        return None   # 동명이인 없음 → 필터 불필요
+
+    team_canon = canonical_team_name((team or "").strip())
+    matched = None
+    if team_canon:
+        for p in profiles:
+            if any(canonical_team_name(t) == team_canon for t in (p.teams or [])):
+                matched = p
+                break
+    if matched is None:
+        return None   # 어느 프로필인지 특정 불가 → 과소 집계보다 전체 유지
+
+    teams = {t for t in (matched.teams or []) if t}
+    if team:
+        teams.add(team.strip())
+    return teams or None
+
+
+def _eh2h_build(sub_event_cd: str, player_name: str, team: str) -> Dict:
+    comp, event = _eh2h_find_event(sub_event_cd)
+    if not event:
+        raise HTTPException(status_code=404, detail="종목을 찾을 수 없습니다")
+
+    my_name = player_name.strip()
+    my_team = team.strip()
+    if not my_team:
+        my_team = _eh2h_team_in_event(event, my_name)   # 즐겨찾기 등 소속 없이 들어온 경우
+    my_team_canon = canonical_team_name(my_team) if my_team else ""
+
+    opponents = _eh2h_collect_opponents(event, my_name, my_team_canon)
+    if not opponents:
+        return {
+            "sub_event_cd": sub_event_cd,
+            "player": my_name,
+            "team": my_team,
+            "opponents": {},
+        }
+
+    # 전 대회 1회 스캔 (상대별 반복 호출 금지)
+    my_teams = _eh2h_profile_teams(my_name, my_team)
+    all_h2h = calculate_head_to_head(my_name, [], my_teams)
+    by_name = {h.get("name"): h for h in all_h2h}
+
+    # 지금 보고 있는 대회는 제외한다. 포함하면 오늘 풀 경기가 스크래핑되는 순간
+    # "첫 대결"이 "1승 0패"로 바뀌어 버려서 배지가 알려주려던 정보가 사라진다.
+    this_comp_name = (comp.get("competition", {}) or {}).get("name", "")
+
+    out: Dict[str, Dict] = {}
+    for opp_name, meta in opponents.items():
+        rec = by_name.get(opp_name)
+        matches = list(rec.get("matches", [])) if rec else []
+        if this_comp_name:
+            matches = [m for m in matches if m.get("tournament") != this_comp_name]
+
+        # 상대 쪽 동명이인 제거: 상대의 소속 이력에 없는 경기는 남의 전적이다.
+        opp_teams = _eh2h_profile_teams(opp_name, meta.get("team", ""))
+        if opp_teams and matches:
+            canon = {canonical_team_name(t) for t in opp_teams if t}
+            matches = [
+                m for m in matches
+                if not m.get("opponent_team") or canonical_team_name(m["opponent_team"]) in canon
+            ]
+
+        wins = sum(1 for m in matches if m.get("result") == "V")
+        losses = len(matches) - wins
+        total = wins + losses
+        last = matches[0] if matches else {}   # matches는 최신순 정렬 상태
+
+        out[opp_name] = {
+            "team": meta.get("team", ""),
+            "wins": wins,
+            "losses": losses,
+            "total": total,
+            "win_rate": round(wins / total * 100, 1) if total else 0,
+            "first_meeting": total == 0,
+            "last_result": last.get("result", ""),
+            "last_score": last.get("score", ""),
+            "last_date": last.get("date", ""),
+            "last_round": last.get("round", ""),
+            "last_tournament": last.get("tournament", ""),
+            "contexts": sorted(meta.get("contexts", set())),
+        }
+
+    return {
+        "sub_event_cd": sub_event_cd,
+        "player": my_name,
+        "team": my_team,
+        "opponents": out,
+    }
+
+
+@app.get("/api/events/{sub_event_cd}/head-to-head")
+async def api_event_head_to_head(
+    sub_event_cd: str,
+    player: str = Query(..., description="내 선수 이름 (한글 원문)"),
+    team: str = Query("", description="내 선수 소속 (동명이인 구분용)"),
+):
+    """종목 내 상대 전적 일괄 조회
+
+    내 선수가 이 종목에서 만나는 풀 동료 + DE 상대 각각에 대해
+    이 대회 이전까지의 전적(승/패, 최근 결과)을 한 번에 반환한다.
+    전적이 0경기면 first_meeting=true (첫 대결).
+    """
+    if not player or not player.strip():
+        raise HTTPException(status_code=400, detail="player 파라미터가 필요합니다")
+
+    cache_key = f"{sub_event_cd}|{player.strip()}|{(team or '').strip()}"
+    now = time.monotonic()
+    cached = _EVENT_H2H_CACHE.get(cache_key)
+    if cached and (now - cached[0]) < _EVENT_H2H_TTL:
+        return cached[1]
+
+    payload = _eh2h_build(sub_event_cd, player.strip(), (team or "").strip())
+
+    if len(_EVENT_H2H_CACHE) >= _EVENT_H2H_CACHE_MAX:
+        # 가장 오래된 항목부터 정리 (LRU까지는 불필요)
+        for k in sorted(_EVENT_H2H_CACHE, key=lambda x: _EVENT_H2H_CACHE[x][0])[:64]:
+            _EVENT_H2H_CACHE.pop(k, None)
+    _EVENT_H2H_CACHE[cache_key] = (now, payload)
+    return payload
+
+
 @app.get("/api/stats")
 async def api_stats():
     """통계 API"""
@@ -5092,7 +5319,8 @@ def calculate_head_to_head(player_name: str, records: List[Dict], profile_teams:
                             "tournament": comp_name,
                             "round": "Pool",
                             "score": f"{my_score}-{opponent_score}",
-                            "result": result
+                            "result": result,
+                            "opponent_team": opponent_team
                         })
 
             # ===== 2. 엘리미나시옹디렉트 대진표에서 상대 전적 추출 =====
@@ -5244,7 +5472,8 @@ def calculate_head_to_head(player_name: str, records: List[Dict], profile_teams:
                                 "tournament": comp_name,
                                 "round": round_name,
                                 "score": f"{my_score}-{opponent_score}",
-                                "result": result
+                                "result": result,
+                                "opponent_team": opponent_team
                             })
                 else:
                     # 기존 구조 (round_name: [matches] 형태) 처리
@@ -5306,7 +5535,8 @@ def calculate_head_to_head(player_name: str, records: List[Dict], profile_teams:
                                     "tournament": comp_name,
                                     "round": round_name,
                                     "score": f"{my_score}-{opponent_score}",
-                                    "result": result
+                                    "result": result,
+                                    "opponent_team": opponent_team
                                 })
 
     # 승률 계산 및 정렬

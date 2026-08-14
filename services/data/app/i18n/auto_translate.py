@@ -2882,6 +2882,42 @@ TRANSLATIONS = {
         "zh": "比分时间轴图表",
         "tr": "Skor zaman çizelgesi grafiği",
     },
+
+    # =========================================================================
+    # 종목 내 상대 전적 배지 (Event head-to-head badges)
+    # =========================================================================
+    "첫 대결": {
+        "en": "First meeting",
+        "fr": "Première rencontre",
+        "it": "Primo confronto",
+        "ja": "初対戦",
+        "zh": "首次交手",
+        "tr": "İlk karşılaşma",
+    },
+    "상대 전적": {
+        "en": "Head-to-head",
+        "fr": "Confrontations directes",
+        "it": "Scontri diretti",
+        "ja": "対戦成績",
+        "zh": "交手战绩",
+        "tr": "Karşılıklı istatistik",
+    },
+    "최근": {
+        "en": "Last",
+        "fr": "Dernier",
+        "it": "Ultimo",
+        "ja": "直近",
+        "zh": "最近",
+        "tr": "Son",
+    },
+    "상대 전적을 불러오는 중": {
+        "en": "Loading head-to-head records",
+        "fr": "Chargement des confrontations directes",
+        "it": "Caricamento degli scontri diretti",
+        "ja": "対戦成績を読み込み中",
+        "zh": "正在加载交手战绩",
+        "tr": "Karşılıklı istatistikler yükleniyor",
+    },
 }
 
 
