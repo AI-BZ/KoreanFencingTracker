@@ -1816,7 +1816,9 @@ tr.player-highlighted td {
 </div>
 
 <script src="/static/js/player-search.js"></script>
-<script src="/static/js/dual-bracket.js"></script>
+{# dual-bracket.js is loaded by components/dual-bracket-tabs.html, and only
+   for dual_de events. Loading it here as well declared DualDEController
+   twice, which threw and left the phase tabs unbound. #}
 <script>
 // Team name translation map (for i18n)
 const _teamTransMap = JSON.parse((document.getElementById('event-team-translation-data') || {}).textContent || '{}');
