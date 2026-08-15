@@ -33,7 +33,10 @@
     R23: Pool 기권(Abandon) 감지 — 기권자 존재 시 INFO, 기권 bout이 승/패에 포함됐으면 WARNING
 """
 
+import asyncio
+import os
 import re
+import time
 from dataclasses import dataclass, field, asdict
 from typing import Dict, List, Optional, Set, Tuple
 from collections import defaultdict
@@ -2131,9 +2134,80 @@ class DataValidator:
         return self.issues
 
 
-def run_validation(competitions: List[Dict]) -> Dict:
-    """전체 검증 실행 및 요약 반환"""
-    validator = DataValidator(competitions)
+class ThrottledDataValidator(DataValidator):
+    """검증 도중 CPU를 양보하는 래퍼.
+
+    검증은 순수 CPU 작업이라 한 번 돌기 시작하면 코어 하나를 100% 물고 늘어진다.
+    2026-08-15 에는 대회 데이터 일괄 수정이 변경 감지를 건드려 post_scrape_validation
+    이 돌았고, 이벤트 루프 안에서 동기로 실행되는 바람에 서버가 16분간 응답하지
+    못했다(Cloudflare 접속 불가). 검증 로직과 결과는 그대로 두고 duty cycle만 건다.
+
+    부모에서 메서드 이름이 바뀌면 이 오버라이드는 호출되지 않는다 —
+    CPU 양보만 사라지고 검증 자체는 정상 동작한다.
+    """
+
+    _WORK_SLICE = 0.05  # 0.05초 일한 뒤 duty 에 맞춰 쉰다
+
+    def __init__(self, *args, cpu_duty: float = 0.25, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._cpu_duty = min(max(cpu_duty, 0.05), 1.0)
+        self._slice_started = time.monotonic()
+
+    def _yield_cpu(self):
+        elapsed = time.monotonic() - self._slice_started
+        if elapsed < self._WORK_SLICE:
+            return
+        if self._cpu_duty < 1.0:
+            time.sleep(elapsed * (1.0 / self._cpu_duty - 1.0))
+        self._slice_started = time.monotonic()
+
+    # 이벤트당 1회 호출되는 지점
+    def _check_r14_same_event_duplicate_names(self, *args, **kwargs):
+        result = super()._check_r14_same_event_duplicate_names(*args, **kwargs)
+        self._yield_cpu()
+        return result
+
+    # 선수당 1회 호출되는 지점 — 검증 시간의 대부분
+    def _validate_player_records(self, *args, **kwargs):
+        result = super()._validate_player_records(*args, **kwargs)
+        self._yield_cpu()
+        return result
+
+
+async def run_validation_async(
+    competitions: List[Dict],
+    org_cache: Optional[Dict] = None,
+    cpu_duty: Optional[float] = None,
+) -> Dict:
+    """검증을 별도 스레드에서 CPU 양보하며 실행. 이벤트 루프를 막지 않는다.
+
+    async 컨텍스트(스크래핑 후 검증, 헬스체크)에서는 run_validation() 대신 이걸 쓴다.
+    """
+    if cpu_duty is None:
+        try:
+            cpu_duty = float(os.getenv("VALIDATION_CPU_DUTY", "0.25"))
+        except (TypeError, ValueError):
+            cpu_duty = 0.25
+
+    def _work() -> Dict:
+        return run_validation(competitions, org_cache=org_cache, cpu_duty=cpu_duty)
+
+    return await asyncio.to_thread(_work)
+
+
+def run_validation(
+    competitions: List[Dict],
+    org_cache: Optional[Dict] = None,
+    cpu_duty: Optional[float] = None,
+) -> Dict:
+    """전체 검증 실행 및 요약 반환
+
+    cpu_duty 를 주면 검증 도중 CPU를 양보한다 (0.25 = 25%만 사용).
+    """
+    if cpu_duty is None:
+        validator = DataValidator(competitions, org_cache=org_cache)
+    else:
+        validator = ThrottledDataValidator(competitions, org_cache=org_cache, cpu_duty=cpu_duty)
     issues = validator.validate_all()
 
     errors = [i for i in issues if i.severity == "ERROR"]

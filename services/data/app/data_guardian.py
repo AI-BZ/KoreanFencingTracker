@@ -68,9 +68,11 @@ class DataGuardian:
                 logger.warning("🛡️ 검증할 데이터 없음")
                 return {"status": "no_data"}
 
-            # DataValidator 실행
-            from app.data_validator import run_validation
-            result = run_validation(competitions)
+            # DataValidator 실행 — 별도 스레드에서 CPU를 양보하며 돈다.
+            # 예전에는 여기서 동기로 실행해 이벤트 루프를 통째로 막았고, 대회 데이터가
+            # 바뀔 때마다 서버가 십수 분간 응답하지 못했다 (2026-08-15).
+            from app.data_validator import run_validation_async
+            result = await run_validation_async(competitions)
 
             errors = result.get("errors", 0)
             warnings = result.get("warnings", 0)
@@ -149,8 +151,8 @@ class DataGuardian:
             competitions = self._load_competitions(limit=20)
             validation_issues = []
             if competitions:
-                from app.data_validator import run_validation
-                validation = run_validation(competitions)
+                from app.data_validator import run_validation_async
+                validation = await run_validation_async(competitions)
                 results["checks"]["validation"] = {
                     "total_issues": validation.get("total_issues", 0),
                     "errors": validation.get("errors", 0),
@@ -286,8 +288,8 @@ class DataGuardian:
         if not competitions:
             return {"status": "no_data", "message": "검증할 데이터 없음"}
 
-        from app.data_validator import run_validation
-        result = run_validation(competitions)
+        from app.data_validator import run_validation_async
+        result = await run_validation_async(competitions)
 
         from app.discord_notify import send_validation_report
         await send_validation_report(
