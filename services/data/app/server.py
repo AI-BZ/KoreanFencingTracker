@@ -6,6 +6,7 @@ Korean Fencing Tracker - FastAPI 웹 서버
 데이터 소스: Supabase (전용)
 데이터 파이프라인: 4단계 검증 시스템
 """
+import asyncio
 import os
 import re
 import time
@@ -8655,13 +8656,28 @@ async def refresh_data_cache(request: Request):
     await require_admin_or_internal(request)
     try:
         logger.info("🔄 데이터 캐시 새로고침 시작...")
+        _t0 = time.monotonic()
 
-        # 1. Supabase에서 최신 데이터 로드
-        success = load_data_from_supabase()
+        # 1. Supabase에서 최신 데이터 로드 (별도 스레드)
+        #
+        # 이 단계가 새로고침 시간의 대부분(약 50초)이다. 2,968개 종목의 raw_data 를
+        # 내려받아 파싱하는 네트워크+파싱 작업이라 이벤트 루프에서 돌리면 그동안
+        # 서버가 아무 요청도 처리하지 못한다. 대회 중에는 스크래퍼가 종목을 저장할
+        # 때마다 이 API를 호출하므로 1분 가까이 먹통이 되는 일이 반복됐다
+        # (2026-08-15 "되다가 또 느려짐"의 원인).
+        #
+        # load_data_from_supabase() 는 전부 지역 변수로 만든 뒤 _data_cache 에 한 번만
+        # 대입한다 → 스레드에서 돌려도 읽는 쪽은 교체 직전까지 이전 데이터를 본다.
+        success = await asyncio.to_thread(load_data_from_supabase)
         if not success:
             return {"success": False, "message": "데이터 로드 실패"}
+        logger.info(f"   데이터 로드 {time.monotonic() - _t0:.1f}초 (이벤트 루프 비점유)")
 
         # 2. 선수 인덱스 및 캐시 재구축
+        #
+        # 여기부터는 이벤트 루프에서 그대로 돈다(1~2초). 이 빌더들은 전역을 빈 값으로
+        # 비우고 채우는 방식이라, 스레드로 옮기면 재구축 도중 들어온 요청이 "선수 없음"을
+        # 보게 된다. 짧게 막고 일관성을 지키는 쪽을 택했다.
         build_player_index()
         build_competition_player_cache()
         build_team_event_index()
