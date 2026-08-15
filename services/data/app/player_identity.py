@@ -552,6 +552,19 @@ class PlayerIdentityResolver:
         },
     }
 
+    # [보조용] 같은 이름 + 같은 소속인데 다른 사람. 팀을 기준으로 도는 규칙(자동 감지,
+    # KNOWN_HOMONYMS, 무기 그룹화)으로는 원리상 절대 분리할 수 없다 — 팀이 하나뿐이라
+    # 나눌 축이 없기 때문이다. 무기로만 갈리므로 확인된 케이스만 손으로 등록한다.
+    #
+    # 무기를 바꾸는 선수도 실제로 있으므로 자동 규칙으로 만들지 않는다.
+    # Format: name -> {team: [무기집합_A, 무기집합_B, ...]}
+    SAME_TEAM_WEAPON_SPLITS = {
+        # 전하윤 (연산중학교) — 에페 15건(2024-07~2026-07, 여중 에페 연속) 사이에
+        #   2025-05 전국소년체육대회 15세이하부 여자 플뢰레 1건만 홀로 존재.
+        #   같은 학교의 다른 학생으로 확인됨.
+        "전하윤": {"연산중학교": [{"epee"}, {"foil"}]},
+    }
+
     # [보조용] 수동 등록 동명이인: 자동 감지(같은 대회 다른 팀)로 잡히지 않는 케이스만.
     # 대부분의 동명이인은 _find_overlapping_teams()가 자동으로 감지.
     # 여기는 두 사람이 절대 같은 대회에 나가지 않는 희귀 케이스에만 사용.
@@ -1094,6 +1107,15 @@ class PlayerIdentityResolver:
             gender_groups = self._group_by_gender(sorted_records)
 
             for gender_key, gender_records in gender_groups.items():
+                # Step 0.5: 같은 소속 동명이인 수동 분리.
+                # 아래 규칙은 전부 팀을 축으로 도는데, 팀이 하나면 나눌 수가 없다.
+                # 확인된 케이스만 무기로 갈라 각각 프로필을 만든다.
+                same_team_groups = self._split_same_team_by_weapon(name, gender_records)
+                if same_team_groups:
+                    for weapon_tag, sub_records in same_team_groups:
+                        self._create_single_profile(name, sub_records, discriminator=weapon_tag)
+                    continue
+
                 # Step 1: Group by weapons within each gender group
                 weapon_groups = self._group_by_weapons(gender_records)
 
@@ -1324,6 +1346,63 @@ class PlayerIdentityResolver:
         """
         # For now, keep unknowns separate - they'll be merged later if teams match
         return known_genders
+
+    def _split_same_team_by_weapon(
+        self, name: str, records: List[Dict]
+    ) -> Optional[List[Tuple[str, List[Dict]]]]:
+        """SAME_TEAM_WEAPON_SPLITS 등록 케이스를 무기로 갈라 반환.
+
+        Returns: [(무기꼬리표, 기록들), ...] 또는 None (해당 없음/한쪽만 존재)
+            무기꼬리표는 프로필 ID를 가르는 데 쓰인다 — 이름·소속이 같아 ID가 겹치기 때문.
+        """
+        entry = self.SAME_TEAM_WEAPON_SPLITS.get(name)
+        if not entry:
+            return None
+
+        for team, weapon_groups in entry.items():
+            team_records = [r for r in records if r.get("team") == team]
+            if not team_records:
+                continue
+
+            buckets: List[Tuple[str, List[Dict]]] = []
+            claimed = 0
+            for group in weapon_groups:
+                matched = [r for r in team_records if r.get("weapon") in group]
+                if not matched:
+                    continue
+                claimed += len(matched)
+                buckets.append(("+".join(sorted(group)), matched))
+
+            # 두 사람 다 나타나야 의미가 있다. 한쪽만 있으면 평소대로 처리한다.
+            if len(buckets) < 2:
+                continue
+
+            # 등록되지 않은 무기 기록(단체전 등 weapon 이 비는 경우 포함)은 버리지 않는다.
+            # 가장 기록이 많은 쪽에 붙여 어느 프로필에서도 사라지지 않게 한다.
+            leftovers = [r for r in team_records if all(r not in b[1] for b in buckets)]
+            if leftovers:
+                buckets.sort(key=lambda b: len(b[1]), reverse=True)
+                buckets[0][1].extend(leftovers)
+                logger.info(
+                    f"[동명이인-같은소속] '{name}'({team}) 무기 미지정 기록 "
+                    f"{len(leftovers)}건은 최다 기록 프로필({buckets[0][0]})에 귀속"
+                )
+
+            # 이 팀 밖의 기록은 규칙 대상이 아니다 → 분리하지 않고 원래 경로로 보낸다.
+            if len(team_records) != len(records):
+                logger.warning(
+                    f"[동명이인-같은소속] '{name}' 은 {team} 외 소속 기록도 있어 "
+                    f"수동 분리를 적용하지 않는다 (등록 내용 재확인 필요)"
+                )
+                return None
+
+            logger.info(
+                f"[동명이인-같은소속] '{name}'({team}) 무기로 분리: "
+                + ", ".join(f"{tag} {len(recs)}건" for tag, recs in buckets)
+            )
+            return buckets
+
+        return None
 
     def _group_by_weapons(self, records: List[Dict]) -> Dict[str, List[Dict]]:
         """
@@ -1792,8 +1871,12 @@ class PlayerIdentityResolver:
 
             self.name_groups[name].profiles.append(profile)
 
-    def _create_single_profile(self, name: str, records: List[Dict]) -> None:
-        """Create a single profile for a person (possibly with team changes)"""
+    def _create_single_profile(self, name: str, records: List[Dict], discriminator: str = "") -> None:
+        """Create a single profile for a person (possibly with team changes)
+
+        discriminator: 이름·소속이 모두 같은 동명이인을 가를 때만 준다 (SAME_TEAM_WEAPON_SPLITS).
+            없으면 기존과 완전히 동일하게 동작한다.
+        """
         # Use first team as base for ID generation
         first_team = ""
         for rec in records:
@@ -1801,7 +1884,7 @@ class PlayerIdentityResolver:
                 first_team = rec["team"]
                 break
 
-        player_id = self._generate_player_id(name, first_team)
+        player_id = self._generate_player_id(name, first_team, discriminator)
         profile = PlayerProfile(
             player_id=player_id,
             name=name
@@ -1851,7 +1934,7 @@ class PlayerIdentityResolver:
 
                 profile.podium_by_season[year]["total"] += 1
 
-    def _generate_player_id(self, name: str, team: str) -> str:
+    def _generate_player_id(self, name: str, team: str, discriminator: str = "") -> str:
         """Generate unique player ID with country code prefix
 
         ID Format: {Country}{P}{Number}
@@ -1863,9 +1946,12 @@ class PlayerIdentityResolver:
         Special: KOP00000 = 박소윤(최병철펜싱클럽) - 시스템 기준점
 
         기존 호환성을 위해 legacy ID도 매핑 유지
+
+        discriminator: 이름과 소속이 모두 같은 두 사람을 가르는 꼬리표(무기 등).
+            비워두면 기존과 동일한 ID가 나온다 — 기존 선수 ID는 바뀌지 않는다.
         """
         # 기존 ID 생성 (호환성용)
-        legacy_base = f"{name}_{team}"
+        legacy_base = f"{name}_{team}" + (f"_{discriminator}" if discriminator else "")
         legacy_id = hashlib.md5(legacy_base.encode()).hexdigest()[:12]
 
         # 이미 매핑된 경우 기존 새 ID 반환

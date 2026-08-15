@@ -3471,7 +3471,8 @@ async def api_players_autocomplete(
                         "name": profile.name,
                         "team": current_team,
                         "display": f"{profile.name} {current_team}" if current_team else profile.name,
-                        "player_id": profile.player_id
+                        "player_id": profile.player_id,
+                        "weapons": sorted(profile.weapons) if getattr(profile, "weapons", None) else [],
                     })
         else:
             # Fallback: 인덱스 검색
@@ -3493,10 +3494,14 @@ async def api_players_autocomplete(
                     })
 
     # 중복 제거 및 정렬 (이름 순)
+    #
+    # 예전에는 "이름 소속" 문자열을 키로 썼다. 그래서 같은 학교에 같은 이름을 가진
+    # 두 사람(예: 전하윤/연산중학교 — 에페와 플뢰레)이 한 명으로 합쳐져, 검색창에서
+    # 다른 쪽을 고를 방법이 아예 없었다. 프로필이 따로 있으면 따로 내려준다.
     seen = set()
     unique_suggestions = []
     for s in suggestions:
-        key = s["display"]
+        key = s.get("player_id") or s["display"]
         if key not in seen:
             seen.add(key)
             unique_suggestions.append(s)
@@ -3527,6 +3532,27 @@ async def api_players_autocomplete(
             s["display_team"] = None
             s["display"] = s.get("display_name", s["name"])  # 이름만 표시
             s["blurred"] = True
+
+    # 화면에 똑같이 보이는 항목끼리는 주 무기로 구분해 준다.
+    #
+    # 판정은 최종 display 기준이다. 게스트는 소속이 가려져 서로 다른 사람도 이름만 남는데,
+    # 그때 고를 방법이 아예 없어지기 때문이다. 소속을 다시 노출하지 않고 무기만 덧붙인다.
+    # (같은 소속 동명이인 — 전하윤/연산중학교 에페·플뢰레 — 은 로그인해도 이 표시가 필요하다)
+    _labels = (
+        {"epee": "에페", "foil": "플뢰레", "sabre": "사브르"} if lang == "ko"
+        else {"epee": "Épée", "foil": "Foil", "sabre": "Sabre"}
+    )
+    _collide = defaultdict(list)
+    for s in final_suggestions:
+        _collide[s["display"]].append(s)
+    for items in _collide.values():
+        if len(items) < 2:
+            continue
+        for s in items:
+            hint = " · ".join(_labels.get(w, w) for w in (s.get("weapons") or []))
+            if hint:
+                s["weapon_hint"] = hint
+                s["display"] = f"{s['display']} ({hint})"
 
     return {
         "query": q,
@@ -6197,10 +6223,25 @@ async def player_page(
     # has_disambiguation이 True면 항상 필터링 (id/team 파라미터 없어도)
     if identity_profile and (id or profile_identified_by_team or has_disambiguation):
         profile_teams = set(identity_profile.teams)
-        filtered_records = [
-            r for r in records
-            if r.get("team") in profile_teams
-        ]
+
+        # 소속만으로 거르면 같은 학교 동명이인(전하윤/연산중학교 — 에페와 플뢰레)이
+        # 갈라지지 않아 두 프로필이 똑같은 화면을 보여준다. 소속+무기 쌍으로 좁힌다.
+        # 무기가 비는 기록(단체전 등)은 쌍을 만들 수 없으므로 소속만 본다.
+        profile_pairs = {
+            (rec.get("team"), rec.get("weapon"))
+            for rec in (getattr(identity_profile, "records", None) or [])
+            if rec.get("team")
+        }
+
+        def _belongs(r: Dict) -> bool:
+            if r.get("team") not in profile_teams:
+                return False
+            weapon = r.get("weapon")
+            if not weapon or not profile_pairs:
+                return True
+            return (r.get("team"), weapon) in profile_pairs
+
+        filtered_records = [r for r in records if _belongs(r)]
         if filtered_records:
             records = filtered_records
 
