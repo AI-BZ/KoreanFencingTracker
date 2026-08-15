@@ -1262,6 +1262,21 @@ class KFFFullScraper:
                 'message': f'{len(skipped)}개 풀 파싱 건너뜀: {skipped}',
             })
 
+        # CHECK 2b: 같은 pool_number 가 두 번 이상 — KFA 페이지의 사본 컨테이너를 또 긁고 있다는 신호.
+        # 2025-01-11 ~ 2026-08-12 대회 477건이 이 문제로 풀이 2배 저장됐다(2026-08-15 정리).
+        pool_numbers = [str(p.get('pool_number')) for p in pool_rounds]
+        if len(pool_numbers) != len(set(pool_numbers)):
+            dup_nums = sorted({n for n in pool_numbers if pool_numbers.count(n) > 1})
+            warnings.append({
+                'type': 'POOL_DUPLICATED',
+                'severity': 'ERROR',
+                'event_name': event_name,
+                'message': (f'같은 풀 번호가 중복 수집됨 ({len(pool_rounds)}개 → 고유 '
+                            f'{len(set(pool_numbers))}개, 중복 번호 {dup_nums[:10]}). '
+                            f'페이지에 사본 컨테이너가 늘었는지 확인 필요'),
+                'diagnostics': pool_diagnostics,
+            })
+
         # CHECK 3: DE bouts 있는데 final_rankings 없음 → 아직 진행 중 or 수집 누락
         if len(de_bouts) > 0 and len(final_rankings) == 0:
             warnings.append({
@@ -1286,13 +1301,21 @@ class KFFFullScraper:
                         pool_headers_found: 0,
                         pools_parsed: 0,
                         pools_skipped: [],
-                        total_rows_processed: 0
+                        total_rows_processed: 0,
+                        duplicate_headers_skipped: 0
                     };
                     let roundNumber = 1;
 
                     // 풀 헤더 UL 요소들 찾기 (뿔 N 텍스트를 포함하는 UL)
-                    const allUls = document.querySelectorAll('ul');
+                    //
+                    // KFA 페이지는 id="pouleAjax" 를 가진 컨테이너를 두 개 두고 같은 풀 목록을
+                    // 양쪽에 채운다(중복 id — 두 번째는 '시간' li 가 빠진 인쇄용 사본).
+                    // document 전체를 훑으면 모든 풀이 정확히 2번 잡혀 저장 데이터가 2배가 된다.
+                    // 첫 번째 컨테이너가 시간까지 들어 있는 완전한 쪽이므로 거기로 범위를 좁힌다.
+                    const poolRoot = document.querySelector('#pouleAjax') || document;
+                    const allUls = poolRoot.querySelectorAll('ul');
                     const poolHeaders = [];
+                    const seenPoolNumbers = new Set();
 
                     allUls.forEach(ul => {
                         const firstLi = ul.querySelector('li');
@@ -1301,9 +1324,16 @@ class KFFFullScraper:
                             // "뿔" 텍스트와 숫자가 포함된 UL만 선택
                             const poolMatch = text.match(/뿔\\s*(\\d+)/);
                             if (poolMatch) {
+                                const poolNumber = parseInt(poolMatch[1]);
+                                // 범위를 좁힌 뒤에도 같은 번호가 또 나오면 사본이다 (2차 방어)
+                                if (seenPoolNumbers.has(poolNumber)) {
+                                    diagnostics.duplicate_headers_skipped++;
+                                    return;
+                                }
+                                seenPoolNumbers.add(poolNumber);
                                 poolHeaders.push({
                                     ul: ul,
-                                    poolNumber: parseInt(poolMatch[1])
+                                    poolNumber: poolNumber
                                 });
                             }
                         }
