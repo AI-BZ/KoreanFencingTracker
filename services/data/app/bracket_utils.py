@@ -1871,7 +1871,11 @@ def normalize_dual_de_bracket_data(de_bracket: Dict) -> NormalizedDualDEBracket:
                 second_de_bracket_size = second_de_raw.get('bracket_size', 64)
                 max_second_de_match = second_de_bracket_size // 2
 
-                match_num = bout.get('match_num', 0)
+                # 실데이터 키는 match_number 다. 예전엔 match_num 을 읽어 항상 0 이 나왔고,
+                # 0 <= max_second_de_match 가 늘 참이라 공유 라운드(64강) 전 경기가
+                # Second DE 로 몰렸다. 그 결과 First DE 에서 64강이 통째로 사라지고
+                # 본선 64강은 32경기여야 할 자리에 64경기가 들어찼다.
+                match_num = bout.get('match_number', bout.get('match_num', 0)) or 0
                 if match_num <= max_second_de_match:
                     second_de_bouts.append(bout)
                 else:
