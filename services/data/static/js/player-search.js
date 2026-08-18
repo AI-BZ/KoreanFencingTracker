@@ -280,8 +280,9 @@ class PlayerHighlighter {
             }
         });
 
-        // 6. Bracket component (new)
-        document.querySelectorAll('.bracket-bout, .bout-card').forEach(bout => {
+        // 6. Bracket component — 트리뷰(.bracket-match)·리스트뷰·레거시 모두 포함.
+        //    .bracket-match 가 빠져 있어 데스크톱 기본 뷰에서 하이라이트가 무동작이었다.
+        document.querySelectorAll('.bracket-bout, .bout-card, .bracket-match').forEach(bout => {
             const playerNames = bout.querySelectorAll('.player-name, .bout-player-name');
             playerNames.forEach(nameEl => {
                 const textContent = nameEl.textContent || nameEl.innerText;
@@ -291,6 +292,16 @@ class PlayerHighlighter {
                     if (!firstFound) firstFound = bout;
                 }
             });
+        });
+
+        // 7. Dual DE 시드/진출자 명단
+        document.querySelectorAll('.seeded-item, .qualifier-item').forEach(item => {
+            const nameEl = item.querySelector('.seeded-name, .qualifier-name');
+            if (nameEl && nameEl.textContent.trim().toLowerCase() === this.highlightedName) {
+                item.classList.add('player-highlighted');
+                foundCount++;
+                if (!firstFound) firstFound = item;
+            }
         });
 
         // Scroll to first found
@@ -306,6 +317,451 @@ class PlayerHighlighter {
             el.classList.remove('player-highlighted');
         });
         this.highlightedName = null;
+    }
+}
+
+/**
+ * MyPlayerBracket — DE 대진표에서 "내 선수" 여러 명을 동시에 표시하고 위치로 데려간다.
+ *
+ * 왜 필요한가: 128강이면 경기 블록이 50개가 넘는다. 색만 살짝 바뀌는 단일 하이라이트로는
+ * 대회장에서 폰을 든 학부모가 자기 아이 경기를 찾을 수 없다.
+ *
+ * 설계 원칙
+ * - 식별은 색이 아니라 "형태"로 한다: 선수마다 슬롯 번호 배지(1,2,3...)를 붙인다.
+ *   색은 보조 채널로만 쓰고 최대 2계열(태극 레드/블루)로 제한한다. (색약·야외 화면 대응)
+ * - 트리뷰(.bracket-match)와 리스트뷰(.match-card)는 같은 경기를 각각 렌더한다.
+ *   표시는 양쪽 모두에, 이동은 "지금 보이는 뷰"의 요소로 한다.
+ * - 상태는 DOM 이 이미 말하고 있는 것만 쓴다. 예상 대진을 결과처럼 보이게 하지 않는다.
+ */
+class MyPlayerBracket {
+    constructor(options) {
+        options = options || {};
+        this.root = typeof options.root === 'string'
+            ? document.querySelector(options.root)
+            : (options.root || document);
+        this.translate = options.translate || function (s) { return s; };
+        this.t = options.t || function (s) { return s; };
+        this.players = [];        // [{ko, display, team, slot, keys}]
+        this.byslot = {};         // slot -> {player, bouts: [entry], cursor}
+        this._locator = null;
+        this._locatorTarget = null;
+        this._rafPending = false;
+        this._onScroll = null;
+    }
+
+    static get MAX_SLOTS() { return 8; }
+
+    static norm(s) { return String(s == null ? '' : s).trim().toLowerCase(); }
+
+    static reducedMotion() {
+        try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; }
+    }
+
+    /* ------------------------------------------------------------------ *
+     * 스캔
+     * ------------------------------------------------------------------ */
+
+    _containers() {
+        if (!this.root || !this.root.querySelectorAll) return [];
+        return Array.from(this.root.querySelectorAll('.bracket-container'));
+    }
+
+    _roundOrder(container) {
+        let rounds = Array.from(container.querySelectorAll('.bracket-tree .bracket-round'))
+            .map(r => r.dataset.round);
+        if (!rounds.length) {
+            rounds = Array.from(container.querySelectorAll('.round-panel'))
+                .map(p => p.dataset.roundPanel);
+        }
+        return rounds;
+    }
+
+    _phaseOf(container) {
+        const panel = container.closest ? container.closest('.de-phase-panel') : null;
+        return panel ? (panel.dataset.phase || '') : '';
+    }
+
+    static _roundOf(el) {
+        const treeRound = el.closest('.bracket-round');
+        if (treeRound) return treeRound.dataset.round || '';
+        const panel = el.closest('.round-panel');
+        if (panel) return panel.dataset.roundPanel || '';
+        return '';
+    }
+
+    static _slotName(slot) {
+        const el = slot.querySelector('.player-name');
+        if (!el || el.classList.contains('bye-text')) return '';
+        const txt = (el.textContent || '').trim();
+        return txt === 'None' ? '' : txt;
+    }
+
+    static _slotScore(slot) {
+        const el = slot.querySelector('.player-score, .player-score-badge');
+        const txt = el ? (el.textContent || '').trim() : '';
+        return (txt === '-' || txt === '') ? null : txt;
+    }
+
+    /**
+     * 내 선수 목록을 세팅하고 대진표를 훑어 표시까지 끝낸다.
+     * @param {Array} list [{ko, display, team}]
+     * @returns {Array} 선수별 요약 (스트립 칩 렌더용)
+     */
+    setPlayers(list) {
+        this.clear();
+        const players = (list || []).slice(0, MyPlayerBracket.MAX_SLOTS);
+        this.players = players.map((p, i) => {
+            const ko = String(p.ko || p.name || '').trim();
+            const display = String(p.display || this.translate(ko) || ko).trim();
+            const keys = {};
+            if (ko) keys[MyPlayerBracket.norm(ko)] = true;
+            if (display) keys[MyPlayerBracket.norm(display)] = true;
+            return { ko: ko, display: display, team: String(p.team || '').trim(), slot: i + 1, keys: keys };
+        }).filter(p => p.ko);
+
+        this.players.forEach(p => { this.byslot[p.slot] = { player: p, bouts: [], cursor: -1 }; });
+        if (!this.players.length) return [];
+
+        this._scan();
+        return this.summaries();
+    }
+
+    _scan() {
+        const seen = {};
+        this._containers().forEach(container => {
+            const order = this._roundOrder(container);
+            const phase = this._phaseOf(container);
+            const phaseRank = phase === 'second' ? 1 : 0;
+
+            container.querySelectorAll('.bracket-match, .match-card').forEach(el => {
+                const slots = el.querySelectorAll('.match-player, .card-player');
+                if (slots.length !== 2) return;
+
+                const names = [MyPlayerBracket._slotName(slots[0]), MyPlayerBracket._slotName(slots[1])];
+                const mine = [];
+                this.players.forEach(p => {
+                    if (p.keys[MyPlayerBracket.norm(names[0])]) mine.push({ p: p, idx: 0 });
+                    else if (p.keys[MyPlayerBracket.norm(names[1])]) mine.push({ p: p, idx: 1 });
+                });
+                if (!mine.length) return;
+
+                const round = MyPlayerBracket._roundOf(el);
+                const roundIdx = Math.max(0, order.indexOf(round));
+                const boutId = el.getAttribute('data-match-id') || '';
+                const isBye = el.classList.contains('bye-match');
+
+                // DOM 표시 마킹 — 트리뷰·리스트뷰 양쪽 모든 인스턴스에 붙인다
+                el.classList.add('mp-match');
+                el.setAttribute('data-mp-slots', mine.map(m => m.p.slot).join(','));
+
+                mine.forEach(m => {
+                    const meSlot = slots[m.idx];
+                    const oppSlot = slots[1 - m.idx];
+                    meSlot.classList.add('mp-me');
+                    meSlot.setAttribute('data-mp-slot', String(m.p.slot));
+                    if (!meSlot.querySelector('.mp-slot-badge')) {
+                        const badge = document.createElement('span');
+                        badge.className = 'mp-slot-badge mp-slot-' + ((m.p.slot - 1) % 2 === 0 ? 'a' : 'b');
+                        badge.textContent = String(m.p.slot);
+                        badge.setAttribute('aria-label', this.t('내 선수') + ' ' + m.p.display);
+                        badge.title = this.t('내 선수') + ': ' + m.p.display;
+                        meSlot.insertBefore(badge, meSlot.firstChild);
+                    }
+
+                    // 상태 판정 — DOM 이 이미 확정한 것만 쓴다
+                    let state;
+                    if (isBye) state = 'bye';
+                    else if (meSlot.classList.contains('forfeit') || oppSlot.classList.contains('forfeit')) {
+                        state = meSlot.classList.contains('forfeit') ? 'forfeit' : 'win';
+                    } else if (meSlot.classList.contains('winner')) state = 'win';
+                    else if (oppSlot.classList.contains('winner')) state = 'loss';
+                    else if (names[0] && names[1]) state = 'scheduled';   // 대진 확정, 결과 전
+                    else state = 'tbd';                                   // 상대 미정
+
+                    const key = phase + '|' + round + '|' + (boutId || (names[0] + '~' + names[1]));
+                    const dedupe = m.p.slot + '#' + key;
+                    if (seen[dedupe]) return;
+                    seen[dedupe] = true;
+
+                    const myScore = MyPlayerBracket._slotScore(meSlot);
+                    const oppScore = MyPlayerBracket._slotScore(oppSlot);
+                    this.byslot[m.p.slot].bouts.push({
+                        slot: m.p.slot,
+                        boutId: boutId,
+                        phase: phase,
+                        round: round,
+                        order: phaseRank * 1000 + roundIdx,
+                        state: state,
+                        opponent: names[1 - m.idx],
+                        score: (myScore !== null && oppScore !== null) ? (myScore + '-' + oppScore) : null,
+                        container: container
+                    });
+                });
+            });
+        });
+
+        Object.keys(this.byslot).forEach(slot => {
+            this.byslot[slot].bouts.sort((a, b) => a.order - b.order);
+        });
+    }
+
+    /* ------------------------------------------------------------------ *
+     * 요약 (칩 텍스트)
+     * ------------------------------------------------------------------ */
+
+    _isChampion(entry) {
+        if (!entry.container) return false;
+        const champ = entry.container.querySelector('.bracket-champion .champion-name');
+        if (!champ) return false;
+        const name = MyPlayerBracket.norm(champ.textContent);
+        const p = this.byslot[entry.slot].player;
+        return !!p.keys[name];
+    }
+
+    summaries() {
+        return this.players.map(p => {
+            const rec = this.byslot[p.slot];
+            const bouts = rec.bouts;
+            const out = {
+                slot: p.slot, ko: p.ko, display: p.display, team: p.team,
+                count: bouts.length, kind: 'none', round: '', detail: ''
+            };
+            if (!bouts.length) { out.kind = 'absent'; return out; }
+
+            const last = bouts[bouts.length - 1];
+            const lost = bouts.filter(b => b.state === 'loss' || b.state === 'forfeit')[0];
+            const nextUp = bouts.filter(b => b.state === 'scheduled' || b.state === 'tbd')[0];
+
+            if (lost) {
+                // 결승 패배는 정의상 준우승이다 (추론이 아니라 규칙). 그 외 라운드는
+                // 최종순위를 함부로 단정하지 않고 "N강 탈락"으로만 말한다.
+                if (lost.state !== 'forfeit' && /^결승$/.test(String(lost.round).trim())) {
+                    out.kind = 'runnerup';
+                } else {
+                    out.kind = lost.state === 'forfeit' ? 'forfeit' : 'out';
+                }
+                out.round = lost.round;
+                out.detail = lost.score || '';
+            } else if (nextUp) {
+                out.kind = nextUp.state === 'tbd' ? 'tbd' : 'next';
+                out.round = nextUp.round;
+            } else if (this._isChampion(last)) {
+                out.kind = 'champion';
+                out.round = last.round;
+            } else {
+                out.kind = 'won';
+                out.round = last.round;
+                out.detail = last.score || '';
+            }
+            return out;
+        });
+    }
+
+    /* ------------------------------------------------------------------ *
+     * 이동
+     * ------------------------------------------------------------------ */
+
+    /** 활성 뷰(트리/리스트) 안에서 해당 경기의 실제 DOM 요소를 찾는다. */
+    _resolveElement(entry) {
+        const container = entry.container;
+        if (!container) return null;
+        const activeView = container.querySelector('.bracket-view.active') || container;
+        let el = null;
+        if (entry.boutId) {
+            el = activeView.querySelector('[data-match-id="' + CSS.escape(entry.boutId) + '"]');
+        }
+        if (!el) {
+            // bout_id 가 없는 레거시 데이터 폴백: 같은 라운드에서 슬롯 마킹된 첫 경기
+            const scope = activeView.querySelector('.round-panel[data-round-panel="' + CSS.escape(entry.round) + '"]')
+                || activeView.querySelector('.bracket-round[data-round="' + CSS.escape(entry.round) + '"]')
+                || activeView;
+            el = scope.querySelector('[data-mp-slots~="' + entry.slot + '"], [data-mp-slots*="' + entry.slot + '"]');
+        }
+        return el;
+    }
+
+    /** 필요한 phase / 라운드 탭을 먼저 연다. */
+    _openContext(entry) {
+        // Dual DE: 다른 phase 면 전환 (dual-bracket.js 가 노출한 컨트롤러만 사용)
+        if (entry.phase && window.dualDEController &&
+            typeof window.dualDEController.switchToPhase === 'function' &&
+            window.dualDEController.getCurrentPhase &&
+            window.dualDEController.getCurrentPhase() !== entry.phase) {
+            try { window.dualDEController.switchToPhase(entry.phase); } catch (e) {}
+        }
+        // 리스트뷰: 해당 라운드 탭 활성화
+        const container = entry.container;
+        if (!container) return;
+        const listView = container.querySelector('.bracket-list-view');
+        if (listView && listView.classList.contains('active') && entry.round) {
+            const tab = container.querySelector('.round-tab[data-round="' + CSS.escape(entry.round) + '"]');
+            if (tab && !tab.classList.contains('active')) tab.click();
+        }
+    }
+
+    /**
+     * 슬롯(선수)의 다음 경기로 이동. 여러 경기가 있으면 호출할 때마다 순환한다.
+     * @returns {object|null} {index, total, entry}
+     */
+    jump(slot) {
+        const rec = this.byslot[slot];
+        if (!rec || !rec.bouts.length) return null;
+        rec.cursor = (rec.cursor + 1) % rec.bouts.length;
+        const entry = rec.bouts[rec.cursor];
+        this._openContext(entry);
+        // phase/라운드 전환 후 레이아웃이 잡히도록 한 프레임 양보
+        setTimeout(() => {
+            const el = this._resolveElement(entry);
+            if (el) this.revealElement(el);
+        }, 60);
+        return { index: rec.cursor + 1, total: rec.bouts.length, entry: entry };
+    }
+
+    /** 요소로 스크롤 + 펄스. 트리뷰의 가로 스크롤 컨테이너까지 함께 움직인다. */
+    revealElement(el) {
+        if (!el) return;
+        const smooth = !MyPlayerBracket.reducedMotion();
+        try {
+            el.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'center', inline: 'center' });
+        } catch (e) {
+            el.scrollIntoView();
+        }
+        el.classList.remove('mp-pulse');
+        // 리플로우로 애니메이션 재시작
+        void el.offsetWidth;
+        el.classList.add('mp-pulse');
+        window.setTimeout(() => el.classList.remove('mp-pulse'), 1600);
+    }
+
+    /* ------------------------------------------------------------------ *
+     * 화면 밖 방향 안내
+     *
+     * 미니맵 대신 방향 인디케이터를 택한 이유: 미니맵은 스크롤 동기화·리사이즈 처리
+     * 비용이 크고 390px 화면에서는 표시 면적이 안 나온다. 방향 표시는 세로(페이지)와
+     * 가로(.bracket-tree) 두 축을 같은 방식으로 다루고, 학부모의 실제 질문
+     * "어느 쪽으로 넘겨야 우리 애가 나오나"에 직접 답한다.
+     * ------------------------------------------------------------------ */
+
+    startLocator() {
+        if (this._locator) return;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'mp-locator';
+        btn.hidden = true;
+        btn.setAttribute('aria-live', 'polite');
+        btn.innerHTML = '<span class="mp-locator-arrow" aria-hidden="true">↓</span>' +
+                        '<span class="mp-locator-label"></span>';
+        btn.addEventListener('click', () => {
+            if (this._locatorTarget) this.revealElement(this._locatorTarget);
+        });
+        document.body.appendChild(btn);
+        this._locator = btn;
+
+        this._onScroll = () => {
+            if (this._rafPending) return;
+            this._rafPending = true;
+            window.requestAnimationFrame(() => {
+                this._rafPending = false;
+                this._updateLocator();
+            });
+        };
+        window.addEventListener('scroll', this._onScroll, { passive: true });
+        window.addEventListener('resize', this._onScroll, { passive: true });
+        document.querySelectorAll('.bracket-tree').forEach(t => {
+            t.addEventListener('scroll', this._onScroll, { passive: true });
+        });
+        this._updateLocator();
+    }
+
+    stopLocator() {
+        if (this._onScroll) {
+            window.removeEventListener('scroll', this._onScroll);
+            window.removeEventListener('resize', this._onScroll);
+            document.querySelectorAll('.bracket-tree').forEach(t => {
+                t.removeEventListener('scroll', this._onScroll);
+            });
+            this._onScroll = null;
+        }
+        if (this._locator) { this._locator.remove(); this._locator = null; }
+        this._locatorTarget = null;
+    }
+
+    /** DE 탭이 안 보이면 인디케이터도 감춘다. */
+    _rootVisible() {
+        const host = (this.root && this.root.nodeType === 1) ? this.root : null;
+        return !host || host.offsetParent !== null || host.classList.contains('active');
+    }
+
+    _updateLocator() {
+        const btn = this._locator;
+        if (!btn) return;
+        if (!this._rootVisible()) { btn.hidden = true; return; }
+
+        const els = Array.from(document.querySelectorAll('.mp-match[data-mp-slots]'))
+            .filter(el => el.offsetParent !== null);
+        if (!els.length) { btn.hidden = true; this._locatorTarget = null; return; }
+
+        const vh = window.innerHeight || document.documentElement.clientHeight;
+        const vw = window.innerWidth || document.documentElement.clientWidth;
+        const pad = 72;   // 상·하단 고정 UI 만큼은 "보인다"고 치지 않는다
+        let offscreen = 0;
+        let best = null;
+        let bestDist = Infinity;
+        let bestDir = 'down';
+
+        els.forEach(el => {
+            const r = el.getBoundingClientRect();
+            let dir = null;
+            if (r.bottom < pad) dir = 'up';
+            else if (r.top > vh - pad) dir = 'down';
+            else if (r.right < 0) dir = 'left';
+            else if (r.left > vw) dir = 'right';
+            else {
+                // 트리뷰 가로 스크롤 컨테이너 안에서 잘렸는지 확인
+                const tree = el.closest('.bracket-tree');
+                if (tree) {
+                    const tr = tree.getBoundingClientRect();
+                    if (r.right < tr.left + 8) dir = 'left';
+                    else if (r.left > tr.right - 8) dir = 'right';
+                }
+            }
+            if (!dir) return;
+            offscreen++;
+            const cx = r.left + r.width / 2;
+            const cy = r.top + r.height / 2;
+            const dist = (dir === 'up' || dir === 'down')
+                ? Math.abs(cy - vh / 2)
+                : Math.abs(cx - vw / 2);
+            if (dist < bestDist) { bestDist = dist; best = el; bestDir = dir; }
+        });
+
+        if (!offscreen || !best) { btn.hidden = true; this._locatorTarget = null; return; }
+
+        const arrows = { up: '↑', down: '↓', left: '←', right: '→' };
+        btn.querySelector('.mp-locator-arrow').textContent = arrows[bestDir];
+        const label = this.t('내 선수');
+        btn.querySelector('.mp-locator-label').textContent =
+            offscreen > 1 ? (label + ' ' + offscreen) : label;
+        btn.setAttribute('aria-label', label + ' ' + this.t('경기로 이동'));
+        btn.dataset.dir = bestDir;
+        btn.hidden = false;
+        this._locatorTarget = best;
+    }
+
+    clear() {
+        document.querySelectorAll('.mp-slot-badge').forEach(b => b.remove());
+        document.querySelectorAll('.mp-match').forEach(el => {
+            el.classList.remove('mp-match', 'mp-pulse');
+            el.removeAttribute('data-mp-slots');
+        });
+        document.querySelectorAll('.mp-me').forEach(el => {
+            el.classList.remove('mp-me');
+            el.removeAttribute('data-mp-slot');
+        });
+        this.players = [];
+        this.byslot = {};
+        this._locatorTarget = null;
+        if (this._locator) this._locator.hidden = true;
     }
 }
 
@@ -654,6 +1110,7 @@ if (!document.getElementById('toast-animations')) {
 // Export for global use
 window.PlayerSearch = PlayerSearch;
 window.PlayerHighlighter = PlayerHighlighter;
+window.MyPlayerBracket = MyPlayerBracket;
 window.DEPredictionTable = DEPredictionTable;
 window.DEResultTable = DEResultTable;
 window.showToast = showToast;

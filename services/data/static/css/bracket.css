@@ -2295,3 +2295,376 @@ details[open] .seeded-toggle-icon {
 [data-theme="light"] .round-tabs::-webkit-scrollbar-thumb:hover {
     background: #9ca3af;
 }
+
+/* ============================================================
+   MY PLAYER IN THE BRACKET  (Phase 2 — "내 선수" 우선 탐색)
+
+   대회장에서 폰을 든 학부모가 128강 대진표에서 자기 아이를 찾는 것이
+   이 블록의 유일한 목적이다. 그래서:
+   - 식별은 색이 아니라 슬롯 번호 배지(형태)로 한다. 색약·야외 화면 대응.
+   - 색은 보조 채널로만, 태극 레드/블루 2계열까지만 쓴다.
+   - 움직임은 prefers-reduced-motion 을 따른다.
+   ============================================================ */
+
+/* --- 검색 하이라이트 (P4: 트리뷰 .bracket-match 가 빠져 있어 무동작이었다) --- */
+.bracket-match.player-highlighted,
+.match-card.player-highlighted {
+    box-shadow: inset 0 0 0 2px var(--fm-accent-primary, #c9302c);
+    border-color: var(--fm-accent-primary, #c9302c);
+}
+
+/* --- 내 선수 경기 블록 --- */
+.bracket-match.mp-match,
+.match-card.mp-match {
+    box-shadow: inset 0 0 0 2px var(--fm-accent-primary, #c9302c);
+    border-color: var(--fm-accent-primary, #c9302c);
+}
+
+/* 내 선수 본인 줄: 이름을 굵게. 색이 아니라 무게로 먼저 읽히게 한다. */
+.match-player.mp-me .player-name,
+.card-player.mp-me .player-name {
+    font-weight: var(--fm-font-bold, 700);
+}
+
+/* 슬롯 번호 배지 — 선수 구분의 1차 채널 */
+.mp-slot-badge {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    margin-right: 6px;
+    border-radius: 50%;
+    font-family: var(--fm-font-display, sans-serif);
+    font-weight: 700;
+    font-size: 12px;
+    line-height: 1;
+    font-variant-numeric: lining-nums tabular-nums;
+    color: #fff;
+    background: var(--fm-accent-primary, #c9302c);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+}
+
+.mp-slot-badge.mp-slot-b {
+    background: var(--fm-accent-secondary, #1e3a8a);
+}
+
+.bracket-tree.bracket-compact .mp-slot-badge {
+    width: 15px;
+    height: 15px;
+    font-size: 10px;
+    margin-right: 4px;
+}
+
+/* 도착 알림 펄스 — 1회, 감속 없음 */
+@keyframes mpPulse {
+    0%   { box-shadow: inset 0 0 0 2px var(--fm-accent-primary, #c9302c), 0 0 0 0 rgba(201, 48, 44, 0.55); }
+    100% { box-shadow: inset 0 0 0 2px var(--fm-accent-primary, #c9302c), 0 0 0 14px rgba(201, 48, 44, 0); }
+}
+
+.mp-pulse {
+    animation: mpPulse 1.1s ease-out 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .mp-pulse { animation: none; box-shadow: inset 0 0 0 3px var(--fm-accent-primary, #c9302c); }
+}
+
+/* ============================================================
+   내 선수 스트립 (DE 탭 상단 고정)
+   ============================================================ */
+.de-mp-strip {
+    /* .navbar 는 position:fixed; height 66px(desktop)/61px(mobile) 이다.
+       top:0 으로 붙이면 스트립이 네비 뒤로 숨는다. */
+    --de-mp-strip-top: 70px;
+    position: sticky;
+    top: var(--de-mp-strip-top);
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    margin-bottom: 12px;
+    border: 1px solid rgba(201, 48, 44, 0.28);
+    border-radius: var(--fm-radius-sm, 8px);
+    background: var(--bracket-bg, #1e1e32);
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+}
+
+/* display:flex 가 UA 의 [hidden]{display:none} 를 이겨버리므로 명시적으로 되돌린다.
+   (이게 없으면 내 선수가 없는 종목에서 빈 스트립이 남는다) */
+.de-mp-strip[hidden] { display: none; }
+
+/* 모바일에서는 html 에 overflow-x:hidden 이 걸려 position:sticky 가 죽는다(Chromium).
+   JS 가 스크롤 위치를 보고 .is-pinned 를 켜고, 스페이서가 레이아웃 점프를 막는다. */
+.de-mp-strip.is-pinned {
+    position: fixed;
+    top: var(--de-mp-strip-top);
+    left: 0;
+    right: 0;
+    margin-bottom: 0;
+    border-radius: 0;
+    border-left: 0;
+    border-right: 0;
+}
+
+.de-mp-strip-spacer[hidden] { display: none; }
+
+.de-mp-strip::-webkit-scrollbar { height: 4px; }
+.de-mp-strip::-webkit-scrollbar-thumb { background: var(--bracket-line-color, #5a5a7a); border-radius: 2px; }
+
+.de-mp-strip-label {
+    flex: 0 0 auto;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--fm-accent-primary, #c9302c);
+    white-space: nowrap;
+}
+
+.de-mp-chip {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border: 1px solid var(--bracket-border, #3a3a54);
+    border-radius: var(--fm-radius-sm, 8px);
+    background: var(--bracket-card-bg, #1a2642);
+    color: var(--bracket-text-primary, #f9fafb);
+    font-size: 0.82rem;
+    font-family: inherit;
+    cursor: pointer;
+    text-align: left;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.de-mp-chip:hover:not(:disabled) {
+    border-color: var(--fm-accent-primary, #c9302c);
+    background: var(--bracket-score-bg, #2a2a4a);
+}
+
+.de-mp-chip:focus-visible {
+    outline: 2px solid var(--fm-accent-primary, #c9302c);
+    outline-offset: 2px;
+}
+
+.de-mp-chip:disabled {
+    cursor: default;
+    opacity: 0.55;
+}
+
+.de-mp-chip-body {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+}
+
+.de-mp-chip-name {
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.de-mp-chip-team {
+    font-size: 0.7rem;
+    color: var(--bracket-text-muted, #9ca3af);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 12ch;
+}
+
+.de-mp-chip-state {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    white-space: nowrap;
+    border: 1px solid transparent;
+}
+
+/* 상태별 표기 — 텍스트가 상태를 말하고, 색은 거들기만 한다 */
+.de-mp-chip-state[data-kind="next"]     { background: rgba(212, 165, 116, 0.16); color: var(--fm-medal-gold, #d4a574); border-color: rgba(212, 165, 116, 0.45); }
+.de-mp-chip-state[data-kind="tbd"]      { background: rgba(156, 163, 175, 0.14); color: var(--bracket-text-muted, #9ca3af); border-color: rgba(156, 163, 175, 0.4); border-style: dashed; }
+.de-mp-chip-state[data-kind="won"]      { background: rgba(34, 197, 94, 0.14); color: #86efac; border-color: rgba(34, 197, 94, 0.45); }
+.de-mp-chip-state[data-kind="champion"] { background: rgba(212, 165, 116, 0.2); color: var(--fm-medal-gold, #d4a574); border-color: rgba(212, 165, 116, 0.6); }
+.de-mp-chip-state[data-kind="runnerup"]  { background: rgba(156, 163, 175, 0.18); color: var(--fm-medal-silver, #9ca3af); border-color: rgba(156, 163, 175, 0.55); }
+.de-mp-chip-state[data-kind="out"],
+.de-mp-chip-state[data-kind="forfeit"]  { background: rgba(239, 68, 68, 0.14); color: #fca5a5; border-color: rgba(239, 68, 68, 0.45); }
+.de-mp-chip-state[data-kind="absent"]   { background: rgba(156, 163, 175, 0.1); color: var(--bracket-text-muted, #9ca3af); border-color: rgba(156, 163, 175, 0.3); }
+
+.de-mp-chip-score {
+    font-family: var(--fm-font-display, sans-serif);
+    font-weight: 700;
+    font-variant-numeric: lining-nums tabular-nums;
+}
+
+.de-mp-chip-count {
+    flex: 0 0 auto;
+    font-family: var(--fm-font-display, sans-serif);
+    font-size: 0.72rem;
+    font-variant-numeric: lining-nums tabular-nums;
+    color: var(--bracket-text-muted, #9ca3af);
+}
+
+.de-mp-chip-go {
+    flex: 0 0 auto;
+    color: var(--fm-accent-primary, #c9302c);
+    font-weight: 700;
+}
+
+@media (max-width: 768px) {
+    /* 하단 내비(56px) 위로 스크롤될 때도 상단 고정이 유효해야 대회장에서 쓸 만하다 */
+    .de-mp-strip {
+        --de-mp-strip-top: 64px;
+        padding: 6px 8px;
+        gap: 6px;
+    }
+    .de-mp-chip-team { max-width: 8ch; }
+}
+
+/* ============================================================
+   화면 밖 방향 인디케이터
+   미니맵 대신 화살표를 택했다: 세로(페이지)/가로(.bracket-tree) 두 축을 같은
+   규칙으로 다루고, 390px 화면에서도 자리를 거의 차지하지 않는다.
+   ============================================================ */
+.mp-locator {
+    position: fixed;
+    right: 16px;
+    bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+    z-index: 900;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 9px 14px;
+    border: 1px solid var(--fm-accent-primary, #c9302c);
+    border-radius: 999px;
+    background: var(--fm-bg-secondary, #12121a);
+    color: var(--fm-text-primary, #fff);
+    font-size: 0.8rem;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+}
+
+.mp-locator[hidden] { display: none; }
+
+.mp-locator:focus-visible {
+    outline: 2px solid var(--fm-accent-primary, #c9302c);
+    outline-offset: 2px;
+}
+
+.mp-locator-arrow {
+    font-family: var(--fm-font-display, sans-serif);
+    font-size: 1.05rem;
+    line-height: 1;
+    color: var(--fm-accent-primary, #c9302c);
+}
+
+@media (max-width: 768px) {
+    .mp-locator {
+        right: 12px;
+        bottom: calc(68px + env(safe-area-inset-bottom, 0px));  /* 하단 내비 56px 위 */
+    }
+}
+
+/* ============================================================
+   경기 전 / 경기 후 구분
+   scheduled = 대진 확정·결과 전, tbd = 상대 미정. 추정을 확정처럼 보이지 않게.
+   ============================================================ */
+.bracket-match[data-state="tbd"] {
+    border-style: dashed;
+    opacity: 0.72;
+}
+
+.bracket-match[data-state="scheduled"] {
+    border-style: dashed;
+}
+
+.bracket-match[data-state="scheduled"]::after {
+    content: "예정";
+    position: absolute;
+    z-index: 2;
+    top: -8px;
+    right: 8px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.4;
+    color: var(--fm-medal-gold, #d4a574);
+    background: var(--bracket-bg, #1e1e32);
+    border: 1px solid rgba(212, 165, 116, 0.5);
+}
+
+.bracket-tree.bracket-compact .bracket-match[data-state="scheduled"]::after {
+    display: none;   /* compact 에서는 라벨이 블록보다 커진다 */
+}
+
+.match-card[data-state="tbd"] { opacity: 0.78; }
+
+.match-status.bye {
+    background: rgba(107, 114, 128, 0.2);
+    color: #9ca3af;
+}
+
+.match-status.tbd {
+    background: rgba(156, 163, 175, 0.18);
+    color: #9ca3af;
+    border: 1px dashed rgba(156, 163, 175, 0.5);
+}
+
+/* ============================================================
+   Light theme
+   ============================================================ */
+[data-theme="light"] .de-mp-strip {
+    background: #ffffff;
+    border-color: rgba(201, 48, 44, 0.3);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="light"] .de-mp-chip {
+    background: #f5f5f7;
+    border-color: rgba(0, 0, 0, 0.1);
+    color: #191f28;
+}
+
+[data-theme="light"] .de-mp-chip:hover:not(:disabled) {
+    background: #e8e8ed;
+}
+
+[data-theme="light"] .de-mp-chip-state[data-kind="won"] { color: #15803d; }
+[data-theme="light"] .de-mp-chip-state[data-kind="out"],
+[data-theme="light"] .de-mp-chip-state[data-kind="forfeit"] { color: #b91c1c; }
+[data-theme="light"] .de-mp-chip-state[data-kind="next"],
+[data-theme="light"] .de-mp-chip-state[data-kind="champion"] { color: #b45309; }
+[data-theme="light"] .de-mp-chip-state[data-kind="runnerup"] { color: #4e5968; }
+
+[data-theme="light"] .mp-locator {
+    background: #ffffff;
+    color: #191f28;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.14);
+}
+
+[data-theme="light"] .bracket-match[data-state="scheduled"]::after {
+    background: #ffffff;
+    color: #b45309;
+}
+
+[data-theme="light"] .match-status.bye {
+    background: rgba(107, 114, 128, 0.2);
+    color: #9ca3af;
+}
+
+.match-status.tbd {
+    background: rgba(107, 114, 128, 0.12);
+    color: #4e5968;
+}

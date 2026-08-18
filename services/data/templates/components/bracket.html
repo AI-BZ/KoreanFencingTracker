@@ -4,7 +4,10 @@
   Requires: bracket (NormalizedBracket), event
 #}
 
-<div class="bracket-container" id="bracket-container">
+{# NOTE: dual DE 는 이 컴포넌트를 phase 당 한 번씩, 즉 한 페이지에 두 번 include 한다.
+   따라서 고정 id 를 쓰면 두 번째 인스턴스가 첫 번째 것을 조작한다(뷰 토글·라운드 탭 무동작).
+   모든 접근은 아래 스크립트에서 "아직 초기화되지 않은 컨테이너" 기준으로 스코프한다. #}
+<div class="bracket-container">
     <!-- View Toggle -->
     <div class="bracket-controls">
         <div class="bracket-view-toggle">
@@ -68,7 +71,7 @@
     {% endif %}
 
     <!-- Tree View (Desktop-optimized) -->
-    <div class="bracket-view bracket-tree-view active" id="bracket-tree-view">
+    <div class="bracket-view bracket-tree-view active">
         {% if bracket.rounds %}
         {# Calculate total matches to determine size class (excluding byes) #}
         {% set total_matches = namespace(count=0) %}
@@ -94,8 +97,16 @@
                     {% for match in matches %}
                     {# 부전승(bye) 경기는 시작 라운드에서만 표시 #}
                     {% if not match.is_bye or round_name == bracket.starting_round %}
+                    {# 경기 전/후를 데이터로 구분한다 (제1원칙: 미확정을 확정처럼 보이지 않게).
+                       done = 결과 확정 / scheduled = 대진 확정·결과 전 / tbd = 상대 미정 #}
+                    {% set _mstate = 'bye' if match.is_bye
+                        else ('done' if (match.winner_name and match.winner_name != 'None')
+                        else ('scheduled' if (match.player1_name and match.player1_name != 'None'
+                                              and match.player2_name and match.player2_name != 'None')
+                        else 'tbd')) %}
                     <div class="bracket-match {% if match.is_bye %}bye-match{% endif %}"
                          data-match-id="{{ match.bout_id }}"
+                         data-state="{{ _mstate }}"
                          role="treeitem"
                          aria-label="Match {{ match.match_number }}: {{ match.player1_name }} vs {{ match.player2_name }}">
                         <!-- Player 1 -->
@@ -178,7 +189,7 @@
     </div>
 
     <!-- List View (Mobile-optimized) -->
-    <div class="bracket-view bracket-list-view" id="bracket-list-view">
+    <div class="bracket-view bracket-list-view">
         {% if bracket.rounds %}
         {# 기본 활성 라운드 = 아직 완료되지 않은 첫 라운드 (전부 완료 시 마지막=결승).
            진행 중 대회에서 빈 결승 대신 현재 진행 라운드를 보여줌 #}
@@ -227,15 +238,24 @@
                 {% for match in matches %}
                 {# 부전승(bye) 경기는 시작 라운드에서만 표시 #}
                 {% if not match.is_bye or round_name == bracket.starting_round %}
-                <article class="match-card {% if match.is_bye %}bye-match{% endif %}" data-match-id="{{ match.bout_id }}">
+                {% set _cstate = 'bye' if match.is_bye
+                    else ('done' if (match.winner_name and match.winner_name != 'None')
+                    else ('scheduled' if (match.player1_name and match.player1_name != 'None'
+                                          and match.player2_name and match.player2_name != 'None')
+                    else 'tbd')) %}
+                <article class="match-card {% if match.is_bye %}bye-match{% endif %}" data-match-id="{{ match.bout_id }}" data-state="{{ _cstate }}">
                     <div class="match-header">
                         <span class="match-number">Match {{ match.match_number }}</span>
                         {% if match.is_forfeit %}
                         <span class="match-status forfeit">기권</span>
+                        {% elif _cstate == 'bye' %}
+                        <span class="match-status bye">부전승</span>
                         {% elif match.winner_name %}
                         <span class="match-status complete">완료</span>
+                        {% elif _cstate == 'scheduled' %}
+                        <span class="match-status pending">경기 예정</span>
                         {% else %}
-                        <span class="match-status pending">예정</span>
+                        <span class="match-status tbd">상대 미정</span>
                         {% endif %}
                     </div>
                     <div class="match-content">
@@ -398,8 +418,15 @@
 
 <script>
 (function() {
-    const container = document.getElementById('bracket-container');
+    // 이 스크립트는 자기 바로 위에 렌더된 컨테이너만 다룬다. 파서가 여기 도달한 시점에
+    // "아직 초기화되지 않은 첫 컨테이너" = 방금 나온 그것이다. (dual DE 2회 include 대응)
+    let container = null;
+    const all = document.querySelectorAll('.bracket-container');
+    for (let i = 0; i < all.length; i++) {
+        if (!all[i].dataset.bracketInit) { container = all[i]; break; }
+    }
     if (!container) return;
+    container.dataset.bracketInit = '1';
 
     // Apply Quarterfinal Group Colors
     function applyQFGroupColors() {
@@ -457,8 +484,9 @@
 
     // View Toggle
     const viewBtns = container.querySelectorAll('.view-btn');
-    const treeView = document.getElementById('bracket-tree-view');
-    const listView = document.getElementById('bracket-list-view');
+    const treeView = container.querySelector('.bracket-tree-view');
+    const listView = container.querySelector('.bracket-list-view');
+    if (!treeView || !listView) return;
 
     viewBtns.forEach(btn => {
         btn.addEventListener('click', () => {
@@ -473,6 +501,10 @@
                 listView.classList.add('active');
                 treeView.classList.remove('active');
             }
+            // 내 선수 스트립/방향 인디케이터가 활성 뷰 기준으로 다시 계산하도록 알린다
+            container.dispatchEvent(new CustomEvent('bracketviewchange', {
+                bubbles: true, detail: { view: view }
+            }));
         });
     });
 
@@ -494,6 +526,9 @@
             roundPanels.forEach(panel => {
                 panel.classList.toggle('active', panel.dataset.roundPanel === round);
             });
+            container.dispatchEvent(new CustomEvent('bracketroundchange', {
+                bubbles: true, detail: { round: round }
+            }));
         });
     });
 

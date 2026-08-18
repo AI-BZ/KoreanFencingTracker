@@ -3,7 +3,7 @@
 {% block title %}{{ tr_event(event.name) }} - {{ tr_comp(competition.competition.name) }}{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="/static/css/bracket.css?v=20260731a">
+<link rel="stylesheet" href="/static/css/bracket.css?v=20260817a">
 <link rel="stylesheet" href="/static/css/player-search.css?v=20260613">
 <style>
 /* =====================================================
@@ -1520,6 +1520,11 @@ tr.player-highlighted td {
                 </div>
             </span>
         </div>
+        {# 내 선수 스트립 — 이 종목에 내 선수가 있을 때만 JS 가 채우고 보여준다.
+           비어 있으면 빈 껍데기가 남지 않도록 hidden 유지. #}
+        <div id="de-my-player-strip-spacer" class="de-mp-strip-spacer" hidden aria-hidden="true"></div>
+        <div id="de-my-player-strip" class="de-mp-strip" hidden
+             role="group" aria-label="{{ _t('내 선수 빠른 이동') }}"></div>
         {# ===== 선수 루트 (Player Route): 내 선수/선택 선수의 대진 경로를 한눈에 ===== #}
         {% set route_players = [] %}
         {% if event.normalized_bracket and event.normalized_bracket.seeding %}{% set route_players = event.normalized_bracket.seeding %}
@@ -1904,7 +1909,7 @@ tr.player-highlighted td {
     <script id="pool-ranking-map-data" type="application/json">{{ pool_ranking_map | default({}) | tojson }}</script>
 </div>
 
-<script src="/static/js/player-search.js"></script>
+<script src="/static/js/player-search.js?v=20260817a"></script>
 {# dual-bracket.js is loaded by components/dual-bracket-tabs.html, and only
    for dual_de events. Loading it here as well declared DualDEController
    twice, which threw and left the phase tabs unbound. #}
@@ -3004,6 +3009,175 @@ window.EventH2H = (function() {
 document.addEventListener('DOMContentLoaded', function() {
     // 풀 표가 그려진 뒤에 붙인다. 네트워크는 비동기라 화면을 막지 않는다.
     setTimeout(function() { try { EventH2H.init(); } catch (e) {} }, 0);
+});
+
+// ==========================================
+// DE 탭 "내 선수" 스트립 (Phase 2)
+//
+// 학부모의 첫 질문은 "우리 애 몇 등이지?" 다. DE 탭을 열면 대진표보다 먼저
+// 내 선수 칩이 보이고, 누르면 그 경기로 데려간다. 경쟁 상대는 그다음이다.
+// 데이터는 이미 렌더된 대진표 DOM 에서 읽는다 — 화면에 없는 것을 추정하지 않는다.
+// ==========================================
+window.DEMyPlayers = (function() {
+    var _mp = null;          // MyPlayerBracket 인스턴스
+    var _strip = null;
+    var _initialized = false;
+
+    function t(s) { try { return (typeof _t === 'function') ? (_t(s) || s) : s; } catch (e) { return s; } }
+    function esc(s) { return (typeof _mpEscapeHtml === 'function') ? _mpEscapeHtml(s) : String(s == null ? '' : s); }
+
+    // 상태 요약 → 칩에 들어갈 문구. 예정과 결과를 말로 구분한다.
+    function stateText(s) {
+        switch (s.kind) {
+            case 'next':     return s.round + ' ' + t('예정');
+            case 'tbd':      return s.round + ' ' + t('상대 미정');
+            case 'won':      return s.round + ' ' + t('승');
+            case 'champion': return t('우승');
+            case 'runnerup': return t('준우승');
+            case 'out':      return s.round + ' ' + t('탈락');
+            case 'forfeit':  return s.round + ' ' + t('기권');
+            default:         return t('본선 기록 없음');
+        }
+    }
+
+    function chipHtml(s) {
+        var slotCls = ((s.slot - 1) % 2 === 0) ? 'mp-slot-a' : 'mp-slot-b';
+        var score = s.detail ? ' <span class="de-mp-chip-score">' + esc(s.detail) + '</span>' : '';
+        var counter = s.count > 1 ? '<span class="de-mp-chip-count">1/' + s.count + '</span>' : '';
+        var go = s.count > 0 ? '<span class="de-mp-chip-go" aria-hidden="true">&#9656;</span>' : '';
+        return '<button type="button" class="de-mp-chip" data-mp-slot="' + s.slot + '"' +
+               (s.count ? '' : ' disabled') +
+               ' aria-label="' + esc(s.display + ' · ' + stateText(s)) + '">' +
+               '<span class="mp-slot-badge ' + slotCls + '" aria-hidden="true">' + s.slot + '</span>' +
+               '<span class="de-mp-chip-body">' +
+                 '<span class="de-mp-chip-name">' + esc(s.display) + '</span>' +
+                 (s.team ? '<span class="de-mp-chip-team">' + esc((typeof _tr_team === 'function' ? _tr_team(s.team) : s.team)) + '</span>' : '') +
+               '</span>' +
+               '<span class="de-mp-chip-state" data-kind="' + s.kind + '">' + esc(stateText(s)) + score + '</span>' +
+               counter + go +
+               '</button>';
+    }
+
+    function render(summaries) {
+        if (!_strip) return;
+        var present = (summaries || []).filter(function(s) { return s.kind !== 'absent'; });
+        if (!present.length) { _strip.hidden = true; _strip.innerHTML = ''; return; }
+        _strip.innerHTML = '<span class="de-mp-strip-label">&#11088; ' + esc(t('내 선수')) + '</span>' +
+                           present.map(chipHtml).join('');
+        _strip.hidden = false;
+    }
+
+    function onChipClick(e) {
+        var btn = e.target.closest ? e.target.closest('.de-mp-chip') : null;
+        if (!btn || btn.disabled || !_mp) return;
+        var slot = parseInt(btn.dataset.mpSlot, 10);
+        var res = _mp.jump(slot);
+        if (!res) return;
+        var counter = btn.querySelector('.de-mp-chip-count');
+        if (counter) counter.textContent = res.index + '/' + res.total;
+    }
+
+    function deTabActive() {
+        var tab = document.getElementById('tab-tournament');
+        return !!(tab && tab.classList.contains('active'));
+    }
+
+    // ---- 모바일 고정(pin) ----
+    // 모바일은 html 에 overflow-x:hidden 이 걸려 있어 position:sticky 가 동작하지 않는다.
+    // 스크롤 위치를 직접 보고 fixed 로 전환하되, 스페이서로 레이아웃 점프를 막는다.
+    var _spacer = null;
+    var _pinRaf = false;
+    function navOffset() {
+        var nav = document.querySelector('.navbar');
+        return nav ? Math.round(nav.getBoundingClientRect().height) : 60;
+    }
+    function updatePin() {
+        if (!_strip || _strip.hidden) return;
+        var mobile = window.matchMedia('(max-width: 768px)').matches;
+        if (!mobile) {                       // 데스크톱은 sticky 가 제대로 동작한다
+            _strip.classList.remove('is-pinned');
+            if (_spacer) { _spacer.hidden = true; _spacer.style.height = ''; }
+            return;
+        }
+        var anchor = _spacer && !_spacer.hidden ? _spacer : _strip;
+        var top = anchor.getBoundingClientRect().top;
+        var limit = navOffset() + 4;
+        if (!_strip.classList.contains('is-pinned')) {
+            if (top < limit) {
+                var h = Math.round(_strip.getBoundingClientRect().height);
+                if (_spacer) { _spacer.style.height = h + 'px'; _spacer.hidden = false; }
+                _strip.classList.add('is-pinned');
+            }
+        } else if (top > limit + 1) {
+            _strip.classList.remove('is-pinned');
+            if (_spacer) { _spacer.hidden = true; _spacer.style.height = ''; }
+        }
+    }
+    function schedulePin() {
+        if (_pinRaf) return;
+        _pinRaf = true;
+        window.requestAnimationFrame(function() { _pinRaf = false; updatePin(); });
+    }
+
+    function syncLocator() {
+        if (!_mp) return;
+        if (deTabActive()) { _mp.startLocator(); schedulePin(); }
+        else {
+            _mp.stopLocator();
+            _strip.classList.remove('is-pinned');
+            if (_spacer) { _spacer.hidden = true; _spacer.style.height = ''; }
+        }
+    }
+
+    function init() {
+        if (_initialized) return;
+        _strip = document.getElementById('de-my-player-strip');
+        _spacer = document.getElementById('de-my-player-strip-spacer');
+        if (!_strip || typeof window.MyPlayerBracket !== 'function') return;
+        if (!document.querySelector('#tab-tournament .bracket-container')) return;  // DE 없음
+        _initialized = true;
+
+        _mp = new window.MyPlayerBracket({
+            root: '#tab-tournament',
+            translate: function(s) { return (typeof _tr_player === 'function') ? _tr_player(s) : s; },
+            t: t
+        });
+        window.myPlayerBracket = _mp;
+
+        _strip.addEventListener('click', onChipClick);
+
+        // 뷰(트리/리스트)·라운드·phase 가 바뀌면 방향 인디케이터를 다시 계산한다.
+        document.addEventListener('bracketviewchange', syncLocator);
+        document.addEventListener('bracketroundchange', syncLocator);
+        var dual = document.getElementById('dual-de-container');
+        if (dual) dual.addEventListener('phasechange', syncLocator);
+        document.querySelectorAll('.tab-btn').forEach(function(b) {
+            b.addEventListener('click', function() { setTimeout(syncLocator, 60); });
+        });
+        window.addEventListener('scroll', schedulePin, { passive: true });
+        window.addEventListener('resize', schedulePin, { passive: true });
+
+        function apply(names) {
+            var list = (names || []).map(function(n) { return { ko: n.ko, display: n.display, team: n.team }; });
+            render(_mp.setPlayers(list));
+            syncLocator();
+            schedulePin();
+        }
+
+        // My Player(localStorage, 동기)로 먼저 그리고 → 즐겨찾기 병합 후 갱신
+        var sync = (typeof getMyPlayerNamesSync === 'function') ? getMyPlayerNamesSync() : [];
+        if (sync.length) apply(sync);
+        if (typeof getMyPlayerNames === 'function') {
+            getMyPlayerNames().then(apply).catch(function() {});
+        }
+    }
+
+    return { init: init, refresh: function() { if (_mp) _mp.stopLocator(); _initialized = false; init(); } };
+})();
+
+document.addEventListener('DOMContentLoaded', function() {
+    // 대진표는 SSR 이라 이 시점에 DOM 에 있다. 풀 렌더 뒤로 한 틱 미룬다.
+    setTimeout(function() { try { window.DEMyPlayers.init(); } catch (e) { console.error('DE my-player strip:', e); } }, 0);
 });
 
 // Initialize autocomplete
