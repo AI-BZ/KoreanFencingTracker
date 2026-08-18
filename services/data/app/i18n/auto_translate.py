@@ -3242,6 +3242,14 @@ TRANSLATIONS = {
         "zh": "晋级本赛段",
         "tr": "Ana tabloya yükselir",
     },
+    "이름을 성부터 입력하세요": {
+        "en": "Type a name from the beginning",
+        "fr": "Saisissez le début du nom",
+        "it": "Digita l'inizio del nome",
+        "ja": "姓から順に入力してください",
+        "zh": "请从姓氏开始输入",
+        "tr": "Adı baştan yazın",
+    },
     "상대 미정": {
         "en": "Opponent TBD",
         "fr": "Adversaire à définir",

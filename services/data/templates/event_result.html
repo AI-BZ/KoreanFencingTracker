@@ -3,7 +3,7 @@
 {% block title %}{{ tr_event(event.name) }} - {{ tr_comp(competition.competition.name) }}{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="/static/css/bracket.css?v=20260818g">
+<link rel="stylesheet" href="/static/css/bracket.css?v=20260819a">
 <link rel="stylesheet" href="/static/css/player-search.css?v=20260613">
 <style>
 /* =====================================================
@@ -2574,7 +2574,7 @@ window.DERoute = (function() {
             closeList();
             setHint(all.length
                 ? esc(t('이 종목 DE 참가자')) + ' <span class="fm-num">' + all.length + '</span>' +
-                  esc(t('명')) + ' · ' + esc(t('성이나 이름 앞부분을 입력하세요'))
+                  esc(t('명')) + ' · ' + esc(t('이름을 성부터 입력하세요'))
                 : esc(t('대진표 데이터가 없습니다')));
             return;
         }
@@ -4241,5 +4241,5 @@ function renderEventTeamTable(container, rankings, sortKey) {
     {# 경로 뷰 — 시트 전체를 이 선수의 대진 경로로 바꿔 쓴다 (390px 에서 스크롤 사냥 방지) #}
     <div class="ms-route-view" id="ms-route-view" hidden></div>
 </aside>
-<script src="/static/js/de-match-sheet.js?v=20260818g"></script>
+<script src="/static/js/de-match-sheet.js?v=20260819a"></script>
 {% endblock %}
