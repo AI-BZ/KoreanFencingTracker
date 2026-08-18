@@ -24,10 +24,63 @@ Dual DE 형식 (국가대표 선발전):
 """
 
 import asyncio
+import re
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Tuple
 from playwright.async_api import Page
 from loguru import logger
+
+
+# ============================================================
+# 소속 칸 상태 문구 판별 (FIE t.95 기권 규약)
+# ============================================================
+# KFA 대진표는 첫 라운드 이후의 박스에서 '소속' 자리(.user_aff)에 소속이 아니라
+# **직전 경기 결과**를 넣는다:
+#   '15 : 13'      → 직전 경기 점수
+#   '박지희의기권'  → 박지희가 기권해서 이 선수가 진출 (기권자는 상대방!)
+#   '기권'/'부전승' → 상태 문구
+# 어느 쪽도 소속이 아니므로 소속으로 저장하면 안 된다.
+#
+# 용어/필드명은 Pool 쪽 기권 규약(is_forfeit / forfeit_player)과 맞춘다.
+# (app/pool_calculator.py, app/bracket_utils.py:45~46 참조 — 새 규약을 만들지 않는다)
+_SCORE_TEXT_RE = re.compile(r'^\d+\s*:\s*\d+$')
+_FORFEIT_BY_RE = re.compile(r'^(?P<who>.+?)\s*(?:의\s*기권|[-–—]\s*기권)$')
+_SELF_FORFEIT_RE = re.compile(r'^(?:기권|abandon|w\.?o\.?)$', re.IGNORECASE)
+_BYE_TEXT_RE = re.compile(r'^(?:부전승|bye)$', re.IGNORECASE)
+
+
+def split_affiliation(text: Optional[str]) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    """소속 칸 원문을 (실제 소속, 기권자, 상태종류)로 분해.
+
+    Returns:
+        (team, forfeited_by, status_kind)
+        - team: 진짜 소속으로 인정되는 문자열. 상태 문구면 None
+        - forfeited_by: '~의 기권' 에서 추출한 **기권한 쪽** 이름(개인전은 선수명,
+          단체전은 팀명). 그 외에는 None
+        - status_kind: None | 'score' | 'forfeit_by' | 'self_forfeit' | 'bye'
+
+    주의: '박지희의기권' 이 붙은 박스의 주인은 **진출한 선수**이고
+    기권한 쪽은 박지희다. 이 둘을 뒤바꾸면 안 된다.
+    """
+    t = (text or '').strip()
+    if not t:
+        return None, None, None
+    if _SCORE_TEXT_RE.match(t):
+        return None, None, 'score'
+    m = _FORFEIT_BY_RE.match(t)
+    if m:
+        who = m.group('who').strip()
+        return (None, who, 'forfeit_by') if who else (None, None, 'self_forfeit')
+    if _SELF_FORFEIT_RE.match(t):
+        return None, None, 'self_forfeit'
+    if _BYE_TEXT_RE.match(t):
+        return None, None, 'bye'
+    return t, None, None
+
+
+def clean_affiliation(text: Optional[str]) -> Optional[str]:
+    """소속 문자열에서 상태 문구를 제거한 값 (상태 문구면 None)."""
+    return split_affiliation(text)[0]
 
 
 @dataclass
@@ -58,6 +111,8 @@ class DEMatch:
     player2_score: Optional[int] = None
     winner: Optional[DEPlayer] = None
     is_bye_match: bool = False  # 상대 없이 자동 진출
+    is_forfeit: bool = False  # 기권으로 종료된 경기 (FIE t.95)
+    forfeit_player: Optional[str] = None  # 기권한 쪽 이름 (개인전=선수, 단체전=팀)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -74,7 +129,11 @@ class DEMatch:
             'player2_score': self.player2_score,
             'winner_seed': self.winner.seed if self.winner else None,
             'winner_name': self.winner.name if self.winner else None,
-            'is_bye': self.is_bye_match
+            'is_bye': self.is_bye_match,
+            # 키 이름은 bracket_utils.Bout(is_forfeit/forfeit_player) 및
+            # Pool 기권 규약과 동일하게 유지한다
+            'is_forfeit': self.is_forfeit,
+            'forfeit_player': self.forfeit_player
         }
 
 
@@ -306,6 +365,9 @@ class DEScraper:
             skip_in_progress_check: True면 진행중 체크 스킵 (Dual DE 컨텍스트에서 사용)
         """
         bracket = DEBracket()
+        # 기권 문구 버퍼 초기화 — 같은 DEScraper 인스턴스가 First/Second DE를
+        # 연달아 파싱하므로 phase 간 누수를 막는다.
+        self._pending_aff_notes = []
 
         try:
             # 0. 대회 진행 중 상태 확인 (DE 데이터 없음)
@@ -411,6 +473,14 @@ class DEScraper:
             # 5. 유효성 검증으로 무효 경기 필터링
             bracket.matches = self._filter_valid_matches(valid_matches)
             logger.info(f"총 경기 수: {len(bracket.matches)} (중복제거 후 {len(deduplicated)}개에서 필터링)")
+
+            # 5.5. 기권 표식 부착 (FIE t.95) — tournament_table 경로와 동일 규약
+            forfeit_pairs = self._collect_forfeit_notes(
+                getattr(self, '_pending_aff_notes', [])
+            )
+            if forfeit_pairs:
+                applied = self._apply_forfeit_notes(bracket.matches, forfeit_pairs)
+                logger.info(f"기권 {len(forfeit_pairs)}건 감지 → {applied}경기에 표식")
 
             # 6. 우승자 확인 (DOM → 결승 bout fallback)
             bracket.champion = await self._get_champion(matches=bracket.matches)
@@ -549,6 +619,7 @@ class DEScraper:
     async def _parse_tab_matches(self, tab_size: int) -> List[DEMatch]:
         """현재 탭에서 매치 정보 추출"""
         matches = []
+        self._pending_aff_notes = getattr(self, '_pending_aff_notes', [])
 
         # row01 ~ row04 각각 파싱
         for row_idx in range(1, 5):
@@ -558,6 +629,7 @@ class DEScraper:
 
             round_name = round_data['round_name']
             players = round_data['players']
+            self._pending_aff_notes.extend(round_data.get('aff_notes', []))
 
             # 이전 라운드 승자들에서 점수 정보 가져오기
             next_round_scores = await self._get_next_round_scores(row_idx)
@@ -672,17 +744,25 @@ class DEScraper:
         if row_idx == 4 and data['playerCount'] == 1:
             return None
 
+        # 소속 자리에 들어온 상태 문구(점수/기권/부전승)는 소속으로 저장하지 않는다.
+        # 기권 문구는 버리지 않고 aff_notes로 올려 보내 기권 표식에 쓴다.
+        aff_notes = [
+            {'name': p['name'], 'aff': p['aff'], 'xposition': round_size}
+            for p in data['players'] if p.get('name') and p.get('aff')
+        ]
+
         return {
             'round_name': round_name,
             'players': [
                 DEPlayer(
                     seed=p['seed'],
                     name=p['name'],
-                    team=p['aff'] if p['aff'] and ':' not in str(p['aff']) else None,
+                    team=clean_affiliation(p['aff']),
                     is_bye=p['is_bye']
                 )
                 for p in data['players']
-            ]
+            ],
+            'aff_notes': aff_notes,
         }
 
     async def _get_next_round_scores(self, current_row_idx: int) -> Dict[str, Dict]:
@@ -1055,6 +1135,70 @@ class DEScraper:
         return result
 
     @staticmethod
+    def _collect_forfeit_notes(aff_notes: List[Dict]) -> List[Tuple[str, str]]:
+        """소속 칸 원문에서 (진출한 쪽, 기권한 쪽) 쌍을 추출.
+
+        같은 쌍이 여러 컬럼/여러 탭에서 반복 등장하므로 중복을 제거한다.
+        """
+        pairs = []
+        seen = set()
+        for note in aff_notes or []:
+            advanced = (note.get('name') or '').strip()
+            _team, forfeited_by, kind = split_affiliation(note.get('aff'))
+            if kind == 'self_forfeit':
+                # '기권' 단독 표기는 상대를 알 수 없어 경기 특정이 불가능하다.
+                # 소속 오염만 제거하고 표식은 붙이지 않는다 (추측 금지).
+                logger.warning(
+                    f"기권 문구에 상대 정보 없음 → 표식 생략: '{note.get('aff')}' ({advanced})"
+                )
+                continue
+            if not forfeited_by or not advanced:
+                continue
+            key = (advanced, forfeited_by)
+            if key not in seen:
+                seen.add(key)
+                pairs.append(key)
+        return pairs
+
+    @staticmethod
+    def _apply_forfeit_notes(matches: List[DEMatch], pairs: List[Tuple[str, str]]) -> int:
+        """(진출한 쪽, 기권한 쪽) 쌍을 실제 두 사람이 맞붙은 bout에 표시.
+
+        ★ 라운드 어긋남 주의: 기권 문구는 **직전 경기 결과**로 표시되므로,
+        문구가 실린 박스의 라운드와 실제 기권 경기의 라운드가 다르다.
+        (실측: 홍누리 32강 박스의 '김미소의기권' → 실제 경기는 64강)
+        따라서 문구가 실린 위치가 아니라 **두 이름이 실제로 맞붙은 경기**를 찾아 표시한다.
+        찾지 못하면 표식을 붙이지 않는다(추측 금지).
+        """
+        applied = 0
+        for advanced, forfeited_by in pairs:
+            targets = [
+                m for m in matches
+                if m.player1 and m.player2
+                and {(m.player1.name or '').strip(), (m.player2.name or '').strip()}
+                == {advanced, forfeited_by}
+            ]
+            if not targets:
+                logger.warning(
+                    f"기권 표식 대상 경기를 찾지 못함: {advanced} vs {forfeited_by} (표식 생략)"
+                )
+                continue
+            if len(targets) > 1:
+                logger.warning(
+                    f"기권 표식 대상 경기가 {len(targets)}개: {advanced} vs {forfeited_by} "
+                    f"(라운드 {[m.round_name for m in targets]}) — 전부 표시"
+                )
+            for m in targets:
+                m.is_forfeit = True
+                m.forfeit_player = forfeited_by
+                applied += 1
+                logger.info(
+                    f"🚩 기권 표식: {m.round_name} {m.player1.name} vs {m.player2.name} "
+                    f"→ 기권 {forfeited_by}"
+                )
+        return applied
+
+    @staticmethod
     def _match_completeness(match: Dict) -> int:
         """추출된 경기 dict의 정보 완전성 점수 (병합 시 우선순위 판정용).
 
@@ -1086,10 +1230,15 @@ class DEScraper:
         return await self.page.evaluate(f"""
             () => {{
                 const boxes = document.querySelectorAll('.user_box');
-                if (!boxes.length) return {{ matches: [], seeding: [] }};
+                if (!boxes.length) return {{ matches: [], seeding: [], aff_notes: [] }};
 
                 const matchMap = new Map();
                 const seedingMap = new Map();
+                // 소속 칸 원문 수집 — 분류는 전부 파이썬(split_affiliation)에서 한다.
+                // 페어를 이루지 못한 '승자 표시 컬럼' 박스에도 기권 문구가 실리므로
+                // (실측: 여자 플뢰레 본선 x=32 컬럼의 '김미소의기권')
+                // 페어 가드보다 먼저, 모든 박스에서 수집한다.
+                const affNotes = [];
                 const skipSeeding = {str(skip_seeding).lower()};
 
                 // ★ 사전 집계: compmatsym 당 박스 수
@@ -1129,6 +1278,10 @@ class DEScraper:
                     // 128강/64강/32강 등 모든 라운드에서 수집, seedNum 중복시 첫 번째 유지
                     if (!skipSeeding && seedNum > 0 && name && !seedingMap.has(seedNum)) {{
                         seedingMap.set(seedNum, player);
+                    }}
+
+                    if (name && team) {{
+                        affNotes.push({{ name: name, aff: team, xposition: xpos }});
                     }}
 
                     // 페어(정확히 2박스)를 이루지 않는 박스는 경기로 만들지 않는다.
@@ -1199,7 +1352,7 @@ class DEScraper:
                 }});
                 seeding.sort((a, b) => a.seed - b.seed);
 
-                return {{ matches, seeding }};
+                return {{ matches, seeding, aff_notes: affNotes }};
             }}
         """)
 
@@ -1223,6 +1376,7 @@ class DEScraper:
         matches_by_id: Dict[str, Dict] = {}
         seeding_data: List[Dict] = []
         merge_order = {}  # match_id → 최초 발견 순서 (라운드 내 정렬 안정화용)
+        aff_notes: List[Dict] = []  # 소속 칸 원문 (기권 문구 추출용)
 
         def _merge_matches(new_matches: List[Dict], source: str) -> int:
             """수집된 경기들을 match_id 기준으로 병합. 반환값 = 새로 추가된 경기 수.
@@ -1262,6 +1416,7 @@ class DEScraper:
                 initial_data = await self._extract_tournament_table_data(skip_seeding=False)
                 initial_matches = initial_data.get('matches', [])
                 initial_seeding = initial_data.get('seeding', [])
+                aff_notes.extend(initial_data.get('aff_notes', []))
                 _merge_matches(initial_matches, "초기 렌더")
                 if len(initial_seeding) > len(seeding_data):
                     seeding_data = initial_seeding
@@ -1300,6 +1455,7 @@ class DEScraper:
                 data = await self._extract_tournament_table_data(skip_seeding=False)
                 tab_matches = data.get('matches', [])
                 tab_seeding = data.get('seeding', [])
+                aff_notes.extend(data.get('aff_notes', []))
 
                 logger.debug(f"  → {tab_name}: {len(tab_matches)}경기 수집")
 
@@ -1314,40 +1470,64 @@ class DEScraper:
             logger.info(f"tournament_table 파싱: {len(matches_data)}경기 (중복제거 후), {len(seeding_data)}명 시드")
 
             # 팀 이름 보정: tournament_table 구조에서 후속 라운드는
-            # .user_aff span에 팀 이름 대신 이전 경기 점수(예: "15 : 13")가 들어감
-            # 시딩 데이터와 첫 라운드 데이터에서 name→team 매핑 구축 후 보정
-            import re
-            score_pattern = re.compile(r'^\d+\s*:\s*\d+$')
+            # .user_aff span에 팀 이름 대신 '직전 경기 결과'가 들어간다.
+            #   - 점수:      "15 : 13"
+            #   - 기권 진출: "박지희의기권"   ← 소속이 아니라 상태 문구
+            # 상태 문구를 소속으로 인정하면 name_to_team에 등록되어, 그 선수의
+            # **모든 라운드 소속이 기권 문구로 덮인다**(2026-08 실사고: 25건 오염).
+            # → split_affiliation()으로 상태 문구를 걸러낸 뒤 매핑을 만든다.
             name_to_team = {}
 
-            # 시딩 데이터에서 매핑 구축
+            def _register_team(name, raw_team):
+                real_team = clean_affiliation(raw_team)
+                if name and real_team:
+                    name_to_team.setdefault(name, real_team)
+
+            # 시딩 데이터에서 매핑 구축 (+ 시딩 자체의 오염도 제거)
             for s in seeding_data:
-                if s.get('name') and s.get('team') and not score_pattern.match(s['team']):
-                    name_to_team[s['name']] = s['team']
+                _register_team(s.get('name'), s.get('team'))
+            for s in seeding_data:
+                if s.get('team') and clean_affiliation(s['team']) is None:
+                    s['team'] = name_to_team.get(s.get('name'), '')
 
             # 첫 라운드(유효한 팀 이름이 있는) 경기에서 매핑 추가
             for m in matches_data:
-                if m.get('red_name') and m.get('red_team') and not score_pattern.match(m['red_team']):
-                    name_to_team[m['red_name']] = m['red_team']
-                if m.get('green_name') and m.get('green_team') and not score_pattern.match(m['green_team']):
-                    name_to_team[m['green_name']] = m['green_team']
+                _register_team(m.get('red_name'), m.get('red_team'))
+                _register_team(m.get('green_name'), m.get('green_team'))
 
-            # 점수가 팀 이름으로 들어간 경우 보정
-            fixed_count = 0
+            # 상태 문구(점수/기권/부전승)가 소속으로 들어간 경우 실제 소속으로 교체.
+            # 실제 소속을 어디서도 못 찾으면 빈 값으로 둔다 (지어내지 않는다).
+            fixed_score, fixed_status, unresolved = 0, 0, 0
             for m in matches_data:
                 for prefix in ('red', 'green'):
                     team_key = f'{prefix}_team'
                     name_key = f'{prefix}_name'
                     team_val = m.get(team_key, '')
-                    if team_val and score_pattern.match(team_val):
-                        correct_team = name_to_team.get(m.get(name_key, ''), '')
-                        m[team_key] = correct_team
-                        fixed_count += 1
-                    elif not team_val and m.get(name_key):
+                    if team_val:
+                        real_team, _forfeited_by, kind = split_affiliation(team_val)
+                        if kind is None:
+                            continue  # 진짜 소속
+                        restored = name_to_team.get(m.get(name_key, ''), '')
+                        m[team_key] = restored
+                        if kind == 'score':
+                            fixed_score += 1
+                        else:
+                            fixed_status += 1
+                        if not restored:
+                            unresolved += 1
+                            logger.warning(
+                                f"소속 복원 실패 → 빈 값 유지: {m.get(name_key)} "
+                                f"(원문 '{team_val}')"
+                            )
+                    elif m.get(name_key):
                         m[team_key] = name_to_team.get(m[name_key], '')
 
-            if fixed_count:
-                logger.info(f"tournament_table: {fixed_count}개 팀 이름 보정 (점수→실제 팀)")
+            if fixed_score or fixed_status:
+                logger.info(
+                    f"tournament_table: 소속 보정 {fixed_score + fixed_status}건 "
+                    f"(점수 {fixed_score} / 기권·부전승 문구 {fixed_status}), "
+                    f"복원 실패 {unresolved}건"
+                )
 
             # 라운드 이름 정규화 (4강 → 준결승, 2강 → 결승)
             for m in matches_data:
@@ -1395,6 +1575,7 @@ class DEScraper:
                         )
                         extra_matches = extra_data.get('matches', [])
                         extra_seeding = extra_data.get('seeding', [])
+                        aff_notes.extend(extra_data.get('aff_notes', []))
 
                         # 추가 경기 데이터 병합
                         _merge_matches(extra_matches, f"교정 {corrected}강")
@@ -1504,6 +1685,16 @@ class DEScraper:
                     is_bye_match=m['red_is_bye'] or m['green_is_bye']
                 )
                 bracket.matches.append(match)
+
+            # 기권 표식 부착 (FIE t.95)
+            # 기권 문구는 '직전 경기 결과'로 표시되므로 문구가 실린 라운드와
+            # 실제 기권 경기의 라운드가 다르다 → 두 이름이 맞붙은 경기를 찾아 표시한다.
+            forfeit_pairs = self._collect_forfeit_notes(aff_notes)
+            if forfeit_pairs:
+                applied = self._apply_forfeit_notes(bracket.matches, forfeit_pairs)
+                logger.info(
+                    f"tournament_table: 기권 {len(forfeit_pairs)}건 감지 → {applied}경기에 표식"
+                )
 
             # 시드 데이터 변환
             for s in seeding_data:
