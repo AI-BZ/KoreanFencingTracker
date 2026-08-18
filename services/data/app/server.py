@@ -7027,6 +7027,24 @@ def _compute_event_sub_rankings(final_rankings: list) -> dict:
     return result
 
 
+@app.get("/event/{event_cd}/{sub_event_cd}")
+async def legacy_event_url_redirect(event_cd: str, sub_event_cd: str):
+    """예전에 나갔던 종목 URL을 정식 주소로 넘긴다.
+
+    선수 프로필의 메달 목록이 한동안 '/event/{대회}/{종목}' 형태로 링크를 만들었는데
+    그런 라우트는 존재한 적이 없어 전부 404 였다. 링크 생성부는 고쳤지만(2026-08-18)
+    이미 나간 주소가 북마크·공유·검색 색인에 남아 있으므로 주소 자체를 살려 둔다.
+
+    정식 주소: /competition/{event_cd}?event={sub_event_cd}
+    """
+    from fastapi.responses import RedirectResponse
+    from urllib.parse import quote
+    return RedirectResponse(
+        url=f"/competition/{quote(event_cd)}?event={quote(sub_event_cd)}",
+        status_code=301,
+    )
+
+
 @app.get("/competition/{event_cd}", response_class=HTMLResponse)
 async def competition_detail_page(request: Request, event_cd: str, event: Optional[str] = None):
     """대회 상세 페이지"""
