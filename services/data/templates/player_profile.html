@@ -963,7 +963,12 @@
                 var html = '<ul class="medal-detail-list">';
                 filtered.forEach(function(r, i) {
                     var rankLabel = r.rank === 1 ? 'Winner' : r.rank === 2 ? 'Runner-up' : r.rank === 3 ? 'Bronze' : 'Top ' + r.rank;
-                    var link = r.sub_event_cd ? '/event/' + r.event_cd + '/' + r.sub_event_cd : '#';
+                    // 종목 페이지는 /competition/{event_cd}?event={sub_event_cd} 다.
+                    // '/event/{a}/{b}' 라우트는 존재한 적이 없어 항상 404 였다.
+                    var link = (r.event_cd && r.sub_event_cd)
+                        ? '/competition/' + encodeURIComponent(r.event_cd) +
+                          '?event=' + encodeURIComponent(r.sub_event_cd)
+                        : '#';
                     html += '<li><a href="' + link + '">' + _tr_comp(r.competition_name) + ' - ' + _tr_event(r.event_name) + '</a> <span class="medal-rank-label">' + rankLabel + '</span></li>';
                 });
                 html += '</ul>';
