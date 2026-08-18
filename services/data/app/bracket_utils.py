@@ -120,11 +120,17 @@ class NormalizedDualDEBracket:
     seeded_count: int = 0
     first_de_participant_count: int = 0
 
+    # 결과 입력 현황 요약 (build_dual_de_progress 산출물)
+    # 탭 기본 진입·배너 문구·진행바가 모두 이 값 하나만 본다.
+    progress: Optional[Dict] = None
+
     def __post_init__(self):
         if self.first_de_qualifiers is None:
             self.first_de_qualifiers = []
         if self.seeded_players is None:
             self.seeded_players = []
+        if self.progress is None:
+            self.progress = build_dual_de_progress(self)
 
     def to_dict(self) -> Dict:
         return {
@@ -136,7 +142,8 @@ class NormalizedDualDEBracket:
             'status': self.status,
             'total_participants': self.total_participants,
             'seeded_count': self.seeded_count,
-            'first_de_participant_count': self.first_de_participant_count
+            'first_de_participant_count': self.first_de_participant_count,
+            'progress': self.progress
         }
 
     def is_dual_de(self) -> bool:
@@ -154,11 +161,16 @@ class NormalizedDualDEBracket:
         return "unknown"
 
     def get_display_name(self, phase: str) -> str:
-        """단계별 표시 이름"""
+        """단계별 표시 이름.
+
+        화면 표기는 templates/components/dual-bracket-tabs.html 이 담당한다.
+        (한국어는 '예선 DE'를 크게, 'First DE'를 작게 병기)
+        여기서는 로그·API 용 짧은 이름만 돌려준다.
+        """
         if phase == "first_de":
-            return "예선 DE (32명의 면제자가 있는 예선엘리미나시옹디렉트)"
+            return "예선 DE"
         elif phase == "second_de":
-            return "본선 DE (64강)"
+            return "본선 DE"
         return phase
 
 
@@ -1842,8 +1854,11 @@ def normalize_dual_de_bracket_data(de_bracket: Dict) -> NormalizedDualDEBracket:
     first_de_raw = de_bracket.get('first_de', {})
     second_de_raw = de_bracket.get('second_de', {})
 
-    first_de_has_bouts = bool((first_de_raw.get('full_bouts') or []))
-    second_de_has_bouts = bool((second_de_raw.get('full_bouts') or []))
+    # 스크래퍼는 하위 브래킷 경기를 'bouts' 키로 저장한다. 예전엔 'full_bouts' 만 확인해
+    # 이미 올바르게 나뉘어 있는 데이터를 "비어 있다"고 오판하고, 최상위 full_bouts 를
+    # 다시 쪼개 덮어썼다. 그 재분배가 First DE 의 64강을 통째로 잃게 만든 경로다.
+    first_de_has_bouts = bool(first_de_raw.get('full_bouts') or first_de_raw.get('bouts'))
+    second_de_has_bouts = bool(second_de_raw.get('full_bouts') or second_de_raw.get('bouts'))
 
     if top_level_bouts and not first_de_has_bouts and not second_de_has_bouts:
         second_de_starting = (second_de_raw.get('starting_round') or '64강')
@@ -2087,6 +2102,204 @@ def _determine_dual_de_status(
         return "first_de_in_progress"
     else:
         return "pending"
+
+
+# ===== Dual DE 결과 입력 현황 =====
+#
+# de_bracket.status / events.has_first_de / events.has_second_de 는 실데이터와 어긋난다
+# (2026-08 실측: 결승까지 결과가 다 들어온 4개 종목이 전부 status='first_de_in_progress',
+#  has_first_de/has_second_de 는 전부 false). 또 BracketBout.is_completed 는 원본에
+# is_completed 키가 없으면 부전승/기권에만 True 가 되어 실제 경기 결과를 반영하지 못한다.
+# 그래서 탭 진입·진행바·배너는 아래 함수들이 "점수(또는 승자)가 실제로 들어왔는지"를
+# 직접 세어 만든 progress 딕셔너리 하나만 본다.
+
+
+def is_bout_result_entered(bout: 'BracketBout') -> bool:
+    """이 경기의 결과가 실제로 들어왔는지 판정.
+
+    - 부전승/기권: 점수가 없어도 결과가 확정된 경기다.
+    - 그 외: 승자 이름이 있거나, 양쪽 점수가 있고 서로 다르면 입력된 것으로 본다.
+      (미진행 경기는 이 데이터에서 0:0 + 승자 없음으로 저장된다.)
+    """
+    if bout is None:
+        return False
+    if getattr(bout, 'is_bye', False) or getattr(bout, 'is_forfeit', False):
+        return True
+    if (getattr(bout, 'winner_name', '') or '').strip():
+        return True
+    s1 = getattr(bout, 'player1_score', None)
+    s2 = getattr(bout, 'player2_score', None)
+    return s1 is not None and s2 is not None and s1 != s2
+
+
+def _is_real_bout(bout: 'BracketBout') -> bool:
+    """양쪽 다 비어 있는 자리(브래킷 채우기용 빈 슬롯)는 분모에서 뺀다."""
+    if bout is None:
+        return False
+    p1 = (getattr(bout, 'player1_name', '') or '').strip()
+    p2 = (getattr(bout, 'player2_name', '') or '').strip()
+    return bool(p1 or p2)
+
+
+def summarize_bracket_entry(bracket: Optional[NormalizedBracket]) -> Dict[str, Any]:
+    """브래킷의 라운드별 결과 입력 현황 집계.
+
+    'contested' = 부전승이 아닌 실제 대결. 진행 판정은 부전승을 빼고 세야 한다.
+    브래킷 스켈레톤만 저장된 이벤트에서 부전승만 보고 "진행 중"으로 오판하지
+    않기 위함이다.
+    """
+    summary = {
+        'rounds': [],       # [{'name', 'total', 'entered', 'complete', 'contested', 'contested_entered'}]
+        'total': 0,
+        'entered': 0,
+        'complete': False,
+        'has_any_result': False,       # 부전승 아닌 경기 결과가 1건 이상
+        'last_round': None,
+        'last_round_complete': False,  # 마지막 라운드의 실제 대결이 전부 입력됨
+    }
+    if not bracket or not bracket.rounds:
+        return summary
+
+    for round_name in bracket.rounds:
+        bouts = [b for b in bracket.bouts_by_round.get(round_name, []) if _is_real_bout(b)]
+        contested = [b for b in bouts if not (b.is_bye or b.is_forfeit)]
+        total = len(bouts)
+        entered = sum(1 for b in bouts if is_bout_result_entered(b))
+        contested_entered = sum(1 for b in contested if is_bout_result_entered(b))
+        summary['rounds'].append({
+            'name': round_name,
+            'total': total,
+            'entered': entered,
+            'complete': total > 0 and entered == total,
+            'contested': len(contested),
+            'contested_entered': contested_entered,
+        })
+        summary['total'] += total
+        summary['entered'] += entered
+
+    summary['complete'] = summary['total'] > 0 and summary['entered'] == summary['total']
+    summary['has_any_result'] = any(r['contested_entered'] > 0 for r in summary['rounds'])
+    if summary['rounds']:
+        last = summary['rounds'][-1]
+        summary['last_round'] = last['name']
+        # 마지막 라운드가 전부 부전승이면 판정 근거가 못 된다.
+        summary['last_round_complete'] = (
+            last['contested'] > 0 and last['contested_entered'] == last['contested']
+        )
+    return summary
+
+
+def build_dual_de_progress(dual_de: 'NormalizedDualDEBracket') -> Dict[str, Any]:
+    """Dual DE 의 결과 입력 현황과 기본 진입 탭을 산출한다.
+
+    기본 진입 탭 규칙:
+      1) 본선 결승 결과가 들어왔으면 → 본선 (대회가 끝난 뒤엔 항상 본선이 목적지다.
+         예선에 미입력 경기가 한둘 남아 있어도 이 규칙이 우선한다.)
+      2) 예선 결과가 아직 다 안 들어왔으면 → 예선
+      3) 예선 결과가 다 들어왔으면 → 본선
+
+    데이터 불완전 판정: 본선 시작 라운드(공유 라운드)가 예선 라운드 목록에 없으면
+    예선 마지막 라운드가 수집되지 않은 것이다. 이때는 진출자 수를 추정하지 않는다.
+    """
+    first_de = getattr(dual_de, 'first_de', None)
+    second_de = getattr(dual_de, 'second_de', None)
+
+    first = summarize_bracket_entry(first_de)
+    second = summarize_bracket_entry(second_de)
+
+    # 본선 시작 라운드 = 예선과 본선이 공유하는 라운드
+    shared_round = second_de.starting_round if second_de else None
+    first_rounds = [r['name'] for r in first['rounds']]
+    structure_complete = bool(shared_round) and shared_round in first_rounds
+
+    # 결승 결과 유무 (대회 종료 판정)
+    final_decided = False
+    if second_de:
+        for round_name in ('결승', '결승전'):
+            for bout in second_de.bouts_by_round.get(round_name, []):
+                if is_bout_result_entered(bout):
+                    final_decided = True
+                    break
+            if final_decided:
+                break
+
+    # 본선 진행 여부는 bout 존재가 아니라 "부전승 아닌 경기의 결과"로 판정한다.
+    # bout 존재만 보면 스켈레톤만 저장된 이벤트를 진행 중으로 오판한다.
+    second_de_in_progress = second['has_any_result']
+
+    # 진출자 수는 명시 목록(first_de_qualifiers)이 있을 때만 숫자를 쓴다.
+    #
+    # seeded_players 의 seed>32 를 진출자로 간주하는 방법을 검토했으나 기각했다.
+    # 두 목록이 다 있는 33개 이벤트에서 둘은 이름이 하나도 겹치지 않는 완전히 다른
+    # 집합이었다(예: COMPS000000000003281 explicit 16명 vs seed>32 16명, 교집합 0).
+    # seeded_players 의 의미가 이벤트마다 달라(면제자 목록 / 본선 시딩 전체) 어느
+    # 쪽인지 데이터로 구분할 수 없다. 확실하지 않은 수를 진출자 수로 쓰지 않는다.
+    qualifiers = getattr(dual_de, 'first_de_qualifiers', None) or []
+    qualifier_count = len(qualifiers) if qualifiers else None
+
+    incomplete_reasons = []
+    if shared_round and not structure_complete:
+        incomplete_reasons.append('missing_shared_round')
+    if qualifier_count is None and (second['has_any_result'] or final_decided):
+        incomplete_reasons.append('unknown_qualifiers')
+
+    # 본선 참가자 구성을 "시드 + 진출자 = 합계"로 단언할 수 있는지 검증.
+    # 실데이터에서 이 등식이 성립하지 않는 종목이 있으므로(남자 에페 31+32=63≠64),
+    # 성립할 때만 그 문장을 쓴다.
+    seeded_count = getattr(dual_de, 'seeded_count', 0) or 0
+    second_participants = second_de.participant_count if second_de else 0
+    composition_verified = bool(
+        qualifier_count is not None
+        and second_participants
+        and seeded_count + qualifier_count == second_participants
+    )
+
+    # 탭 열람 가능 여부는 bout 존재로 판단한다(결과가 없어도 대진은 볼 수 있어야 한다).
+    # 진행 판정(second_de_in_progress)과는 별개다.
+    second_de_available = bool(second_de and second['total'] > 0)
+
+    # 예선 종료 판정 — 셋 중 하나면 종료로 본다.
+    #   A) 예선 마지막 라운드(= 본선과 공유하는 라운드)의 실제 대결이 전부 입력됨.
+    #   B) A 를 쓸 수 없을 때(마지막 라운드가 데이터에 통째로 없을 때)만 쓰는 대체 근거:
+    #      진출자 명단이 확보돼 있으면 예선은 끝난 것이다.
+    #
+    # A 가 쓸 수 있으면 A 만 본다. B 를 A 와 OR 로 묶으면, 진출자 명단이 미리 저장된
+    # 이벤트에서 예선이 한창인데도 완료로 판정돼 본선 탭으로 튄다(사용자가 겪은 그 증상).
+    if structure_complete:
+        first_de_complete = first['last_round_complete']
+    else:
+        first_de_complete = qualifier_count is not None
+
+    if final_decided or second_de_in_progress:
+        default_phase = 'second'
+    elif first_de_complete:
+        default_phase = 'second'
+    else:
+        default_phase = 'first'
+
+    # 본선에 볼 경기가 없으면 그 탭은 갈 곳이 아니다.
+    if default_phase == 'second' and not second_de_available:
+        default_phase = 'first'
+
+    return {
+        'first_de': first,
+        'second_de': second,
+        'shared_round': shared_round,
+        'first_de_structure_complete': structure_complete,
+        # 전 라운드 전 경기 입력 여부 (진행바/문구용). 진입 판정은 first_de_complete 가 쓴다.
+        'first_de_results_complete': bool(first['complete'] and first['total'] > 0),
+        'first_de_complete': first_de_complete,
+        'second_de_in_progress': second_de_in_progress,
+        'first_de_final_round': shared_round if structure_complete else None,
+        'qualifier_count': qualifier_count,
+        'second_de_participants': second_participants,
+        'composition_verified': composition_verified,
+        'final_decided': final_decided,
+        'second_de_available': bool(second_de and second['total'] > 0),
+        'default_phase': default_phase,
+        'data_incomplete': bool(incomplete_reasons),
+        'incomplete_reasons': incomplete_reasons,
+    }
 
 
 def get_dual_de_combined_seeding(dual_de: NormalizedDualDEBracket) -> List[Dict]:

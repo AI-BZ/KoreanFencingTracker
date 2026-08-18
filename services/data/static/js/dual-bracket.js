@@ -18,6 +18,10 @@ class DualDEController {
         }
 
         this.status = this.container.dataset.status || 'pending';
+        // 진입 탭의 유일한 기준. 서버(bracket_utils.build_dual_de_progress)가
+        // 예선 경기의 점수 입력 완료 여부로 직접 판정한 값이다.
+        // data-status 는 실데이터와 어긋나므로 여기서 쓰지 않는다.
+        this.defaultPhase = this.container.dataset.defaultPhase === 'second' ? 'second' : 'first';
         this.currentPhase = 'first';
         this.isInitialized = false;
 
@@ -51,7 +55,8 @@ class DualDEController {
                 if (btn.disabled || btn.classList.contains('active')) return;
 
                 const phase = btn.dataset.phase;
-                this.switchToPhase(phase);
+                // 사용자가 직접 고른 탭은 이번 세션 동안 기억한다.
+                this.switchToPhase(phase, { userInitiated: true });
             });
         });
     }
@@ -113,8 +118,9 @@ class DualDEController {
     /**
      * Switch to a specific phase
      */
-    switchToPhase(phase) {
+    switchToPhase(phase, options) {
         if (!this.canSwitchTo(phase)) return;
+        const userInitiated = !!(options && options.userInitiated);
 
         const phaseBtns = this.container.querySelectorAll('.de-phase-btn');
         const panels = this.container.querySelectorAll('.de-phase-panel');
@@ -135,7 +141,7 @@ class DualDEController {
         });
 
         this.currentPhase = phase;
-        this.saveState();
+        if (userInitiated) this.saveState();
         this.updateAriaAttributes();
 
         // Dispatch custom event for external listeners
@@ -155,53 +161,60 @@ class DualDEController {
     canSwitchTo(phase) {
         if (phase === 'first') return true;
 
-        // Second DE only available if First DE is complete
+        // 본선 탭은 볼 경기가 있을 때만 열린다 (서버가 data-second-available 로 판정).
         const secondBtn = this.container.querySelector('.de-phase-btn[data-phase="second"]');
         return secondBtn && !secondBtn.disabled;
     }
 
     /**
-     * Save current state to localStorage
+     * Save the user's own tab choice for this browsing session.
+     *
+     * sessionStorage 를 쓴다. localStorage 에 저장하면 대회가 진행돼 서버 판정이
+     * 바뀐 뒤에도 지난 방문의 낡은 탭이 계속 이겨서, 예선이 한창인데 본선 탭이
+     * 열리는 문제가 남는다.
      */
     saveState() {
         try {
             const eventId = this.getEventId();
             if (eventId) {
-                localStorage.setItem(`dualDE_phase_${eventId}`, this.currentPhase);
+                sessionStorage.setItem(`dualDE_phase_${eventId}`, this.currentPhase);
             }
         } catch (e) {
-            // localStorage might not be available
-            console.warn('Could not save state to localStorage:', e);
+            console.warn('Could not save state to sessionStorage:', e);
         }
     }
 
     /**
-     * Restore state from localStorage or auto-select based on status
+     * Decide the tab to open.
+     *
+     * 우선순위:
+     *   1) 이번 세션에 사용자가 직접 누른 탭 (그 선택은 존중한다)
+     *   2) 서버가 예선 결과 입력 현황으로 판정한 data-default-phase
+     *      - 예선 결과가 아직 다 안 들어왔으면 first
+     *      - 예선 결과가 다 들어왔거나 결승이 끝났으면 second
      */
     restoreState() {
-        // Auto-select phase based on tournament status
-        if (this.status === 'second_de_in_progress' || this.status === 'completed') {
-            if (this.canSwitchTo('second')) {
-                this.switchToPhase('second');
-                return;
-            }
-        }
-
-        // Try to restore from localStorage
         try {
             const eventId = this.getEventId();
             if (eventId) {
-                const savedPhase = localStorage.getItem(`dualDE_phase_${eventId}`);
-                if (savedPhase && this.canSwitchTo(savedPhase)) {
-                    this.switchToPhase(savedPhase);
+                // 옛 규칙으로 저장된 값은 더 이상 쓰지 않는다.
+                localStorage.removeItem(`dualDE_phase_${eventId}`);
+
+                const sessionPhase = sessionStorage.getItem(`dualDE_phase_${eventId}`);
+                if (sessionPhase && this.canSwitchTo(sessionPhase)) {
+                    this.switchToPhase(sessionPhase);
                     return;
                 }
             }
         } catch (e) {
-            console.warn('Could not restore state from localStorage:', e);
+            console.warn('Could not restore state from sessionStorage:', e);
         }
 
-        // Default: First DE
+        if (this.defaultPhase === 'second' && this.canSwitchTo('second')) {
+            this.switchToPhase('second');
+            return;
+        }
+
         this.switchToPhase('first');
     }
 
@@ -209,11 +222,19 @@ class DualDEController {
      * Get event ID from URL or data attribute
      */
     getEventId() {
-        // Try to get from URL
+        // /event/{cd} 형태
         const pathMatch = window.location.pathname.match(/\/event\/([^\/]+)/);
         if (pathMatch) return pathMatch[1];
 
-        // Try to get from container
+        // 대회 페이지는 /competition/{comp}?event={sub_event_cd} 형태다.
+        // 이 경로를 안 보면 eventId 가 늘 null 이 되어 탭 선택이 기억되지 않았다.
+        try {
+            const q = new URLSearchParams(window.location.search).get('event');
+            if (q) return q;
+        } catch (e) {
+            /* URLSearchParams unavailable */
+        }
+
         return this.container.dataset.eventId || null;
     }
 
