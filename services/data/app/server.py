@@ -4712,6 +4712,28 @@ def _eh2h_profile_teams(name: str, team: str) -> Optional[Set[str]]:
     return teams or None
 
 
+def _eh2h_is_de_match(m: Dict) -> bool:
+    """전적 항목 1건이 DE(엘리미나시옹디렉트) 경기인지 판정.
+
+    calculate_head_to_head()는 Pool 경기에만 round를 고정 문자열 "Pool"로 넣고
+    (server.py:5385), de_bracket에서 뽑은 경기는 라운드명을 그대로 쓴다
+    ("128강"/"8강"/"결승" 등 — server.py:5451). 즉 round == "Pool" 여부가
+    곧 출처(풀/DE) 구분이다.
+
+    실데이터 확인(2026-08-17, Supabase):
+    - de_bracket.full_bouts의 round_name 분포: 256/128/64/32/16/8강·준결승·결승
+      + null 60건. null은 bout["round"] 폴백(준결승/16강/8강)으로 채워진다.
+    - bouts_by_round 키 분포: 128/64/32/16/8강·준결승·결승.
+    - 어느 쪽에도 "Pool"은 없다.
+
+    구식 구조 폴백(server.py:5545 `for round_name, matches in de_bracket.items()`)에서는
+    라운드명 자리에 "bouts"/"matches" 같은 컨테이너 키가 들어올 수 있으나, 그
+    경기들도 de_bracket에서 나온 DE 경기이므로 DE로 세는 것이 맞다(라운드 라벨만
+    부정확하며, 이는 기존 last_round도 동일하게 갖고 있던 성질이다).
+    """
+    return (m.get("round") or "").strip() != "Pool"
+
+
 def _eh2h_build(sub_event_cd: str, player_name: str, team: str) -> Dict:
     comp, event = _eh2h_find_event(sub_event_cd)
     if not event:
@@ -4762,6 +4784,13 @@ def _eh2h_build(sub_event_cd: str, player_name: str, team: str) -> Dict:
         total = wins + losses
         last = matches[0] if matches else {}   # matches는 최신순 정렬 상태
 
+        # DE 한정 전적: 위에서 이미 걸러진 matches를 재사용한다(추가 스캔 없음).
+        # 순서도 그대로라 de_matches[0] 역시 최신 DE 경기다.
+        de_matches = [m for m in matches if _eh2h_is_de_match(m)]
+        de_wins = sum(1 for m in de_matches if m.get("result") == "V")
+        de_total = len(de_matches)
+        de_last = de_matches[0] if de_matches else {}
+
         out[opp_name] = {
             "team": meta.get("team", ""),
             "wins": wins,
@@ -4775,6 +4804,15 @@ def _eh2h_build(sub_event_cd: str, player_name: str, team: str) -> Dict:
             "last_round": last.get("round", ""),
             "last_tournament": last.get("tournament", ""),
             "contexts": sorted(meta.get("contexts", set())),
+            # --- DE 한정 (추가 필드, 기존 필드 의미 불변) ---
+            "de_wins": de_wins,
+            "de_losses": de_total - de_wins,
+            "de_total": de_total,
+            "de_last_result": de_last.get("result", ""),
+            "de_last_score": de_last.get("score", ""),
+            "de_last_date": de_last.get("date", ""),
+            "de_last_round": de_last.get("round", ""),
+            "de_last_tournament": de_last.get("tournament", ""),
         }
 
     return {
