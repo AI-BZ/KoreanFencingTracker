@@ -3,7 +3,7 @@
 {% block title %}{{ tr_event(event.name) }} - {{ tr_comp(competition.competition.name) }}{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="/static/css/bracket.css?v=20260818a">
+<link rel="stylesheet" href="/static/css/bracket.css?v=20260818g">
 <link rel="stylesheet" href="/static/css/player-search.css?v=20260613">
 <style>
 /* =====================================================
@@ -1525,62 +1525,26 @@ tr.player-highlighted td {
         <div id="de-my-player-strip-spacer" class="de-mp-strip-spacer" hidden aria-hidden="true"></div>
         <div id="de-my-player-strip" class="de-mp-strip" hidden
              role="group" aria-label="{{ _t('내 선수 빠른 이동') }}"></div>
-        {# ===== 선수 루트 (Player Route): 내 선수/선택 선수의 대진 경로를 한눈에 ===== #}
-        {% set route_players = [] %}
-        {% if event.normalized_bracket and event.normalized_bracket.seeding %}{% set route_players = event.normalized_bracket.seeding %}
-        {% elif event.normalized_bracket and event.normalized_bracket.seeded_players %}{% set route_players = event.normalized_bracket.seeded_players %}
-        {% elif event.de_seeding %}{% set route_players = event.de_seeding %}{% endif %}
-        {% if route_players %}
+        {# ===== 선수 경로 찾기 (Player Route Search) =====
+           예전에는 select 드롭다운이었는데, 그 목록의 출처가 본선 상위 시드뿐이라
+           예선 DE 부터 올라온 선수는 아예 고를 수 없었다(여자 에페 기준 33개 옵션 vs
+           실제 DE 참가자 153명). 목록에서 찾는 방식 자체도 100명이 넘으면 무의미하다.
+           → 이름 접두사 검색으로 바꾸고, 후보는 대진표 DOM 에서 전원 수집한다.
+           선택하면 매치 시트의 경로 뷰를 그대로 연다 (렌더는 한 벌만 유지). #}
         <div class="de-route" id="de-route">
-            <div class="de-route-head">
-                <span class="de-route-title">🧭 {{ _t("선수 루트") }}</span>
-                <select id="de-route-select" class="de-route-select" aria-label="{{ _t('선수 선택') }}">
-                    <option value="">{{ _t("선수 선택") }}</option>
-                    {% set seen_r = namespace(names=[]) %}
-                    {% for p in route_players %}
-                    {% if p.name and p.name not in seen_r.names %}
-                    {% set seen_r.names = seen_r.names + [p.name] %}
-                    <option value="{{ p.name }}" data-team="{{ p.team }}">{% if p.seed %}[{{ p.seed }}] {% endif %}{{ tr_player(p.name) }}{% if p.team %} · {{ tr_team(p.team) }}{% endif %}</option>
-                    {% endif %}
-                    {% endfor %}
-                </select>
+            <label class="de-route-title" for="de-route-search">🧭 {{ _t("선수 경로 찾기") }}</label>
+            <div class="drs-field">
+                <input type="search" id="de-route-search" class="drs-input"
+                       role="combobox" aria-expanded="false" aria-autocomplete="list"
+                       aria-controls="de-route-results" autocomplete="off"
+                       placeholder="{{ _t('선수 이름을 입력하세요') }}">
+                <button type="button" class="drs-clear" id="de-route-clear" hidden
+                        aria-label="{{ _t('검색어 지우기') }}">&times;</button>
             </div>
-            <div class="de-route-body" id="de-route-body">
-                <div class="de-route-hint">{{ _t("내 선수 또는 선수를 선택하면 대진 경로가 표시됩니다") }}</div>
-            </div>
+            <div class="drs-hint" id="de-route-hint"></div>
+            <ul class="drs-results" id="de-route-results" role="listbox"
+                aria-label="{{ _t('선수 검색 결과') }}" hidden></ul>
         </div>
-        <style>
-        .de-route{background:var(--bg-secondary,rgba(26,26,37,.6));border:1px solid var(--border-color,rgba(255,255,255,.08));border-radius:12px;padding:12px 14px;margin-bottom:16px}
-        .de-route-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
-        .de-route-title{font-weight:700;font-size:.95rem;color:var(--text-primary,#e5e7eb)}
-        .de-route-select{flex:1;min-width:180px;max-width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border-color,rgba(255,255,255,.15));background:var(--bg-primary,#12121a);color:var(--text-primary,#e5e7eb);font-size:.9rem}
-        .de-route-hint{color:var(--text-muted,#6b6b7b);font-size:.85rem;padding:6px 2px}
-        .drt-player{margin-bottom:10px;font-size:.95rem}
-        .drt-name{font-weight:700;color:var(--fm-accent-primary,#c9302c);text-decoration:none}
-        .drt-team{color:var(--text-muted,#6b6b7b);font-size:.85rem}
-        .drt-seedbadge{background:var(--bg-primary,#12121a);border:1px solid var(--border-color,rgba(255,255,255,.15));border-radius:6px;padding:1px 7px;font-family:var(--fm-font-display);font-weight:600;letter-spacing:.03em;font-size:.8rem;color:var(--text-muted,#9ca3af);margin-left:4px}
-        .drt-list{list-style:none;margin:0;padding:0}
-        /* Route node state — hue + tint. The 승/패/부전승 badge carries the same
-           state as text, so colour is never the only channel. */
-        .drt-node,.drt-end{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 10px;border-radius:8px;margin-bottom:6px;border:1px solid var(--border-color,rgba(255,255,255,.12));background:var(--bg-primary,rgba(255,255,255,.02))}
-        .drt-node.is-win{border-color:rgba(34,197,94,.5);background:rgba(34,197,94,.09)}
-        .drt-node.is-lose{border-color:rgba(239,68,68,.5);background:rgba(239,68,68,.09)}
-        .drt-node.is-bye{border-color:rgba(156,163,175,.45);background:rgba(156,163,175,.07)}
-        .drt-node.is-current{border-color:rgba(212,165,116,.65);background:rgba(212,165,116,.12)}
-        .drt-node.drt-future{opacity:.9;border-style:dashed}
-        .drt-round{font-weight:700;font-size:.85rem;min-width:52px;color:var(--text-primary,#e5e7eb)}
-        .drt-vs{font-size:.88rem;color:var(--text-primary,#d1d5db)}
-        .drt-seed{color:var(--text-muted,#6b6b7b);font-size:.78rem}
-        .drt-score{font-family:var(--fm-font-display);font-weight:700;letter-spacing:.01em;font-variant-numeric:lining-nums tabular-nums;color:var(--text-secondary,#c3c9d2);font-size:.95rem;margin-left:auto}
-        .drt-win{background:#14532d;color:#86efac;border-radius:5px;padding:1px 7px;font-size:.75rem;font-weight:700}
-        .drt-lose{background:#7f1d1d;color:#fca5a5;border-radius:5px;padding:1px 7px;font-size:.75rem;font-weight:700}
-        .drt-bye{background:#374151;color:#d1d5db;border-radius:5px;padding:1px 7px;font-size:.75rem;font-weight:700}
-        .drt-cands{font-size:.85rem;color:var(--text-muted,#9ca3af)}
-        .drt-cur{color:#d4a574;font-size:.75rem;font-weight:700}
-        .drt-end{font-weight:700;color:var(--text-primary,#e5e7eb);border-left-color:#d4a574}
-        .drt-final{color:var(--fm-medal-gold,#d4a574)}
-        </style>
-        {% endif %}
         {% if event.normalized_bracket %}
             {% if event.normalized_bracket.format == 'dual_de' %}
             {# Dual DE 포맷 (국가대표 선발전 등) - 특별 컴포넌트 사용 #}
@@ -2514,6 +2478,8 @@ const EVENT_CD = "{{ competition.competition.event_cd }}";
 // 전적에서 빼기 위한 키(EventH2H 와 같은 기준 — "이 대회 이전 전적").
 window.EVENT_WEAPON = {{ (event.weapon or '')|tojson }};
 window.COMPETITION_NAME = {{ (competition.competition.name or '')|tojson }};
+// const 는 window 프로퍼티가 되지 않는다 — 매치 시트가 최종순위를 조회할 때 쓴다.
+window.SUB_EVENT_CD = SUB_EVENT_CD;
 
 // Initialize components
 const playerHighlighter = new PlayerHighlighter();
@@ -2528,173 +2494,199 @@ const dePrediction = new DEPredictionTable(
 );
 
 // ==========================================
-// DE Route View (선수 루트) — 내 선수/선택 선수의 대진 경로를 한 타임라인으로
-// de-results(과거 실제) + de-prediction(향후 잠재)를 합쳐서 렌더. 서버 미변경.
+// DE Route Search (선수 경로 찾기) — 이름 접두사 검색으로 이 종목 DE 참가자를 찾는다.
+//
+// 왜 검색인가: 예전 드롭다운의 후보는 본선 상위 시드뿐이었다. 예선 DE 부터 올라온
+// 선수는 목록에 아예 없어서 고를 수가 없었고(여자 에페 33개 옵션 vs 실제 참가자 153명),
+// 100명이 넘는 목록에서 눈으로 찾는 것 자체가 대회장에서 쓸 수 없는 방식이었다.
+//
+// 후보 출처: 이미 렌더된 대진표 DOM (MatchSheet.participants) — 예선·본선 양쪽 패널.
+//   /api/players/autocomplete 는 쓰지 않는다. 실측 결과 이 종목 DE 에 없는 선수까지
+//   섞여 오고(김: DOM 35명 vs API 44명), limit 50 에서 잘려 실제 참가자가 누락된다
+//   (남자 에페 '김' 검색 시 김태환 등 4명 유실).
+//
+// 렌더: 선택하면 매치 시트의 경로 뷰를 그대로 연다. 경로 렌더는 한 벌만 유지한다.
 // ==========================================
 window.DERoute = (function() {
-    var _subCd = SUB_EVENT_CD;
+    var MAX_ROWS = 60;
+
+    var _people = null;      // 대진표에서 모은 참가자 (최초 사용 시 1회 수집)
+    var _rows = [];          // 지금 화면에 있는 후보
+    var _active = -1;        // 키보드 선택 위치
+
+    var input, results, hint, clearBtn, box;
+
     function esc(s) { return (typeof _mpEscapeHtml === 'function') ? _mpEscapeHtml(s) : String(s == null ? '' : s); }
-    function trP(s) { try { return (typeof _tr_player === 'function') ? (_tr_player(s) || s) : s; } catch (e) { return s; } }
-    function trT(s) { try { return (typeof _tr_team === 'function') ? (_tr_team(s) || s) : s; } catch (e) { return s; } }
     function t(s) { try { return (typeof _t === 'function') ? (_t(s) || s) : s; } catch (e) { return s; } }
-    function getJson(url) { return fetch(url).then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; }); }
-    // 라운드 시간순 정렬 키 (빠른 라운드=참가자 많음=먼저). 준결승/결승은 번호가 없어 별도 처리.
-    function roundOrder(r) {
-        r = String(r == null ? '' : r);
-        if (r.indexOf('결승') >= 0 && r.indexOf('준') < 0) return -2;   // 결승 = 맨 뒤
-        if (r.indexOf('준결승') >= 0 || r === '4강') return -4;         // 준결승(=4강)
-        if (r.indexOf('3') >= 0 && r.indexOf('위') >= 0) return -1;      // 3위전
-        var m = r.match(/(\d+)/);
-        if (m) return -parseInt(m[1], 10);                              // 32강→-32 ... 8강→-8
-        return -3;
+    function trT(s) { try { return (typeof _tr_team === 'function') ? (_tr_team(s) || s) : s; } catch (e) { return s; } }
+    function norm(s) { return String(s == null ? '' : s).trim().toLowerCase(); }
+
+    function people() {
+        if (_people) return _people;
+        if (!window.MatchSheet || typeof window.MatchSheet.participants !== 'function') return [];
+        try { _people = window.MatchSheet.participants(); } catch (e) { _people = []; }
+        return _people;
     }
 
-    function render(name, results, pred) {
-        var body = document.getElementById('de-route-body');
-        if (!body) return;
-        var pInfo = (results && results.player) || (pred && pred.player) || { name: name };
-        var resList = (results && results.results) ? results.results.slice() : [];
-        resList.sort(function(a, b) { return roundOrder(a.round) - roundOrder(b.round); }); // API가 준결승/결승 순서를 섞어 반환 → 시간순 정렬
-        var lastResult = resList.length ? resList[resList.length - 1] : null;
-        var lostLast = !!(lastResult && lastResult.result === 'lose');
-        var wonFinal = resList.some(function(r) { return String(r.round).indexOf('결승') >= 0 && String(r.round).indexOf('준') < 0 && r.result === 'win'; });
-        // 상태는 실제 결과(de-results)를 우선 신뢰: 마지막 경기가 패배면 탈락 (prediction이 놓치는 경우 보정)
-        var isEliminated = !wonFinal && (lostLast || !!(pred && pred.eliminated));
-        var elimRound = (lastResult && lostLast) ? lastResult.round : (pred && pred.elimination_round);
-        var maxDone = resList.length ? Math.max.apply(null, resList.map(function(r) { return roundOrder(r.round); })) : -999;
-        var nodes = [];
-
-        // 1) 완료된 라운드 (실제 결과)
-        resList.forEach(function(r) {
-            var opp = r.opponent || {};
-            var isBye = r.result === 'bye';
-            var win = r.result === 'win';
-            var cls = win ? 'is-win' : (isBye ? 'is-bye' : 'is-lose');
-            var badge = isBye ? '<span class="drt-bye">' + t('부전승') + '</span>'
-                       : (win ? '<span class="drt-win">' + t('승') + '</span>' : '<span class="drt-lose">' + t('패') + '</span>');
-            var vs = isBye ? t('부전승')
-                   : 'vs ' + esc(trP(opp.name || '-')) + (opp.seed ? ' <span class="drt-seed">(' + esc(opp.seed) + ')</span>' : '');
-            nodes.push(
-                '<li class="drt-node ' + cls + '">' +
-                    '<span class="drt-round">' + esc(r.round) + '</span>' +
-                    '<span class="drt-vs">' + vs + '</span>' +
-                    (r.score ? '<span class="drt-score">' + esc(r.score) + '</span>' : '') +
-                    badge +
-                '</li>'
-            );
-        });
-
-        // 2) 탈락 → 종료 노드 (+ 최종순위 비동기 채움), 아니면 3) 향후 라운드
-        if (wonFinal) {
-            nodes.push('<li class="drt-end"><span>🏆 ' + t('우승') + '</span><span class="drt-final" id="drt-final"></span></li>');
-        } else if (isEliminated) {
-            nodes.push(
-                '<li class="drt-end"><span>🏁 ' + t('이 대회 종료') +
-                (elimRound ? ' · ' + esc(elimRound) + ' ' + t('탈락') : '') +
-                '</span><span class="drt-final" id="drt-final"></span></li>'
-            );
-        } else if (pred && pred.predictions && pred.predictions.length) {
-            // 아직 진행 중: 완료된 라운드보다 뒤(미래)인 예측만 표시 (준결승=4강 라벨 불일치 중복 제거)
-            var future = pred.predictions.slice()
-                .filter(function(rd) { return roundOrder(rd.round) > maxDone; })
-                .sort(function(a, b) { return roundOrder(a.round) - roundOrder(b.round); });
-            future.forEach(function(rd, idx) {
-                var opps = rd.potential_opponents || [];
-                var isNext = idx === 0;
-                var names = opps.slice(0, 8).map(function(o) {
-                    return esc(trP(o.name)) + (o.seed ? ' (' + esc(o.seed) + ')' : '');
-                }).join(', ');
-                if (opps.length > 8) names += ' ' + t('외') + ' ' + (opps.length - 8);
-                var cand = opps.length ? (t('상대 후보') + ' ' + opps.length + t('명') + (names ? ': ' + names : '')) : t('상대 미정');
-                nodes.push(
-                    '<li class="drt-node drt-future ' + (isNext ? 'is-current' : '') + '">' +
-                        '<span class="drt-round">' + esc(rd.round) + (isNext ? ' <span class="drt-cur">▶ ' + t('다음') + '</span>' : '') + '</span>' +
-                        '<span class="drt-cands">' + cand + '</span>' +
-                    '</li>'
-                );
-            });
-        }
-
-        if (!nodes.length) {
-            body.innerHTML = '<div class="de-route-hint">' + t('이 선수의 대진 경로 정보가 없습니다') + '</div>';
-            return;
-        }
-
-        var link = '/player/' + encodeURIComponent(pInfo.name || name) + (pInfo.team ? '?team=' + encodeURIComponent(pInfo.team) : '');
-        body.innerHTML =
-            '<div class="drt-player">' +
-                '<a href="' + link + '" class="drt-name">' + esc(trP(pInfo.name || name)) + '</a>' +
-                (pInfo.team ? ' <span class="drt-team">' + esc(trT(pInfo.team)) + '</span>' : '') +
-                (pInfo.seed ? ' <span class="drt-seedbadge">Seed ' + esc(pInfo.seed) + '</span>' : '') +
-            '</div>' +
-            '<ul class="drt-list">' + nodes.join('') + '</ul>';
-
-        // 탈락/우승 시 최종순위 (KFA 기준) 조회해서 채움
-        if (isEliminated || wonFinal) {
-            getJson('/api/events/' + encodeURIComponent(_subCd) + '/players/search?q=' + encodeURIComponent(pInfo.name || name)).then(function(d) {
-                if (!d || !d.players || !d.players.length) return;
-                var team = pInfo.team || '';
-                var pl = d.players.filter(function(x) { return !team || (x.team || '') === team; })[0] || d.players[0];
-                if (pl && pl.final_rank && typeof pl.final_rank === 'number' && pl.final_rank > 0) {
-                    var el = document.getElementById('drt-final');
-                    if (el) el.textContent = ' · ' + t('최종') + ' ' + pl.final_rank + t('위');
-                }
-            });
-        }
-    }
-
-    function load(name, team) {
-        if (!name || !_subCd) return;
-        var body = document.getElementById('de-route-body');
-        if (body) body.innerHTML = '<div class="de-route-hint">' + t('불러오는 중') + '...</div>';
-        Promise.all([
-            getJson('/api/events/' + encodeURIComponent(_subCd) + '/de-results/' + encodeURIComponent(name)),
-            getJson('/api/events/' + encodeURIComponent(_subCd) + '/de-prediction/' + encodeURIComponent(name))
-        ]).then(function(arr) {
-            render(name, arr[0], arr[1]);
-            var sel = document.getElementById('de-route-select');
-            if (sel && sel.value !== name) {
-                for (var i = 0; i < sel.options.length; i++) {
-                    if (sel.options[i].value === name) { sel.selectedIndex = i; break; }
-                }
-            }
-        });
-    }
-
-    function _selectInDropdown(sel, ko) {
-        if (!ko) return false;
-        for (var i = 0; i < sel.options.length; i++) {
-            if (sel.options[i].value === ko) {
-                sel.selectedIndex = i;
-                load(ko, sel.options[i].getAttribute('data-team') || '');
-                return true;
-            }
+    /* 접두사 매칭. "박" → 박으로 시작하는 이름 전부, "박소" → 박소로 시작.
+       중간 일치(부분 문자열)는 하지 않는다 — 오너 요구가 "앞에서부터" 다.
+       로마자 표기는 이름/성 순서가 뒤집히므로(박소윤 → "Soyun Park")
+       표시명 전체뿐 아니라 각 단어의 앞부분도 본다. 초성 검색은 범위 밖. */
+    function matches(p, q) {
+        if (norm(p.ko).indexOf(q) === 0) return true;
+        var d = norm(p.display);
+        if (d.indexOf(q) === 0) return true;
+        var parts = d.split(/\s+/);
+        for (var i = 1; i < parts.length; i++) {
+            if (parts[i].indexOf(q) === 0) return true;
         }
         return false;
     }
 
+    function rowHtml(p, i) {
+        return '<li class="drs-row" role="option" id="drs-row-' + i + '"' +
+                 ' aria-selected="false" data-i="' + i + '">' +
+                 '<span class="drs-name">' + esc(p.display || p.ko) + '</span>' +
+                 (p.seed ? '<span class="drs-seed">[<span class="fm-num">' + esc(p.seed) + '</span>]</span>' : '') +
+                 (p.team ? '<span class="drs-team">' + esc(trT(p.team)) + '</span>' : '') +
+                 (p.homonym ? '<span class="fm-badge fm-badge--micro fm-badge--pill drs-dup">' +
+                              esc(t('동명이인')) + '</span>' : '') +
+               '</li>';
+    }
+
+    function setHint(html) { if (hint) hint.innerHTML = html; }
+
+    function closeList() {
+        _rows = [];
+        _active = -1;
+        if (results) { results.hidden = true; results.innerHTML = ''; }
+        if (input) {
+            input.setAttribute('aria-expanded', 'false');
+            input.removeAttribute('aria-activedescendant');
+        }
+    }
+
+    function render(q) {
+        var all = people();
+        if (clearBtn) clearBtn.hidden = !q;
+
+        if (!q) {
+            closeList();
+            setHint(all.length
+                ? esc(t('이 종목 DE 참가자')) + ' <span class="fm-num">' + all.length + '</span>' +
+                  esc(t('명')) + ' · ' + esc(t('성이나 이름 앞부분을 입력하세요'))
+                : esc(t('대진표 데이터가 없습니다')));
+            return;
+        }
+
+        var hits = all.filter(function (p) { return matches(p, q); });
+        if (!hits.length) {
+            closeList();
+            setHint(esc(t('이 종목 DE 참가자 중에 없습니다')));
+            return;
+        }
+
+        _rows = hits.slice(0, MAX_ROWS);
+        _active = -1;
+        results.innerHTML = _rows.map(rowHtml).join('');
+        results.hidden = false;
+        input.setAttribute('aria-expanded', 'true');
+        setHint(
+            '<span class="fm-num">' + hits.length + '</span>' + esc(t('명')) +
+            (hits.length > _rows.length
+                ? ' · ' + esc(t('앞 {n}명만 표시').replace('{n}', _rows.length))
+                : '')
+        );
+    }
+
+    function highlight(i) {
+        var items = results ? results.querySelectorAll('.drs-row') : [];
+        for (var k = 0; k < items.length; k++) {
+            var on = (k === i);
+            items[k].classList.toggle('is-active', on);
+            items[k].setAttribute('aria-selected', on ? 'true' : 'false');
+            if (on) {
+                input.setAttribute('aria-activedescendant', items[k].id);
+                try { items[k].scrollIntoView({ block: 'nearest' }); } catch (e) {}
+            }
+        }
+        _active = i;
+    }
+
+    function pick(i) {
+        var p = _rows[i];
+        if (!p) return;
+        closeList();
+        if (input) input.blur();   // 모바일: 키보드를 내려야 시트가 가려지지 않는다
+        if (window.MatchSheet && typeof window.MatchSheet.openRoute === 'function') {
+            window.MatchSheet.openRoute(p.ko, p.team);
+        }
+    }
+
     function init() {
-        var sel = document.getElementById('de-route-select');
-        if (!sel) return;
-        sel.addEventListener('change', function() {
-            var opt = sel.options[sel.selectedIndex];
-            if (opt && opt.value) load(opt.value, opt.getAttribute('data-team') || '');
-            else {
-                var body = document.getElementById('de-route-body');
-                if (body) body.innerHTML = '<div class="de-route-hint">' + t('선수를 선택하세요') + '</div>';
+        box = document.getElementById('de-route');
+        input = document.getElementById('de-route-search');
+        results = document.getElementById('de-route-results');
+        hint = document.getElementById('de-route-hint');
+        clearBtn = document.getElementById('de-route-clear');
+        if (!box || !input || !results) return;
+
+        // 대진표가 없는 종목이면 검색할 대상도 없다 → 빈 껍데기를 남기지 않는다
+        if (!people().length) { box.hidden = true; return; }
+
+        render('');
+
+        input.addEventListener('input', function () { render(norm(input.value)); });
+        input.addEventListener('focus', function () {
+            if (norm(input.value)) render(norm(input.value));
+        });
+
+        input.addEventListener('keydown', function (e) {
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                if (!_rows.length) return;
+                e.preventDefault();
+                var next = _active + (e.key === 'ArrowDown' ? 1 : -1);
+                if (next < 0) next = _rows.length - 1;
+                if (next >= _rows.length) next = 0;
+                highlight(next);
+            } else if (e.key === 'Enter') {
+                if (!_rows.length) return;
+                e.preventDefault();
+                pick(_active >= 0 ? _active : 0);
+            } else if (e.key === 'Escape') {
+                if (!results.hidden) { e.stopPropagation(); closeList(); }
             }
         });
-        // 기본 선택: ?highlight 우선 → 내 선수(동기) → Favorites(비동기)
-        var hp = null;
-        try { hp = new URLSearchParams(window.location.search).get('highlight'); } catch (e) {}
-        if (hp) { if (!_selectInDropdown(sel, hp)) load(hp, ''); return; }
-        var sync = (typeof getMyPlayerNamesSync === 'function') ? getMyPlayerNamesSync() : [];
-        var picked = sync.length && _selectInDropdown(sel, sync[0].ko);
-        if (typeof getMyPlayerNames === 'function') {
-            getMyPlayerNames().then(function(names) {
-                if (picked || !names || !names.length) return;
-                _selectInDropdown(sel, names[0].ko); // 이벤트에 없으면 그대로 대기(선택 안내 유지)
+
+        results.addEventListener('click', function (e) {
+            var row = e.target.closest('.drs-row');
+            if (!row) return;
+            pick(parseInt(row.getAttribute('data-i'), 10));
+        });
+
+        if (clearBtn) {
+            clearBtn.addEventListener('click', function () {
+                input.value = '';
+                render('');
+                input.focus();
             });
+        }
+
+        document.addEventListener('click', function (e) {
+            if (!box.contains(e.target)) closeList();
+        });
+
+        // ?highlight= 로 들어왔으면 검색어만 채워둔다 (시트를 멋대로 열지는 않는다)
+        try {
+            var hp = new URLSearchParams(window.location.search).get('highlight');
+            if (hp) { input.value = hp; render(norm(hp)); }
+        } catch (e) {}
+    }
+
+    // 외부 진입점 유지: 이름만 주면 경로를 연다 (내 선수 스트립 등에서 호출 가능)
+    function load(name, team) {
+        if (window.MatchSheet && typeof window.MatchSheet.openRoute === 'function') {
+            window.MatchSheet.openRoute(name, team || '');
         }
     }
 
@@ -2892,21 +2884,23 @@ window.EventH2H = (function() {
         });
     }
 
-    // ---- 선수 루트 위젯: 표시 중인 선수가 내 선수일 때만 상대 노드에 배지 ----
+    // ---- 매치 시트의 경로 뷰: 표시 중인 선수가 내 선수일 때만 상대 노드에 배지 ----
+    // (예전엔 페이지 안의 선수 루트 위젯을 대상으로 했다. 위젯이 이름 검색으로
+    //  바뀌고 경로 렌더가 시트 안으로 합쳐지면서 대상만 옮겼다.)
     function applyRoute() {
         var entries = ready();
         if (!entries.length) return;
-        var body = document.getElementById('de-route-body');
-        if (!body) return;
-        var who = body.querySelector('.drt-name');
+        var body = document.getElementById('ms-route-view');
+        if (!body || body.hidden) return;
+        var who = body.querySelector('.msr-pname');
         if (!who) return;
         var label = norm(who.textContent);
-        // 지금 보고 있는 루트의 주인공이 내 선수일 때만 표시 (다른 선수 루트에는 붙이지 않음)
+        // 지금 보고 있는 경로의 주인공이 내 선수일 때만 표시 (다른 선수 경로에는 붙이지 않음)
         var e = null;
         for (var k = 0; k < entries.length; k++) { if (entries[k].self[label]) { e = entries[k]; break; } }
         if (!e) return;
         var keys = Object.keys(e.map);
-        body.querySelectorAll('.drt-node .drt-vs').forEach(function(el) {
+        body.querySelectorAll('.msr-node .msr-vs').forEach(function(el) {
             if (el.querySelector('.h2h-badge')) return;
             var txt = el.textContent || '';
             for (var i = 0; i < keys.length; i++) {
@@ -2993,8 +2987,8 @@ window.EventH2H = (function() {
 
     function init() {
         load();
-        // 선수 루트는 선택할 때마다 다시 그려진다 → 그려진 뒤에 배지를 얹는다.
-        var body = document.getElementById('de-route-body');
+        // 경로 뷰는 선수를 고를 때마다 다시 그려진다 → 그려진 뒤에 배지를 얹는다.
+        var body = document.getElementById('ms-route-view');
         if (body && window.MutationObserver) {
             var pending = false;
             new MutationObserver(function() {
@@ -4225,9 +4219,13 @@ function renderEventTeamTable(container, rankings, sortKey) {
    bracket.html 은 수정하지 않고 이벤트 위임으로 클릭을 받는다. #}
 <div id="match-sheet-backdrop" class="bottom-sheet-backdrop" onclick="MatchSheet.close()"></div>
 <aside id="match-sheet" class="bottom-sheet match-sheet" role="dialog"
-       aria-labelledby="ms-title" hidden>
+       aria-labelledby="ms-title" data-view="match" hidden>
     <div class="bottom-sheet-handle"></div>
     <header class="ms-head">
+        {# 경로 뷰에서만 보인다. 시트를 떠나지 않고 경기 정보로 되돌아간다. #}
+        <button type="button" class="ms-back" id="ms-back" hidden
+                aria-label="{{ _t('경기 정보로 돌아가기') }}"
+                onclick="MatchSheet.backToMatch()"><span aria-hidden="true">&#8592;</span></button>
         <span id="ms-title" class="ms-round"></span>
         <span class="ms-status" id="ms-status"></span>
         <button type="button" class="bottom-sheet-close" id="ms-close"
@@ -4240,6 +4238,8 @@ function renderEventTeamTable(container, rankings, sortKey) {
         <section class="ms-after ms-stagger" id="ms-after" style="--ms-i:3" hidden></section>
         <footer class="ms-actions ms-stagger" id="ms-actions" style="--ms-i:4" hidden></footer>
     </div>
+    {# 경로 뷰 — 시트 전체를 이 선수의 대진 경로로 바꿔 쓴다 (390px 에서 스크롤 사냥 방지) #}
+    <div class="ms-route-view" id="ms-route-view" hidden></div>
 </aside>
-<script src="/static/js/de-match-sheet.js?v=20260818a"></script>
+<script src="/static/js/de-match-sheet.js?v=20260818g"></script>
 {% endblock %}

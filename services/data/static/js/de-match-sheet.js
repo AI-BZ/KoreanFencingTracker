@@ -6,6 +6,7 @@
      1) 이 경기 누구랑 누구고, 어떻게 됐나
      2) 둘이 전에 붙은 적 있나 — 특히 DE 에서
      3) 이기면 다음에 누구를 만나나
+     4) 이 선수가 여기까지 어떻게 왔나 (경로) — 시트 안에서 뷰를 바꿔 답한다
 
    설계 원칙
    - 데이터의 1차 소스는 이미 렌더된 대진표 DOM 이다. 화면에 없는 것을 지어내지 않는다.
@@ -27,8 +28,10 @@
     var sheet = null;
     var backdrop = null;
     var originBlock = null;      // 시트를 연 경기 블록 (닫을 때 포커스 복귀용)
+    var lastInfo = null;         // 현재 시트가 보여주는 경기 (경로 → 뒤로가기 때 헤더 복원)
     var lastFocus = null;
     var reqSeq = 0;              // 비동기 전적 응답이 늦게 와서 다른 경기에 얹히는 것 방지
+    var routeSeq = 0;            // 최종순위 응답이 다른 선수의 경로에 얹히는 것 방지
     var dragBound = false;
     var mounted = false;
 
@@ -403,20 +406,20 @@
         if (!people.length) { el.hidden = true; el.innerHTML = ''; return; }
         el.hidden = false;
 
-        var hasRoute = !!document.getElementById('de-route') && !!window.DERoute;
+        // 경로는 대진표 DOM 에서 만든다 — 선수 루트 위젯이 없어도 열 수 있다.
+        // 대진표에서 눌린 경기의 선수이므로 경로는 최소 한 경기 이상 존재한다.
         var html = people.map(function (p) {
+            return '<button type="button" class="ms-btn ms-btn--route" data-ms-route="' + esc(p.ko) +
+                   '" data-ms-team="' + esc(p.team || '') + '">' +
+                   esc(p.display || p.ko) + ' ' + esc(t('경로 보기')) + '</button>';
+        }).join('');
+
+        html += people.map(function (p) {
             var href = '/player/' + encodeURIComponent(p.ko) + (p.team ? '?team=' + encodeURIComponent(p.team) : '');
-            return '<a class="ms-btn" href="' + esc(href) + '">' +
+            return '<a class="ms-btn ms-btn--ghost" href="' + esc(href) + '">' +
                    esc(p.display || p.ko) + ' ' + esc(t('프로필')) + '</a>';
         }).join('');
 
-        if (hasRoute) {
-            html += people.map(function (p) {
-                return '<button type="button" class="ms-btn ms-btn--ghost" data-ms-route="' + esc(p.ko) +
-                       '" data-ms-team="' + esc(p.team || '') + '">' +
-                       esc(p.display || p.ko) + ' ' + esc(t('경로 보기')) + '</button>';
-            }).join('');
-        }
         el.innerHTML = html;
     }
 
@@ -559,6 +562,381 @@
         });
     }
 
+    // ---------- 선수 경로 (시트 안에서) ----------
+    /* 경로도 이미 렌더된 대진표 DOM 이 1차 소스다. 서버를 새로 부르지 않는다.
+
+       ⚠️ 예선 64강과 본선 64강은 다른 경기다.
+       국가대표 선발 대회는 dual DE 라 "64강" 이 예선·본선 양쪽에 존재한다.
+       라운드명만으로 묶으면 두 경기가 한 줄로 섞인다. 그래서
+         - 스캔을 반드시 .de-phase-panel[data-phase] 단위로 돌고
+         - 노드마다 어느 단계에서 나온 경기인지 들고 다니고
+         - 화면에도 "예선 64강" / "본선 64강" 으로 단계를 붙여 표시한다.
+       단계 패널이 없는 단일 DE 에서는 접두사를 붙이지 않는다. */
+
+    // 이 페이지의 대진 단계. dual DE 가 아니면 단계 구분이 없는 하나의 묶음으로 본다.
+    function phasePanels() {
+        var root = document.getElementById('tab-tournament');
+        if (!root) return [];
+        var panels = [].slice.call(root.querySelectorAll('.de-phase-panel'));
+        if (panels.length) {
+            return panels.map(function (p) { return { el: p, phase: p.dataset.phase || '' }; });
+        }
+        return [{ el: root, phase: '' }];
+    }
+
+    // 한 단계의 라운드 컨테이너를 DOM 순서(=시간 순서)대로.
+    // 트리 뷰와 리스트 뷰는 같은 경기를 두 번 렌더하므로 하나만 골라 중복 집계를 막는다.
+    function phaseRounds(panelEl) {
+        var tree = panelEl.querySelector('.bracket-tree');
+        if (tree) {
+            return { isTree: true, rounds: [].slice.call(tree.querySelectorAll(':scope > .bracket-round')) };
+        }
+        var list = panelEl.querySelector('.bracket-list-view');
+        if (list) {
+            return { isTree: false, rounds: [].slice.call(list.querySelectorAll(':scope > .round-panel')) };
+        }
+        return { isTree: false, rounds: [] };
+    }
+
+    /* 이 종목 DE 참가자 전원 (예선 DE + 본선 시드).
+
+       출처는 대진표의 경기 블록 슬롯 뿐이다. 이유가 둘 있다.
+       1) 어떤 블록에도 없는 선수는 애초에 보여줄 경로가 없다.
+       2) 시드/진출자 명단(.qualifier-item 등)은 team 칸에 소속이 아닌 값이
+          들어오는 경우가 있다 — 남자 에페 first_de_qualifiers 에 실제로
+          이우빈/"김광수의기권", 김도완/"황현일의기권" 이 있다. 그걸 후보로 넣으면
+          한 사람이 둘로 갈라지고 동명이인으로도 잘못 표시된다.
+       자동완성 API 도 쓰지 않는다 — 이 종목 DE 에 없는 선수까지 섞여 오고
+       (남자 에페 '김': DOM 35명 vs API 49명) limit 50 에서 실제 참가자가 잘린다. */
+    function participants() {
+        var index = {}, out = [];
+
+        function add(phase, ko, team, seed) {
+            if (!ko) return;
+            var k = ko + '|' + (team || '');
+            var e = index[k];
+            if (!e) {
+                e = { ko: ko, team: team || '', seed: seed || '', display: trP(ko) || ko, phases: [] };
+                index[k] = e;
+                out.push(e);
+            }
+            if (!e.seed && seed) e.seed = seed;
+            if (phase && e.phases.indexOf(phase) < 0) e.phases.push(phase);
+        }
+
+        phasePanels().forEach(function (p) {
+            var rr = phaseRounds(p.el);
+            rr.rounds.forEach(function (roundEl) {
+                blocksIn(roundEl, rr.isTree).forEach(function (b) {
+                    slotsOf(b).forEach(function (s) {
+                        var sl = parseSlot(s);
+                        if (!sl.empty) add(p.phase, sl.ko, sl.team, sl.seed);
+                    });
+                });
+            });
+        });
+
+        out.sort(function (a, b) {
+            try { return a.ko.localeCompare(b.ko, 'ko'); } catch (e) { return a.ko < b.ko ? -1 : 1; }
+        });
+
+        // 동명이인 표시용 — 소속만으로 구분해야 하는 이름을 미리 표시해둔다
+        var byName = {};
+        out.forEach(function (p) { byName[p.ko] = (byName[p.ko] || 0) + 1; });
+        out.forEach(function (p) { p.homonym = byName[p.ko] > 1; });
+        return out;
+    }
+
+    // 동명이인 방어: 소속을 둘 다 알고 있으면 소속까지 같아야 같은 사람으로 본다.
+    function samePlayer(slot, ko, team) {
+        if (!slot || slot.empty || !slot.ko) return false;
+        if (slot.ko !== ko) return false;
+        if (team && slot.team && slot.team !== team) return false;
+        return true;
+    }
+
+    // data-state 가 없는 레거시 마크업 폴백 (표시 클래스로 역추론)
+    function blockState(block, me, opp) {
+        var st = block.dataset.state || '';
+        if (st) return st;
+        if (block.classList.contains('bye-match')) return 'bye';
+        if (block.querySelector('.winner')) return 'done';
+        return (me && !me.empty && opp && !opp.empty) ? 'scheduled' : 'tbd';
+    }
+
+    function buildRoute(ko, team) {
+        var panels = phasePanels();
+        var multiPhase = panels.length > 1;
+        var nodes = [];
+        var player = null;
+
+        panels.forEach(function (p, pi) {
+            var rr = phaseRounds(p.el);
+            rr.rounds.forEach(function (roundEl, ri) {
+                var blocks = blocksIn(roundEl, rr.isTree);
+                var realCount = blocks.filter(function (b) {
+                    return !b.classList.contains('bye-match');
+                }).length;
+
+                blocks.forEach(function (b) {
+                    var slots = slotsOf(b);
+                    if (slots.length < 2) return;
+                    var s0 = parseSlot(slots[0]);
+                    var s1 = parseSlot(slots[1]);
+                    var me = null, opp = null;
+                    if (samePlayer(s0, ko, team)) { me = s0; opp = s1; }
+                    else if (samePlayer(s1, ko, team)) { me = s1; opp = s0; }
+                    if (!me) return;
+                    if (!player) player = me;
+
+                    var isBye = b.classList.contains('bye-match');
+                    var st = blockState(b, me, opp);
+                    var result;
+                    if (isBye || st === 'bye') result = 'bye';
+                    else if (st === 'done') result = me.winner ? 'win' : 'lose';
+                    else if (!opp || opp.empty) result = 'tbd';
+                    else result = 'scheduled';
+
+                    nodes.push({
+                        phase: p.phase,
+                        round: roundEl.dataset.round || roundEl.dataset.roundPanel || '',
+                        me: me,
+                        opp: opp,
+                        result: result,
+                        forfeitMine: !!me.forfeit,
+                        forfeitOpp: !!(opp && opp.forfeit),
+                        isLastRoundOfPhase: ri === rr.rounds.length - 1,
+                        isLastPhase: pi === panels.length - 1,
+                        roundRealCount: realCount
+                    });
+                });
+            });
+        });
+
+        /* 한 선수가 같은 단계·같은 라운드에서 두 경기를 뛸 수는 없다(단일 토너먼트).
+           그런 데이터가 오면 경로를 그럴듯하게 이어붙이지 말고 그 사실을 알린다.
+           실제로 남자 에페에서 기권 표기가 소속 칸에 들어가 한 선수의 경기가
+           갈라지는 사례가 있다 — 그때 이 경고가 뜬다. */
+        var seenRound = {}, conflict = false;
+        nodes.forEach(function (n) {
+            var k = n.phase + '|' + n.round;
+            if (seenRound[k]) conflict = true;
+            seenRound[k] = true;
+        });
+
+        return {
+            player: player || { ko: ko, team: team, display: trP(ko), seed: '' },
+            nodes: nodes,
+            multiPhase: multiPhase,
+            conflict: conflict
+        };
+    }
+
+    function phaseShort(phase) {
+        if (phase === 'first') return t('예선');
+        if (phase === 'second') return t('본선');
+        return '';
+    }
+
+    // "예선 64강". 자리표시자 키로 두어야 번역이 어순을 바꿀 수 있다.
+    function routeRoundLabel(node, multiPhase) {
+        var r = node.round ? t(node.round) : '';
+        if (!multiPhase) return r;
+        var ph = phaseShort(node.phase);
+        if (!ph || !r) return r || ph;
+        return t('{phase} {round}').replace('{phase}', ph).replace('{round}', r);
+    }
+
+    // 배지 색은 시트가 이미 쓰는 상태 배지 클래스를 그대로 재사용한다 (새 색 도입 없음).
+    function routeBadge(node) {
+        var base = 'fm-badge fm-badge--micro fm-badge--pill ms-status-badge msr-badge ';
+        if (node.result === 'bye') return '<span class="' + base + 'ms-status--tbd">' + esc(t('부전승')) + '</span>';
+        if (node.result === 'tbd') return '<span class="' + base + 'ms-status--tbd">' + esc(t('상대 미정')) + '</span>';
+        if (node.result === 'scheduled') return '<span class="' + base + 'ms-status--pending">' + esc(t('예정')) + '</span>';
+        if (node.result === 'win') {
+            if (node.forfeitOpp) return '<span class="' + base + 'ms-status--done">' + esc(t('상대 기권')) + '</span>';
+            return '<span class="' + base + 'ms-status--done">' + esc(t('승')) + '</span>';
+        }
+        if (node.forfeitMine) return '<span class="' + base + 'ms-status--forfeit">' + esc(t('기권')) + '</span>';
+        return '<span class="' + base + 'ms-status--forfeit">' + esc(t('패')) + '</span>';
+    }
+
+    function routeScore(node) {
+        if (node.result !== 'win' && node.result !== 'lose') return '';
+        var a = node.me.score, b = node.opp ? node.opp.score : '';
+        if (!a || !b || a === '-' || b === '-') return '';
+        return '<span class="msr-score">' + num(a) + '<span class="msr-score-sep">:</span>' + num(b) + '</span>';
+    }
+
+    function routeOpponent(node) {
+        if (node.result === 'bye') {
+            return '<span class="msr-opp msr-opp--none">' + esc(t('부전승')) + '</span>';
+        }
+        if (!node.opp || node.opp.empty) {
+            return '<span class="msr-opp msr-opp--none">' + esc(t('상대 미정')) + '</span>';
+        }
+        var href = '/player/' + encodeURIComponent(node.opp.ko) +
+                   (node.opp.team ? '?team=' + encodeURIComponent(node.opp.team) : '');
+        return '<a class="msr-opp" href="' + esc(href) + '">' + esc(node.opp.display || node.opp.ko) + '</a>' +
+               (node.opp.seed ? ' <span class="msr-oseed">[' + num(node.opp.seed) + ']</span>' : '') +
+               (node.opp.team ? '<span class="msr-oteam">' + esc(trT(node.opp.team)) + '</span>' : '');
+    }
+
+    // 마지막 노드로부터 결론을 낸다. 확신할 수 있을 때만 붙인다 (제1원칙).
+    function routeEndNode(route) {
+        var last = route.nodes[route.nodes.length - 1];
+        if (!last) return '';
+        if (last.result === 'lose') {
+            var lbl = routeRoundLabel(last, route.multiPhase);
+            return '<li class="msr-end msr-end--out">' +
+                   esc(t('{round} 탈락').replace('{round}', lbl)) + '</li>';
+        }
+        if (last.result !== 'win') return '';
+        if (!last.isLastRoundOfPhase) return '';
+        if (last.isLastPhase) {
+            if (last.roundRealCount === 1) {
+                return '<li class="msr-end msr-end--champ">' + esc(t('우승')) + '</li>';
+            }
+            return '';
+        }
+        return '<li class="msr-end msr-end--up">' + esc(t('본선 DE 진출')) + '</li>';
+    }
+
+    function renderRoute(ko, team) {
+        var el = document.getElementById('ms-route-view');
+        if (!el) return;
+
+        var route;
+        try { route = buildRoute(ko, team); } catch (e) { route = null; }
+
+        if (!route || !route.nodes.length) {
+            el.innerHTML = '<div class="ms-hint">' + esc(t('이 선수의 대진 경로를 찾을 수 없습니다')) + '</div>';
+            return;
+        }
+
+        var p = route.player;
+        var href = '/player/' + encodeURIComponent(p.ko) + (p.team ? '?team=' + encodeURIComponent(p.team) : '');
+        var head = '<div class="msr-player">' +
+                     '<a class="msr-pname" href="' + esc(href) + '">' + esc(p.display || p.ko) + '</a>' +
+                     (p.seed ? '<span class="msr-pseed">[' + num(p.seed) + ']</span>' : '') +
+                     (p.team ? '<span class="msr-pteam">' + esc(trT(p.team)) + '</span>' : '') +
+                   '</div>';
+
+        var items = route.nodes.map(function (n) {
+            var cls = 'msr-node msr-node--' + n.result;
+            return '<li class="' + cls + '">' +
+                     '<span class="msr-round">' + esc(routeRoundLabel(n, route.multiPhase)) + '</span>' +
+                     '<span class="msr-vs">' + routeOpponent(n) + '</span>' +
+                     '<span class="msr-right">' + routeScore(n) + routeBadge(n) + '</span>' +
+                   '</li>';
+        }).join('');
+
+        var notice = route.conflict
+            ? '<p class="msr-notice" role="status">' +
+              esc(t('같은 라운드에 경기가 둘 이상 기록되어 있어 경로가 정확하지 않을 수 있습니다')) +
+              '</p>'
+            : '';
+
+        el.innerHTML = head + notice + '<ol class="msr-list">' +
+                       items +
+                       routeEndNode(route) +
+                       '<li class="msr-final" id="msr-final" hidden></li>' +
+                       '</ol>';
+        if (!reducedMotion()) {
+            el.classList.remove('ms-fade-in');
+            void el.offsetWidth;
+            el.classList.add('ms-fade-in');
+        }
+        loadFinalRank(p, ++routeSeq);
+    }
+
+    /* KFA 최종 순위. 자체 계산이 아니라 서버가 확정한 값을 그대로 붙인다.
+       비동기 — 못 받으면 아무것도 붙이지 않는다 (빈 칸을 지어내지 않는다). */
+    function loadFinalRank(p, seq) {
+        var sub = (typeof window.SUB_EVENT_CD === 'string') ? window.SUB_EVENT_CD : '';
+        if (!sub || !p || !p.ko) return;
+        var url = '/api/events/' + encodeURIComponent(sub) +
+                  '/players/search?q=' + encodeURIComponent(p.ko);
+        fetchJson(url, H2H_TIMEOUT_MS).then(function (d) {
+            if (seq !== routeSeq) return;              // 다른 선수의 경로로 바뀌었다
+            var list = (d && d.players) || [];
+            if (!list.length) return;
+            var hit = list.filter(function (x) {
+                return !p.team || (x.team || '') === p.team;
+            })[0] || (p.team ? null : list[0]);        // 소속을 아는데 못 맞추면 붙이지 않는다
+            if (!hit || typeof hit.final_rank !== 'number' || hit.final_rank <= 0) return;
+            var el = document.getElementById('msr-final');
+            if (!el) return;
+            el.hidden = false;
+            // "127위" / "127th" — 숫자 자리를 자리표시자로 두어야 언어별 어순을 바꿀 수 있다
+            el.innerHTML = '<span class="msr-final-label">' + esc(t('최종 순위')) + '</span>' +
+                           '<span class="msr-final-rank">' +
+                           t('{n}위').replace('{n}', num(hit.final_rank)) + '</span>';
+        });
+    }
+
+    // ---------- 뷰 전환 (경기 정보 ↔ 경로) ----------
+
+    function setView(v) {
+        if (!sheet) return;
+        sheet.dataset.view = v;
+        var body = document.getElementById('ms-body');
+        var rv = document.getElementById('ms-route-view');
+        var back = document.getElementById('ms-back');
+        var status = document.getElementById('ms-status');
+        if (body) body.hidden = (v === 'route');
+        if (rv) rv.hidden = (v !== 'route');
+        // 검색으로 바로 연 경로에는 돌아갈 경기가 없다 → 뒤로가기를 주지 않는다.
+        if (back) back.hidden = !(v === 'route' && lastInfo);
+        if (status) status.hidden = (v === 'route');
+        try { sheet.scrollTop = 0; } catch (e) {}
+    }
+
+    // 경기 시트 안에서 경로로 전환 (뒤로가기 있음)
+    function showRoute(ko, team) {
+        if (!ensure() || !ko) return;
+        var title = document.getElementById('ms-title');
+        if (title) title.textContent = t('선수 경로');
+        renderRoute(ko, team);
+        setView('route');
+        var back = document.getElementById('ms-back');
+        if (back && !back.hidden) { try { back.focus({ preventScroll: true }); } catch (e) { back.focus(); } }
+    }
+
+    /* 이름 검색에서 곧바로 경로를 연다 (경기 시트를 거치지 않음).
+       선수 검색 위젯이 쓰는 진입점 — 렌더는 위와 같은 것을 그대로 쓴다. */
+    function openRoute(ko, team) {
+        if (!ensure() || !ko) return;
+        reqSeq++;                                  // 진행 중인 전적 응답 무효화
+        var wasOpen = sheet.classList.contains('open');
+        if (!wasOpen) lastFocus = document.activeElement;
+        originBlock = null;
+        lastInfo = null;                           // 돌아갈 경기가 없다
+
+        var title = document.getElementById('ms-title');
+        if (title) title.textContent = t('선수 경로');
+        renderRoute(ko, team);
+        setView('route');
+        showSheet(wasOpen);
+
+        var closeBtn = document.getElementById('ms-close');
+        if (closeBtn) { try { closeBtn.focus({ preventScroll: true }); } catch (e) { closeBtn.focus(); } }
+    }
+
+    function backToMatch() {
+        if (!sheet || sheet.hidden) return;
+        var rv = document.getElementById('ms-route-view');
+        if (rv) rv.innerHTML = '';
+        if (lastInfo) renderHead(lastInfo);
+        setView('match');
+        var closeBtn = document.getElementById('ms-close');
+        if (closeBtn) { try { closeBtn.focus({ preventScroll: true }); } catch (e) { closeBtn.focus(); } }
+    }
+
+    function inRouteView() {
+        return !!sheet && sheet.dataset.view === 'route';
+    }
+
     // ---------- 시트 열기/닫기 ----------
 
     function ensure() {
@@ -624,10 +1002,10 @@
         block.appendChild(fx);
     }
 
-    function render(info) {
+    // 헤더만 따로 그린다 — 경로 뷰에서 뒤로 돌아올 때 다시 쓴다.
+    function renderHead(info) {
         var head = document.getElementById('ms-title');
         var status = document.getElementById('ms-status');
-        var versus = document.getElementById('ms-versus');
 
         var bits = [];
         var pl = phaseLabel(info.phase);
@@ -636,6 +1014,11 @@
         if (info.number) bits.push('Match ' + num(info.number));
         if (head) head.innerHTML = bits.join(' <span class="ms-dot">·</span> ') || esc(t('경기 정보'));
         if (status) status.innerHTML = statusBadge(info);
+    }
+
+    function render(info) {
+        var versus = document.getElementById('ms-versus');
+        renderHead(info);
 
         if (versus) {
             versus.innerHTML = '<div class="ms-vs-grid">' +
@@ -663,6 +1046,12 @@
         var wasOpen = sheet.classList.contains('open');
         if (!wasOpen) lastFocus = document.activeElement;
         originBlock = block;
+        lastInfo = info;
+
+        // 다른 경기를 누르면 이전 경로 상태는 남기지 않는다.
+        var rv = document.getElementById('ms-route-view');
+        if (rv) rv.innerHTML = '';
+        setView('match');
 
         render(info);
 
@@ -674,6 +1063,15 @@
             if (!reducedMotion()) body.classList.add('ms-fade-in');
         }
 
+        showSheet(wasOpen);
+
+        pulse(block);
+        var closeBtn = document.getElementById('ms-close');
+        if (closeBtn) { try { closeBtn.focus({ preventScroll: true }); } catch (e) { closeBtn.focus(); } }
+    }
+
+    // 시트를 화면에 올린다 (경기 진입 / 이름 검색 진입 공통)
+    function showSheet(wasOpen) {
         sheet.hidden = false;
         // 데스크톱은 백드롭 없이 띄운다 — 시트를 열어둔 채 대진표를 계속 볼 수 있어야 한다.
         // (라이트 테마의 .bottom-sheet-backdrop 배경은 !important 라 CSS 로 투명하게 못 만든다)
@@ -696,10 +1094,6 @@
             var clearWill = function () { sheet.style.willChange = ''; sheet.removeEventListener('transitionend', clearWill); };
             sheet.addEventListener('transitionend', clearWill);
         }
-
-        pulse(block);
-        var closeBtn = document.getElementById('ms-close');
-        if (closeBtn) { try { closeBtn.focus({ preventScroll: true }); } catch (e) { closeBtn.focus(); } }
     }
 
     function close() {
@@ -716,6 +1110,12 @@
         };
         if (reducedMotion()) finish();
         else setTimeout(finish, 320);   // .bottom-sheet transition 300ms + 여유
+
+        // 경로 상태는 닫는 순간 버린다 — 다음에 열 때 남아 있으면 안 된다.
+        var rv = document.getElementById('ms-route-view');
+        if (rv) rv.innerHTML = '';
+        setView('match');
+        lastInfo = null;
 
         if (originBlock) { pulse(originBlock); originBlock = null; }
         if (lastFocus && document.contains(lastFocus)) {
@@ -771,29 +1171,33 @@
         var deTab = document.querySelector('.tab-btn[data-tab="tournament"]');
         if (deTab) deTab.addEventListener('click', function () { setTimeout(mark, 250); });
 
+        // Esc: 경로 뷰에서는 한 단계만 되돌린다 (바로 닫지 않는다).
         document.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape' && sheet && !sheet.hidden) close();
+            if (e.key !== 'Escape' || !sheet || sheet.hidden) return;
+            if (inRouteView()) backToMatch();
+            else close();
         });
 
-        // 액션의 "경로 보기" — 시트를 닫고 선수 루트 위젯으로
+        // 액션의 "경로 보기" — 시트 안에서 경로 뷰로 전환한다 (페이지 스크롤 점프 없음)
         var actions = document.getElementById('ms-actions');
         if (actions) {
             actions.addEventListener('click', function (e) {
                 var btn = e.target.closest('[data-ms-route]');
                 if (!btn) return;
-                var name = btn.getAttribute('data-ms-route');
-                var team = btn.getAttribute('data-ms-team') || '';
-                close();
-                if (window.DERoute && typeof window.DERoute.load === 'function') {
-                    window.DERoute.load(name, team);
-                    var routeEl = document.getElementById('de-route');
-                    if (routeEl) routeEl.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'center' });
-                }
+                e.preventDefault();
+                showRoute(btn.getAttribute('data-ms-route'), btn.getAttribute('data-ms-team') || '');
             });
         }
     }
 
-    window.MatchSheet = { open: open, close: close, init: init };
+    window.MatchSheet = {
+        open: open,
+        close: close,
+        init: init,
+        backToMatch: backToMatch,
+        openRoute: openRoute,       // 이름 검색 → 경로 뷰 (선수 검색 위젯이 쓴다)
+        participants: participants  // 이 종목 DE 참가자 전원
+    };
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
