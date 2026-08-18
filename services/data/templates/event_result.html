@@ -3,7 +3,7 @@
 {% block title %}{{ tr_event(event.name) }} - {{ tr_comp(competition.competition.name) }}{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="/static/css/bracket.css?v=20260817a">
+<link rel="stylesheet" href="/static/css/bracket.css?v=20260818a">
 <link rel="stylesheet" href="/static/css/player-search.css?v=20260613">
 <style>
 /* =====================================================
@@ -2509,6 +2509,11 @@ function toggleSeeding(header) {
 // ==========================================
 const SUB_EVENT_CD = "{{ event.sub_event_cd }}";
 const EVENT_CD = "{{ competition.competition.event_cd }}";
+// 매치 시트가 임의 두 선수의 전적을 조회할 때 쓴다.
+// 무기: /api/players/{a}/head-to-head/{b} 의 필터. 대회명: 지금 보고 있는 대회를
+// 전적에서 빼기 위한 키(EventH2H 와 같은 기준 — "이 대회 이전 전적").
+window.EVENT_WEAPON = {{ (event.weapon or '')|tojson }};
+window.COMPETITION_NAME = {{ (competition.competition.name or '')|tojson }};
 
 // Initialize components
 const playerHighlighter = new PlayerHighlighter();
@@ -3003,7 +3008,22 @@ window.EventH2H = (function() {
         if (deTab) deTab.addEventListener('click', function() { setTimeout(function() { try { applyBracket(); } catch (e) {} }, 250); });
     }
 
-    return { init: init, load: load, clear: clear, applyAll: applyAll };
+    // 매치 시트용 공개 조회. 내 선수(myKo) 기준으로 상대(oppKo)의 레코드를 캐시에서 꺼낸다.
+    // 이미 받아둔 응답을 재사용하므로 추가 요청이 없다. 내 선수가 아니면 null.
+    function getRecord(myKo, oppKo) {
+        var mk = norm(myKo), ok = norm(oppKo);
+        if (!mk || !ok) return null;
+        for (var i = 0; i < _players.length; i++) {
+            var e = _players[i];
+            if (!e.map || !e.byText) continue;
+            if (norm(e.ko) !== mk && !(e.self && e.self[mk])) continue;
+            var ko = e.byText[ok];
+            if (ko && e.map[ko]) return { ko: ko, rec: e.map[ko], who: e.ko };
+        }
+        return null;
+    }
+
+    return { init: init, load: load, clear: clear, applyAll: applyAll, getRecord: getRecord };
 })();
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -4198,4 +4218,28 @@ function renderEventTeamTable(container, rankings, sortKey) {
     container.innerHTML = html;
 }
 </script>
+
+{# ===== DE 매치 시트 (Phase 3) =====
+   경기 블록을 누르면 열린다. 모바일=바텀시트 / 데스크톱=우측 하단 카드.
+   #tab-tournament 밖에 두고 JS 가 body 직속으로 옮긴다 — 128강 트리 레이아웃과 완전히 분리.
+   bracket.html 은 수정하지 않고 이벤트 위임으로 클릭을 받는다. #}
+<div id="match-sheet-backdrop" class="bottom-sheet-backdrop" onclick="MatchSheet.close()"></div>
+<aside id="match-sheet" class="bottom-sheet match-sheet" role="dialog"
+       aria-labelledby="ms-title" hidden>
+    <div class="bottom-sheet-handle"></div>
+    <header class="ms-head">
+        <span id="ms-title" class="ms-round"></span>
+        <span class="ms-status" id="ms-status"></span>
+        <button type="button" class="bottom-sheet-close" id="ms-close"
+                aria-label="{{ _t('닫기') }}" onclick="MatchSheet.close()">&times;</button>
+    </header>
+    <div class="ms-body" id="ms-body">
+        <section class="ms-versus ms-stagger" id="ms-versus" style="--ms-i:0"></section>
+        <section class="ms-h2h ms-stagger" id="ms-h2h" style="--ms-i:1" hidden></section>
+        <section class="ms-next ms-stagger" id="ms-next" style="--ms-i:2" hidden></section>
+        <section class="ms-after ms-stagger" id="ms-after" style="--ms-i:3" hidden></section>
+        <footer class="ms-actions ms-stagger" id="ms-actions" style="--ms-i:4" hidden></footer>
+    </div>
+</aside>
+<script src="/static/js/de-match-sheet.js?v=20260818a"></script>
 {% endblock %}

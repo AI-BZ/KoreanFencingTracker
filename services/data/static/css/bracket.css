@@ -2668,3 +2668,473 @@ details[open] .seeded-toggle-icon {
     background: rgba(107, 114, 128, 0.12);
     color: #4e5968;
 }
+
+/* ============================================================================
+   DE MATCH SHEET (Phase 3)
+   경기 블록을 누르면 열리는 상세 시트. 모바일=바텀시트 / 데스크톱=우측 하단 카드.
+   셸은 mobile-ux.css 의 .bottom-sheet 를 그대로 상속하고 여기서는 차이만 얹는다.
+   ============================================================================ */
+
+/* 블록이 이제 클릭 대상이다 */
+.bracket-match,
+.match-card {
+    cursor: pointer;
+}
+
+.match-sheet {
+    display: flex;
+    flex-direction: column;
+    gap: var(--fm-space-2);
+}
+.match-sheet .bottom-sheet-handle {
+    margin: 10px auto 4px;
+}
+.match-sheet[hidden] {
+    display: none;
+}
+.ms-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--fm-space-4);
+    min-height: 0;
+}
+
+/* --- 헤더 --- */
+.ms-head {
+    display: flex;
+    align-items: center;
+    gap: var(--fm-space-2);
+    padding-bottom: var(--fm-space-3);
+    border-bottom: 1px solid var(--fm-border);
+}
+.ms-round {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--fm-text-primary);
+    letter-spacing: var(--fm-tracking-tight);
+    min-width: 0;
+}
+.ms-dot {
+    color: var(--fm-text-muted);
+    margin: 0 2px;
+}
+.ms-head .bottom-sheet-close {
+    margin-left: auto;
+    flex: none;
+}
+
+.ms-status-badge {
+    border: 1px solid transparent;
+}
+.ms-status--done {
+    background: rgba(22, 163, 74, 0.12);
+    color: #15803d;
+}
+.ms-status--pending {
+    background: transparent;
+    border-color: var(--fm-border-light);
+    color: var(--fm-text-muted);
+}
+.ms-status--tbd {
+    background: transparent;
+    border-style: dashed;
+    border-color: var(--fm-border-light);
+    color: var(--fm-text-muted);
+}
+.ms-status--forfeit {
+    background: rgba(220, 38, 38, 0.12);
+    color: #b91c1c;
+}
+[data-theme="dark"] .ms-status--done { background: rgba(34, 197, 94, 0.16); color: #86efac; }
+[data-theme="dark"] .ms-status--forfeit { background: rgba(248, 113, 113, 0.16); color: #fca5a5; }
+
+/* --- 대결 헤더 --- */
+.ms-vs-grid {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: var(--fm-space-3);
+}
+.ms-side {
+    min-width: 0;
+}
+.ms-side--right {
+    text-align: right;
+}
+/* 승자는 색 + 배지 + 굵기 + 보더 4중 채널. 색만으로 전달하지 않는다. */
+.ms-side.is-winner {
+    border-left: 2px solid var(--fm-accent-primary);
+    padding-left: var(--fm-space-2);
+}
+.ms-side--right.is-winner {
+    border-left: 0;
+    border-right: 2px solid var(--fm-accent-primary);
+    padding-left: 0;
+    padding-right: var(--fm-space-2);
+}
+.ms-side.is-winner .ms-pname {
+    font-weight: 800;
+}
+.ms-side.is-forfeit .ms-pname {
+    text-decoration: line-through;
+    opacity: 0.75;
+}
+.ms-seed {
+    font-size: 0.72rem;
+    color: var(--fm-text-muted);
+    line-height: 1.4;
+}
+.ms-pname-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.ms-side--right .ms-pname-row {
+    justify-content: flex-end;
+}
+.ms-pname {
+    font-size: 0.98rem;
+    font-weight: 600;
+    color: var(--fm-text-primary);
+    text-decoration: none;
+    word-break: keep-all;
+}
+.ms-pname:hover {
+    text-decoration: underline;
+}
+.ms-pname--tbd {
+    color: var(--fm-text-muted);
+    font-weight: 500;
+}
+.ms-team {
+    font-size: 0.76rem;
+    color: var(--fm-text-muted);
+    margin-top: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.ms-tag--win {
+    background: var(--fm-accent-primary);
+    color: #fff;
+}
+.ms-tag--forfeit {
+    background: rgba(220, 38, 38, 0.12);
+    color: #b91c1c;
+}
+[data-theme="dark"] .ms-tag--forfeit { background: rgba(248, 113, 113, 0.16); color: #fca5a5; }
+
+.ms-score {
+    font-family: var(--fm-font-display);
+    font-weight: 700;
+    font-size: 1.5rem;
+    letter-spacing: 0.01em;
+    color: var(--fm-text-primary);
+    white-space: nowrap;
+    text-align: center;
+}
+.ms-score-sep {
+    margin: 0 4px;
+    color: var(--fm-text-muted);
+}
+.ms-score--word {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--fm-text-muted);
+    letter-spacing: 0.06em;
+}
+
+/* --- 섹션 공통 --- */
+.ms-sec-title {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--fm-text-muted);
+    margin-bottom: var(--fm-space-2);
+}
+.ms-sec-sub {
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--fm-text-secondary);
+    font-weight: 600;
+}
+.ms-who {
+    font-size: 0.85rem;
+    color: var(--fm-text-secondary);
+    margin-bottom: var(--fm-space-2);
+}
+.ms-note {
+    font-size: 0.9rem;
+    color: var(--fm-text-primary);
+    font-weight: 600;
+}
+.ms-note--final {
+    color: var(--fm-medal-gold);
+}
+.ms-hint {
+    font-size: 0.75rem;
+    color: var(--fm-text-muted);
+    margin-top: 4px;
+    line-height: 1.5;
+}
+.ms-hint-inline {
+    font-size: 0.75rem;
+    color: var(--fm-text-muted);
+}
+
+/* --- 상대 전적 --- */
+.ms-h2h-main {
+    font-size: 0.95rem;
+    color: var(--fm-text-primary);
+}
+.ms-h2h-label {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--fm-text-secondary);
+    margin-right: 4px;
+}
+.ms-h2h-sub {
+    font-size: 0.82rem;
+    color: var(--fm-text-secondary);
+    margin-top: 4px;
+    line-height: 1.5;
+}
+.ms-h2h-sub--muted {
+    color: var(--fm-text-muted);
+}
+.ms-skel {
+    height: 13px;
+    border-radius: 4px;
+    background: var(--fm-bg-input);
+    margin-bottom: 6px;
+}
+.ms-skel--short {
+    width: 60%;
+}
+
+/* --- 다음 상대 --- */
+/* 확정 = 실선 + "확정" 배지 / 예상 = 점선 + "예상" 배지.
+   형태와 글자 두 채널로 구분한다 (야외 화면·색약 대응). */
+.ms-cand {
+    display: flex;
+    align-items: center;
+    gap: var(--fm-space-2);
+    padding: var(--fm-space-2) var(--fm-space-3);
+    border: 1px solid var(--fm-border-light);
+    border-radius: var(--fm-radius-sm);
+    background: var(--fm-bg-input);
+    min-width: 0;
+}
+.ms-cand--confirmed {
+    border-color: var(--fm-accent-secondary);
+    border-width: 1px;
+}
+.ms-cand--maybe {
+    border-style: dashed;
+    background: transparent;
+}
+.ms-cand-seed {
+    font-size: 0.72rem;
+    color: var(--fm-text-muted);
+    flex: none;
+}
+.ms-cand-name {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--fm-text-primary);
+    word-break: keep-all;
+}
+.ms-cand-team {
+    font-size: 0.75rem;
+    color: var(--fm-text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+.ms-cand .ms-pill {
+    margin-left: auto;
+    flex: none;
+}
+.ms-pill {
+    background: transparent;
+    border: 1px dashed var(--fm-border-light);
+    color: var(--fm-text-muted);
+    font-weight: 600;
+}
+.ms-pill--sure {
+    background: var(--fm-accent-secondary);
+    border-style: solid;
+    border-color: transparent;
+    color: #fff;
+}
+.ms-or {
+    text-align: center;
+    font-size: 0.72rem;
+    color: var(--fm-text-muted);
+    margin: 5px 0;
+}
+
+/* --- 그다음 라운드 (접힘) --- */
+.ms-details {
+    border: 1px solid var(--fm-border);
+    border-radius: var(--fm-radius-sm);
+    padding: var(--fm-space-2) var(--fm-space-3);
+}
+.ms-summary {
+    cursor: pointer;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--fm-text-muted);
+    list-style: none;
+}
+.ms-summary::-webkit-details-marker { display: none; }
+.ms-summary::before {
+    content: '+';
+    display: inline-block;
+    width: 1em;
+    color: var(--fm-text-muted);
+}
+.ms-details[open] .ms-summary::before { content: '−'; }
+.ms-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: var(--fm-space-2);
+}
+.ms-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 4px 9px;
+    border: 1px dashed var(--fm-border-light);
+    border-radius: var(--fm-radius-pill);
+    font-size: 0.78rem;
+    color: var(--fm-text-secondary);
+    white-space: nowrap;
+}
+.ms-chip-seed {
+    color: var(--fm-text-muted);
+    font-size: 0.74rem;
+}
+
+/* --- 액션 --- */
+.ms-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--fm-space-2);
+    padding-top: var(--fm-space-3);
+    border-top: 1px solid var(--fm-border);
+}
+.ms-btn {
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+    padding: 8px 12px;
+    border: 1px solid var(--fm-border-light);
+    border-radius: var(--fm-radius-sm);
+    background: var(--fm-bg-input);
+    color: var(--fm-text-primary);
+    font-size: 0.8rem;
+    font-weight: 600;
+    font-family: inherit;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background var(--fm-transition-fast), border-color var(--fm-transition-fast);
+}
+.ms-btn:hover {
+    background: var(--fm-bg-card-hover);
+    border-color: var(--fm-accent-primary);
+}
+.ms-btn--ghost {
+    background: transparent;
+    color: var(--fm-text-secondary);
+}
+
+/* --- 애니메이션 (transform/opacity 만) --- */
+.ms-stagger {
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 180ms ease-out, transform 180ms ease-out;
+    transition-delay: calc(var(--ms-i, 0) * 40ms);
+}
+.match-sheet.open .ms-stagger {
+    opacity: 1;
+    transform: none;
+}
+.ms-fade-in {
+    animation: ms-fade 120ms ease-out;
+}
+@keyframes ms-fade {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+/* 원본 블록 펄스 — 어느 블록에서 열렸는지 알려준다.
+   .bracket-match 는 ::before/::after 가 이미 부전승/예정 라벨에 쓰이므로 자식 오버레이로 처리.
+   --fm-glow-primary 는 라이트 테마에서 transparent 라 글로우 대신 액센트 오버레이를 쓴다. */
+.match-card.ms-origin-pulse {
+    position: relative;
+}
+.ms-pulse-fx {
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    border-radius: inherit;
+    background: var(--fm-accent-primary);
+    opacity: 0;
+    pointer-events: none;
+    animation: ms-pulse 600ms ease-out;
+}
+@keyframes ms-pulse {
+    0%   { opacity: 0; }
+    30%  { opacity: 0.16; }
+    100% { opacity: 0; }
+}
+
+/* --- 데스크톱: 우측 하단 고정 카드 (백드롭 없이 대진표 계속 탐색) --- */
+@media (min-width: 1025px) {
+    #match-sheet.match-sheet {
+        left: auto;
+        right: var(--fm-space-6);
+        bottom: var(--fm-space-6);
+        width: 420px;
+        max-width: calc(100vw - var(--fm-space-12));
+        max-height: min(70vh, 640px);
+        border-radius: var(--fm-radius-md);
+        border: 1px solid var(--fm-border);
+        box-shadow: var(--fm-shadow-lg);
+        padding: var(--fm-space-4) var(--fm-space-4) var(--fm-space-4);
+    }
+    #match-sheet .bottom-sheet-handle {
+        display: none;
+    }
+    #match-sheet-backdrop {
+        background: transparent;
+        pointer-events: none;
+    }
+}
+
+/* --- 모션 최소화 --- */
+@media (prefers-reduced-motion: reduce) {
+    #match-sheet.match-sheet,
+    #match-sheet.match-sheet.open {
+        transform: none;
+        transition: none;
+    }
+    #match-sheet .ms-stagger {
+        opacity: 1;
+        transform: none;
+        transition: none;
+        transition-delay: 0ms;
+    }
+    #match-sheet .ms-fade-in {
+        animation: none;
+    }
+    .ms-pulse-fx {
+        display: none;
+    }
+}
