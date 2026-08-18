@@ -104,6 +104,103 @@ def _de_data_quality_score(de_bracket: dict) -> int:
     return 0
 
 
+def _de_bout_identities(de_bracket: dict) -> set:
+    """DE bracket에 실제로 들어있는 경기의 '내용 기반 신원' 집합.
+
+    신원 = (위상, 라운드명, {선수1, 선수2})
+
+    ★ 위상(de_phase)이 반드시 키에 들어가야 한다.
+    국가대표 선발 대회의 Dual DE 는 예선(qualifying)과 본선(main)이 '64강'이라는
+    **같은 이름의 라운드를 각각** 가진다. 둘은 완전히 다른 경기다. 라운드 이름만으로
+    세면 두 위상이 한 칸에 합쳐져서, 예선 64강 32경기가 통째로 사라져도 총합이
+    그럴듯해 보인다. 실제로 이 방식으로 두 번 유실됐다(2026-08-17, 2026-08-18:
+    159경기 → 127경기).
+
+    ★ match_number 가 아니라 선수쌍으로 신원을 잡는 이유:
+    스크래퍼는 병합 후 match_number 를 브래킷 전역 연속번호로 재부여한다
+    (de_scraper_v4.py). 번호 체계가 한 번 바뀌면 번호 기반 비교는 멀쩡한 데이터를
+    전부 '유실'로 오판해 이후 모든 갱신을 막아버린다.
+
+    ★ 개수가 아니라 집합인 이유:
+    중복 저장 사고(풀 2배 저장, 2026-08-15)처럼 기존 데이터에 사본이 섞이면
+    단순 개수 비교는 "기존 48 > 새 24"로 판정해 중복본을 영원히 붙잡는다.
+    집합은 사본이 같은 원소로 접혀서 그 덫에 걸리지 않는다.
+    """
+    identities = set()
+    if not de_bracket or not isinstance(de_bracket, dict):
+        return identities
+
+    def _ingest(bouts, phase: str):
+        if not isinstance(bouts, list):
+            return
+        for b in bouts:
+            if not isinstance(b, dict):
+                continue
+            # 저장된 위상이 있으면 그것이 진실. 없으면(구 레코드) 호출자가 준 위치 기반 값.
+            bout_phase = b.get("de_phase") or phase
+            round_name = (b.get("round_name") or b.get("round") or "").strip()
+            p1 = (b.get("player1_name") or "").strip()
+            p2 = (b.get("player2_name") or "").strip()
+            if not round_name or not (p1 or p2):
+                # 이름이 전혀 없는 placeholder/bye 골격은 신원을 만들 수 없다.
+                continue
+            identities.add((bout_phase, round_name, frozenset({p1, p2})))
+
+    if de_bracket.get("format") == "dual_de":
+        for key, phase in (("first_de", "qualifying"), ("second_de", "main")):
+            sub = de_bracket.get(key) or {}
+            if isinstance(sub, dict):
+                _ingest(sub.get("full_bouts") or sub.get("bouts"), phase)
+        # 하위 브래킷이 비어 있고 top-level 에만 있는 저장 형태도 있다.
+        if not identities:
+            _ingest(de_bracket.get("full_bouts") or de_bracket.get("bouts"), "main")
+    else:
+        _ingest(de_bracket.get("full_bouts") or de_bracket.get("bouts"), "main")
+
+    return identities
+
+
+def _de_bracket_regression(new_de: dict, existing_de: dict) -> Optional[str]:
+    """새 DE 데이터가 기존보다 구조적으로 후퇴했으면 사유 문자열, 아니면 None.
+
+    _de_data_quality_score() 는 '점수 있는 경기가 하나라도 있으면 3'에서 천장을 친다.
+    그래서 완전한 159경기 브래킷과, 예선 64강이 통째로 빠진 127경기 브래킷이
+    **둘 다 3점**이 되고, 보존 가드(existing_quality > new_quality)가 발동하지 않아
+    부분 데이터가 완전 데이터를 덮어썼다. 그것이 2026-08-18 유실의 직접 원인이다.
+
+    여기서는 '기존에 있었는데 새 데이터에 없는 경기'만 본다. 데이터를 만들어내지
+    않고, 갱신을 막기만 한다.
+    """
+    if not existing_de or not isinstance(existing_de, dict):
+        return None
+
+    # 포맷 강등: dual_de 로 저장돼 있던 것이 single_de 로 돌아오면 한 위상이 통째로 날아간 것.
+    if existing_de.get("format") == "dual_de" and new_de.get("format") != "dual_de":
+        return (
+            f"format 강등 dual_de → {new_de.get('format') or 'unknown'} "
+            "(예선/본선 중 한 위상이 통째로 유실)"
+        )
+
+    existing_ids = _de_bout_identities(existing_de)
+    if not existing_ids:
+        return None
+    new_ids = _de_bout_identities(new_de)
+
+    lost = existing_ids - new_ids
+    if not lost:
+        return None
+
+    # 어느 (위상, 라운드) 에서 몇 경기가 사라졌는지 집계 — 로그만 보고 판단할 수 있게.
+    by_round: Dict[tuple, int] = {}
+    for phase, round_name, _players in lost:
+        by_round[(phase, round_name)] = by_round.get((phase, round_name), 0) + 1
+    detail = ", ".join(
+        f"{phase}/{round_name} {cnt}경기"
+        for (phase, round_name), cnt in sorted(by_round.items())
+    )
+    return f"기존 {len(existing_ids)}경기 중 {len(lost)}경기가 새 데이터에 없음 → {detail}"
+
+
 # Supabase
 from supabase import create_client, Client
 
@@ -690,7 +787,30 @@ class EventBasedScraper:
                     )
                     de_bracket_to_save = existing_de_bracket
                 else:
-                    de_bracket_to_save = new_de_bracket
+                    # ★ 품질 점수가 같아도(둘 다 3점) 내용이 후퇴했으면 덮어쓰지 않는다.
+                    # 품질 점수는 '점수 있는 경기가 하나라도 있으면 3'에서 천장을 치므로
+                    # 완전한 159경기와 예선 64강이 빠진 127경기를 구분하지 못한다.
+                    # 이 가드가 없어서 2026-08-18 스케줄러 실행이 완전 데이터를 부분
+                    # 데이터로 덮어썼다.
+                    regression = _de_bracket_regression(new_de_bracket, existing_de_bracket)
+                    if regression:
+                        logger.error(
+                            f"    🚨 DE 데이터 후퇴 감지 → 기존 데이터 유지 ({event.name}): {regression}"
+                        )
+                        de_bracket_to_save = existing_de_bracket
+                        results.setdefault("_scrape_warnings", []).append({
+                            "type": "DE_BRACKET_REGRESSION",
+                            "severity": "ERROR",
+                            "event_name": event.name,
+                            "message": (
+                                f"[{event.name}] 새로 수집한 DE 데이터가 기존보다 후퇴하여 "
+                                f"저장을 거부했습니다: {regression}. "
+                                "기존 데이터를 유지했으므로 DB 유실은 없으나, 스크래퍼가 "
+                                "경기를 놓치고 있다는 뜻이므로 원인 확인이 필요합니다."
+                            ),
+                        })
+                    else:
+                        de_bracket_to_save = new_de_bracket
 
                 # === 풀 데이터 보존 정책 ===
                 # KFF는 풀 종료 후 본선 미진출자를 삭제하므로,
@@ -838,8 +958,24 @@ class EventBasedScraper:
                     logger.warning(f"    종목 저장 오류 ({event.name}): {e}")
 
                 # Layer 5: ERROR급 스크래핑 경고 시 Discord 알림
+                #
+                # ⚠️ 알림은 '유형 허용목록'으로 좁힌다.
+                # _validate_scrape_completeness() 가 get_full_results() 경로에 연결되면서
+                # 그동안 잠들어 있던 경고들이 한꺼번에 깨어난다. 그중 POOL_DUPLICATED 는
+                # 이미 알려진 과거 이슈로 수백 개 대회에 걸쳐 있어, 그대로 두면 진짜 신호가
+                # 알림 폭주에 파묻힌다. 경고 자체는 전부 _scrape_metadata 에 기록되므로
+                # 조회는 언제든 가능하고, 여기서는 '지금 사람이 봐야 하는 것'만 보낸다.
+                # 새 유형을 알림에 넣으려면 이 목록에 명시적으로 추가할 것.
+                ALERTING_WARNING_TYPES = {
+                    "DUAL_DE_QUALIFYING_ROUND_MISSING",  # 예선 DE 라운드 유실 (2026-08-17/18 재발 감지)
+                    "DE_BRACKET_REGRESSION",             # 새 DE 가 기존보다 후퇴 (저장 거부됨)
+                }
                 scrape_warnings = results.get("_scrape_warnings", [])
-                error_warnings = [w for w in scrape_warnings if w.get('severity') == 'ERROR']
+                error_warnings = [
+                    w for w in scrape_warnings
+                    if w.get('severity') == 'ERROR'
+                    and w.get('type') in ALERTING_WARNING_TYPES
+                ]
                 if error_warnings:
                     comp_name_for_alert = comp.get("name", "알 수 없는 대회")
                     for w in error_warnings:
