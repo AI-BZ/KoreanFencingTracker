@@ -1054,6 +1054,23 @@ class DEScraper:
 
         return result
 
+    @staticmethod
+    def _match_completeness(match: Dict) -> int:
+        """추출된 경기 dict의 정보 완전성 점수 (병합 시 우선순위 판정용).
+
+        같은 compmatsym이 초기 렌더와 fnGetMatch 재렌더 양쪽에서 잡힐 때,
+        승자/점수/이름을 더 많이 가진 쪽을 채택하기 위한 단순 가중치다.
+        (승자 정보가 있는 레코드를 없는 레코드로 덮어쓰지 않는 것이 핵심)
+        """
+        score = 0
+        if match.get('winner_name'):
+            score += 4
+        if (match.get('red_score') or 0) or (match.get('green_score') or 0):
+            score += 2
+        if match.get('red_name') and match.get('green_name'):
+            score += 1
+        return score
+
     async def _has_tournament_table(self) -> bool:
         """페이지에 .tournament_table 구조가 있는지 확인"""
         return await self.page.evaluate("""
@@ -1074,6 +1091,19 @@ class DEScraper:
                 const matchMap = new Map();
                 const seedingMap = new Map();
                 const skipSeeding = {str(skip_seeding).lower()};
+
+                // ★ 사전 집계: compmatsym 당 박스 수
+                // 대진표에는 '승자 표시 컬럼'(다음 라운드 진출자만 나열)이 함께 렌더되는데,
+                // 그 박스들은 페어를 이루지 않고 compmatsym 이 비었거나 한 값에 몰린다.
+                // (실측: 여자 에페 예선 초기 렌더의 x=32 컬럼 32박스가 sym 1개에 공유됨)
+                // 이걸 그대로 matchMap 에 넣으면 red/green 이 덮어써지며 '없는 경기'가 1개 만들어진다.
+                // → 정확히 2박스인 sym 만 경기로 인정한다.
+                const symBoxCount = new Map();
+                boxes.forEach(box => {{
+                    const s = box.getAttribute('compmatsym');
+                    if (!s) return;
+                    symBoxCount.set(s, (symBoxCount.get(s) || 0) + 1);
+                }});
 
                 boxes.forEach(box => {{
                     const sym = box.getAttribute('compmatsym');
@@ -1099,6 +1129,12 @@ class DEScraper:
                     // 128강/64강/32강 등 모든 라운드에서 수집, seedNum 중복시 첫 번째 유지
                     if (!skipSeeding && seedNum > 0 && name && !seedingMap.has(seedNum)) {{
                         seedingMap.set(seedNum, player);
+                    }}
+
+                    // 페어(정확히 2박스)를 이루지 않는 박스는 경기로 만들지 않는다.
+                    // (시딩 수집은 위에서 이미 끝났으므로 시드 정보는 잃지 않는다)
+                    if (!sym || symBoxCount.get(sym) !== 2) {{
+                        return;
                     }}
 
                     if (!matchMap.has(sym)) {{
@@ -1182,15 +1218,70 @@ class DEScraper:
         """
         bracket = DEBracket()
 
+        # match_id(=compmatsym) 기준 병합 저장소.
+        # 초기 렌더와 fnGetMatch 렌더에서 같은 경기가 중복으로 잡히므로 병합이 필요하다.
+        matches_by_id: Dict[str, Dict] = {}
+        seeding_data: List[Dict] = []
+        merge_order = {}  # match_id → 최초 발견 순서 (라운드 내 정렬 안정화용)
+
+        def _merge_matches(new_matches: List[Dict], source: str) -> int:
+            """수집된 경기들을 match_id 기준으로 병합. 반환값 = 새로 추가된 경기 수.
+
+            같은 match_id가 이미 있으면 '더 완전한' 쪽을 채택한다
+            (_match_completeness). 동점이면 먼저 수집한 쪽을 유지해
+            fn 재렌더가 이미 확보한 정보를 지우지 못하게 한다.
+            """
+            added = 0
+            for m in new_matches:
+                mid = m.get('match_id')
+                if not mid:
+                    continue
+                prev = matches_by_id.get(mid)
+                if prev is None:
+                    matches_by_id[mid] = m
+                    merge_order[mid] = len(merge_order)
+                    added += 1
+                elif self._match_completeness(m) > self._match_completeness(prev):
+                    matches_by_id[mid] = m
+            if added:
+                logger.debug(f"  → {source}: 신규 {added}경기 병합")
+            return added
+
         try:
+            # ===== 0) 초기 렌더 선추출 (fnGetMatch 호출 전) =====
+            # 예선(First DE) 화면의 라운드 탭(li)은 시작 라운드 하나만 광고하지만,
+            # 대진표 진입 직후의 초기 렌더에는 예선 전 라운드의 페어링이 이미 들어 있다.
+            # (128 이벤트: 128강+64강 / 256 이벤트: 256강+128강+64강 — KFA 실측 2026-08-17)
+            # 반면 fnGetMatch(시작라운드)를 호출하면 다음 라운드 컬럼이 페어 없는
+            # '승자 표시 컬럼'으로 강등되어 예선 64강이 통째로 사라진다.
+            # → 페이지 요청을 늘리지 않고 초기 화면을 먼저 1회 추출해 병합한다.
+            initial_box_count = await self.page.evaluate(
+                "document.querySelectorAll('.user_box').length"
+            )
+            if initial_box_count:
+                initial_data = await self._extract_tournament_table_data(skip_seeding=False)
+                initial_matches = initial_data.get('matches', [])
+                initial_seeding = initial_data.get('seeding', [])
+                _merge_matches(initial_matches, "초기 렌더")
+                if len(initial_seeding) > len(seeding_data):
+                    seeding_data = initial_seeding
+                initial_rounds = {}
+                for m in initial_matches:
+                    rs = m.get('round_size')
+                    initial_rounds[rs] = initial_rounds.get(rs, 0) + 1
+                logger.info(
+                    f"tournament_table: 초기 렌더 선추출 {len(initial_matches)}경기 "
+                    f"(라운드별 {dict(sorted(initial_rounds.items(), reverse=True))}), "
+                    f"시드 {len(initial_seeding)}명"
+                )
+            else:
+                logger.debug("tournament_table: 초기 렌더에 .user_box 없음 → 선추출 스킵")
+
+            # ===== 1) 라운드 탭 순회 =====
             # 실제 존재하는 탭을 동적으로 감지
             # fnGetMatch(7)=128강, (6)=64강, (5)=32강, (4)=16강, (3)=8강
             tabs_to_parse = await self._detect_tournament_table_tabs()
             logger.info(f"tournament_table: 감지된 탭 = {[(p, n) for p, n in tabs_to_parse]}")
-
-            all_matches_data = []
-            seeding_data = []
-            seeding_collected = False
 
             for fn_param, tab_name in tabs_to_parse:
                 # 탭 클릭
@@ -1206,28 +1297,18 @@ class DEScraper:
                     logger.warning(f"  → {tab_name}: .user_box 요소가 없음! 스킵")
                     continue
 
-                data = await self._extract_tournament_table_data(seeding_collected)
+                data = await self._extract_tournament_table_data(skip_seeding=False)
                 tab_matches = data.get('matches', [])
                 tab_seeding = data.get('seeding', [])
 
                 logger.debug(f"  → {tab_name}: {len(tab_matches)}경기 수집")
 
-                # 첫 번째 탭에서만 시딩 수집
-                if not seeding_collected and tab_seeding:
+                # 시딩은 '가장 많이 잡힌' 뷰의 것을 채택 (초기 렌더 포함 비교)
+                if len(tab_seeding) > len(seeding_data):
                     seeding_data = tab_seeding
-                    seeding_collected = True
-                    logger.info(f"tournament_table: 시딩 수집 완료 ({len(seeding_data)}명)")
+                    logger.info(f"tournament_table: 시딩 갱신 ({len(seeding_data)}명, {tab_name})")
 
-                all_matches_data.extend(tab_matches)
-
-            # 중복 제거 (같은 match_id는 나중 것 유지 - 더 완전한 데이터)
-            matches_by_id = {}
-            for m in all_matches_data:
-                match_id = m.get('match_id')
-                if match_id:
-                    # 점수가 있는 것을 우선
-                    if match_id not in matches_by_id or (m.get('red_score') or m.get('green_score')):
-                        matches_by_id[match_id] = m
+                _merge_matches(tab_matches, tab_name)
 
             matches_data = list(matches_by_id.values())
             logger.info(f"tournament_table 파싱: {len(matches_data)}경기 (중복제거 후), {len(seeding_data)}명 시드")
@@ -1316,10 +1397,7 @@ class DEScraper:
                         extra_seeding = extra_data.get('seeding', [])
 
                         # 추가 경기 데이터 병합
-                        for em in extra_matches:
-                            mid = em.get('match_id')
-                            if mid and mid not in matches_by_id:
-                                matches_by_id[mid] = em
+                        _merge_matches(extra_matches, f"교정 {corrected}강")
                         matches_data = list(matches_by_id.values())
 
                         # 시딩 데이터 교체 (더 큰 라운드의 시딩이 더 완전)
@@ -1378,6 +1456,20 @@ class DEScraper:
                 bracket.starting_round = self.SIZE_TO_ROUND_NAME.get(
                     min_bracket_from_seeding, f'{min_bracket_from_seeding}강'
                 )
+
+            # ★ match_number 전역 재부여 (라운드 크기 내림차순 → 라운드 내 원래 순서)
+            # 초기 렌더와 각 fn 탭이 각각 1번부터 번호를 매기므로 병합 후에는 번호가 겹친다.
+            # 하위 소비자(app/de_transforms.py의 라운드 범위 재배정,
+            # bracket_utils.get_correct_round_by_match_number, dual DE 공유 라운드 분리)는
+            # 모두 '브래킷 전체에 걸친 연속 번호'를 전제하므로 여기서 한 번에 정규화한다.
+            # 예) 128 예선: 128강 1~64, 64강 65~96 / 256 예선: 256강 1~128, 128강 129~192, 64강 193~224
+            matches_data.sort(key=lambda m: (
+                -(m.get('round_size') or 0),
+                m.get('match_number') or 0,
+                merge_order.get(m.get('match_id'), 0),
+            ))
+            for idx, m in enumerate(matches_data, start=1):
+                m['match_number'] = idx
 
             # 경기 데이터 변환
             for m in matches_data:
