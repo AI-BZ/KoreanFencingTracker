@@ -3509,3 +3509,13 @@ details[open] .seeded-toggle-icon {
         display: none;
     }
 }
+
+/* 진행바의 부전승 표기 — 경기 수와 구분되게 작고 옅게. 부전승은 경기가 아니라
+   같은 줄에 나란히 두되 위계를 낮춘다. */
+.de-progress-bar .step-byes {
+    display: block;
+    margin-top: 2px;
+    font-size: 0.72rem;
+    color: var(--fm-text-muted, var(--text-muted, #6b7280));
+    letter-spacing: 0.01em;
+}

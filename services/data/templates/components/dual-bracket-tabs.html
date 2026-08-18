@@ -130,36 +130,13 @@
                     <span class="de-term-main">{{ first_main }}</span>
                     <span class="de-term-sub">{{ first_sub }}</span>
                 </div>
+                {# 한 줄만 둔다. 라운드 구성과 경기 수는 바로 아래 진행바가 보여주므로
+                   여기서 되풀이하면 같은 내용이 세 번 나온다(배너·진행바·캡션). #}
                 <div class="banner-description">
-                    {% if dual_bracket.first_de_participant_count %}
-                        {% if is_ko %}
-                        예선 DE에 <span class="fm-num">{{ dual_bracket.first_de_participant_count }}</span>명이 출전합니다.
-                        {% else %}
-                        <span class="fm-num">{{ dual_bracket.first_de_participant_count }}</span> fencers compete in the qualifying DE.
-                        {% endif %}
-                    {% endif %}
-                    {% if fd_prog.get('rounds') %}
-                        {% if is_ko %}
-                        <span class="fm-num">{{ fd_prog['rounds']|length }}</span>개 라운드를 치릅니다
-                        {% else %}
-                        <span class="fm-num">{{ fd_prog['rounds']|length }}</span> round{{ '' if fd_prog['rounds']|length == 1 else 's' }}
-                        {% endif %}
-                        (<span class="de-round-chain">{% for r in fd_prog['rounds'] %}{% if not loop.first %} · {% endif %}{{ r.name }} <span class="fm-num">{{ r.total }}</span>{{ '경기' if is_ko else '' }}{% endfor %}</span>).
-                    {% endif %}
-                    {% if structure_ok %}
-                        {% if qualifier_count %}
-                            {% if is_ko %}
-                            마지막 {{ shared_round }}에서 이긴 <span class="fm-num">{{ qualifier_count }}</span>명이 본선 DE로 올라갑니다.
-                            {% else %}
-                            The <span class="fm-num">{{ qualifier_count }}</span> winners of the final {{ shared_round }} round advance to the Second DE.
-                            {% endif %}
-                        {% else %}
-                            {% if is_ko %}
-                            마지막 {{ shared_round }}에서 이긴 선수가 본선 DE로 올라갑니다.
-                            {% else %}
-                            Winners of the final {{ shared_round }} round advance to the Second DE.
-                            {% endif %}
-                        {% endif %}
+                    {% if is_ko %}
+                    시드를 받지 못한 선수들이 <strong>본선 DE</strong> 진출을 다투는 단계입니다.
+                    {% else %}
+                    Unseeded fencers compete here for a place in the Main DE.
                     {% endif %}
                 </div>
             </div>
@@ -202,7 +179,13 @@
                 <div class="progress-step {% if r.complete %}completed{% elif r.entered > 0 %}current{% endif %}">
                     <div class="step-marker"></div>
                     <span class="step-label">{{ r.name }}</span>
-                    <span class="step-count fm-num">{{ r.entered }}/{{ r.total }}</span>
+                    {# 경기 수는 '실제 대결'만 센다. 부전승은 경기가 아니다 —
+                       풀의 기권 규약(FIE t.95)과 같은 기준이다. 예전에는 브래킷 슬롯 수를
+                       경기 수로 적어 256강이 32경기인데 128경기로 나갔다. #}
+                    <span class="step-count fm-num">{{ r.contested_entered if r.contested_entered is defined else r.entered }}/{{ r.contested if r.contested is defined else r.total }}</span>
+                    {% if r.byes %}
+                    <span class="step-byes">{{ '부전승' if is_ko else 'byes' }} <span class="fm-num">{{ r.byes }}</span></span>
+                    {% endif %}
                 </div>
                 {% endfor %}
                 {% if structure_ok %}
@@ -215,15 +198,8 @@
                 </div>
                 {% endif %}
             </div>
-            {% if structure_ok %}
-            <p class="de-progress-caption">
-                {% if is_ko %}
-                {{ shared_round }}에서 이긴 선수가 <strong>본선 DE(Second DE)</strong>로 올라가 시드 선수들과 만납니다.
-                {% else %}
-                Winners of the {{ shared_round }} round move up to the <strong>Second DE</strong> and meet the seeded fencers.
-                {% endif %}
-            </p>
-            {% endif %}
+            {# 진행바 캡션은 뺐다. 배너가 이미 "본선 DE 진출을 다투는 단계"라고 말하고,
+               진행바 마지막 칸에도 "본선 DE 진출"이 있어 같은 문장이 세 번 나왔다. #}
         </div>
         {% endif %}
 
