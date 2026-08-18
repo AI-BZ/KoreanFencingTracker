@@ -701,15 +701,33 @@ class EventBasedScraper:
                 existing_pool_ranking = existing_raw.get("pool_total_ranking", [])
 
                 # pool_rounds 보존: 기존이 있고 새것이 비거나 더 적으면 → 기존 유지
+                #
+                # 비교는 '고유 풀 번호' 기준이다. 단순 개수로 비교하면 중복이 한 번
+                # 섞인 순간 영원히 풀리지 않는다 — KFA 페이지의 사본 컨테이너 때문에
+                # 풀이 2배로 저장된 적이 있는데(2026-08-15 수정), 스크래퍼를 고친 뒤에도
+                # 이 가드가 "기존 48개 > 새 24개"로 판단해 중복본을 계속 붙잡고 있었다.
+                # 실제로 8/17 로그에 그 판정이 6종목 전부 찍혔다.
+                def _distinct_pools(pools):
+                    return len({str(p.get("pool_number")) for p in (pools or [])})
+
+                new_distinct = _distinct_pools(new_pool_rounds)
+                existing_distinct = _distinct_pools(existing_pool_rounds)
+
                 if existing_pool_rounds and (
-                    not new_pool_rounds or len(new_pool_rounds) < len(existing_pool_rounds)
+                    not new_pool_rounds or new_distinct < existing_distinct
                 ):
                     logger.info(
-                        f"    🛡️ pool_rounds 보존: 기존 {len(existing_pool_rounds)}개 풀 "
-                        f"> 새 {len(new_pool_rounds)}개 ({event.name})"
+                        f"    🛡️ pool_rounds 보존: 기존 고유 {existing_distinct}개 풀 "
+                        f"> 새 고유 {new_distinct}개 ({event.name})"
                     )
                     pool_rounds_to_save = existing_pool_rounds
                 else:
+                    if len(new_pool_rounds) < len(existing_pool_rounds):
+                        logger.info(
+                            f"    ♻️ pool_rounds 교체: 기존 {len(existing_pool_rounds)}개 "
+                            f"→ 새 {len(new_pool_rounds)}개 (고유 {existing_distinct}→{new_distinct}, "
+                            f"중복 정리 {event.name})"
+                        )
                     pool_rounds_to_save = new_pool_rounds
 
                 # === 풀 종합 순위 정책 (2026-03-25) ===
