@@ -113,10 +113,20 @@ class DEMatch:
     is_bye_match: bool = False  # 상대 없이 자동 진출
     is_forfeit: bool = False  # 기권으로 종료된 경기 (FIE t.95)
     forfeit_player: Optional[str] = None  # 기권한 쪽 이름 (개인전=선수, 단체전=팀)
+    # 'qualifying'(예선 first_de) | 'main'(본선 second_de 및 단일 DE 전체)
+    # Dual DE는 예선과 본선이 **둘 다 '64강'이라는 이름의 라운드**를 갖는다.
+    # 이름만 보고 같은 라운드로 취급하면 서로 다른 선수들의 경기가 겹쳐서
+    # 한쪽이 통째로 사라진다(2026년에 예선 64강 32경기가 두 번 이렇게 소실됐다).
+    # 값을 DEBracket.to_dict()에서 새겨주므로 여기 기본값은 None이다.
+    de_phase: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
+            # bout_id는 형식을 바꾸지 않는다 — 하위 모듈들이 이 문자열을 식별자로
+            # 쓰고 있으므로, 구분이 필요한 곳은 bout_id 대신 (de_phase, bout_id)
+            # 복합 키를 쓰는 방향으로 고친다.
             'bout_id': f"{self.round_name}_{self.match_number:02d}",
+            'de_phase': self.de_phase,
             'round_name': self.round_name,
             'match_number': self.match_number,
             'player1_seed': self.player1.seed,
@@ -147,14 +157,39 @@ class DEBracket:
     matches: List[DEMatch] = field(default_factory=list)
     champion: Optional[DEPlayer] = None
     is_in_progress: bool = False  # 대회가 진행 중인지 (DE 데이터 없음 상태)
+    # 이 브래킷이 Dual DE의 어느 쪽인지. DualDEBracket.to_dict()가 직렬화 직전에
+    # 'qualifying'/'main'을 넣어준다. 단일 DE는 예선이 없으므로 None인 채로 두고
+    # to_dict()에서 'main'으로 확정한다.
+    de_phase: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
+        # de_phase는 bout 하나하나에 새겨서 내보낸다.
+        # 라운드 '이름'은 Dual DE에서 유일 식별자가 아니다(예선/본선 둘 다 64강).
+        # 그래서 저장 시점에 phase를 박아두지 않으면, 나중에 어떤 코드가
+        # round_name만 보고 dedup/merge를 하는 순간 예선 절반이 조용히 사라진다.
+        # 단일 DE도 'main'으로 채워두는 이유: de_phase가 **없다**는 사실이
+        # '이 변경 이전에 저장된 옛 레코드'라는 뜻 하나만 갖게 하기 위해서다.
+        phase = self.de_phase or 'main'
+
+        # 확정값을 매치 객체에도 되새긴다.
+        # 하나의 DEBracket은 정의상 한 phase만 담으므로 일괄 대입해도 안전하고,
+        # 파싱 시점에 phase를 몰랐던 경로(단일 DE 등)를 여기서 마감한다.
+        for match in self.matches:
+            match.de_phase = phase
+
+        def _stamped(match: DEMatch) -> Dict[str, Any]:
+            d = match.to_dict()
+            d['de_phase'] = phase
+            return d
+
         # 라운드별 경기 그룹화
-        bouts_by_round = {}
+        # bouts / bouts_by_round는 서로 다른 dict 객체를 담는다(기존 동작 유지).
+        # 별칭(aliasing)에 기대지 않고 양쪽 모두에 명시적으로 phase를 새긴다.
+        bouts_by_round: Dict[str, List[Dict[str, Any]]] = {}
         for match in self.matches:
             if match.round_name not in bouts_by_round:
                 bouts_by_round[match.round_name] = []
-            bouts_by_round[match.round_name].append(match.to_dict())
+            bouts_by_round[match.round_name].append(_stamped(match))
 
         # 라운드 순서 정렬
         round_order = ['128강', '64강', '32강', '16강', '8강', '준결승', '결승']
@@ -170,7 +205,7 @@ class DEBracket:
             'participant_count': self.participant_count,
             'rounds': rounds,
             'seeding': [p.to_dict() for p in self.seeding],
-            'bouts': [m.to_dict() for m in self.matches],
+            'bouts': [_stamped(m) for m in self.matches],
             'bouts_by_round': bouts_by_round,
             'champion': self.champion.to_dict() if self.champion else None,
             'is_in_progress': self.is_in_progress
@@ -201,6 +236,17 @@ class DualDEBracket:
     status: str = "pending"  # pending, first_de_in_progress, second_de_in_progress, completed
 
     def to_dict(self) -> Dict[str, Any]:
+        # ★ 직렬화 직전에 phase를 새긴다.
+        # first_de / second_de 는 같은 DEBracket 클래스라서 자기 자신이 예선인지
+        # 본선인지 모른다 — 그걸 아는 유일한 자리가 여기다.
+        # 이 두 줄이 빠지면 아래 full_bouts 합산에서 예선/본선 64강이 구분 불가능한
+        # 상태로 섞여 나가고, 그걸 받은 하위 코드가 round_name 기준으로 dedup하면
+        # 예선 64강 32경기가 통째로 지워진다(실제로 두 번 발생한 사고).
+        if self.first_de is not None:
+            self.first_de.de_phase = 'qualifying'
+        if self.second_de is not None:
+            self.second_de.de_phase = 'main'
+
         first_dict = self.first_de.to_dict() if self.first_de else None
         second_dict = self.second_de.to_dict() if self.second_de else None
 
@@ -211,7 +257,26 @@ class DualDEBracket:
         if second_dict and second_dict.get('bouts'):
             all_bouts.extend(second_dict['bouts'])
 
-        # participant_count: 모든 bout에서 unique 선수 수
+        # 계약 검증: full_bouts의 모든 bout은 de_phase를 갖는다.
+        # 하나라도 비었다면 위 스탬핑 경로가 깨진 것이므로 조용히 넘기지 않는다.
+        unstamped = sum(1 for b in all_bouts if not b.get('de_phase'))
+        if unstamped:
+            logger.error(
+                f"🚨 Dual DE full_bouts {unstamped}/{len(all_bouts)}경기에 de_phase가 없음 "
+                f"— 예선/본선 공유 라운드(예: 64강) 구분이 불가능한 상태로 저장된다"
+            )
+
+        # participant_count: 모든 bout에서 unique 선수 '이름' 수
+        #
+        # ⚠️ 이 값을 참가 인원으로 화면에 쓰지 말 것. 이름으로 dedup 하므로
+        # **동명이인이 한 명으로 합쳐져 항상 실제보다 적게 나온다.**
+        # 실측(제66회 대통령배 2026-08-18): 4개 dual 종목 전부에서 정확히 2명씩 적었다
+        # (여자 에페 예선의 김민서·김나연이 각각 2명, 남자 에페의 이승현·이우빈이 각각 2명).
+        #
+        # 참가 인원이 필요하면 **시드 슬롯 수**를 쓴다 — 이름이 채워진 슬롯 수는
+        # `2×슬롯수 − 부전승` 과 정확히 일치하며 결손이 0이다(실측 확인).
+        # `bracket_utils.build_dual_de_progress()` 의 `first_de_participants` 가 그 값이다.
+        # 여기 값은 하위 호환을 위해 계산식을 그대로 두되, 용도를 이 주석으로 못박는다.
         player_names = set()
         for b in all_bouts:
             if b.get('player1_name'):
@@ -267,6 +332,12 @@ class DEScraper:
     def __init__(self, page: Page):
         self.page = page
         self.is_tournament_in_progress = False  # 대회 진행 중 상태
+        # 현재 파싱 중인 Dual DE phase ('qualifying' | 'main' | None=단일 DE).
+        # select_dual_de_phase()가 화면을 전환할 때 함께 갱신한다.
+        # 이 값이 있어야 _deduplicate_matches가 예선 64강과 본선 64강을
+        # 서로 다른 경기로 인식한다. DEScraper는 종목 하나당 새로 생성되므로
+        # 종목 간에 값이 새지 않는다.
+        self.current_de_phase: Optional[str] = None
 
     async def _check_tournament_in_progress(self) -> bool:
         """대회가 진행 중인지 확인 (DE 데이터 없음 상태)
@@ -673,7 +744,11 @@ class DEScraper:
                     player1_score=p1_score,
                     player2_score=p2_score,
                     winner=winner,
-                    is_bye_match=is_bye
+                    is_bye_match=is_bye,
+                    # 파싱 시점에 phase를 박아둔다. 직렬화 때 채우면 늦다 —
+                    # 그 전에 도는 _deduplicate_matches가 phase를 못 보고
+                    # 예선/본선 64강을 같은 칸으로 착각한다.
+                    de_phase=self.current_de_phase,
                 )
                 matches.append(match)
 
@@ -834,10 +909,17 @@ class DEScraper:
         return (None, None)
 
     def _deduplicate_matches(self, matches: List[DEMatch]) -> List[DEMatch]:
-        """중복 매치 제거 (같은 라운드+매치번호는 나중 것 유지)"""
+        """중복 매치 제거 (같은 phase+라운드+매치번호는 나중 것 유지)"""
         unique = {}
         for match in matches:
-            key = (match.round_name, match.match_number)
+            # 키에 de_phase가 들어가야 하는 이유:
+            # Dual DE는 예선과 본선이 **둘 다 '64강'** 을 갖는다. (round_name, match_number)
+            # 만으로 키를 잡으면 서로 다른 선수들의 경기가 같은 칸에 덮어쓰기 되어
+            # 한쪽 라운드가 통째로 사라진다.
+            # 지금은 이 함수가 phase별로 한 번씩만 호출되므로 당장 충돌하진 않지만,
+            # 훗날 누가 두 phase를 합친 뒤 dedup을 돌리면 그 순간 절반이 날아간다.
+            # 그 시나리오를 원천 봉쇄하기 위한 방어 코드다.
+            key = (match.de_phase, match.round_name, match.match_number)
             # 점수 정보가 있는 것을 우선
             if key not in unique or (match.player1_score is not None):
                 unique[key] = match
@@ -1682,7 +1764,9 @@ class DEScraper:
                     player1_score=m['red_score'],
                     player2_score=m['green_score'],
                     winner=winner,
-                    is_bye_match=m['red_is_bye'] or m['green_is_bye']
+                    is_bye_match=m['red_is_bye'] or m['green_is_bye'],
+                    # 파싱 시점 phase 스탬핑 (위 _parse_matches_from_columns와 동일 이유)
+                    de_phase=self.current_de_phase,
                 )
                 bracket.matches.append(match)
 
@@ -1839,6 +1923,10 @@ class DEScraper:
             성공 여부
         """
         logger.debug(f"select_dual_de_phase 시작: phase={phase}")
+        # 화면 전환과 동시에 '지금 긁는 게 예선인지 본선인지'를 기록한다.
+        # 이후 생성되는 모든 DEMatch가 이 값을 물고 태어나므로, 예선/본선이
+        # 같은 이름의 라운드(64강)를 가져도 dedup 단계에서 섞이지 않는다.
+        self.current_de_phase = 'qualifying' if phase == 'first_de' else 'main'
         options = cached_options if cached_options else await self.get_dual_de_options()
         logger.debug(f"  옵션: {options}")
 
@@ -1951,8 +2039,15 @@ class DEScraper:
                 first_de = await self.parse_de_bracket(skip_in_progress_check=True)
                 if first_de and first_de.matches:
                     dual_bracket.first_de = first_de
+                    # 라운드 목록은 실제 수집된 값으로 찍는다.
+                    # '~ 64강'을 문자열로 박아두면 예선이 128강에서 끊긴 사고 상황에서도
+                    # 로그는 멀쩡히 64강까지 받은 것처럼 보인다.
+                    first_rounds = sorted(
+                        {m.round_name for m in first_de.matches},
+                        key=lambda r: -self._round_bracket_size(r)
+                    )
                     logger.info(f"  First DE 파싱 완료: {len(first_de.matches)}경기, "
-                               f"라운드: {first_de.starting_round} ~ 64강")
+                               f"라운드: {first_rounds}")
 
                     # First DE 진출자 추출 (64강에서 이긴 32명)
                     qualifiers = self._extract_first_de_qualifiers(first_de)
@@ -1966,8 +2061,12 @@ class DEScraper:
                 second_de = await self.parse_de_bracket(skip_in_progress_check=True)
                 if second_de and second_de.matches:
                     dual_bracket.second_de = second_de
+                    second_rounds = sorted(
+                        {m.round_name for m in second_de.matches},
+                        key=lambda r: -self._round_bracket_size(r)
+                    )
                     logger.info(f"  Second DE 파싱 완료: {len(second_de.matches)}경기, "
-                               f"라운드: 64강 ~ 결승")
+                               f"라운드: {second_rounds}")
 
                     # 시드 선수 추출 (Second DE seeding에서 First DE 진출자가 아닌 선수)
                     seeded = self._extract_seeded_players(second_de, dual_bracket.first_de_qualifiers)
@@ -1986,17 +2085,60 @@ class DEScraper:
             traceback.print_exc()
             return None
 
-    def _extract_first_de_qualifiers(self, first_de: DEBracket) -> List[DEPlayer]:
-        """First DE 진출자 추출 (64강 승자들 = Second DE 진출)
+    @staticmethod
+    def _round_bracket_size(round_name: str) -> int:
+        """라운드 이름 → 그 라운드의 브래킷 크기. 판별 불가면 0.
 
-        First DE는 128강 → 64강까지 진행, 64강 승자 32명이 Second DE로 진출
+        라운드를 '이름'이 아니라 '크기'로 비교해야 예선 규모가 이벤트마다 달라도
+        (128 예선: 128강→64강 / 256 예선: 256강→128강→64강) 마지막 라운드를
+        정확히 집어낼 수 있다. SIZE_TO_ROUND_NAME에 없는 '256강' 같은 이름도
+        숫자를 그대로 읽어 처리한다.
         """
-        qualifiers = []
+        name = (round_name or '').strip()
+        named = {'결승': 2, 'Final': 2, '1-2': 2, '준결승': 4, 'Semi': 4}
+        if name in named:
+            return named[name]
+        m = re.match(r'^(\d+)강$', name)
+        if m:
+            return int(m.group(1))
+        return 0
 
-        # 64강 라운드의 승자들 추출
-        for match in first_de.matches:
-            if match.round_name == '64강' and match.winner:
-                qualifiers.append(match.winner)
+    def _extract_first_de_qualifiers(self, first_de: DEBracket) -> List[DEPlayer]:
+        """First DE 진출자 추출 (예선 마지막 라운드 승자 = Second DE 진출)
+
+        보통은 128강 → 64강이라 '64강' 승자 32명이 본선으로 올라가지만,
+        예선 규모는 이벤트마다 다르다(256 예선은 256강 → 128강 → 64강).
+        라운드 이름을 '64강'으로 못박아두면 규모가 다른 이벤트에서 진출자가 0명이 되고,
+        진출자 명단으로 역산하는 시드 판별(_extract_seeded_players)까지 함께 무너진다.
+        → 예선에 **실제로 존재하는 가장 작은(=마지막) 라운드**를 진출 라운드로 본다.
+          일반적인 64강 케이스에서는 결과가 종전과 완전히 동일하다.
+        """
+        matches = first_de.matches or []
+        if not matches:
+            return []
+
+        known_sizes = [
+            s for s in (self._round_bracket_size(m.round_name) for m in matches) if s > 0
+        ]
+        if known_sizes:
+            final_size = min(known_sizes)
+            final_round = next(
+                m.round_name for m in matches
+                if self._round_bracket_size(m.round_name) == final_size
+            )
+        else:
+            # 라운드 이름을 하나도 해석 못한 경우에만 마지막 매치의 이름으로 폴백
+            final_round = matches[-1].round_name
+
+        qualifiers = [
+            m.winner for m in matches
+            if m.round_name == final_round and m.winner
+        ]
+        logger.info(
+            f"  First DE 진출 라운드 = {final_round} "
+            f"(예선 수집 라운드: {sorted({m.round_name for m in matches})}), "
+            f"진출자 {len(qualifiers)}명"
+        )
 
         # 시드 순서로 정렬
         qualifiers.sort(key=lambda p: p.seed)

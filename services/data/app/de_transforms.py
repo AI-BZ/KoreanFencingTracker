@@ -2,13 +2,69 @@
 
 server.py에서 추출한 자기완결적 DE(Direct Elimination) 브래킷 및 bout 변환
 함수 모음. 동작 불변(behavior-preserving) 리팩터링으로 순수 이동됨.
+
+🔴 Dual DE(국가대표 선발전 등)에서는 예선 DE(first_de)와 본선 DE(second_de)에
+   **같은 이름의 라운드('64강')가 각각 존재한다.** 서로 다른 선수의 다른 경기다.
+   라운드 이름만으로 bout 신원을 만들면 예선 64강 32경기가 통째로 사라진다
+   (실제로 두 번 발생한 사고). 신원 키에는 반드시 de_phase 를 포함할 것.
+
+   - de_phase 규약: "qualifying"(예선) / "main"(본선 및 단일 DE) / 키 없음(레거시)
+   - 레거시(키 없음)는 페이즈를 지어내지 말고 종전 동작으로 폴백한다.
+
+📌 DE 라운드를 화면에 표시할 때는 **반드시 `de_round_label()`** 을 쓴다
+   (이 모듈에서 re-export 한다). 두 라운드가 같은 이름을 가질 수 있으므로,
+   '64강'을 그대로 찍으면 사용자는 예선/본선을 구분할 수 없다.
 """
 from typing import Dict, List, Set
 from collections import defaultdict
 
 from loguru import logger
 
-from app.bracket_utils import normalize_bracket_data
+from app.bracket_utils import (
+    normalize_bracket_data,
+    DE_PHASE_QUALIFYING,
+    DE_PHASE_MAIN,
+    get_bout_phase,
+    de_round_label,
+)
+
+__all__ = [
+    # DE 표시/페이즈 공개 API (server.py·템플릿은 여기서 가져다 쓴다)
+    "de_round_label",
+    "get_bout_phase",
+    "DE_PHASE_QUALIFYING",
+    "DE_PHASE_MAIN",
+    # 기존 공개 함수 (server.py 가 import 중)
+    "_normalize_bout_data",
+    "_normalize_de_bracket_for_api",
+    "_reconstruct_bouts_from_duplicated_bbr",
+    "_dedup_keep_highest_round",
+    "_get_full_bouts_from_de_bracket",
+    "_build_rank_chart_data",
+    "_extract_bout_player_info",
+    "compute_dual_de_final_rankings",
+    "transform_de_bracket",
+    "_is_de_final_complete",
+    "_ROUND_PROGRESSION",
+    "_ROUND_RANK",
+]
+
+
+def _distinct_de_phases(bouts) -> Set[str]:
+    """bout 목록에 실제로 존재하는 de_phase 집합 (레거시=키 없음은 제외).
+
+    len() >= 2 이면 예선/본선이 한 덩어리에 섞여 있다는 뜻이다. 이 경우
+    '라운드 이름 = 유일 식별자' 를 전제로 한 로직(경기번호 기반 라운드 재구성,
+    중복 감지 휴리스틱)은 전부 틀린 답을 낸다.
+    """
+    phases: Set[str] = set()
+    for bout in bouts or []:
+        if not isinstance(bout, dict):
+            continue
+        phase = get_bout_phase(bout)
+        if phase:
+            phases.add(phase)
+    return phases
 
 
 def _normalize_bout_data(bout: Dict) -> Dict:
@@ -115,9 +171,25 @@ def _reconstruct_bouts_from_duplicated_bbr(
       match #25~#28: 8강 (4경기)
       match #29~#30: 준결승 (2경기)
       match #31: 결승 (1경기)
+
+    ⚠️ 전제: 입력이 **1..N 으로 연속 번호가 매겨진 단일 브래킷** 이어야 한다.
+    Dual DE 처럼 예선/본선 두 브래킷이 섞여 들어오면 각 브래킷이 1번부터 다시
+    번호를 매기므로, 경기번호로 라운드를 되짚는 순간 예선 경기에 본선 라운드
+    이름이 붙는다(라벨 오염). 그래서 섞여 있으면 재구성 자체를 포기한다.
     """
     if not raw_bouts or bracket_size < 4:
         return []
+
+    # 페이즈가 둘 이상 = 브래킷이 둘 이상 = 경기번호가 연속이 아니다.
+    # 잘못된 라운드명을 붙이느니 원본을 그대로 넘긴다(없는 정보를 지어내지 않음).
+    phases = _distinct_de_phases(raw_bouts)
+    if len(phases) > 1:
+        logger.error(
+            f"❌ 라운드 재구성 중단: bouts 가 여러 de_phase({sorted(phases)})에 걸쳐 있음 "
+            f"({len(raw_bouts)}경기). 경기번호 기반 라운드 재배정은 단일 브래킷에서만 유효 → "
+            f"입력을 그대로 반환"
+        )
+        return list(raw_bouts)
 
     # 라운드별 match_number 범위 계산
     round_ranges = []  # [(start, end, round_name)]
@@ -165,6 +237,13 @@ def _dedup_keep_highest_round(bouts: List[Dict]) -> List[Dict]:
 
     스크래퍼 버그로 같은 경기가 여러 라운드에 저장된 경우,
     예: 32강과 16강에 동일한 경기 → 16강(higher)만 유지.
+
+    🔴 키는 반드시 (페이즈, 선수쌍) 이어야 한다. Dual DE 에서는 예선에서 만난
+    두 선수가 본선에서 다시 만나는 리매치가 실제로 일어난다. 선수쌍만으로
+    키를 만들면 그 두 경기가 같은 경기로 뭉개져 한쪽이 삭제된다.
+    (현재 호출부는 서브 브래킷별로만 부르지만, 호출부가 한 번만 바뀌면
+     바로 데이터가 사라지는 구조라 키 자체를 안전하게 만들어 둔다.)
+    레거시(페이즈 없음) 레코드는 전부 phase=None 으로 묶이므로 종전과 동일.
     """
     best_bout: Dict[tuple, tuple] = {}
 
@@ -175,7 +254,7 @@ def _dedup_keep_highest_round(bouts: List[Dict]) -> List[Dict]:
             best_bout[("_nopair", i)] = (0, i, bout)
             continue
 
-        pair_key = tuple(sorted([p1, p2]))
+        pair_key = (get_bout_phase(bout),) + tuple(sorted([p1, p2]))
         rnd = (bout.get("round_name") or bout.get("round") or "").strip()
         rank = _ROUND_RANK.get(rnd, -1)
 
@@ -204,16 +283,48 @@ def _get_full_bouts_from_de_bracket(de_bracket: Dict) -> List[Dict]:
     # dual_de 형식 처리: first_de와 second_de에서 재귀 추출 + de_phase 태깅
     if de_bracket.get("format") == "dual_de":
         all_bouts = []
-        phase_map = {"first_de": "qualifying", "second_de": "main"}
+        # 서브 브래킷 위치에서 '유도한' 페이즈. 저장된 de_phase 가 없을 때만 쓰는 폴백이다.
+        phase_map = {"first_de": DE_PHASE_QUALIFYING, "second_de": DE_PHASE_MAIN}
         for sub_key in ("first_de", "second_de"):
             sub_bracket = de_bracket.get(sub_key, {})
             if isinstance(sub_bracket, dict):
                 sub_bouts = _get_full_bouts_from_de_bracket(sub_bracket)
-                phase = phase_map[sub_key]
+                fallback_phase = phase_map[sub_key]
                 for bout in sub_bouts:
-                    bout["de_phase"] = phase
+                    # 스크래퍼가 기록한 값이 권위 있다 — 어느 선택 화면(예선/본선)에서
+                    # 긁었는지 아는 쪽은 스크래퍼뿐이다. 저장 위치는 재분배 로직에 의해
+                    # 바뀔 수 있으므로, 위치에서 유도한 값으로 덮어쓰면 안 된다.
+                    bout["de_phase"] = get_bout_phase(bout, fallback_phase)
                 all_bouts.extend(sub_bouts)
-        return all_bouts
+        if all_bouts:
+            return all_bouts
+
+        # 🔴 무음 데이터 유실 방지 폴백.
+        # 스크래핑이 한쪽 페이즈에서 실패하면 'first_de': None 처럼 저장된다.
+        # 그때 여기서 []를 돌려주면 최상위 full_bouts 에 경기가 멀쩡히 남아 있어도
+        # 선수 프로필 / H2H / 이벤트 선수검색 / 통계가 전부 "DE 경기 0" 이 된다.
+        fallback_source = {
+            k: v for k, v in de_bracket.items()
+            if k not in ("format", "first_de", "second_de")
+        }
+        top_level_bouts = _get_full_bouts_from_de_bracket(fallback_source)
+        if top_level_bouts:
+            logger.warning(
+                f"⚠️ dual_de 인데 first_de/second_de 가 비어있음 "
+                f"(first_de={type(de_bracket.get('first_de')).__name__}, "
+                f"second_de={type(de_bracket.get('second_de')).__name__}) → "
+                f"최상위 full_bouts {len(top_level_bouts)}경기로 폴백. "
+                f"저장 레코드가 깨진 상태이므로 재스크래핑 필요"
+            )
+            for bout in top_level_bouts:
+                # 저장된 페이즈만 정규화해서 남긴다. 없으면 없는 대로 둔다 —
+                # 여기서는 예선/본선을 판별할 근거가 전혀 없으므로 지어내지 않는다.
+                phase = get_bout_phase(bout)
+                if phase:
+                    bout["de_phase"] = phase
+            return top_level_bouts
+
+        return []
 
     full_bouts = de_bracket.get("full_bouts", [])
 
@@ -240,12 +351,33 @@ def _get_full_bouts_from_de_bracket(de_bracket: Dict) -> List[Dict]:
         # (예: 8강=32, 16강=32, 32강=32 → 정상이면 8강=4, 16강=8, 32강=16)
         round_bout_counts = {k: len(v) for k, v in bouts_by_round.items() if isinstance(v, list)}
         counts = list(round_bout_counts.values())
+
+        # 🔴 예선/본선이 한 dict 에 평탄화되어 있으면 이 휴리스틱은 오탐한다.
+        # 예선 64강 32경기 + 본선 64강 32경기처럼 '같은 경기 수'가 자연스럽게
+        # 반복되므로 중복으로 오판하고, 그러면 라운드 하나만 남기고 진짜 경기를
+        # 전부 버린다(예선 64강 32경기가 사라진 사고의 형태 그 자체).
+        all_bbr_bouts = [b for v in bouts_by_round.values() if isinstance(v, list) for b in v]
+        spans_multiple_phases = len(_distinct_de_phases(all_bbr_bouts)) > 1
+        if spans_multiple_phases:
+            logger.debug(
+                "bouts_by_round 가 여러 de_phase 에 걸쳐 있어 중복 감지 휴리스틱을 건너뜀 "
+                f"({round_bout_counts})"
+            )
+
         is_duplicated = False
-        if len(counts) >= 2:
+        if not spans_multiple_phases and len(counts) >= 2:
             max_count = max(counts)
             same_count = sum(1 for c in counts if c == max_count)
-            # 절반 이상의 라운드가 같은 bout 수이고, 그 수가 4 초과면 중복 패턴
-            if same_count >= len(counts) * 0.5 and max_count > 4:
+            # 🔴 same_count >= 2 조건이 반드시 필요하다.
+            # '중복'의 실제 서명은 **여러 라운드가 똑같은 경기 수를 갖는 것**이다.
+            # 그런데 `same_count >= len(counts) * 0.5` 만 쓰면 라운드가 정확히 2개일 때
+            # 1 >= 1.0 이 성립해 **항상 참**이 된다. 그리고 예선 DE 는 라운드가 정확히
+            # 2개다(128강 + 64강). 즉 이 휴리스틱은 모든 정상 예선 브래킷을 중복으로
+            # 오판하고 작은 라운드를 통째로 버렸다 — 96경기가 64경기가 되는,
+            # 2026-08-17/18 유실과 정확히 같은 형태의 손실이 API 계층에서 매번 재현됐다.
+            # (128강 64 + 64강 32 → same_count=1 → 중복 아님. 정상.)
+            # (8강 32 + 16강 32 + 32강 32 → same_count=3 → 중복. 계속 탐지됨.)
+            if same_count >= 2 and same_count >= len(counts) * 0.5 and max_count > 4:
                 is_duplicated = True
                 logger.warning(
                     f"⚠️ bouts_by_round 중복 감지: {round_bout_counts} → "
@@ -528,6 +660,10 @@ def compute_dual_de_final_rankings(de_bracket: Dict, pool_total_ranking: List = 
 
     # 3. 8강 이후: 시드 기반 개별 순위 (FIE 표준)
     #    같은 라운드 탈락자는 풀 시드 순으로 5,6,7,8 / 9,10,...,16 등 개별 부여
+    # ⚠️ 이 라운드→시작순위 표는 **의도적으로 second_de(본선) 전용**이다.
+    #    bouts_by_round 는 위에서 second_de 의 bouts 만으로 만들었다. 예선 64강과
+    #    본선 64강은 다른 경기이므로, 이 표를 예선까지 합친 목록에 겨누면
+    #    예선 탈락자가 본선 33위로 둔갑한다. 절대 merged 목록으로 바꾸지 말 것.
     for round_name, start_rank in [
         ("8강", 5), ("16강", 9),
         ("32강", 17), ("64강", 33), ("128강", 65),
@@ -570,7 +706,16 @@ def compute_dual_de_final_rankings(de_bracket: Dict, pool_total_ranking: List = 
 
         # 라운드 순서: 결승에 가까운 라운드가 높은 순위
         # (64강 first_de 패자 > 128강 패자 > 256강 패자)
-        round_priority = ["64강", "128강", "256강"]
+        # ⚠️ 라운드 목록을 하드코딩하지 않는다. 예선 DE 가 64/128/256강이 아닌
+        #    라운드에서 시작·종료하는 대회가 있으면, 목록에 없는 라운드의 패자가
+        #    통째로 최종순위에서 누락된다(순위표에 이름이 안 나옴).
+        #    고정할 것은 '라운드 목록'이 아니라 '결승에 가까울수록 상위'라는 원칙뿐.
+        #    데이터가 256/128/64강이면 정렬 결과가 기존 하드코딩 목록과 동일하다.
+        round_priority = sorted(
+            (r for r in first_de_by_round.keys() if r),
+            key=lambda r: _ROUND_RANK.get(r, -1),
+            reverse=True,
+        )
 
         for round_name in round_priority:
             if round_name not in first_de_by_round:
@@ -697,6 +842,14 @@ def _is_de_final_complete(de_bracket: Dict) -> bool:
         return False
 
     for bout in _get_full_bouts_from_de_bracket(de_bracket):
+        # 결승은 본선(main)에만 존재한다. 여기 오는 목록은 예선+본선이 합쳐진
+        # 상태라, 라운드 '이름'만 보고 판정하면 예선 쪽에 '결승' 이름의 라운드가
+        # 생기는 순간 대회가 끝나지도 않았는데 최종순위가 확정 노출된다.
+        # 페이즈를 아는 bout 은 본선으로 좁히고, 모르는 레거시는 종전대로 훑는다.
+        phase = get_bout_phase(bout)
+        if phase is not None and phase != DE_PHASE_MAIN:
+            continue
+
         round_name = (bout.get("round_name") or bout.get("round") or "").strip()
         if round_name != "결승":
             continue

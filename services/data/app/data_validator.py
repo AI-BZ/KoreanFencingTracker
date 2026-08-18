@@ -31,6 +31,10 @@
     R21: 3년 이상 활동 공백 후 다른 팀에서 재등장 → 동명이인 의심
     R22: pool_total_ranking 존재하나 pool_rounds 비어있음 → 스크래핑 실패 감지
     R23: Pool 기권(Abandon) 감지 — 기권자 존재 시 INFO, 기권 bout이 승/패에 포함됐으면 WARNING
+    R24: Dual DE 공유 라운드 유실 — 본선 starting_round(예: 64강)가 예선(first_de)에 없음 (ERROR)
+         + dual_de인데 first_de/second_de 한쪽만 데이터가 있는 반쪽 스크래핑 (ERROR)
+    R25: Dual DE bout에 de_phase 누락 — 예선/본선 구분 불가 (ERROR, 이벤트 단위 집계)
+         + 페이즈 없는 bout끼리 (round_name, match_number) 충돌 = 잠재적 병합 사고 (ERROR)
 """
 
 import asyncio
@@ -44,6 +48,17 @@ from loguru import logger
 
 from app.player_identity import PlayerIdentityResolver, get_team_type
 from app.grade_estimator import GradeEstimator
+# Dual DE 페이즈 규약은 bracket_utils가 단일 원본이다. 여기서 다시 구현하면
+# 검증기와 실제 저장/표시 로직이 서로 다른 기준으로 갈라진다 — 그 순간
+# "검증은 통과했는데 화면은 틀린" 상태가 되고, 검증기 자체가 무의미해진다.
+from app.bracket_utils import (
+    DE_PHASE_QUALIFYING,
+    DE_PHASE_MAIN,
+    EXPECTED_BOUTS_BY_ROUND,
+    get_bout_phase,
+    phase_bout_key,
+    normalize_round_name,
+)
 
 # KNOWN_HOMONYMS 참조 (등록된 동명이인은 RESOLVED로 다운그레이드)
 _KNOWN_HOMONYMS = PlayerIdentityResolver.KNOWN_HOMONYMS
@@ -317,6 +332,111 @@ def _reconstruct_bouts_from_duplicated_bbr(
     return result
 
 
+# === R24/R25 (Dual DE) 전용 헬퍼 ===
+#
+# 이 헬퍼들이 _get_full_bouts_from_bracket()을 쓰지 않는 이유:
+# 그 함수는 self-bout 제거 + 동일 선수쌍 중복 제거(가장 높은 라운드만 유지)를 한다.
+# 표시용으로는 옳지만 "유실 감지"에는 치명적이다 — 정리된 뒤의 목록을 세면
+# 사라진 경기가 원래 없었던 것처럼 보인다. R24/R25는 저장된 그대로(raw)를 본다.
+
+# R5/R6와 동일한 라운드명 변형 표. 기존 규칙의 지역 상수를 건드리지 않기 위해
+# 별도로 둔다(기존 규칙 동작 변경 금지).
+_DUAL_DE_ROUND_VARIANTS = {
+    "준결승": "4강", "4강전": "4강",
+    "결승전": "결승",
+    "8강전": "8강", "16강전": "16강", "32강전": "32강",
+    "64강전": "64강", "128강전": "128강", "256강전": "256강",
+}
+
+
+def _normalize_de_round(raw: object) -> str:
+    """라운드명 정규화. '64강전'/'준결승' 같은 변형 때문에 공유 라운드 대조가
+    빗나가면, 실제로는 유실됐는데 R24가 침묵하거나 그 반대가 된다."""
+    if not isinstance(raw, str):
+        return ""
+    name = raw.strip()
+    if not name:
+        return ""
+    name = normalize_round_name(name)
+    return _DUAL_DE_ROUND_VARIANTS.get(name, name)
+
+
+def _bout_round_name(bout: Dict) -> str:
+    """bout에서 라운드명 추출 (round_name → round 순)"""
+    if not isinstance(bout, dict):
+        return ""
+    return _normalize_de_round(bout.get("round_name") or bout.get("round") or "")
+
+
+def _collect_raw_de_bouts(bracket: object) -> List[Dict]:
+    """sub-bracket에서 저장된 bout을 가공 없이 수집.
+
+    R16과 동일한 우선순위(full_bouts → bouts → bouts_by_round)를 쓴다.
+    한 브래킷이 full_bouts와 bouts에 같은 내용을 중복 보관하는 경우가 있어
+    전부 합치면 경기 수가 부풀려지기 때문에, 먼저 채워진 소스 하나만 쓴다.
+    first_de/second_de는 None일 수 있다(빈 dict가 아니다) — 반드시 방어한다.
+    """
+    if not isinstance(bracket, dict) or not bracket:
+        return []
+
+    for key in ("full_bouts", "bouts"):
+        raw = bracket.get(key)
+        if isinstance(raw, list) and raw:
+            return [b for b in raw if isinstance(b, dict)]
+
+    bbr = bracket.get("bouts_by_round")
+    result: List[Dict] = []
+    if isinstance(bbr, dict):
+        for round_name, round_bouts in bbr.items():
+            if not isinstance(round_bouts, list):
+                continue
+            for bout in round_bouts:
+                if not isinstance(bout, dict):
+                    continue
+                b = dict(bout)
+                if not b.get("round_name"):
+                    b["round_name"] = round_name
+                result.append(b)
+    return result
+
+
+def _bout_identity(bout: Dict) -> Tuple:
+    """같은 bout이 여러 소스(최상위 full_bouts + sub-bracket)에 중복 저장된 것을
+    합치기 위한 내용 기반 키.
+
+    🔴 여기서 phase_bout_key()를 쓰면 안 된다. 페이즈가 없는 레코드에서는
+    예선 64강 #1과 본선 64강 #1이 **같은 키**가 되어(그게 바로 이 사고의 원인이다)
+    서로 다른 경기가 하나로 합쳐진다. 즉 R25가 세어야 할 유실 증거를
+    R25 자신이 지워버린다. 선수 이름/점수까지 넣어야 둘이 갈라진다.
+    """
+    return (
+        get_bout_phase(bout),
+        _bout_round_name(bout),
+        bout.get("match_number"),
+        _get_player_name(bout, "player1"),
+        _get_player_name(bout, "player2"),
+        bout.get("player1_score"),
+        bout.get("player2_score"),
+    )
+
+
+def _is_team_event(event_name: str) -> bool:
+    """단체전 감지 (R3와 동일 기준). 단체전은 dual DE를 쓰지 않는다."""
+    if not event_name:
+        return False
+    return "단체" in event_name or "(단)" in event_name
+
+
+def _bout_label(bout: Dict) -> str:
+    """로그에 남길 bout 식별 문자열 — 사람이 KFA 페이지에서 바로 찾을 수 있어야 한다."""
+    key = phase_bout_key(bout)
+    rnd = key[1] or _bout_round_name(bout) or "?"
+    num = key[2]
+    p1 = _get_player_name(bout, "player1") or "?"
+    p2 = _get_player_name(bout, "player2") or "?"
+    return f"{rnd} #{num} {p1} vs {p2}"
+
+
 def _get_dual_de_sub_bouts(de_bracket: Dict) -> Tuple[List[Dict], List[Dict]]:
     """dual_de에서 first_de, second_de 별도 추출 (R7용)"""
     if not de_bracket or not isinstance(de_bracket, dict):
@@ -411,6 +531,14 @@ class DataValidator:
                     event, event_cd, comp_name, event_name, de_bracket
                 )
                 self._check_r17_final_rankings_vs_de_winner(
+                    event, event_cd, comp_name, event_name, de_bracket
+                )
+                # R24/R25: dual_de 전용. 두 규칙 모두 내부에서 format을 확인하므로
+                # 단일 DE/단체전에서는 즉시 반환된다(무해).
+                self._check_r24_dual_de_shared_round(
+                    event, event_cd, comp_name, event_name, de_bracket
+                )
+                self._check_r25_de_phase_tagging(
                     event, event_cd, comp_name, event_name, de_bracket
                 )
 
@@ -1987,6 +2115,271 @@ class DataValidator:
             return p2
 
         return ""
+
+    # =========================================================================
+    # R24 / R25: Dual DE (예선+본선) 전용 검증
+    #
+    # dual DE는 예선(first_de)과 본선(second_de)이 **같은 이름의 라운드**를 갖는다.
+    # 예: 예선 64강 32경기 + 본선 64강 32경기 — 이름만 같을 뿐 완전히 다른 경기다.
+    # 라운드 이름만으로 bout을 식별하는 코드가 하나라도 있으면 두 페이즈가
+    # 조용히 병합되고, 한쪽이 통째로 사라진다. 아래 두 규칙이 그 감시선이다.
+    # =========================================================================
+
+    def _dual_de_phase_sources(self, de_bracket: Dict) -> Tuple[Dict, Dict, List[Dict]]:
+        """dual_de에서 (first_de, second_de, 최상위 flat full_bouts) 안전 추출.
+
+        first_de/second_de는 `{}`가 아니라 `None`으로 저장된 레코드가 실제로 있다.
+        `de_bracket.get("first_de", {})`는 키가 존재하고 값이 None이면 None을 돌려주므로
+        `or {}`까지 해야 안전하다.
+        """
+        first_de = de_bracket.get("first_de") or {}
+        second_de = de_bracket.get("second_de") or {}
+        if not isinstance(first_de, dict):
+            first_de = {}
+        if not isinstance(second_de, dict):
+            second_de = {}
+
+        flat = de_bracket.get("full_bouts")
+        flat_bouts = [b for b in flat if isinstance(b, dict)] if isinstance(flat, list) else []
+        return first_de, second_de, flat_bouts
+
+    def _check_r24_dual_de_shared_round(
+        self, event: Dict, event_cd: str, comp_name: str, event_name: str,
+        de_bracket: Dict
+    ):
+        """R24: dual DE의 공유 라운드가 예선(first_de)에서 통째로 사라짐 (ERROR)
+
+        🔴 실제 사고 2회 — 2026-08-17, 2026-08-18.
+        예선 64강 32경기가 사라져 저장된 대진표가 159경기 → 127경기로 줄었다.
+        두 번 다 first_de에는 128강 64경기만 남고 64강은 0경기였다. 본선에도 64강이
+        있었기 때문에 "64강은 있다"고 보이는 화면상으로는 유실이 드러나지 않았다.
+        이 규칙이 세 번째를 막는 마지막 방어선이다.
+
+        판정: 본선(second_de)의 starting_round = 예선이 본선으로 합류하는 공유 라운드.
+        예선 브래킷에 그 라운드의 경기가 단 하나도 없으면 유실이다.
+
+        추가로 dual_de인데 예선/본선 중 한쪽만 데이터가 있는 '반쪽 스크래핑'도 ERROR.
+        (R16은 second_de 누락만 본다. 그 반대 방향 — 본선만 있고 예선이 통째로 빈 경우 —
+         이 규칙이 잡는다. 겹치는 구간이 있어도 유실 감지는 중복이 침묵보다 낫다.)
+        """
+        if de_bracket.get("format") != "dual_de":
+            return  # 단일 DE는 공유 라운드 개념 자체가 없다
+        if _is_team_event(event_name):
+            return  # 단체전은 dual DE를 쓰지 않는다
+
+        first_de, second_de, flat_bouts = self._dual_de_phase_sources(de_bracket)
+
+        first_bouts = _collect_raw_de_bouts(first_de)
+        second_bouts = _collect_raw_de_bouts(second_de)
+        # 일부 레코드는 sub-bracket을 비워두고 최상위 full_bouts에만 저장한다.
+        # 그 경우 페이즈 태그가 유일한 소속 근거다.
+        flat_qualifying = [b for b in flat_bouts
+                           if get_bout_phase(b) == DE_PHASE_QUALIFYING]
+        flat_main = [b for b in flat_bouts if get_bout_phase(b) == DE_PHASE_MAIN]
+
+        has_first = bool(first_bouts or flat_qualifying)
+        has_second = bool(second_bouts or flat_main)
+
+        if has_first != has_second:
+            missing = "first_de(예선)" if has_second else "second_de(본선)"
+            present = "second_de(본선)" if has_second else "first_de(예선)"
+            present_count = len(second_bouts or flat_main) if has_second else len(first_bouts or flat_qualifying)
+            self.issues.append(ValidationIssue(
+                rule_id="R24",
+                severity="ERROR",
+                player_name="",
+                event_cd=event_cd,
+                competition_name=comp_name,
+                message=(
+                    f"[{event_name}] dual_de인데 {missing}에 경기가 하나도 없음 "
+                    f"({present}만 {present_count}경기) → 반쪽만 스크래핑된 상태. "
+                    f"해당 이벤트 재스크래핑 필요"
+                ),
+                data={
+                    "first_de_bout_count": len(first_bouts),
+                    "second_de_bout_count": len(second_bouts),
+                    "flat_qualifying_count": len(flat_qualifying),
+                    "flat_main_count": len(flat_main),
+                    "missing_phase": missing,
+                },
+            ))
+            return  # 반쪽 상태에서는 공유 라운드 대조가 의미 없다
+
+        if not has_first and not has_second:
+            return  # 완전 빈 dual_de는 R16 담당
+
+        # --- 공유 라운드 결정 ---
+        shared_round = _normalize_de_round(second_de.get("starting_round"))
+        second_all = second_bouts or flat_main
+        if not shared_round:
+            # starting_round가 없으면 본선 경기 중 가장 이른 라운드로 대체한다.
+            # 없는 값을 지어내지 않고, 근거를 못 찾으면 침묵한다.
+            second_rounds = {_bout_round_name(b) for b in second_all}
+            candidates = [r for r in ROUND_ORDER_LIST if r in second_rounds]
+            shared_round = candidates[0] if candidates else ""
+        if not shared_round:
+            return
+
+        # --- 예선 라운드별 경기 수 집계 ---
+        # 같은 경기가 first_de와 최상위 full_bouts에 둘 다 실릴 수 있다.
+        # 페이즈를 뺀 (라운드, 경기번호)로 합쳐야 숫자가 부풀지 않는다.
+        qual_seen: Dict[Tuple, Dict] = {}
+        for bout in list(first_bouts) + list(flat_qualifying):
+            qual_seen.setdefault(_bout_identity(bout), bout)
+
+        first_round_counts: Dict[str, int] = defaultdict(int)
+        for bout in qual_seen.values():
+            rnd = _bout_round_name(bout)
+            if rnd:
+                first_round_counts[rnd] += 1
+
+        if first_round_counts.get(shared_round, 0) > 0:
+            return  # 정상
+
+        expected = EXPECTED_BOUTS_BY_ROUND.get(shared_round)
+        expected_text = f"{expected}경기" if expected else "해당 라운드 경기"
+        counts_text = ", ".join(
+            f"{r}={first_round_counts[r]}"
+            for r in ROUND_ORDER_LIST if first_round_counts.get(r)
+        ) or "(경기 없음)"
+
+        self.issues.append(ValidationIssue(
+            rule_id="R24",
+            severity="ERROR",
+            player_name="",
+            event_cd=event_cd,
+            competition_name=comp_name,
+            message=(
+                f"[{event_name}] dual_de 공유 라운드 '{shared_round}'의 예선 경기가 "
+                f"first_de에 0개 → 예선 {shared_round} {expected_text}가 유실됨. "
+                f"first_de 라운드별 경기 수: {counts_text}. "
+                f"(본선 second_de.starting_round='{shared_round}', "
+                f"본선 {shared_round} {sum(1 for b in second_all if _bout_round_name(b) == shared_round)}경기 존재) "
+                f"→ 2026-08-17/2026-08-18과 동일 유형. 해당 이벤트 재스크래핑 필요"
+            ),
+            data={
+                "shared_round": shared_round,
+                "first_de_round_counts": dict(first_round_counts),
+                "first_de_bout_count": len(qual_seen),
+                "second_de_bout_count": len(second_all),
+                "second_de_starting_round": second_de.get("starting_round"),
+                "expected_bouts_in_shared_round": expected,
+            },
+        ))
+
+    def _check_r25_de_phase_tagging(
+        self, event: Dict, event_cd: str, comp_name: str, event_name: str,
+        de_bracket: Dict
+    ):
+        """R25: dual DE bout에 de_phase가 없음 (ERROR, 이벤트 단위 집계)
+
+        de_phase가 없는 순간 그 bout은 본선 bout과 구별할 방법이 사라진다.
+        라운드 이름으로 키잉하는 소비자(중복 제거, 대진표 조립, H2H 집계)는
+        예선 64강과 본선 64강을 같은 경기로 보고 한쪽을 버린다 — 이것이
+        2026-08-17/18 유실의 메커니즘이다.
+
+        🔴 반드시 format == "dual_de" 에서만 발동한다.
+        단일 DE·단체전·비-dual 레거시까지 검사하면 수천 건의 무의미한 ERROR가 쏟아져
+        검증 리포트 자체를 못 쓰게 된다(= 진짜 오류가 묻힌다).
+        기존 dual 레코드가 걸리는 것은 의도된 결과다 — 실제로 재스크래핑이 필요하다.
+
+        bout 하나당 이슈를 만들지 않고 이벤트당 1건으로 집계한다(경기 수가 100건대라
+        그대로 뱉으면 리포트가 폭발한다). 샘플 5건만 첨부한다.
+        """
+        if de_bracket.get("format") != "dual_de":
+            return
+        if _is_team_event(event_name):
+            return
+
+        first_de, second_de, flat_bouts = self._dual_de_phase_sources(de_bracket)
+
+        # 같은 경기가 여러 소스에 중복 등장할 수 있으므로 신원 키로 합친다.
+        all_bouts: Dict[Tuple, Dict] = {}
+        for bout in (list(flat_bouts)
+                     + _collect_raw_de_bouts(first_de)
+                     + _collect_raw_de_bouts(second_de)):
+            all_bouts.setdefault(_bout_identity(bout), bout)
+
+        if not all_bouts:
+            return  # 빈 dual_de는 R16/R24 담당
+
+        untagged: List[Dict] = []
+        for bout in all_bouts.values():
+            phase = get_bout_phase(bout)
+            if phase not in (DE_PHASE_QUALIFYING, DE_PHASE_MAIN):
+                untagged.append(bout)
+
+        total = len(all_bouts)
+        if untagged:
+            samples = [_bout_label(b) for b in untagged[:5]]
+            bad_values = sorted({
+                str(b.get("de_phase")) for b in untagged
+                if isinstance(b, dict) and b.get("de_phase")
+            })
+            extra = f" 규약 외 값: {bad_values}." if bad_values else ""
+            self.issues.append(ValidationIssue(
+                rule_id="R25",
+                severity="ERROR",
+                player_name="",
+                event_cd=event_cd,
+                competition_name=comp_name,
+                message=(
+                    f"[{event_name}] dual_de인데 de_phase 없는 DE bout "
+                    f"{len(untagged)}/{total}개 → 예선/본선 구분 불가 "
+                    f"(라운드명만으로는 예선 64강과 본선 64강이 같은 경기로 취급됨)."
+                    f"{extra} 샘플: {'; '.join(samples)}"
+                    f" → 해당 이벤트 재스크래핑 필요"
+                ),
+                data={
+                    "untagged_count": len(untagged),
+                    "total_bout_count": total,
+                    "sample_bouts": samples,
+                    "invalid_phase_values": bad_values,
+                },
+            ))
+
+        # --- 페이즈 없는 bout끼리의 (라운드, 경기번호) 충돌 ---
+        # 페이즈가 서로 다른 두 bout이 같은 (라운드, 번호)를 갖는 건 정상이다
+        # (예선 64강 #1 / 본선 64강 #1). 문제는 **양쪽 다 페이즈가 없을 때** —
+        # 이건 이미 구분 불가능한 상태로 저장돼 있다는 뜻이고, 아무 소비자나
+        # 라운드+번호로 dedup하는 순간 한쪽이 삭제된다.
+        collision_groups: Dict[Tuple, List[Dict]] = defaultdict(list)
+        for bout in all_bouts.values():
+            key = phase_bout_key(bout)
+            collision_groups[(key[1], key[2])].append(bout)
+
+        collisions = []
+        for (rnd, num), bouts in collision_groups.items():
+            if len(bouts) < 2:
+                continue
+            if all(get_bout_phase(b) is None for b in bouts):
+                collisions.append({
+                    "round_name": rnd,
+                    "match_number": num,
+                    "bouts": [_bout_label(b) for b in bouts[:3]],
+                })
+
+        if collisions:
+            sample_text = "; ".join(
+                f"{c['round_name']} #{c['match_number']} ({' / '.join(c['bouts'])})"
+                for c in collisions[:3]
+            )
+            self.issues.append(ValidationIssue(
+                rule_id="R25",
+                severity="ERROR",
+                player_name="",
+                event_cd=event_cd,
+                competition_name=comp_name,
+                message=(
+                    f"[{event_name}] 페이즈 없는 bout끼리 (round_name, match_number) 충돌 "
+                    f"{len(collisions)}건 → 예선/본선 구분 근거가 전혀 없어 "
+                    f"중복 제거 시 한쪽이 삭제됨(잠재적 유실). 충돌: {sample_text}"
+                ),
+                data={
+                    "collision_count": len(collisions),
+                    "collisions": collisions[:10],
+                },
+            ))
 
     def _check_r18_kff_external_comparison(
         self, event: Dict, event_cd: str, comp_name: str, event_name: str

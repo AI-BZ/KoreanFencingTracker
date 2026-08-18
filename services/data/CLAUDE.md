@@ -346,6 +346,8 @@ if starting_round in full_round_order:
 | R11 | 선수 | 나이그룹 역행 (동명이인) |
 | R12 | 선수 | 무기 3종 이상 (동명이인) |
 | R23 | 이벤트 | Pool 기권(Abandon) 감지 — A/X 마커, 기권 bout 승/패 혼입 |
+| R24 | 이벤트 | Dual DE 공유 라운드 유실 — 예선에 공유 라운드(본선 시작 라운드) 경기가 0개 / 반쪽 스크래핑 |
+| R25 | 이벤트 | Dual DE bout 의 `de_phase` 누락 — 예선/본선 구분 불가 상태, 위상 없는 라운드명 충돌 |
 
 ### 필수 검증 명령어
 ```bash
@@ -479,6 +481,146 @@ app/server.py                  # API 엔드포인트
 
 ---
 
+## 🚨🚨🚨 Dual DE: 예선 64강 ≠ 본선 64강 (처음 보는 개발자는 반드시 읽을 것) 🚨🚨🚨
+
+**이 절은 이 코드베이스에서 데이터를 두 번 파괴한 함정을 설명한다. 10년 뒤에 읽어도 같은 실수를 하지 않도록 쓴다.**
+
+### 왜 64강이 두 번 나오는가
+
+국가대표 선발 대회(대통령배, 회장기 등)는 **두 개의 독립된 토너먼트**를 연달아 치른다.
+
+```
+예선 DE (First DE, 예선엘리미나시옹디렉트)     본선 DE (Second DE, 본선 64강)
+  128강 (64경기)                                  ┌─ 시드 32명 (예선 면제자)
+     ↓                                            │
+   64강 (32경기) ── 승자 32명 ──────────────────→ ├─ 64강 (32경기)
+                                                  │     ↓
+                                                  │   32강 → 16강 → 8강 → 준결승 → 결승
+```
+
+- 예선 64강 32경기와 본선 64강 32경기는 **완전히 다른 경기다.** 선수도, 점수도, 날짜도 다르다.
+- 그런데 KFA 원본에서 둘 다 라운드 이름이 문자열 `"64강"` 이다.
+- 128 브래킷 종목의 정답은 **159경기** = 예선 128강 64 + 예선 64강 32 + 본선 63.
+  256 브래킷은 **287경기** = 예선 256강 128 + 128강 64 + 64강 32 + 본선 63.
+
+### 🔴 절대 금지: 라운드 이름을 키로 쓰지 말 것
+
+```python
+# ❌ 절대 금지 — 예선 64강과 본선 64강이 같은 칸에 들어가 한쪽이 사라진다
+bouts_by_round[bout["round_name"]].append(bout)
+if bout["round_name"] == "64강": ...
+seen.add(bout["bout_id"])          # bout_id = "64강_01" 도 위상을 담지 않는다
+
+# ✅ 항상 위상을 포함한 복합 키
+from app.bracket_utils import phase_bout_key, get_bout_phase
+seen.add(phase_bout_key(bout))     # (de_phase, round_name, match_number)
+```
+
+`bout_id` 는 `f"{round_name}_{match_number:02d}"` 형식이며 **위상을 담지 않는다.** 식별자 자체를 바꾸면 하위 소비자가 전부 깨지므로, **식별자가 아니라 그것을 쓰는 키를 복합 키로 바꾸는 것**이 이 코드베이스의 규약이다.
+
+### 우리가 위상을 구분하는 방법: `de_phase`
+
+모든 DE bout 은 자기가 어느 토너먼트 소속인지 **스스로 들고 다닌다.**
+
+| 값 | 의미 |
+|---|---|
+| `"qualifying"` | 예선 DE (first_de) |
+| `"main"` | 본선 DE (second_de) **및 모든 단일 DE·단체전** |
+| 키 자체가 없음 | **이 변경(2026-08-18) 이전에 저장된 구 레코드** — 그 외의 의미는 없다 |
+
+- 스크래퍼가 `select#schEtc01` 로 어느 화면을 보고 있는지 알 때 stamp 한다 (`de_scraper_v4.py`: `DEScraper.current_de_phase` → `DEMatch.de_phase`). **파싱 시점에 붙는다** — 직렬화 시점에 붙이면 파싱 중 실행되는 `_deduplicate_matches()` 가 이미 두 경기를 합쳐버린 뒤다.
+- 저장 위치: `de_bracket.full_bouts[*]`, `first_de.bouts[*]`, `first_de.bouts_by_round[*][*]`, `second_de` 동일.
+- **이 필드를 잃으면 무슨 일이 생기는가**: 예선 64강과 본선 64강이 구분 불가능해진다. 랭킹/선발 포인트가 예선 패자를 본선 33위로 계산하고(`ranking/selection_points.py`), H2H 가 두 경기 중 하나를 버리고, 프로필 경로보기가 64강 노드를 하나만 그린다. 그리고 다음 스크래핑에서 조용히 덮어써진다.
+
+### 표시 라벨 — 화면에는 반드시 위상을 드러낼 것
+
+```python
+from app.de_transforms import de_round_label   # 또는 app.bracket_utils
+
+de_round_label("64강", "qualifying")   # → "예선 64강"
+de_round_label("64강", "main")         # → "본선 64강"
+de_round_label("64강", None)           # → "64강"  (구 레코드에 거짓 라벨을 붙이지 않는다)
+de_round_label("64강", "main", qualifying_prefix=_t("예선"), main_prefix=_t("본선"))  # i18n
+```
+
+접두사가 인자인 이유는 7개 언어를 지원하기 때문이다. `bracket_utils` 에 i18n 을 import 하지 말 것(최하위 레이어).
+
+### 실제 유실 이력 (같은 일을 세 번째로 겪지 말 것)
+
+| 날짜 | 무엇이 사라졌나 | 원인 |
+|------|----------------|------|
+| 2026-08-17 | 제66회 대통령배 128 브래킷 3종목: 예선 64강 32경기 (159 → 127) | 예선 화면의 라운드 탭은 시작 라운드 하나만 광고한다. `fnGetMatch()` 재렌더 과정에서 64강 컬럼이 페어링 없는 '승자 표시 컬럼'으로 강등된다. 초기 렌더에는 있는데 탭을 누르는 순간 사라진다 → `_parse_tournament_table_bracket()` 이 `fnGetMatch` 호출 **전에** 초기 렌더를 선추출해 `compmatsym` 으로 병합하도록 수정 (커밋 `e5f8c29`) |
+| 2026-08-18 | 같은 3종목이 다시 127경기로 회귀 | **① 스케줄러 프로세스가 7/31부터 18일간 떠 있어서** 디스크에 배포된 수정 코드가 아니라 메모리에 로드된 구버전 모듈을 계속 실행했다. **② 그렇게 만들어진 부분 데이터(127)가 완전 데이터(159)를 덮어썼다** — `_de_data_quality_score()` 가 '점수 있는 경기가 하나라도 있으면 3'에서 천장을 쳐서 159와 127이 **둘 다 3점**이라 보존 가드가 발동하지 않았다 |
+
+**교훈 ①(운영):** 스크래퍼/스케줄러 코드를 배포했으면 **반드시 스케줄러 프로세스를 재시작**해야 한다. 파일만 바꾸는 것은 배포가 아니다. 2026-07-11 PYTHONPATH 섀도잉 사고와 같은 계열의 실패다 — "배포했는데 반영 안 됨".
+```bash
+ps -eo pid,lstart,command | grep run_scheduler   # 시작 시각이 배포 시각보다 앞서면 구코드가 돌고 있다
+```
+
+**교훈 ②(설계):** 데이터 품질을 '있다/없다'로 재면 부분 유실을 못 잡는다. **내용을 비교**해야 한다.
+
+### 재발 방지 장치 (4중)
+
+| 계층 | 위치 | 동작 |
+|------|------|------|
+| 스크래핑 직후 | `full_scraper._validate_scrape_completeness()` → `DUAL_DE_QUALIFYING_ROUND_MISSING` (ERROR) | `second_de.starting_round`(공유 라운드)의 경기가 `first_de` 에 0개면 경고 |
+| 저장 직전 | `competition_detector._de_bracket_regression()` → `DE_BRACKET_REGRESSION` (ERROR) | 기존에 있던 경기가 새 데이터에 없으면 **저장 거부하고 기존 유지**. 선수쌍 기반 집합 비교라 ⑴ match_number 재부여에 흔들리지 않고 ⑵ 중복 저장 사고에 발이 묶이지 않는다 |
+| 검증 배치 | `data_validator` R24 | dual_de 인데 공유 라운드가 예선에 없으면 ERROR / 한쪽 위상만 있는 반쪽 스크래핑 ERROR |
+| 검증 배치 | `data_validator` R25 | dual_de 이벤트의 DE bout 에 `de_phase` 가 없으면 ERROR (이벤트 단위 집계). 위상 없는 `(round_name, match_number)` 충돌쌍도 ERROR |
+
+Discord 알림은 `competition_detector.ALERTING_WARNING_TYPES` 허용목록으로 좁혀져 있다. 경고는 전부 `raw_data._scrape_metadata.scrape_warnings` 에 기록되지만, 알림은 지금 사람이 봐야 하는 유형만 보낸다. 새 유형을 알리려면 그 목록에 명시적으로 추가할 것.
+
+### 🔢 경기 수를 세는 법 — 슬롯 수 ≠ 경기 수
+
+**부전승(bye)은 경기가 아니다.** 풀 기권 규약(FIE t.95, A/X 셀을 승패에 카운트하지 않음)과 같은 원칙이다.
+
+`build_dual_de_progress()` 의 라운드별 항목은 세 값을 **각각** 준다:
+
+| 필드 | 의미 | 화면에 쓰나? |
+|------|------|-------------|
+| `total` | 브래킷 **슬롯 수** (부전승 포함) | ❌ 이걸 "N경기"라고 쓰면 안 된다 |
+| `real` | **실제 경기 수** = `total - byes` | ✅ "N경기"는 이 값 |
+| `byes` | 부전승 수 | ✅ "(부전승 N)" 처럼 분리 표기 |
+
+합계는 `first_de_real_bouts` / `first_de_byes` / `second_de_real_bouts` / `second_de_byes`.
+
+실측 (제66회 대통령배, 2026-08-18):
+```
+여자 에페 예선 128강   슬롯 64  = 실제 57 + 부전승 7
+남자 에페 예선 256강   슬롯 128 = 실제 32 + 부전승 96   ← 화면엔 "128경기"로 나가던 값 (실제의 4배)
+남자 에페 예선 128강   슬롯 64  = 실제 64 + 부전승 0
+여자 플뢰레 예선 128강 슬롯 64  = 실제 34 + 부전승 30
+```
+
+부전승 판정은 반드시 `bracket_utils.is_bye_bout()` 을 쓴다 — `is_bye` 플래그와 **'한쪽 이름이 비어 있음'의 합집합**이다. 스크래퍼 경로에 따라 플래그 없이 슬롯만 비는 형태가 있어 한쪽만 보면 부전승을 경기로 센다. (기권은 부전승이 아니다. 양쪽 선수가 실재하는 편성된 경기이므로 `real` 에 포함된다.)
+
+### 🔢 참가 인원 — 이름으로 dedup 하지 말 것 (동명이인)
+
+참가 인원은 **시드 슬롯 수** 기준이며 데이터로 확정된다: `build_dual_de_progress()['first_de_participants']`.
+
+`bout` 에서 뽑은 **고유 이름 수**를 참가 인원으로 쓰면 **항상 몇 명 적게 나온다.** 데이터 결손이 아니라 **동명이인**이 한 명으로 합쳐지기 때문이다. 실측에서 4개 dual 종목 전부 정확히 2명씩 적었다:
+
+```
+                이름 채워진 슬롯   seeding   고유 이름   차이   동명이인
+여자 에페           121            121       119        2     김민서 2명, 김나연 2명
+남자 플뢰레          123            123       121        2     김도영 2명, 정유준 2명
+남자 에페           160            160       158        2     이승현 2명, 이우빈 2명
+여자 플뢰레           98             98        96        2     최예진 2명, 김하은 2명
+```
+
+`이름 채워진 슬롯 = 2×슬롯수 − 부전승 = seeding 길이` 가 **정확히 일치**하고 seeding 이름 중 bout 에 없는 사람은 0명이다 → 결손 없음. 따라서 참가 인원은 표시해도 되는 확정 수치다.
+
+⚠️ `de_bracket.participant_count` (스크래퍼가 쓰는 최상위 값)는 **이름 dedup 방식이라 동명이인을 누락한다.** 참가 인원 표시에 쓰지 말 것.
+
+### 하위 호환 (구 레코드)
+
+현재 DB의 **모든** 기존 레코드에는 `de_phase` 가 없다. 따라서:
+- `de_phase` 부재로 **크래시하면 안 된다.** 항상 `get_bout_phase(bout, default)` 로 읽는다.
+- 부재 시에는 기존 동작(= `match_number` 기반 휴리스틱 분배)으로 **정확히** 폴백한다. 새 로직을 구 레코드에 적용하지 않는다.
+- 없는 위상을 **추측해서 만들지 않는다.** 모르면 없는 채로 두고 R25 가 잡게 한다 (제1원칙).
+
+---
+
 ## Dual DE 대진표 구조 (Dual Direct Elimination)
 
 ### 개요
@@ -510,12 +652,17 @@ First DE(예선 DE)에서 탈락하지 않은 선수들이 Second DE(본선 DE)�
 일부 dual DE 이벤트에서 모든 bout이 최상위 `de_bracket.full_bouts`에 저장되고
 `first_de.full_bouts`와 `second_de.full_bouts`는 빈 배열인 경우가 있음.
 
-`normalize_dual_de_bracket_data()`에서 자동 분배:
-- **Second DE 시작 라운드 이전** (예: 256강, 128강) → First DE
-- **Second DE 시작 라운드 이후** (예: 32강~결승) → Second DE
-- **공유 라운드** (예: 64강) → `match_num`으로 분리
-  - `match_num ≤ bracket_size/2` → Second DE
-  - `match_num > bracket_size/2` → First DE
+`normalize_dual_de_bracket_data()`에서 자동 분배. **판정 우선순위가 중요하다:**
+
+1. **bout 에 `de_phase` 가 있으면 그것이 절대적 진실** — 스크래퍼가 어느 화면을 보고 있었는지 알고 붙인 값이다. 아래 휴리스틱을 적용하지 않는다.
+2. **`de_phase` 가 없을 때만**(= 2026-08-18 이전 구 레코드) 아래 위치 기반 휴리스틱으로 폴백:
+   - **Second DE 시작 라운드 이전** (예: 256강, 128강) → First DE
+   - **Second DE 시작 라운드 이후** (예: 32강~결승) → Second DE
+   - **공유 라운드** (예: 64강) → `match_num`으로 분리
+     - `match_num ≤ bracket_size/2` → Second DE
+     - `match_num > bracket_size/2` → First DE
+
+⚠️ 이 휴리스틱은 스크래퍼가 `match_number` 를 브래킷 전역 연속번호로 재부여한다는 전제 위에서만 성립하며, **예선 DE 자체가 공유 라운드에서 시작하는 대회에서는 예선 전체를 본선으로 오분류한다.** 그래서 `de_phase` 를 도입했다. 새 데이터에는 절대 이 경로가 쓰이지 않아야 한다.
 
 ### 라운드 매핑
 ```

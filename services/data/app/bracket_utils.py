@@ -20,6 +20,158 @@ import re
 logger = logging.getLogger(__name__)
 
 
+# =============================================================================
+# Dual DE 페이즈(예선/본선) 식별 — 이 모듈의 최하위 primitive
+# =============================================================================
+# 국가대표 선발전 같은 Dual DE 종목은 예선 DE(first_de)와 본선 DE(second_de)를
+# 따로 치른다. 그런데 두 DE 는 '64강' 이라는 **글자까지 똑같은 라운드**를 각각 갖는다.
+# 예선 64강 32경기와 본선 64강 32경기는 선수도 결과도 완전히 다른 경기다.
+#
+# "라운드 이름 = 라운드 고유 식별자" 라고 가정한 코드 때문에 예선 64강 32경기가
+# 통째로 사라지는 사고가 두 번 났다.
+#   1) 최상위 full_bouts 재분배가 존재하지 않는 키(match_num)를 읽어 항상 0 →
+#      공유 라운드 전 경기가 본선으로 몰리고 예선 64강이 소멸
+#      (normalize_dual_de_bracket_data 안 주석 참조)
+#   2) bout_id 중복 제거가 "{round_name}_{match_number:02d}" 만 보므로
+#      예선 "64강_01" 과 본선 "64강_01" 이 같은 경기로 간주돼 한쪽이 조용히 삭제
+#
+# 그래서 DE bout 의 신원 키는 **반드시 (페이즈, 라운드, 경기번호) 복합키**여야 한다.
+# 라운드 이름만으로 DE bout 을 키잉하지 말 것. bout_id 는 페이즈를 담지 않는다.
+#
+# de_phase 규약 (스크래퍼가 부여):
+#   "qualifying" = 예선 DE (first_de)
+#   "main"       = 본선 DE (second_de) 및 단일 DE 전체
+#   키 없음      = 이 규약 이전에 저장된 레거시 레코드. 그 외의 의미는 없다.
+#                  → 레거시는 반드시 종전 동작으로 폴백한다(출력이 달라지면 안 됨).
+# =============================================================================
+
+DE_PHASE_QUALIFYING = "qualifying"
+DE_PHASE_MAIN = "main"
+
+# 코드베이스가 예선/본선을 부르는 이름이 레이어마다 다르다(first_de/second_de,
+# 예선/본선, qualifying/main). 저장 규약은 qualifying/main 하나뿐이지만,
+# 다른 레이어가 자기 이름으로 넘겨도 같은 페이즈로 읽히도록 흡수한다.
+_DE_PHASE_ALIASES = {
+    'qualifying': DE_PHASE_QUALIFYING,
+    'first_de': DE_PHASE_QUALIFYING,
+    'first': DE_PHASE_QUALIFYING,
+    '예선': DE_PHASE_QUALIFYING,
+    'main': DE_PHASE_MAIN,
+    'second_de': DE_PHASE_MAIN,
+    'second': DE_PHASE_MAIN,
+    '본선': DE_PHASE_MAIN,
+}
+
+# 라운드별 정상 경기 수. 공유 라운드가 64강이 아닐 수도 있으므로
+# '64강이면 32경기' 같은 상수를 코드에 박지 않기 위한 표.
+EXPECTED_BOUTS_BY_ROUND = {
+    '256강': 128,
+    '128강': 64,
+    '64강': 32,
+    '32강': 16,
+    '16강': 8,
+    '8강': 4,
+    '준결승': 2,
+    '결승': 1,
+}
+
+
+def _bout_get(bout: Any, key: str, default: Any = None) -> Any:
+    """dict 형태 bout 과 BracketBout 객체를 모두 받기 위한 접근자.
+
+    이 모듈의 상위 레이어는 정규화 전(dict)과 정규화 후(BracketBout)를 섞어 쓴다.
+    primitive 가 한쪽만 받으면 호출부마다 분기가 생기고, 그 분기가 빠지는 순간
+    페이즈 판정이 통째로 누락된다.
+    """
+    if bout is None:
+        return default
+    if isinstance(bout, dict):
+        value = bout.get(key, default)
+    else:
+        value = getattr(bout, key, default)
+    return default if value is None else value
+
+
+def get_bout_phase(bout: dict, default: Optional[str] = None) -> Optional[str]:
+    """bout 의 DE 페이즈를 반환. 페이즈 태깅 이전 레코드면 `default`.
+
+    반환값이 None(기본 default)이라는 것은 "이 레코드는 레거시다" 라는 뜻이지
+    "단일 DE 다" 라는 뜻이 아니다. 호출부는 이 둘을 절대 혼동하면 안 된다.
+    """
+    raw = _bout_get(bout, 'de_phase', None)
+    if not isinstance(raw, str):
+        return default
+    value = raw.strip()
+    if not value:
+        return default
+    # 규약 밖의 값이 들어오면 지어내지 않고 원문 그대로 돌려준다.
+    # (키가 갈라져야 서로 다른 경기가 합쳐지지 않는다.)
+    return _DE_PHASE_ALIASES.get(value.lower(), value)
+
+
+def phase_bout_key(bout: dict) -> tuple:
+    """DE bout 의 범용 신원 키: (페이즈, 라운드, 경기번호).
+
+    🔴 DE bout 을 라운드 이름만으로 키잉하지 말 것 — 예선 64강과 본선 64강이 충돌한다.
+
+    라운드/경기번호는 bout_id("{round_name}_{match_number:02d}") 에서 먼저 뽑는다.
+    bout_id 가 기존 신원의 원본이므로, 레거시(페이즈 없음) 레코드에서는 이 키가
+    bout_id 와 1:1 로 대응한다 = 종전 중복 제거 결과가 그대로 보존된다.
+    """
+    phase = get_bout_phase(bout)
+
+    bout_id = _bout_get(bout, 'bout_id', '') or ''
+    if not isinstance(bout_id, str):
+        bout_id = str(bout_id)
+
+    round_name = extract_round_from_bout_id(bout_id)
+    if not round_name:
+        raw_round = _bout_get(bout, 'round_name', '') or _bout_get(bout, 'round', '') or ''
+        round_name = normalize_round_name(raw_round) if raw_round else ''
+
+    match_number = _extract_match_number_from_bout_id(bout_id)
+    if match_number is None:
+        raw_number = _bout_get(bout, 'match_number', None)
+        if raw_number is None:
+            raw_number = _bout_get(bout, 'matchNumber', None)
+        match_number = raw_number
+
+    if match_number is None:
+        # 번호를 못 뽑았을 때 (phase, round, None) 을 돌려주면 그 라운드의 서로 다른
+        # 경기가 전부 같은 키로 뭉쳐 하나만 남고 삭제된다. 식별 근거가 없을수록
+        # 키는 더 잘게 갈라져야 한다 — 원문 bout_id 를 번호 자리에 넣는다.
+        return (phase, round_name or bout_id, bout_id or None)
+
+    return (phase, round_name, match_number)
+
+
+def de_round_label(round_name: str, de_phase: Optional[str], *,
+                   dual: bool = True,
+                   qualifying_prefix: str = "예선",
+                   main_prefix: str = "본선") -> str:
+    """페이즈가 드러나는 표시용 라운드명: '예선 64강' / '본선 64강'.
+
+    dual 이 아니거나 de_phase 를 모르면 `round_name` 을 그대로 돌려준다.
+    레거시 레코드(페이즈 없음)에 '예선'/'본선' 딱지를 임의로 붙이면 그건 없는
+    사실을 지어내는 것이다 — 모르면 라벨을 붙이지 않는다.
+
+    접두사가 인자인 이유: 이 서비스는 7개 언어를 서빙한다. 호출부(템플릿의 _t())가
+    번역된 문자열을 넣을 수 있어야 한다. i18n 모듈은 여기서 import 하지 않는다
+    (bracket_utils 는 앱의 어떤 모듈도 import 하지 않는 최하위 레이어).
+    """
+    if not round_name:
+        return round_name
+    if not dual:
+        return round_name
+
+    phase = get_bout_phase({'de_phase': de_phase}) if de_phase else None
+    if phase == DE_PHASE_QUALIFYING and (qualifying_prefix or '').strip():
+        return f"{qualifying_prefix} {round_name}"
+    if phase == DE_PHASE_MAIN and (main_prefix or '').strip():
+        return f"{main_prefix} {round_name}"
+    return round_name
+
+
 @dataclass
 class BracketBout:
     """단일 DE 경기 (bout) - 새로운 기본 구조"""
@@ -559,14 +711,39 @@ def get_correct_round_by_match_number(
     original_round: str,
     match_number: int,
     bracket_size: int,
-    starting_round: str
+    starting_round: str,
+    bouts: Optional[List[Any]] = None
 ) -> str:
     """
     match_number를 기반으로 올바른 라운드 결정 (deprecated - bout_id 사용 권장)
 
     주의: match_number가 라운드별로 재시작되는 경우가 있어
     이 함수 대신 extract_round_from_bout_id() 사용 권장
+
+    🔴 Dual DE 데이터에는 절대 쓰지 말 것.
+    이 함수는 "하나의 연속된 브래킷에서 경기번호가 누적된다"고 가정한다.
+    예선 DE 와 본선 DE 가 섞인 목록에서는 두 브래킷의 경기번호가 각각 1부터
+    다시 시작하므로, 누적 합산 결과가 통째로 엉뚱한 라운드를 가리킨다.
+    Dual DE 는 normalize_dual_de_bracket_data() 로 페이즈를 먼저 분리한 뒤
+    각 서브 브래킷에서만 라운드를 판정해야 한다.
+
+    Args:
+        bouts: (선택) 이 판정의 근거가 된 bout 목록. 넘기면 페이즈 혼재를
+               감지해 판정을 거부한다. 넘기지 않으면 종전과 동일하게 동작한다.
     """
+    if bouts:
+        phases = {get_bout_phase(b) for b in bouts}
+        phases.discard(None)
+        if len(phases) > 1:
+            logger.error(
+                "get_correct_round_by_match_number()가 페이즈 혼재 데이터로 호출됨 "
+                "(phases=%s, original_round=%s, match_number=%s). "
+                "이 함수는 단일 연속 브래킷 전용이며 Dual DE 에서는 라운드를 오판한다. "
+                "라운드 재계산을 건너뛰고 원본 라운드를 그대로 유지한다.",
+                sorted(phases), original_round, match_number
+            )
+            return normalize_round_name(original_round)
+
     normalized = normalize_round_name(original_round)
 
     # 시작 라운드별 예상 경기 수
@@ -768,7 +945,13 @@ def normalize_bracket_data(
     # 방법 1: full_bouts 사용 (가장 우선 - 완전한 경기 정보)
     full_bouts = de_bracket.get('full_bouts', [])
     if full_bouts:
-        all_bouts, bouts_by_round = _process_full_bouts(full_bouts)
+        # format 이 dual_de 인데 여기까지 내려왔다면(= is_dual_de_format 이 놓쳤다면)
+        # 예선/본선이 한 덩어리로 들어온 것이다. 경기 수 2배를 오류로 오판하지 않도록
+        # 알려준다. de_phase 태그가 있으면 _correct_round_names 가 스스로도 감지한다.
+        all_bouts, bouts_by_round = _process_full_bouts(
+            full_bouts,
+            is_dual=(de_bracket.get('format') == 'dual_de')
+        )
 
     # 방법 2: 새로운 bouts 형식 사용 (de_scraper_v4 호환)
     elif de_bracket.get('bouts', []):
@@ -1086,13 +1269,19 @@ def normalize_bracket_data(
     )
 
 
-def _process_full_bouts(full_bouts: List[Dict]) -> Tuple[List[BracketBout], Dict[str, List[BracketBout]]]:
+def _process_full_bouts(full_bouts: List[Dict],
+                        is_dual: bool = False) -> Tuple[List[BracketBout], Dict[str, List[BracketBout]]]:
     """
     full_bouts 데이터 처리 (가장 완전한 형식)
 
     지원하는 데이터 형식:
     1. nested 형식: winner/loser/score 객체 (레거시)
     2. flat 형식: player1_name, player1_seed, player2_name 등 (새로운 형식)
+
+    Args:
+        is_dual: 예선/본선이 섞인 Dual DE 목록이면 True (경기 수 기반 라운드명
+                 수정을 끈다). de_phase 가 섞여 있으면 자동 감지되므로 보통은
+                 지정할 필요가 없다.
     """
     all_bouts: List[BracketBout] = []
     bouts_by_round: Dict[str, List[BracketBout]] = defaultdict(list)
@@ -1110,7 +1299,7 @@ def _process_full_bouts(full_bouts: List[Dict]) -> Tuple[List[BracketBout], Dict
         raw_bouts_by_round[round_name].append(bout_data)
 
     # 라운드별 예상 경기 수 기반으로 라운드명 수정
-    corrected_rounds = _correct_round_names(raw_bouts_by_round)
+    corrected_rounds = _correct_round_names(raw_bouts_by_round, is_dual=is_dual)
 
     bout_counter = 1
     for original_round, bouts_data in corrected_rounds.items():
@@ -1214,13 +1403,30 @@ def _process_full_bouts(full_bouts: List[Dict]) -> Tuple[List[BracketBout], Dict
                     bout_id = f"{original_round}_{bout_counter:02d}"
                     match_number = match_num
 
-            # 중복 체크: bout_id 기반 (가장 안전) 또는 선수 이름 기반 (폴백)
-            if bout_id and bout_id in seen_matches:
-                continue
+            # 중복 체크: (페이즈, 라운드, 경기번호) 복합키 기반, 또는 선수 이름 기반 (폴백)
+            #
+            # 🔴 예전엔 bout_id 문자열 하나만 봤다. bout_id 는 "{round_name}_{match_number:02d}"
+            # 라서 페이즈를 담지 않는다. Dual DE 처럼 예선과 본선이 같은 라운드(64강)에서
+            # 시작하면 예선 "64강_01" 과 본선 "64강_01" 이 완전히 동일한 문자열이 되고,
+            # 실재하는 경기 하나가 아무 로그도 없이 삭제됐다.
+            # 레거시(de_phase 없음) 레코드에서는 키의 첫 원소가 None 으로 고정되므로
+            # bout_id 단독 키와 1:1 대응 = 종전 중복 제거 결과가 그대로 유지된다.
+            bout_phase = get_bout_phase(bout_data)
             if bout_id:
-                seen_matches.add(bout_id)
+                # bout_id/match_number 는 위에서 이미 폴백까지 확정된 값이다.
+                # 원본 dict 를 그대로 넘기면 bout_id 가 없던 레코드에서 생성된 id
+                # (bout_counter 기반, 전역 유일)를 놓쳐 서로 다른 경기가 뭉친다.
+                dedup_key = phase_bout_key(
+                    {**bout_data, 'bout_id': bout_id, 'match_number': match_number}
+                )
+                if dedup_key in seen_matches:
+                    continue
+                seen_matches.add(dedup_key)
             else:
-                match_key = _create_match_key(original_round, p1_name, p2_name or f"bye_{p2_seed}")
+                match_key = _create_match_key(
+                    original_round, p1_name, p2_name or f"bye_{p2_seed}",
+                    de_phase=bout_phase
+                )
                 if match_key in seen_matches:
                     continue
                 seen_matches.add(match_key)
@@ -1255,13 +1461,34 @@ def _process_full_bouts(full_bouts: List[Dict]) -> Tuple[List[BracketBout], Dict
     return all_bouts, bouts_by_round
 
 
-def _create_match_key(round_name: str, player1: str, player2: str) -> str:
-    """경기 중복 체크를 위한 키 생성 (순서 무관)"""
+def _create_match_key(round_name: str, player1: str, player2: str,
+                      de_phase: Optional[str] = None) -> str:
+    """경기 중복 체크를 위한 키 생성 (순서 무관)
+
+    de_phase 를 주면 페이즈를 키에 포함한다. 예선 64강과 본선 64강은 라운드 이름이
+    같으므로, 페이즈 없이는 서로 다른 두 경기가 같은 키로 뭉칠 수 있다.
+    de_phase=None(레거시)이면 종전과 완전히 동일한 문자열을 만든다.
+    """
     players = sorted([player1.strip(), player2.strip()])
-    return f"{round_name}:{players[0]}:{players[1]}"
+    base = f"{round_name}:{players[0]}:{players[1]}"
+    return f"{de_phase}:{base}" if de_phase else base
 
 
-def _correct_round_names(raw_bouts_by_round: Dict[str, List[Dict]]) -> Dict[str, List[Dict]]:
+def _has_mixed_de_phases(raw_bouts_by_round: Dict[str, List[Dict]]) -> bool:
+    """서로 다른 de_phase 가 섞여 있는가 = 예선/본선이 한 덩어리로 들어왔는가."""
+    phases = set()
+    for bouts in raw_bouts_by_round.values():
+        for bout in bouts:
+            phase = get_bout_phase(bout)
+            if phase is not None:
+                phases.add(phase)
+                if len(phases) > 1:
+                    return True
+    return False
+
+
+def _correct_round_names(raw_bouts_by_round: Dict[str, List[Dict]],
+                         is_dual: bool = False) -> Dict[str, List[Dict]]:
     """
     라운드별 중복 제거 및 필요시 라운드명 수정
 
@@ -1269,7 +1496,19 @@ def _correct_round_names(raw_bouts_by_round: Dict[str, List[Dict]]) -> Dict[str,
     1. 먼저 각 라운드별로 중복 제거
     2. 중복 제거 후에도 경기 수가 맞지 않으면 라운드명 수정 고려
        (단, 결승/준결승은 이동하지 않음 - 원본 데이터 존중)
+
+    Args:
+        is_dual: Dual DE 로 확인된 브래킷이면 True. 이때 경기 수 기반 라운드명
+                 수정은 건너뛴다(아래 참조). 명시하지 않아도 bout 의 de_phase 가
+                 섞여 있으면 자동으로 Dual 로 판정한다.
     """
+    # 🔴 Dual DE 에서는 경기 수 기반 라운드명 수정을 절대 하면 안 된다.
+    # 예선과 본선이 한 덩어리로 들어오면 공유 라운드의 경기 수가 정상적으로 2배가 된다
+    # (16강 = 예선 8 + 본선 8 = 16). 그런데 _find_round_by_count(16) 은 '32강' 을
+    # 돌려주므로, 멀쩡한 16강 16경기가 통째로 '32강' 으로 개명당한다.
+    # 여기서의 2배는 오류가 아니라 Dual DE 의 정상적인 모습이다.
+    dual_detected = bool(is_dual) or _has_mixed_de_phases(raw_bouts_by_round)
+
     # 1단계: 각 라운드별 중복 제거 먼저 수행
     # bout_id를 기준으로 중복 제거 (가장 안전한 방법)
     deduped_by_round = {}
@@ -1278,10 +1517,15 @@ def _correct_round_names(raw_bouts_by_round: Dict[str, List[Dict]]) -> Dict[str,
         unique_bouts = []
         for bout in bouts:
             # bout_id가 있으면 이를 기준으로 중복 체크
+            # 단, bout_id 는 페이즈를 담지 않으므로 (페이즈, 라운드, 번호) 복합키를 쓴다.
+            # 이 버킷은 라운드 이름으로 묶여 있어서, Dual DE 라면 예선/본선 경기가
+            # 같은 버킷에 함께 들어온다. bout_id 문자열만 보면 예선 "64강_01" 이
+            # 본선 "64강_01" 의 중복으로 판정돼 여기서 먼저 삭제된다.
             bout_id = bout.get('bout_id', '')
             if bout_id:
-                if bout_id not in seen_ids:
-                    seen_ids.add(bout_id)
+                dedup_key = phase_bout_key(bout)
+                if dedup_key not in seen_ids:
+                    seen_ids.add(dedup_key)
                     unique_bouts.append(bout)
             else:
                 # bout_id가 없으면 선수 이름 기반 중복 체크 (폴백)
@@ -1303,7 +1547,8 @@ def _correct_round_names(raw_bouts_by_round: Dict[str, List[Dict]]) -> Dict[str,
                         p1_name = winner.get('name', '') or ''
                         p2_name = loser.get('name', '') or ''
 
-                key = _create_match_key(round_name, p1_name, p2_name)
+                key = _create_match_key(round_name, p1_name, p2_name,
+                                        de_phase=get_bout_phase(bout))
                 if key not in seen_ids:
                     seen_ids.add(key)
                     unique_bouts.append(bout)
@@ -1330,6 +1575,19 @@ def _correct_round_names(raw_bouts_by_round: Dict[str, List[Dict]]) -> Dict[str,
 
         # 보호된 라운드는 경기 수와 관계없이 원래 라운드명 유지
         if round_name in protected_rounds:
+            if round_name not in result:
+                result[round_name] = []
+            result[round_name].extend(bouts)
+            continue
+
+        # Dual DE 는 공유 라운드의 경기 수가 2배인 것이 정상이므로 개명 대상이 아니다.
+        if dual_detected and actual_count >= expected * 2:
+            logger.info(
+                "Dual DE 감지 — 라운드 '%s'(%d경기, 단일 기준 %d경기)의 경기 수 기반 "
+                "라운드명 수정을 건너뛴다. 예선/본선이 같은 라운드 이름을 공유하므로 "
+                "경기 수가 2배인 것은 정상이다.",
+                round_name, actual_count, expected
+            )
             if round_name not in result:
                 result[round_name] = []
             result[round_name].extend(bouts)
@@ -1850,9 +2108,15 @@ def normalize_dual_de_bracket_data(de_bracket: Dict) -> NormalizedDualDEBracket:
     # === Distribute top-level bouts to sub-brackets if needed ===
     # Some dual DE events store all bouts in de_bracket.full_bouts
     # while first_de.full_bouts and second_de.full_bouts are empty.
-    top_level_bouts = de_bracket.get('full_bouts', [])
-    first_de_raw = de_bracket.get('first_de', {})
-    second_de_raw = de_bracket.get('second_de', {})
+    #
+    # 🔴 `.get(key, {})` 를 쓰면 안 된다. 스크래퍼는 한쪽 페이즈 수집이 실패하면
+    # 키를 지우는 게 아니라 'first_de': None 을 그대로 써 넣는다. 이때 기본값 {} 는
+    # 적용되지 않고(키가 존재하므로) None 이 그대로 나와 다음 줄의 .get() 에서
+    # AttributeError 로 이벤트 페이지 전체가 500 이 된다. 아래 first_de_allowed_rounds
+    # 계산부는 이미 `(... or {})` 형태로 안전한데 여기만 어긋나 있었다.
+    top_level_bouts = de_bracket.get('full_bouts') or []
+    first_de_raw = de_bracket.get('first_de') or {}
+    second_de_raw = de_bracket.get('second_de') or {}
 
     # 스크래퍼는 하위 브래킷 경기를 'bouts' 키로 저장한다. 예전엔 'full_bouts' 만 확인해
     # 이미 올바르게 나뉘어 있는 데이터를 "비어 있다"고 오판하고, 최상위 full_bouts 를
@@ -1867,8 +2131,28 @@ def normalize_dual_de_bracket_data(de_bracket: Dict) -> NormalizedDualDEBracket:
 
         first_de_bouts = []
         second_de_bouts = []
+        tagged_count = 0        # de_phase 를 그대로 믿은 경기 수
+        heuristic_count = 0     # 공유 라운드에서 match_number 휴리스틱으로 판정한 경기 수
 
         for bout in top_level_bouts:
+            # 1순위: bout 이 de_phase 를 달고 있으면 무조건 그것을 따른다.
+            #
+            # 이게 이번 변경의 전부다. 스크래퍼가 어느 페이즈에서 긁었는지 아는
+            # 유일한 주체이고, 여기 아래의 어떤 추론도 그 사실을 이길 수 없다.
+            # 라운드 인덱스 규칙보다도 우선한다 — 라운드 '이름' 은 예선과 본선이
+            # 공유하므로 애초에 페이즈를 식별하지 못한다.
+            bout_phase = get_bout_phase(bout)
+            if bout_phase == DE_PHASE_QUALIFYING:
+                first_de_bouts.append(bout)
+                tagged_count += 1
+                continue
+            if bout_phase == DE_PHASE_MAIN:
+                second_de_bouts.append(bout)
+                tagged_count += 1
+                continue
+
+            # 2순위: de_phase 가 없는 레거시 레코드만 종전 휴리스틱으로 폴백한다.
+            # (아래 로직은 손대지 않는다 — 기존 저장분의 출력이 달라지면 안 된다.)
             round_name = bout.get('round_name', '')
             round_idx = round_order.index(round_name) if round_name in round_order else -1
 
@@ -1883,7 +2167,13 @@ def normalize_dual_de_bracket_data(de_bracket: Dict) -> NormalizedDualDEBracket:
                 second_de_bouts.append(bout)
             else:
                 # Shared round (e.g., 64강) → split by match_number
-                second_de_bracket_size = second_de_raw.get('bracket_size', 64)
+                #
+                # ⚠️ 이 휴리스틱은 "스크래퍼가 서브 브래킷별로 경기번호를 전역
+                # 재부여한다" 는 전제 위에서만 성립한다. 예선 DE 자체가 공유
+                # 라운드에서 시작하는 종목이면 예선 한 라운드가 통째로 본선으로
+                # 오분류된다. 그래서 새 데이터는 de_phase 로 판정하고, 여기는
+                # 페이즈 태그가 없는 레거시 전용 경로로만 남긴다.
+                second_de_bracket_size = second_de_raw.get('bracket_size') or 64
                 max_second_de_match = second_de_bracket_size // 2
 
                 # 실데이터 키는 match_number 다. 예전엔 match_num 을 읽어 항상 0 이 나왔고,
@@ -1895,6 +2185,15 @@ def normalize_dual_de_bracket_data(de_bracket: Dict) -> NormalizedDualDEBracket:
                     second_de_bouts.append(bout)
                 else:
                     first_de_bouts.append(bout)
+                heuristic_count += 1
+
+        logger.info(
+            "Dual DE 최상위 full_bouts 재분배: %d경기 → 예선 %d / 본선 %d "
+            "(판정 근거: de_phase 태그 %d경기, 공유 라운드 match_number 휴리스틱 %d경기, "
+            "공유 라운드=%s)",
+            len(top_level_bouts), len(first_de_bouts), len(second_de_bouts),
+            tagged_count, heuristic_count, second_de_starting
+        )
 
         if first_de_bouts:
             first_de_raw = {**first_de_raw, 'full_bouts': first_de_bouts}
@@ -1910,7 +2209,8 @@ def normalize_dual_de_bracket_data(de_bracket: Dict) -> NormalizedDualDEBracket:
     # First DE는 128강 → 64강만 있고, 64강 승자가 Second DE로 진출
     # 32강 이후는 Second DE에서 진행되므로 First DE에서 제거
     if first_de:
-        second_de_starting = (de_bracket.get('second_de') or {}).get('starting_round', '64강')
+        # 'starting_round': None 으로 저장된 사례가 있어 기본값 인자만으로는 부족하다.
+        second_de_starting = (de_bracket.get('second_de') or {}).get('starting_round') or '64강'
         first_de_allowed_rounds = []
 
         # Second DE 시작 라운드까지 First DE에 포함 (동일 라운드 포함)
@@ -1953,33 +2253,44 @@ def normalize_dual_de_bracket_data(de_bracket: Dict) -> NormalizedDualDEBracket:
 
     # 시드 선수 처리 (First DE 면제)
     # Dual DE 형식에서 시드 선수는 seed 1-32만 해당 (나머지는 First DE 참가)
+    # 목록 자체가 None 으로 저장된 사례가 있어 `or []` 로 받는다. 원소도 'seed': None
+    # 형태가 섞여 들어오면 `None <= 32` 로 TypeError 가 난다.
     seeded_players = []
-    for player in de_bracket.get('seeded_players', []):
-        seed_num = player.get('seed', 0)
+    for player in (de_bracket.get('seeded_players') or []):
+        if not isinstance(player, dict):
+            continue
+        seed_num = player.get('seed') or 0
         # seed 1-32만 시드 선수로 처리 (First DE 면제)
         if seed_num <= 32:
             seeded_players.append(DualDEPlayer(
                 seed=seed_num,
-                name=player.get('name', ''),
-                team=player.get('team', ''),
+                name=player.get('name') or '',
+                team=player.get('team') or '',
                 is_seeded=True,
                 first_de_result=None  # 시드 선수는 First DE 참가 안함
             ))
 
     # First DE 진출자 처리
     first_de_qualifiers = []
-    for player in de_bracket.get('first_de_qualifiers', []):
+    for player in (de_bracket.get('first_de_qualifiers') or []):
+        if not isinstance(player, dict):
+            continue
         first_de_qualifiers.append(DualDEPlayer(
-            seed=player.get('seed', 0),
-            name=player.get('name', ''),
-            team=player.get('team', ''),
+            seed=player.get('seed') or 0,
+            name=player.get('name') or '',
+            team=player.get('team') or '',
             is_seeded=False,
             first_de_result='qualified'
         ))
 
     # First DE에서 진출자 자동 추출 (명시적 목록이 없는 경우)
+    # 공유 라운드(= 예선의 마지막 라운드)는 본선 시작 라운드에서 유도한다.
+    # '64강' 을 박아 두면 본선이 32강에서 시작하는 종목에서 엉뚱한 라운드를 읽는다.
+    shared_round = second_de.starting_round if second_de else None
     if not first_de_qualifiers and first_de:
-        first_de_qualifiers = _extract_first_de_qualifiers_from_bracket(first_de)
+        first_de_qualifiers = _extract_first_de_qualifiers_from_bracket(
+            first_de, shared_round=shared_round
+        )
 
     # 상태 결정
     status = _determine_dual_de_status(first_de, second_de)
@@ -2002,21 +2313,40 @@ def normalize_dual_de_bracket_data(de_bracket: Dict) -> NormalizedDualDEBracket:
     )
 
 
-def _extract_first_de_qualifiers_from_bracket(first_de: NormalizedBracket) -> List[DualDEPlayer]:
+def _extract_first_de_qualifiers_from_bracket(
+    first_de: NormalizedBracket,
+    shared_round: Optional[str] = None
+) -> List[DualDEPlayer]:
     """
-    First DE 브래킷에서 진출자(64강 승자 32명) 추출
+    First DE 브래킷에서 진출자(공유 라운드 승자) 추출
 
-    First DE 구조:
+    First DE 구조 (전형):
     - 128강(64경기) → 64강(32경기)
     - 64강 승자 32명이 Second DE로 진출
+
+    Args:
+        shared_round: 예선과 본선이 공유하는 라운드(= 본선 시작 라운드).
+                      예선의 마지막 라운드이자 진출자를 가리는 라운드다.
+                      주지 않으면 종전과 동일하게 64강 → 32강 순으로 찾는다.
+
+    공유 라운드를 '64강' 으로 박아 두면 본선이 32강에서 시작하는 종목에서
+    예선의 엉뚱한 라운드(또는 빈 라운드)를 읽는다. 진출자 명단은 탭 기본 진입과
+    "예선 종료" 판정의 근거이므로 여기서 틀리면 화면 전체가 어긋난다.
     """
     qualifiers = []
 
-    # 64강 경기에서 승자 추출 (First DE의 마지막 라운드)
-    r64_bouts = first_de.bouts_by_round.get('64강', [])
+    # 공유 라운드 우선, 그 다음 종전 폴백 순서(64강 → 32강).
+    # shared_round 가 '64강' 이면 후보 순서가 종전과 완전히 동일하다.
+    candidate_rounds: List[str] = []
+    if shared_round:
+        candidate_rounds.append(normalize_round_name(shared_round))
+    for fallback in ('64강', '32강'):
+        if fallback not in candidate_rounds:
+            candidate_rounds.append(fallback)
 
-    if r64_bouts:
-        for bout in r64_bouts:
+    for round_name in candidate_rounds:
+        round_bouts = first_de.bouts_by_round.get(round_name, [])
+        for bout in round_bouts:
             if bout.winner_name and bout.is_completed:
                 # 승자 팀 결정
                 if bout.winner_name == bout.player1_name:
@@ -2032,23 +2362,9 @@ def _extract_first_de_qualifiers_from_bracket(first_de: NormalizedBracket) -> Li
                     first_de_result='qualified'
                 ))
 
-    # 64강 경기가 없으면 32강에서 추출 시도 (폴백)
-    if not qualifiers:
-        r32_bouts = first_de.bouts_by_round.get('32강', [])
-        for bout in r32_bouts:
-            if bout.winner_name and bout.is_completed:
-                if bout.winner_name == bout.player1_name:
-                    winner_team = bout.player1_team
-                else:
-                    winner_team = bout.player2_team or ''
-
-                qualifiers.append(DualDEPlayer(
-                    seed=bout.winner_seed or 0,
-                    name=bout.winner_name,
-                    team=winner_team,
-                    is_seeded=False,
-                    first_de_result='qualified'
-                ))
+        # 한 라운드에서 진출자를 뽑았으면 거기서 끝낸다(종전 동작과 동일).
+        if qualifiers:
+            break
 
     return qualifiers
 
@@ -2075,11 +2391,21 @@ def _determine_dual_de_status(
     first_de_complete = False
 
     if first_de_has_bouts:
-        # 64강 경기가 모두 완료되었는지 확인
-        r64_bouts = first_de.bouts_by_round.get('64강', [])
-        if r64_bouts:
-            completed_r64 = sum(1 for b in r64_bouts if b.is_completed)
-            first_de_complete = completed_r64 == len(r64_bouts) and len(r64_bouts) >= 32
+        # 공유 라운드(= 본선 시작 라운드 = 예선 마지막 라운드) 경기가 모두 완료되었는지 확인.
+        # '64강' 과 '32경기' 를 박아 두면 본선이 32강에서 시작하는 종목에서
+        # 존재하지 않는 라운드를 보고 예선을 영원히 '진행 중' 으로 판정한다.
+        shared_round = (
+            normalize_round_name(second_de.starting_round)
+            if second_de and second_de.starting_round else '64강'
+        )
+        expected_shared_bouts = EXPECTED_BOUTS_BY_ROUND.get(shared_round, 32)
+        shared_bouts = first_de.bouts_by_round.get(shared_round, [])
+        if shared_bouts:
+            completed_shared = sum(1 for b in shared_bouts if b.is_completed)
+            first_de_complete = (
+                completed_shared == len(shared_bouts)
+                and len(shared_bouts) >= expected_shared_bouts
+            )
 
     # Second DE 상태 확인
     second_de_has_bouts = second_de and len(second_de.bouts) > 0
@@ -2112,6 +2438,36 @@ def _determine_dual_de_status(
 # is_completed 키가 없으면 부전승/기권에만 True 가 되어 실제 경기 결과를 반영하지 못한다.
 # 그래서 탭 진입·진행바·배너는 아래 함수들이 "점수(또는 승자)가 실제로 들어왔는지"를
 # 직접 세어 만든 progress 딕셔너리 하나만 본다.
+
+
+def is_bye_bout(bout) -> bool:
+    """부전승(bye)인가? — BracketBout 객체와 dict 를 모두 받는다.
+
+    ★ 두 조건의 합집합으로 판정한다.
+      1) `is_bye` 플래그
+      2) 양쪽 중 한쪽 이름이 비어 있음
+
+    실측(제66회 대통령배, 2026-08-18)에서는 두 조건이 정확히 일치했다
+    (여자 에페 예선 128강: is_bye=7, 이름결손=7, 합집합=7). 그러나 스크래퍼 경로에
+    따라 `is_bye` 를 세우지 않고 상대 슬롯만 비워 두는 형태가 존재하므로, 한쪽만
+    보면 부전승을 실제 경기로 세게 된다. 합집합이 안전한 쪽이다.
+
+    ⚠️ 기권(forfeit)은 부전승이 아니다. 기권은 양쪽 선수가 실재하는 편성된 경기이며
+    FIE t.95 상 별도 개념이다. 여기서는 부전승만 판정한다.
+    """
+    if bout is None:
+        return False
+    if isinstance(bout, dict):
+        if bout.get('is_bye') or bout.get('isBye'):
+            return True
+        p1 = (bout.get('player1_name') or '').strip()
+        p2 = (bout.get('player2_name') or '').strip()
+    else:
+        if getattr(bout, 'is_bye', False):
+            return True
+        p1 = (getattr(bout, 'player1_name', '') or '').strip()
+        p2 = (getattr(bout, 'player2_name', '') or '').strip()
+    return not p1 or not p2
 
 
 def is_bout_result_entered(bout: 'BracketBout') -> bool:
@@ -2147,11 +2503,29 @@ def summarize_bracket_entry(bracket: Optional[NormalizedBracket]) -> Dict[str, A
     'contested' = 부전승이 아닌 실제 대결. 진행 판정은 부전승을 빼고 세야 한다.
     브래킷 스켈레톤만 저장된 이벤트에서 부전승만 보고 "진행 중"으로 오판하지
     않기 위함이다.
+
+    ★ 라운드별 집계 필드 3종의 의미를 혼동하지 말 것 (2026-08-18 추가):
+      total  = 브래킷 **슬롯 수**. 부전승 포함. "128강 64" 는 슬롯 수이지 경기 수가 아니다.
+      real   = **실제로 치러진 경기 수** = total - byes. 화면에 "N경기" 로 쓸 값은 이것이다.
+      byes   = 부전승 수 (`is_bye_bout` 합집합 판정).
+
+    화면이 total 을 "경기 수"라고 표시하고 있었고, 256 브래킷 예선에서는 실제의 4배가
+    나갔다(실측: 남자 에페 예선 256강 슬롯 128 = 실제 32경기 + 부전승 96).
+    부전승은 경기가 아니다 — 풀 기권 규약(FIE t.95, A/X 셀을 승패에 카운트하지 않음)과
+    같은 원칙이다.
+
+    실측값 (제66회 대통령배, 2026-08-18):
+      여자 에페 예선 128강  슬롯 64  = 실제 57 + 부전승 7
+      남자 에페 예선 256강  슬롯 128 = 실제 32 + 부전승 96
+      남자 에페 예선 128강  슬롯 64  = 실제 64 + 부전승 0
     """
     summary = {
-        'rounds': [],       # [{'name', 'total', 'entered', 'complete', 'contested', 'contested_entered'}]
-        'total': 0,
+        # [{'name', 'total', 'entered', 'complete', 'contested', 'contested_entered', 'real', 'byes'}]
+        'rounds': [],
+        'total': 0,          # 슬롯 수 합계 (부전승 포함) — 하위 호환 유지
         'entered': 0,
+        'real_total': 0,     # 실제 경기 수 합계 (부전승 제외)
+        'byes_total': 0,     # 부전승 수 합계
         'complete': False,
         'has_any_result': False,       # 부전승 아닌 경기 결과가 1건 이상
         'last_round': None,
@@ -2162,20 +2536,28 @@ def summarize_bracket_entry(bracket: Optional[NormalizedBracket]) -> Dict[str, A
 
     for round_name in bracket.rounds:
         bouts = [b for b in bracket.bouts_by_round.get(round_name, []) if _is_real_bout(b)]
-        contested = [b for b in bouts if not (b.is_bye or b.is_forfeit)]
+        # 부전승 판정은 is_bye 플래그와 '한쪽 이름 없음'의 합집합(is_bye_bout).
+        # 이전에는 b.is_bye 만 봤다 — 플래그가 안 선 부전승이 실제 경기로 세어졌고,
+        # 그러면 영원히 결과가 들어오지 않을 경기를 기다리며 라운드가 미완료로 남는다.
+        byes = [b for b in bouts if is_bye_bout(b)]
+        contested = [b for b in bouts if not is_bye_bout(b) and not b.is_forfeit]
         total = len(bouts)
         entered = sum(1 for b in bouts if is_bout_result_entered(b))
         contested_entered = sum(1 for b in contested if is_bout_result_entered(b))
         summary['rounds'].append({
             'name': round_name,
-            'total': total,
+            'total': total,                  # 슬롯 수 (부전승 포함)
             'entered': entered,
             'complete': total > 0 and entered == total,
-            'contested': len(contested),
+            'contested': len(contested),     # 부전승·기권 제외
             'contested_entered': contested_entered,
+            'real': total - len(byes),       # ★ 실제 경기 수 (기권은 편성된 경기이므로 포함)
+            'byes': len(byes),               # ★ 부전승 수
         })
         summary['total'] += total
         summary['entered'] += entered
+        summary['real_total'] += total - len(byes)
+        summary['byes_total'] += len(byes)
 
     summary['complete'] = summary['total'] > 0 and summary['entered'] == summary['total']
     summary['has_any_result'] = any(r['contested_entered'] > 0 for r in summary['rounds'])
@@ -2292,6 +2674,23 @@ def build_dual_de_progress(dual_de: 'NormalizedDualDEBracket') -> Dict[str, Any]
         'second_de_in_progress': second_de_in_progress,
         'first_de_final_round': shared_round if structure_complete else None,
         'qualifier_count': qualifier_count,
+        # ★ 실제 경기 수 / 부전승 수 (2026-08-18).
+        # 라운드별 값은 first_de['rounds'][i]['real'] / ['byes'] 에 들어 있다.
+        # 화면에 "N경기" 로 쓸 값은 total 이 아니라 real 이다.
+        'first_de_real_bouts': first['real_total'],
+        'first_de_byes': first['byes_total'],
+        'second_de_real_bouts': second['real_total'],
+        'second_de_byes': second['byes_total'],
+        # 예선 참가 인원. 시드 슬롯 수(= 이름이 들어찬 슬롯 수) 기준이며 데이터로 확정된다.
+        #
+        # ⚠️ 이 값을 'bout 에서 뽑은 고유 이름 수'로 검산하면 항상 몇 명 적게 나오는데,
+        # 그건 데이터 결손이 아니라 **동명이인** 때문이다. 이름으로 dedup 하면 서로 다른
+        # 사람이 한 명으로 합쳐진다. 실측(제66회 대통령배, 4개 종목 전부):
+        #   이름 채워진 슬롯 = 2×슬롯수 − 부전승 = seeding 길이 (정확히 일치, 결손 0)
+        #   seeding − 고유이름 = 2 = 동명이인 초과분 (여자 에페 김민서·김나연 각 2명)
+        # 즉 참가 인원은 확정 가능한 수치이므로 표시해도 된다. 고유 이름 수를 참가
+        # 인원으로 쓰지 말 것.
+        'first_de_participants': first_de.participant_count if first_de else None,
         'second_de_participants': second_participants,
         'composition_verified': composition_verified,
         'final_decided': final_decided,

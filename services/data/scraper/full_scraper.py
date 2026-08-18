@@ -202,11 +202,39 @@ def fill_missing_seeds(seeding: List[Dict], bracket_size: int) -> List[Dict]:
     return result
 
 
+def stamp_missing_de_phase(bracket_data: Dict[str, Any], phase: str = 'main') -> int:
+    """de_phase가 비어 있는 bout에 phase를 새긴다. 새로 채운 개수를 반환.
+
+    계약: **de_phase가 없다 == 이 변경 이전에 저장된 레거시 레코드** — 이 뜻 하나만
+    갖게 하려면 지금 수집되는 bout에는 예외 없이 phase가 있어야 한다.
+    그런데 DEMatch를 거치지 않고 dict를 직접 만드는 경로가 아직 남아 있다:
+      - v3 fallback (_convert_to_full_bouts 등)
+      - 부전승 생성기 (generate_bye_bouts_for_starting_round)
+    이들이 만든 bout에 phase가 비면, 방금 긁어온 데이터가 레거시 레코드로 오인된다.
+    단일 DE에는 예선이 없으므로 'main'으로 채우는 것이 계약상 정확하다.
+
+    bouts / full_bouts / bouts_by_round 는 경로에 따라 같은 dict 객체를 공유하기도,
+    별개 객체이기도 하다. 어느 쪽이든 안전하도록 전부 훑고, 이미 채워진 건 건드리지
+    않는다(멱등).
+    """
+    stamped = 0
+    buckets: List[Any] = [bracket_data.get('bouts'), bracket_data.get('full_bouts')]
+    buckets.extend((bracket_data.get('bouts_by_round') or {}).values())
+
+    for bucket in buckets:
+        for bout in (bucket or []):
+            if isinstance(bout, dict) and not bout.get('de_phase'):
+                bout['de_phase'] = phase
+                stamped += 1
+    return stamped
+
+
 def generate_bye_bouts_for_starting_round(
     seeding: List[Dict],
     bracket_size: int,
     starting_round: str,
-    existing_bouts: List[Dict]
+    existing_bouts: List[Dict],
+    de_phase: Optional[str] = None
 ) -> List[Dict]:
     """
     시작 라운드의 부전승 경기 생성
@@ -216,6 +244,9 @@ def generate_bye_bouts_for_starting_round(
         bracket_size: 브라켓 크기 (8, 16, 32, ...)
         starting_round: 시작 라운드명 ("16강", "32강", ...)
         existing_bouts: 기존 실제 경기 리스트
+        de_phase: 생성되는 부전승이 속할 phase. 여기서 만드는 bout은 '실제로 긁어온
+            경기'가 아니라 우리가 합성한 경기다. phase를 비워두면 갓 만든 부전승이
+            레거시 레코드와 구분되지 않으므로, 같은 라운드의 실제 경기에서 물려받는다.
 
     Returns:
         기존 경기 + 새로 생성된 부전승 경기
@@ -272,6 +303,7 @@ def generate_bye_bouts_for_starting_round(
                 'winner_name': p1.get('name'),
                 'is_bye': True,
                 'is_completed': True,
+                'de_phase': de_phase,
             }
             result_bouts.append(bye_bout)
             existing_matchups.add((seed1, None))
@@ -293,6 +325,7 @@ def generate_bye_bouts_for_starting_round(
                 'winner_name': p2.get('name'),
                 'is_bye': True,
                 'is_completed': True,
+                'de_phase': de_phase,
             }
             result_bouts.append(bye_bout)
             existing_matchups.add((seed2, None))
@@ -314,6 +347,31 @@ def post_process_de_bracket(bracket_data: Dict[str, Any]) -> Dict[str, Any]:
     """
     if not bracket_data:
         return bracket_data
+
+    # ── Dual DE는 이 후처리를 통째로 지나간다 (의도된 동작) ──
+    # DualDEBracket.to_dict()는 top-level에 'seeding'/'bouts'를 내보내지 않는다.
+    # 경기는 full_bouts와 first_de/second_de 안에 들어 있어서, 아래의 seeding 기반
+    # 후처리(부전승 생성·무효경기 필터·bouts_by_round 재구성)가 자연히 건너뛰어진다.
+    # 그대로 두는 게 맞다 — 예선과 본선을 한 덩어리로 후처리하면 '64강'이 두 phase에
+    # 동시에 존재하는 탓에 starting_round 판정과 bouts_by_round 재구성이 서로를
+    # 덮어쓰고, 그 순간 예선 64강이 사라진다(두 번 겪은 사고의 재현 경로다).
+    # 통과시키되, de_phase가 살아서 나가는지만 확인한다.
+    if bracket_data.get('format') == 'dual_de':
+        dual_bouts = bracket_data.get('full_bouts') or []
+        missing = sum(1 for b in dual_bouts if isinstance(b, dict) and not b.get('de_phase'))
+        if missing:
+            logger.error(
+                f"🚨 post_process: dual DE full_bouts {missing}/{len(dual_bouts)}경기에 "
+                f"de_phase 없음 — 예선/본선 구분이 불가능한 상태로 저장된다"
+            )
+
+    # 단일 DE 경로: DEMatch를 거치지 않은 bout(v3 fallback 등)에 phase를 채운다.
+    # 아래 후처리가 어느 지점에서 early return 하더라도 스탬핑은 이미 끝나 있도록
+    # 가장 먼저 실행한다.
+    else:
+        filled = stamp_missing_de_phase(bracket_data, 'main')
+        if filled:
+            logger.debug(f"de_phase 미기재 bout {filled}개에 'main' 스탬핑 (단일 DE)")
 
     seeding = bracket_data.get('seeding', [])
     if not seeding:
@@ -364,8 +422,16 @@ def post_process_de_bracket(bracket_data: Dict[str, Any]) -> Dict[str, Any]:
     starting_round_bouts = [b for b in bouts if b.get('round_name') == starting_round]
 
     # 부전승 추가
+    # 합성되는 부전승은 같은 시작 라운드의 실제 경기에서 phase를 물려받는다.
+    # (단일 DE만 여기 도달하므로 실제 값은 'main'이지만, 라운드에서 끌어오는 방식을
+    #  유지해야 나중에 dual DE가 이 경로를 타게 되어도 phase가 뒤바뀌지 않는다)
+    starting_round_phase = next(
+        (b.get('de_phase') for b in starting_round_bouts if b.get('de_phase')),
+        'main'
+    )
     enhanced_bouts = generate_bye_bouts_for_starting_round(
-        seeding, bracket_size, starting_round, starting_round_bouts
+        seeding, bracket_size, starting_round, starting_round_bouts,
+        de_phase=starting_round_phase
     )
 
     # 다른 라운드 경기와 합침
@@ -404,6 +470,10 @@ def post_process_de_bracket(bracket_data: Dict[str, Any]) -> Dict[str, Any]:
 
     # ★★★ full_bouts도 동일하게 업데이트 (normalize_bracket_data가 full_bouts 우선 사용!)
     bracket_data['full_bouts'] = all_bouts
+
+    # 후처리로 새로 생긴 bout(부전승 등)까지 phase가 채워졌는지 마무리 확인.
+    # 위 스탬핑은 멱등이라 이미 채워진 값은 건드리지 않는다.
+    stamp_missing_de_phase(bracket_data, 'main')
 
     logger.debug(f"DE 후처리 완료: bracket_size={bracket_size}, starting_round={starting_round}, "
                 f"seeding={len(seeding)}명, bouts={len(all_bouts)}개")
@@ -1116,12 +1186,13 @@ class KFFFullScraper:
                 results["de_bracket"] = bracket_data
 
                 # bouts를 de_matches로도 저장 (호환성 유지)
-                bouts = bracket_data.get("bouts", [])
                 de_matches = bracket_data.get("match_results", [])
                 results["de_matches"] = de_matches
 
-                rounds_found = bracket_data.get("rounds", [])
-                logger.info(f"엘리미나시옹디렉트 대진표 수집 완료: {len(bouts)}개 경기, 라운드: {rounds_found}, 시드: {len(bracket_data.get('seeding', []))}명")
+                logger.info(
+                    f"엘리미나시옹디렉트 대진표 수집 완료: "
+                    f"{self._describe_de_bracket(bracket_data)}"
+                )
             except Exception as e:
                 logger.debug(f"대진표 파싱 오류: {e}")
 
@@ -1129,6 +1200,28 @@ class KFFFullScraper:
             logger.error(f"결과 조회 오류 ({event_cd}/{sub_event_cd}): {e}")
         finally:
             await page.close()
+
+        # Post-scrape 교차 검증 (Layer 2) — get_de_only()와 동일한 블록.
+        # 스케줄러(competition_detector)는 get_de_only()가 아니라 이 함수를 호출하고,
+        # 저장 시 results["_scrape_warnings"]를 _scrape_metadata에 기록하도록 이미
+        # 짜여 있다. 그런데 정작 이 함수가 그 키를 만들지 않아서, POOL_DUPLICATED를
+        # 비롯한 검증 경고 전체가 프로덕션 경로에서 한 번도 발화한 적이 없다.
+        # (같은 이유로 위 start_time도 계산만 되고 버려지고 있었다 — 이 블록이
+        #  빠져 있었다는 증거다.)
+        pool_diag = results.get("_pool_diagnostics", {})
+        scrape_warnings = self._validate_scrape_completeness(
+            event_name=f"{event_cd}/{sub_event_cd}",
+            results=results,
+            pool_diagnostics=pool_diag,
+        )
+        results["_scrape_warnings"] = scrape_warnings
+        results["_duration_ms"] = int((time.time() - start_time) * 1000)
+
+        for w in scrape_warnings:
+            if w.get("severity") == "ERROR":
+                logger.error(f"🚨 스크래핑 검증 실패: {w['message']}")
+            elif w.get("severity") == "WARNING":
+                logger.warning(f"⚠️ 스크래핑 경고: {w['message']}")
 
         return results
 
@@ -1204,9 +1297,7 @@ class KFFFullScraper:
             results["de_bracket"] = bracket_data
             results["de_matches"] = bracket_data.get("match_results", [])
 
-            bouts = bracket_data.get("bouts", [])
-            rounds_found = bracket_data.get("rounds", [])
-            logger.debug(f"DE 수집: {len(bouts)}개 경기, 라운드: {rounds_found}")
+            logger.debug(f"DE 수집: {self._describe_de_bracket(bracket_data)}")
 
         except Exception as e:
             logger.debug(f"DE 수집 오류 ({event_cd}/{sub_event_cd}): {e}")
@@ -1230,6 +1321,41 @@ class KFFFullScraper:
                 logger.warning(f"⚠️ 스크래핑 경고: {w['message']}")
 
         return results
+
+    @staticmethod
+    def _describe_de_bracket(bracket_data: dict) -> str:
+        """DE 대진표 수집 결과를 로그 한 줄로 요약.
+
+        Dual DE의 to_dict()는 top-level에 'bouts'/'rounds'/'seeding'을 내보내지 않는다.
+        경기는 'full_bouts'와 first_de/second_de 안에 들어 있다.
+        그런데 예전 로그는 top-level 'bouts'만 읽어서, **성공한** dual DE 수집이
+        바로 앞줄의 'Dual DE 파싱 완료: first_de=96경기, second_de=63경기' 뒤에
+        '0개 경기, 라운드: [], 시드: 0명'으로 찍혔다.
+        이 가짜 실패 로그 때문에 사람이 매번 오진했고, 정작 예선이 진짜로 유실된
+        상황과 구분이 되지 않았다. 그래서 dual DE는 예선/본선을 나눠서 명시한다.
+        """
+        if not bracket_data:
+            return "데이터 없음"
+
+        if bracket_data.get("format") == "dual_de":
+            first = bracket_data.get("first_de") or {}
+            second = bracket_data.get("second_de") or {}
+            first_bouts = first.get("bouts") or first.get("full_bouts") or []
+            second_bouts = second.get("bouts") or second.get("full_bouts") or []
+            total = len(bracket_data.get("full_bouts") or [])
+            seeded = len(bracket_data.get("seeded_players") or [])
+            qualifiers = len(bracket_data.get("first_de_qualifiers") or [])
+            return (
+                f"Dual DE — 예선 {len(first_bouts)}경기 (라운드: {first.get('rounds') or []}) "
+                f"/ 본선 {len(second_bouts)}경기 (라운드: {second.get('rounds') or []}) "
+                f"(합계 {total}), 시드 {seeded}명, 예선 진출자 {qualifiers}명"
+            )
+
+        # 단일 DE: 'bouts'가 정상 경로지만, 일부 fallback 경로는 full_bouts만 채운다
+        bouts = bracket_data.get("bouts") or bracket_data.get("full_bouts") or []
+        rounds_found = bracket_data.get("rounds") or []
+        seeding = bracket_data.get("seeding") or []
+        return f"{len(bouts)}개 경기, 라운드: {rounds_found}, 시드: {len(seeding)}명"
 
     def _validate_scrape_completeness(self, event_name: str, results: dict,
                                       pool_diagnostics: dict = None) -> list:
@@ -1286,6 +1412,41 @@ class KFFFullScraper:
                 'message': (f'DE {len(de_bouts)}경기 존재하지만 '
                             f'final_rankings 없음 (대회 진행 중일 수 있음)'),
             })
+
+        # CHECK 4: Dual DE인데 예선(first_de)에 '공유 라운드'가 한 경기도 없음 → 예선 유실.
+        # 본선 시작 라운드(보통 64강)는 예선에도 반드시 존재한다. 예선의 마지막 라운드가
+        # 바로 본선 진출자 32명을 만들어내는 라운드이기 때문이다.
+        # 그 라운드가 0경기인데도 128강만 보고 "수집 성공"으로 넘어가면 아무도 눈치채지
+        # 못한 채 저장되고, 예선 절반이 영구 소실된다 — 2026년에 이 상태로 두 번 배포됐다.
+        # (예선/본선이 둘 다 '64강'이라는 같은 이름을 쓰는 게 이 사고의 근원이다.)
+        if de_bracket and de_bracket.get('format') == 'dual_de':
+            first_de = de_bracket.get('first_de') or {}
+            second_de = de_bracket.get('second_de') or {}
+            shared_round = (second_de.get('starting_round') or '').strip()
+
+            # 두 phase가 모두 파싱된 경우에만 판정한다.
+            # 한쪽이 아예 없으면 그건 dual DE 감지 실패라 성격이 다른 문제다.
+            if first_de and second_de and shared_round:
+                first_bouts = first_de.get('bouts') or first_de.get('full_bouts') or []
+                round_counts: dict = {}
+                for b in first_bouts:
+                    rn = b.get('round_name') or '(라운드명 없음)'
+                    round_counts[rn] = round_counts.get(rn, 0) + 1
+
+                if round_counts.get(shared_round, 0) == 0:
+                    warnings.append({
+                        'type': 'DUAL_DE_QUALIFYING_ROUND_MISSING',
+                        'severity': 'ERROR',
+                        'event_name': event_name,
+                        'message': (
+                            f'[{event_name}] Dual DE 예선(first_de)에 본선 시작 라운드 '
+                            f'"{shared_round}" 경기가 0개 — 예선 마지막 라운드가 통째로 '
+                            f'유실됐다. 예선에서 실제로 수집된 라운드: {round_counts} '
+                            f'(총 {len(first_bouts)}경기). '
+                            f'"{shared_round}"은(는) 본선 진출자를 만들어내는 라운드이므로 '
+                            f'이 상태로 저장하면 예선 결과가 영구 소실된다. 재수집 필요.'
+                        ),
+                    })
 
         return warnings
 
@@ -3280,6 +3441,10 @@ class KFFFullScraper:
             full_bout = {
                 'table_index': bout.get('tableIndex', 0),
                 'round': bout['round'] + '전',
+                # 이 경로(v3 fallback)는 DEMatch를 거치지 않고 dict를 새로 조립하므로
+                # 여기서 직접 새긴다. v3 fallback은 단일 DE 전용이라 항상 'main'이다.
+                # (비워두면 갓 수집한 경기가 레거시 레코드와 구분되지 않는다)
+                'de_phase': 'main',
                 'winner': {
                     'seed': winner['seed'],
                     'name': winner['name'],
