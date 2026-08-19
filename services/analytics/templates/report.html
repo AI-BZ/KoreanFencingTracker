@@ -548,15 +548,13 @@
                  data-kind="touch"
                  {% if playable %}data-clip-type="touch" data-clip-number="{{ touch.touch_number }}"
                  {% if mex is defined and mex and mex.start_frame is defined and mex.end_frame is defined %}data-start-frame="{{ mex.start_frame }}" data-end-frame="{{ mex.end_frame }}"{% else %}data-touch-frame="{{ touch.frame }}"{% endif %}
-                 data-clip-label="득점{% if ev.display_number is not none %} #{{ ev.display_number }}{% endif %} — {{ scorer_name }} {{ touch.score_after }}"{% endif %}>
+                 data-clip-label="득점 #{{ ev.display_index }} — {{ scorer_name }} {{ touch.score_after }}"{% endif %}>
                 <div class="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0
                             {% if touch.scorer == 'left' %}bg-blue-500{% else %}bg-red-500{% endif %}">
                     <span class="text-[11px] font-bold text-white fm-num">{{ touch.score_after }}</span>
                 </div>
-                {% if ev.display_number is not none %}
                 <span class="flex-shrink-0 px-1.5 py-0.5 rounded bg-white/5 font-mono text-[11px] text-gray-500 select-none"
-                      title="{% if ev.display_number_kind == 'exchange' %}교전 번호{% else %}득점 번호{% endif %} — 이 줄을 가리킬 때 쓰는 번호입니다">#<span class="fm-num">{{ ev.display_number }}</span></span>
-                {% endif %}
+                      title="타임라인 {{ ev.display_index }}번째{% if ev.display_number is not none %} — {% if ev.display_number_kind == 'exchange' %}교전{% else %}득점{% endif %} #{{ ev.display_number }}{% endif %}">#<span class="fm-num">{{ ev.display_index }}</span></span>
                 <div class="flex-shrink-0 w-16 text-right">
                     <span class="block text-sm font-mono text-gray-200"
                           title="{% if touch.match_time_estimated %}경기 잔여 시간 — 시계 OCR이 초를 부분 인식해 앞뒤 터치로 보정한 추정값{% else %}경기 잔여 시간{% endif %}">{% if touch.match_time_estimated %}~{% endif %}{{ touch.match_time }}</span>
@@ -637,14 +635,12 @@
                  data-kind="exchange"
                  {% if playable %}data-clip-type="exchange" data-clip-number="{{ ex.exchange_number }}"
                  data-start-frame="{{ ex.start_frame }}" data-end-frame="{{ ex.end_frame | default(ex.start_frame) }}"
-                 data-clip-label="교전{% if ev.display_number is not none %} #{{ ev.display_number }}{% endif %} — {{ ex.event_type_ko | default(badge.label) }}"{% endif %}>
+                 data-clip-label="교전 #{{ ev.display_index }} — {{ ex.event_type_ko | default(badge.label) }}"{% endif %}>
                 <div class="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center flex-shrink-0">
                     <span class="text-[9px] font-semibold text-gray-500">교전</span>
                 </div>
-                {% if ev.display_number is not none %}
                 <span class="flex-shrink-0 px-1.5 py-0.5 rounded bg-white/5 font-mono text-[11px] text-gray-500 select-none"
-                      title="{% if ev.display_number_kind == 'exchange' %}교전 번호{% else %}득점 번호{% endif %} — 이 줄을 가리킬 때 쓰는 번호입니다">#<span class="fm-num">{{ ev.display_number }}</span></span>
-                {% endif %}
+                      title="타임라인 {{ ev.display_index }}번째{% if ev.display_number is not none %} — {% if ev.display_number_kind == 'exchange' %}교전{% else %}득점{% endif %} #{{ ev.display_number }}{% endif %}">#<span class="fm-num">{{ ev.display_index }}</span></span>
                 <div class="flex-shrink-0 w-16 text-right">
                     <span class="block text-[11px] font-mono text-gray-500" title="영상 재생 위치 (비득점 교전은 경기 시계와 매칭되지 않습니다)">▶ {{ ex.start_time }}</span>
                     {% if ex.duration_sec is defined %}

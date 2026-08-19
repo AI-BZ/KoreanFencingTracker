@@ -52,6 +52,9 @@ REPORTS_DIR = _SERVICE_ROOT / "data" / "reports"
 #: hand-entered one, and this detector's answer from the v1 detector's.
 HANDEDNESS_SOURCE = "detected_v2"
 
+#: A handedness a coach stated directly. Outranks anything measured here.
+USER_CONFIRMED_SOURCE = "user_confirmed"
+
 #: COCO poses are 17 joints of (x, y, confidence).
 _SIDECAR_JOINTS = 17
 _SIDECAR_FLAT_LEN = _SIDECAR_JOINTS * 3
@@ -184,19 +187,33 @@ def write_report(path: Path, report: dict) -> None:
         raise
 
 
-def apply_verdicts(report: dict, verdicts: dict) -> None:
+def apply_verdicts(report: dict, verdicts: dict, force: bool = False) -> List[str]:
     """Set the three handedness fields on both fencer blocks, in place.
 
     Assignment rather than reconstruction: the fencer block holds touch counts,
     action distributions and names that this script has no business rewriting,
     and assigning to an existing key leaves it where it was in the file.
+
+    A block whose ``handedness_source`` is ``"user_confirmed"`` is left alone.
+    That value means a coach stated which hand the fencer holds the weapon in,
+    and a detector — however confident — is evidence about the same question,
+    not authority over the answer. Silently overwriting it would turn a re-run
+    of this script into a way to lose a fact nobody can recover from the video.
+    ``force`` overrides, for the case where the stored value is known wrong.
+
+    Returns the sides that were skipped, so the caller can say so out loud.
     """
+    skipped: List[str] = []
     for side, key in (("left", "left_fencer"), ("right", "right_fencer")):
         block = report[key]
+        if not force and block.get("handedness_source") == USER_CONFIRMED_SOURCE:
+            skipped.append(side)
+            continue
         verdict = verdicts[side]
         block["handedness"] = verdict.handedness
         block["handedness_confidence"] = verdict.confidence
         block["handedness_source"] = HANDEDNESS_SOURCE
+    return skipped
 
 
 # ------------------------------------------------------------------
@@ -259,6 +276,11 @@ def main(argv: Optional[list] = None) -> int:
         action="store_true",
         help="store the verdicts on the report's left_fencer and right_fencer",
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help=f"overwrite a {USER_CONFIRMED_SOURCE} handedness (refused by default)",
+    )
     args = parser.parse_args(argv)
 
     report_id = normalize_report_id(args.report_id)
@@ -280,6 +302,7 @@ def main(argv: Optional[list] = None) -> int:
     }
 
     report_path = None
+    skipped: List[str] = []
     if args.write:
         report_path = resolve_report_path(REPORTS_DIR, report_id)
         if report_path is None:
@@ -300,19 +323,30 @@ def main(argv: Optional[list] = None) -> int:
             )
             return EXIT_ERROR
 
-        apply_verdicts(report, verdicts)
-        write_report(report_path, report)
+        skipped = apply_verdicts(report, verdicts, force=args.force)
+        if len(skipped) == 2:
+            # Nothing left to store — do not rewrite the file just to touch it.
+            report_path = None
+        else:
+            write_report(report_path, report)
 
     if args.json:
         payload = {
             "report_id": report_id,
             "sidecar_path": str(sidecar_path),
             "written_to": str(report_path) if report_path is not None else None,
+            "kept_user_confirmed": skipped,
             "fencers": {side: verdict_to_dict(v) for side, v in verdicts.items()},
         }
         print(json.dumps(payload, ensure_ascii=False, indent=2))
     else:
         print(format_verdicts(report_id, sidecar_path, doc, verdicts))
+        if args.write and skipped:
+            sides = ", ".join(skipped)
+            print(
+                f"\nkept {USER_CONFIRMED_SOURCE} handedness on: {sides} "
+                f"(--force to overwrite)"
+            )
         if report_path is not None:
             print(f"\nwrote handedness ({HANDEDNESS_SOURCE}) to {report_path}")
 

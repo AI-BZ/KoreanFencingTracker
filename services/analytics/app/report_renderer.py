@@ -657,18 +657,18 @@ def annotate_estimated_badges(report_dict: dict) -> dict:
 
 
 def _display_number(kind: str, touch: dict | None, exchange: dict | None) -> dict:
-    """Pick the number a coach points at when they name a timeline row.
+    """Name the row's underlying record: exchange number, else touch number.
 
-    The timeline is the coordinate system the coach is reading off the screen,
-    and a touch row that folded in its exchange *is* that exchange — so the
-    exchange number wins whenever the row has one. Only some touches carry a
-    matched exchange, so the touch-number fallback is the ordinary case rather
-    than an edge case, and both have to look deliberate on screen.
+    This is the tracing handle, not the coach's handle. Touch numbers and
+    exchange numbers are two independent sequences, so on a real report they
+    collide constantly — a page can show an exchange row and a touch row both
+    reading "3". The chip therefore carries ``display_index`` (see
+    :func:`build_timeline`) and this number moves into the tooltip, where it
+    still gets an engineer from a row on screen back to the report JSON.
 
-    A row with neither number gets ``None``; the template drops the chip
-    entirely rather than printing ``#None``. ``display_number_kind`` names the
-    numbering space the value came from, which is what disambiguates "#12" when
-    two rows can legitimately carry the same digits.
+    A row with neither number gets ``None`` and the tooltip simply omits the
+    record reference. ``display_number_kind`` names which sequence the value
+    came from, since "#3" is meaningless without it.
     """
     number = (exchange or {}).get("exchange_number")
     if number is not None:
@@ -689,11 +689,16 @@ def build_timeline(report_dict: dict) -> list:
     the scoreboard caught up.
 
     Returns a list of ``{"kind": "touch"|"exchange", "touch": ..., "exchange":
-    ..., "sort_frame": int, "display_number": int|None,
+    ..., "sort_frame": int, "display_index": int, "display_number": int|None,
     "display_number_kind": "touch"|"exchange"}`` dicts sorted chronologically.
-    The display number is decided here, not in the template: it is the handle a
-    coach uses to name a row ("the call on #12 is wrong"), so the rule behind it
-    belongs somewhere testable. See :func:`_display_number`.
+
+    ``display_index`` is the row's 1-based position in that final order, and it
+    is what the page shows: it is unique by construction and it is what a person
+    gets by counting down the screen, which is exactly what a coach is doing
+    when they say "the call on #12 is wrong". Numbering by the underlying
+    records instead cannot work — touches and exchanges number independently, so
+    two different rows routinely land on the same digits. The ordinal is
+    assigned after the sort, so it always agrees with what is rendered.
     """
     touches = report_dict.get("touches") or []
     exchanges = report_dict.get("exchanges") or []
@@ -724,6 +729,8 @@ def build_timeline(report_dict: dict) -> list:
         })
 
     events.sort(key=lambda ev: ev["sort_frame"])
+    for position, event in enumerate(events, start=1):
+        event["display_index"] = position
     return events
 
 

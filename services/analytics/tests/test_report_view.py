@@ -274,12 +274,51 @@ class TestPrepareReportView:
 # ------------------------------------------------------------------
 
 
-class TestTimelineDisplayNumber:
-    """``build_timeline`` decides the number; Jinja only prints it."""
+class TestTimelineDisplayIndex:
+    """The number on the chip: the row's position, unique by construction."""
 
-    def test_matched_touch_row_takes_the_exchange_number(self):
-        # The touch folded exchange 4 into itself, so the row *is* exchange 4 —
-        # numbering it 1 (its touch number) would point at a different row.
+    def test_ordinals_are_contiguous_from_one_in_display_order(self):
+        timeline = build_timeline(_numbered_report())
+        assert [ev["display_index"] for ev in timeline] == [1, 2, 3, 4]
+
+    def test_ordinal_follows_the_sort_not_the_input_order(self):
+        # Exchange 9 is listed first but happens last, so it is the third row.
+        report = {
+            "touches": [{"touch_number": 1, "frame": 900, "matched_exchange_number": 4}],
+            "exchanges": [
+                {"exchange_number": 9, "start_frame": 5000},
+                {"exchange_number": 4, "start_frame": 800, "end_frame": 890},
+            ],
+        }
+        timeline = build_timeline(report)
+        assert [ev["sort_frame"] for ev in timeline] == [800, 5000]
+        assert [ev["display_index"] for ev in timeline] == [1, 2]
+
+    def test_ordinal_stays_unique_where_the_record_numbers_collide(self):
+        # Touch numbers and exchange numbers are independent sequences, so two
+        # different rows legitimately carry the same record number. That is what
+        # made the record number unusable as the thing a coach points at.
+        report = {
+            "touches": [{"touch_number": 3, "frame": 900, "matched_exchange_number": None}],
+            "exchanges": [{"exchange_number": 3, "start_frame": 100}],
+        }
+        timeline = build_timeline(report)
+        assert [ev["display_number"] for ev in timeline] == [3, 3]
+        assert [ev["display_index"] for ev in timeline] == [1, 2]
+
+    def test_row_without_a_record_number_still_gets_an_ordinal(self):
+        # The ordinal never goes missing — a row a coach cannot name defeats
+        # the whole point of numbering the timeline.
+        report = {"touches": [{"frame": 120}], "exchanges": [{"start_frame": 900}]}
+        timeline = build_timeline(report)
+        assert [ev["display_number"] for ev in timeline] == [None, None]
+        assert [ev["display_index"] for ev in timeline] == [1, 2]
+
+
+class TestTimelineDisplayNumber:
+    """The tracing handle behind the chip: which record the row came from."""
+
+    def test_matched_touch_row_names_the_exchange_it_folded_in(self):
         report = {
             "touches": [{"touch_number": 1, "frame": 900, "matched_exchange_number": 4}],
             "exchanges": [{"exchange_number": 4, "start_frame": 800, "end_frame": 890}],
@@ -302,7 +341,7 @@ class TestTimelineDisplayNumber:
         assert event["display_number"] == 12
         assert event["display_number_kind"] == "exchange"
 
-    def test_row_without_any_number_reports_none(self):
+    def test_row_without_any_record_number_reports_none(self):
         report = {"touches": [{"frame": 120}], "exchanges": [{"start_frame": 900}]}
         touch_ev, exchange_ev = build_timeline(report)
         assert touch_ev["display_number"] is None
@@ -310,12 +349,13 @@ class TestTimelineDisplayNumber:
         assert exchange_ev["display_number"] is None
         assert exchange_ev["display_number_kind"] == "exchange"
 
-    def test_every_event_carries_both_keys(self):
-        timeline = build_timeline(_synthetic_report())
+    def test_every_event_carries_all_three_keys(self):
+        timeline = build_timeline(_numbered_report())
         assert timeline
         for event in timeline:
             assert "display_number" in event
             assert event["display_number_kind"] in ("touch", "exchange")
+            assert event["display_index"] >= 1
 
 
 # ------------------------------------------------------------------
@@ -338,9 +378,13 @@ _CLIP_LABEL = re.compile(r'data-clip-label="([^"]*)"')
 def _numbered_report() -> dict:
     """Four timeline rows, one per numbering case, in chronological order.
 
-    Row 1 folded exchange 4 in (exchange-numbered), row 2 matched nothing
-    (touch-numbered), row 3 carries no number at all, row 4 is a plain
-    exchange.
+    Row 1 folded exchange 3 in, row 2 matched nothing and carries touch number
+    3, row 3 has no record number at all, row 4 is a plain exchange numbered 1.
+
+    Rows 1 and 2 deliberately collide: both are touch rows whose underlying
+    record reads "3", one from the exchange sequence and one from the touch
+    sequence. Nothing on screen separates two touch rows, so if the chip ever
+    goes back to showing the record number this fixture catches it.
     """
     return {
         "summary": {
@@ -351,20 +395,20 @@ def _numbered_report() -> dict:
         "touches": [
             {"touch_number": 1, "frame": 900, "video_timestamp": "0:30",
              "match_time": "2:46", "scorer": "right", "score_after": "0-1",
-             "attack_outcome": "unclear", "matched_exchange_number": 4},
-            {"touch_number": 7, "frame": 1800, "video_timestamp": "1:00",
+             "attack_outcome": "unclear", "matched_exchange_number": 3},
+            {"touch_number": 3, "frame": 1800, "video_timestamp": "1:00",
              "match_time": "2:20", "scorer": "left", "score_after": "1-1",
              "attack_outcome": "unclear", "matched_exchange_number": None},
-            # No touch_number and no matched exchange — nothing to print.
+            # No touch_number and no matched exchange — no record to trace to.
             {"frame": 2400, "video_timestamp": "1:20",
              "match_time": "2:00", "scorer": "left", "score_after": "2-1",
              "attack_outcome": "unclear", "matched_exchange_number": None},
         ],
         "exchanges": [
-            {"exchange_number": 4, "start_frame": 800, "end_frame": 890,
+            {"exchange_number": 3, "start_frame": 800, "end_frame": 890,
              "start_time": "0:26", "end_time": "0:29", "event_type": "failed_attack",
              "event_type_ko": "공격 실패", "attacker": "left", "defender": "right"},
-            {"exchange_number": 5, "start_frame": 2600, "end_frame": 2700,
+            {"exchange_number": 1, "start_frame": 2600, "end_frame": 2700,
              "start_time": "1:26", "end_time": "1:30", "event_type": "mutual_retreat",
              "event_type_ko": "상호 후퇴", "attacker": "unknown", "defender": "unknown"},
         ],
@@ -404,26 +448,35 @@ def numbered_html():
 
 
 class TestNumberChipRendering:
-    def test_chips_read_in_row_order(self, numbered_html):
-        # #4 from the folded exchange, #7 from the unmatched touch's own number,
-        # #5 from the plain exchange. The number-less row contributes nothing.
-        assert _NUM_CHIP.findall(_timeline_block(numbered_html)) == ["4", "7", "5"]
+    def test_chips_are_the_row_ordinals_in_display_order(self, numbered_html):
+        assert _NUM_CHIP.findall(_timeline_block(numbered_html)) == ["1", "2", "3", "4"]
 
-    def test_number_less_row_omits_the_chip_entirely(self, numbered_html):
+    def test_every_chip_on_the_page_is_unique(self, numbered_html):
+        # The whole feature rests on this: "#3 판정이 틀렸다" has to name one row.
+        chips = _NUM_CHIP.findall(_timeline_block(numbered_html))
+        assert len(set(chips)) == len(chips)
+
+    def test_every_row_gets_a_chip_including_the_record_less_one(self, numbered_html):
         block = _timeline_block(numbered_html)
+        rows = block.count('data-kind="touch"') + block.count('data-kind="exchange"')
+        assert rows == 4
+        assert len(_NUM_CHIP.findall(block)) == rows
         assert "#None" not in block
-        assert block.count('data-kind="touch"') == 3
-        assert len(_NUM_CHIP.findall(block)) == 2 + 1  # two touch rows + one exchange
 
     def test_hash_sits_outside_the_barlow_span(self, numbered_html):
         # .fm-num is a digits face; the "#" glyph belongs to the surrounding text.
         for _tag, inner in _FM_NUM.findall(_timeline_block(numbered_html)):
             assert "#" not in inner
 
-    def test_chip_tooltip_names_the_numbering_space(self, numbered_html):
+    def test_tooltip_traces_the_row_back_to_its_record(self, numbered_html):
         block = _timeline_block(numbered_html)
-        assert "교전 번호" in block
-        assert "득점 번호" in block
+        # Row 1 folded exchange 3 in; row 2 is touch 3; row 4 is exchange 1.
+        assert 'title="타임라인 1번째 — 교전 #3"' in block
+        assert 'title="타임라인 2번째 — 득점 #3"' in block
+        assert 'title="타임라인 4번째 — 교전 #1"' in block
+
+    def test_tooltip_omits_the_record_when_there_is_none(self, numbered_html):
+        assert 'title="타임라인 3번째"' in _timeline_block(numbered_html)
 
     def test_no_korean_inside_any_fm_num_element(self, numbered_html):
         offenders = [
@@ -434,24 +487,25 @@ class TestNumberChipRendering:
 
 
 class TestClipLabels:
-    def test_touch_row_leads_with_kind_and_number(self, numbered_html):
+    def test_touch_rows_lead_with_their_kind_and_ordinal(self, numbered_html):
         labels = _CLIP_LABEL.findall(_timeline_block(numbered_html))
-        # The folded row is numbered by its exchange, but it is still a score,
-        # so the word stays 득점 — "교전" means non-scoring in this timeline.
-        assert labels[0] == f"득점 #4 — {_AWAY_STEM} 0-1"
-        assert labels[1] == f"득점 #7 — {_HOME_STEM} 1-1"
+        # Row 1 folded an exchange in, but it is still a score, so the word
+        # stays 득점 — "교전" means non-scoring in this timeline.
+        assert labels[0] == f"득점 #1 — {_AWAY_STEM} 0-1"
+        assert labels[1] == f"득점 #2 — {_HOME_STEM} 1-1"
 
-    def test_number_less_touch_row_drops_the_hash_not_the_label(self, numbered_html):
+    def test_record_less_row_still_gets_a_numbered_label(self, numbered_html):
         labels = _CLIP_LABEL.findall(_timeline_block(numbered_html))
-        assert labels[2] == f"득점 — {_HOME_STEM} 2-1"
+        assert labels[2] == f"득점 #3 — {_HOME_STEM} 2-1"
 
-    def test_exchange_row_keeps_its_kind_and_number(self, numbered_html):
+    def test_exchange_row_keeps_its_kind_and_ordinal(self, numbered_html):
         labels = _CLIP_LABEL.findall(_timeline_block(numbered_html))
-        assert labels[3] == "교전 #5 — 상호 후퇴"
+        assert labels[3] == "교전 #4 — 상호 후퇴"
 
     def test_label_number_matches_the_chip_on_the_same_row(self, numbered_html):
         block = _timeline_block(numbered_html)
-        # Both come from the same ``display_number``; if they ever diverge, a
-        # coach saying "#12" and the workbench chip mean different rows.
+        # Both come from ``display_index``. If they ever diverge, the loop chip
+        # and the AI-clip title name a different row than the one the coach is
+        # looking at, which is worse than having no number at all.
         labelled = re.findall(r'data-clip-label="[^"#]*#(\d+)', block)
         assert labelled == _NUM_CHIP.findall(block)

@@ -264,6 +264,36 @@ class TestApplyVerdicts:
         assert list(report["left_fencer"]) == before + ["handedness_source"]
         assert list(report) == list(make_report())
 
+    def test_a_user_confirmed_handedness_is_never_overwritten(self):
+        """A coach's statement outranks the detector; a re-run must not lose it."""
+        report = make_report()
+        report["left_fencer"].update({
+            "handedness": "right",
+            "handedness_confidence": 1.0,
+            "handedness_source": module.USER_CONFIRMED_SOURCE,
+        })
+
+        skipped = apply_verdicts(report, self._verdicts())
+
+        assert skipped == ["left"]
+        assert report["left_fencer"]["handedness"] == "right"
+        assert report["left_fencer"]["handedness_source"] == module.USER_CONFIRMED_SOURCE
+        # The other side had no such claim on it and is still updated.
+        assert report["right_fencer"]["handedness_source"] == HANDEDNESS_SOURCE
+
+    def test_force_overwrites_a_user_confirmed_handedness(self):
+        report = make_report()
+        report["left_fencer"]["handedness_source"] = module.USER_CONFIRMED_SOURCE
+
+        assert apply_verdicts(report, self._verdicts(), force=True) == []
+        assert report["left_fencer"]["handedness_source"] == HANDEDNESS_SOURCE
+
+    def test_a_detected_source_is_not_protected(self):
+        """Only a human's claim is sticky — re-running over our own output is fine."""
+        report = make_report()
+        report["left_fencer"]["handedness_source"] = HANDEDNESS_SOURCE
+        assert apply_verdicts(report, self._verdicts()) == []
+
     def test_undetermined_verdict_is_written_as_null(self):
         """A refusal is a result; masking it would leave a stale value in place."""
         report = make_report()
@@ -362,6 +392,49 @@ class TestCli:
         assert saved["left_fencer"]["handedness_source"] == HANDEDNESS_SOURCE
         assert saved["meta"]["share_token"] == "abc123"
         assert saved["touches"] == make_report()["touches"]
+
+    def _confirmed_report(self):
+        report = make_report()
+        for key, hand in (("left_fencer", "right"), ("right_fencer", "left")):
+            report[key].update({
+                "handedness": hand,
+                "handedness_confidence": 1.0,
+                "handedness_source": module.USER_CONFIRMED_SOURCE,
+            })
+        return report
+
+    def test_write_leaves_a_fully_user_confirmed_report_untouched(self, reports_root, capsys):
+        """Not even a rewrite with identical bytes — the file is not opened for writing."""
+        write_json(reports_root / "private" / "keypoints" / f"{REPORT_ID}.json", make_sidecar())
+        report_path = reports_root / "private" / f"{REPORT_ID}.json"
+        write_json(report_path, self._confirmed_report())
+        before = report_path.read_text(encoding="utf-8")
+
+        assert main([REPORT_ID, "--write"]) == 0
+        assert report_path.read_text(encoding="utf-8") == before
+        out = capsys.readouterr().out
+        assert module.USER_CONFIRMED_SOURCE in out and "--force" in out
+        assert "wrote handedness" not in out
+
+    def test_force_overwrites_a_user_confirmed_report(self, reports_root, capsys):
+        write_json(reports_root / "private" / "keypoints" / f"{REPORT_ID}.json", make_sidecar())
+        report_path = reports_root / "private" / f"{REPORT_ID}.json"
+        write_json(report_path, self._confirmed_report())
+
+        assert main([REPORT_ID, "--write", "--force"]) == 0
+        saved = json.loads(report_path.read_text(encoding="utf-8"))
+        assert saved["left_fencer"]["handedness"] == "left"
+        assert saved["left_fencer"]["handedness_source"] == HANDEDNESS_SOURCE
+
+    def test_json_output_names_the_sides_it_kept(self, reports_root, capsys):
+        write_json(reports_root / "private" / "keypoints" / f"{REPORT_ID}.json", make_sidecar())
+        report_path = reports_root / "private" / f"{REPORT_ID}.json"
+        write_json(report_path, self._confirmed_report())
+
+        assert main([REPORT_ID, "--write", "--json"]) == 0
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["kept_user_confirmed"] == ["left", "right"]
+        assert payload["written_to"] is None
 
     def test_write_without_a_report_exits_two(self, reports_root, capsys):
         write_json(reports_root / "private" / "keypoints" / f"{REPORT_ID}.json", make_sidecar())
