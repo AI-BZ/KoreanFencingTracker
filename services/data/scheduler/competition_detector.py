@@ -18,6 +18,8 @@ from dotenv import load_dotenv
 
 # 풀 순위 계산 및 비교
 from app.pool_calculator import calculate_pool_total_ranking, compare_pool_rankings, enrich_with_advancement_status
+# 부전승 판정 — 슬롯 수와 경기 수를 섞지 않기 위해 반드시 이 함수를 쓴다
+from app.bracket_utils import is_bye_bout
 
 load_dotenv()
 
@@ -104,15 +106,15 @@ def _de_data_quality_score(de_bracket: dict) -> int:
     return 0
 
 
-def _de_bout_identities(de_bracket: dict) -> set:
-    """DE bracket에 실제로 들어있는 경기의 '내용 기반 신원' 집합.
+def _de_bout_identities(de_bracket: dict) -> dict:
+    """DE bracket에 실제로 들어있는 **실제 대결**의 '내용 기반 신원' → 라운드명 맵.
 
-    신원 = (위상, 라운드명, {선수1, 선수2})
+    신원 = (위상, {선수1, 선수2})
 
     ★ 위상(de_phase)이 반드시 키에 들어가야 한다.
     국가대표 선발 대회의 Dual DE 는 예선(qualifying)과 본선(main)이 '64강'이라는
-    **같은 이름의 라운드를 각각** 가진다. 둘은 완전히 다른 경기다. 라운드 이름만으로
-    세면 두 위상이 한 칸에 합쳐져서, 예선 64강 32경기가 통째로 사라져도 총합이
+    **같은 이름의 라운드를 각각** 가진다. 둘은 완전히 다른 경기다. 위상 없이 세면
+    두 위상이 한 칸에 합쳐져서, 예선 64강 32경기가 통째로 사라져도 총합이
     그럴듯해 보인다. 실제로 이 방식으로 두 번 유실됐다(2026-08-17, 2026-08-18:
     159경기 → 127경기).
 
@@ -125,8 +127,21 @@ def _de_bout_identities(de_bracket: dict) -> set:
     중복 저장 사고(풀 2배 저장, 2026-08-15)처럼 기존 데이터에 사본이 섞이면
     단순 개수 비교는 "기존 48 > 새 24"로 판정해 중복본을 영원히 붙잡는다.
     집합은 사본이 같은 원소로 접혀서 그 덫에 걸리지 않는다.
+
+    ★ 라운드명이 신원에서 빠진 이유 (2026-08-19):
+    구 파서가 8팀/16팀 브래킷의 첫 라운드를 실제와 무관하게 '32강'으로 적어 둔
+    레코드가 77종목 남아 있다. 재수집하면 '8강'/'16강'으로 **교정**되는데, 라운드명이
+    신원에 들어 있으면 같은 선수쌍의 같은 경기가 '다른 경기'로 보여서 교정본이
+    전부 유실로 오판된다 — 즉 **틀린 데이터를 영구히 붙잡는다.**
+    위상은 남기므로 예선/본선 분리는 그대로 지켜진다. 단일 제거 토너먼트에서 한 위상
+    안에 같은 선수쌍이 두 번 편성되는 일은 없으므로 선수쌍만으로 신원이 유일하다.
+
+    ★ 부전승(bye)을 제외하는 이유:
+    부전승은 경기가 아니다(슬롯 수 ≠ 경기 수). 게다가 구 파서는 참가자 표시 컬럼을
+    부전승 경기로 오파싱해 **참가 팀 수만큼 팬텀 항목**을 만들어 뒀다(77종목 635건).
+    이것을 신원으로 세면 팬텀이 '기존에 있던 경기'가 되어 정상적인 재수집을 막는다.
     """
-    identities = set()
+    identities: Dict[tuple, str] = {}
     if not de_bracket or not isinstance(de_bracket, dict):
         return identities
 
@@ -141,10 +156,11 @@ def _de_bout_identities(de_bracket: dict) -> set:
             round_name = (b.get("round_name") or b.get("round") or "").strip()
             p1 = (b.get("player1_name") or "").strip()
             p2 = (b.get("player2_name") or "").strip()
-            if not round_name or not (p1 or p2):
-                # 이름이 전혀 없는 placeholder/bye 골격은 신원을 만들 수 없다.
+            if not round_name or is_bye_bout(b):
+                # 부전승/빈 placeholder 는 경기가 아니다 — 신원을 만들지 않는다.
                 continue
-            identities.add((bout_phase, round_name, frozenset({p1, p2})))
+            # 라운드명은 신원이 아니라 진단 메시지용으로만 들고 간다.
+            identities.setdefault((bout_phase, frozenset({p1, p2})), round_name)
 
     if de_bracket.get("format") == "dual_de":
         for key, phase in (("first_de", "qualifying"), ("second_de", "main")):
@@ -186,17 +202,20 @@ def _de_bracket_regression(new_de: dict, existing_de: dict) -> Optional[str]:
         return None
     new_ids = _de_bout_identities(new_de)
 
-    lost = existing_ids - new_ids
+    lost = set(existing_ids) - set(new_ids)
     if not lost:
         return None
 
     # 어느 (위상, 라운드) 에서 몇 경기가 사라졌는지 집계 — 로그만 보고 판단할 수 있게.
+    # 라운드명은 기존 레코드가 들고 있던 값이다(신원이 아니라 참고용).
     by_round: Dict[tuple, int] = {}
-    for phase, round_name, _players in lost:
+    for ident in lost:
+        phase, _players = ident
+        round_name = existing_ids[ident]
         by_round[(phase, round_name)] = by_round.get((phase, round_name), 0) + 1
     detail = ", ".join(
         f"{phase}/{round_name} {cnt}경기"
-        for (phase, round_name), cnt in sorted(by_round.items())
+        for (phase, round_name), cnt in sorted(by_round.items(), key=lambda x: str(x[0]))
     )
     return f"기존 {len(existing_ids)}경기 중 {len(lost)}경기가 새 데이터에 없음 → {detail}"
 
