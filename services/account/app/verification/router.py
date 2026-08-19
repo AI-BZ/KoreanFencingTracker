@@ -21,7 +21,14 @@ from shared_core.db.client import get_supabase_client
 from shared_core.email import EmailService
 
 from ..config import get_account_settings
-from .processor import VerificationProcessor
+from .processor import (
+    VerificationProcessor,
+    VerificationStorageError,
+    VerificationUploadRejected,
+    build_verification_object_path,
+    upload_verification_image,
+    validate_verification_image,
+)
 from .brn import validate_brn_checkdigit
 from .claims import router as claims_router
 from .notification_service import VerificationNotificationService
@@ -33,6 +40,14 @@ router = APIRouter(prefix="/verification", tags=["verification"])
 router.include_router(claims_router)
 
 _templates = Jinja2Templates(directory=str(Path(__file__).parent.parent.parent / "templates"))
+
+# verifications.verification_type CHECK 제약(migration 003)과 일치해야 한다.
+# 화이트리스트 밖의 값은 DB가 거부하기 전에 400으로 막는다.
+ALLOWED_VERIFICATION_TYPES = frozenset({
+    "association_card",
+    "mask_photo",
+    "uniform_photo",
+})
 
 
 def get_supabase():
@@ -274,36 +289,46 @@ async def upload_verification(
     if not member:
         raise HTTPException(status_code=401, detail="로그인이 필요합니다")
 
-    if not file.content_type or not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="이미지 파일만 업로드 가능합니다")
+    if verification_type not in ALLOWED_VERIFICATION_TYPES:
+        raise HTTPException(status_code=400, detail="지원하지 않는 인증 유형입니다")
 
     content = await file.read()
-    if len(content) > 10 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="파일 크기는 10MB 이하여야 합니다")
+
+    # 크기/형식 검증. 선언된 Content-Type이 아니라 실제 바이트를 스니핑해서
+    # 판단하고, 저장 확장자도 스니핑 결과에서만 파생시킨다(사용자 파일명 미사용).
+    try:
+        actual_mime, file_ext = validate_verification_image(content, file.content_type)
+    except VerificationUploadRejected as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     supabase = get_supabase()
 
-    # Supabase Storage에 업로드
-    import uuid
-    file_ext = file.filename.split(".")[-1] if file.filename else "jpg"
-    storage_path = f"verifications/{member['id']}/{uuid.uuid4()}.{file_ext}"
-
+    # 비공개 버킷에 업로드. 실패하면 여기서 끝낸다 —
+    # 공개 URL이나 가짜 로컬 경로로 폴백하고 DB 행만 남기던 예전 동작은 제거했다.
+    storage_path = build_verification_object_path(member["id"], file_ext)
     try:
-        supabase.storage.from_("verification-images").upload(
-            storage_path,
-            content,
-            {"content-type": file.content_type}
+        upload_verification_image(storage_path, content, actual_mime)
+    except VerificationStorageError as e:
+        logger.error(f"인증 이미지 업로드 거부 (member={member['id']}): {e}")
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "인증 이미지 저장소가 설정되지 않아 업로드를 처리할 수 없습니다. "
+                "관리자에게 문의해주세요."
+            ),
         )
-        public_url = supabase.storage.from_("verification-images").get_public_url(storage_path)
-    except Exception as e:
-        logger.error(f"Storage 업로드 오류: {e}")
-        public_url = f"/static/uploads/{storage_path}"
 
-    # 인증 레코드 생성
+    # 인증 레코드 생성.
+    # image_url은 003 마이그레이션에서 NOT NULL로 잡혀 있어 값을 채워야 하지만,
+    # 더 이상 공개 URL을 넣지 않는다. 역참조 불가능한 storage:// URI를 넣어
+    # (a) NOT NULL을 만족시키고 (b) 혹시 이 값을 href/img src로 쓰는 코드가 있으면
+    # 조용히 유출되는 대신 눈에 띄게 깨지도록 한다.
+    # 정식 값은 image_storage_path이며, 읽을 때는 매번 서명 URL을 발급한다.
+    settings = get_account_settings()
     verification_data = {
         "member_id": member["id"],
         "verification_type": verification_type,
-        "image_url": public_url,
+        "image_url": f"storage://{settings.VERIFICATION_STORAGE_BUCKET}/{storage_path}",
         "image_storage_path": storage_path,
         "status": "pending",
     }

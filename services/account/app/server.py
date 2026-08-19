@@ -3,6 +3,7 @@ Account Service - FastAPI 서버
 
 인증/프로필/구독 관리 서비스 (account.fencingmind.ai, port 70)
 """
+from contextlib import asynccontextmanager
 from urllib.parse import quote
 
 from fastapi import FastAPI, Request
@@ -13,8 +14,11 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 
+from loguru import logger
 from slowapi.errors import RateLimitExceeded
 
+from .config import get_account_settings
+from .deletion import scheduler as deletion_scheduler
 from .auth.router import router as auth_router, limiter
 from .profile.router import router as profile_router
 from .verification.router import router as verification_router
@@ -29,10 +33,37 @@ SERVICE_DIR = Path(__file__).parent.parent
 TEMPLATES_DIR = SERVICE_DIR / "templates"
 STATIC_DIR = SERVICE_DIR / "static"
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """서버 기동/종료 훅.
+
+    Startup: 탈퇴 회원 파기 스케줄러 (ENABLE_ACCOUNT_SCHEDULER 로 on/off).
+             기본값 False — 파기는 되돌릴 수 없으므로 명시적으로 켜야 한다.
+    """
+    settings = get_account_settings()
+
+    if settings.ENABLE_ACCOUNT_SCHEDULER:
+        deletion_scheduler.start(
+            interval_minutes=settings.ACCOUNT_DELETION_INTERVAL_MINUTES,
+            limit=settings.ACCOUNT_DELETION_BATCH_LIMIT,
+            dry_run=settings.ACCOUNT_DELETION_DRY_RUN,
+        )
+    else:
+        logger.info(
+            "[scheduler] 비활성 (ENABLE_ACCOUNT_SCHEDULER=false) - "
+            "탈퇴 회원 파기가 자동 실행되지 않습니다"
+        )
+
+    yield
+
+    await deletion_scheduler.stop()
+
+
 app = FastAPI(
     title="FencingMind Account",
     description="인증/프로필/구독 관리 서비스",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 # Rate limiter (공개 검색 엔드포인트 남용/스크레이핑 차단)

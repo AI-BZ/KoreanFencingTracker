@@ -21,6 +21,14 @@ from pydantic import BaseModel
 
 from shared_core.auth.jwt import get_current_member
 from shared_core.db.client import get_supabase_client
+from app.verification.processor import (
+    build_verification_object_path,
+    upload_verification_image,
+    validate_verification_image,
+)
+from app.config import get_account_settings
+
+VERIFICATION_BUCKET = get_account_settings().VERIFICATION_STORAGE_BUCKET
 
 from ..config import get_account_settings, VERIFICATION_PROMPTS
 from .processor import GeminiVerifier
@@ -424,26 +432,31 @@ async def submit_org_claim(
 
     document_url = None
 
-    # Upload document if provided
-    if file and file.content_type and file.content_type.startswith("image/"):
+    # 사업자등록증 업로드.
+    #
+    # 여기 담기는 것은 대표자 성명·주소·사업자등록번호다. 예전에는 공개 URL을
+    # 만들어 DB에 저장했고, 확장자를 file.filename에서 그대로 가져와 경로에
+    # 넣었으며, MIME은 클라이언트가 준 값을 믿었다. 업로드가 실패해도 예외를
+    # 삼키고 document_url=None으로 claim 행을 만들어, 관리자는 첨부가 있는 줄
+    # 알고 심사하게 됐다. 사진 인증 경로(router.py)와 동일한 처리로 맞춘다.
+    if file and file.filename:
         content = await file.read()
-        if len(content) > 10 * 1024 * 1024:
-            raise HTTPException(status_code=400, detail="파일 크기는 10MB 이하여야 합니다")
-
-        import uuid
-        file_ext = file.filename.split(".")[-1] if file.filename else "jpg"
-        storage_path = f"org-claims/{member['id']}/{uuid.uuid4()}.{file_ext}"
-
+        actual_mime, file_ext = validate_verification_image(content, file.content_type)
+        storage_path = build_verification_object_path(member["id"], file_ext)
         try:
-            supabase.storage.from_("verification-images").upload(
-                storage_path, content, {"content-type": file.content_type}
-            )
-            document_url = supabase.storage.from_("verification-images").get_public_url(storage_path)
+            upload_verification_image(storage_path, content, actual_mime)
         except Exception as e:
-            logger.error(f"Document upload error: {e}")
-            document_url = None
-
-        claim_data["document_url"] = document_url
+            logger.error(f"조직 인증 서류 업로드 실패: member={member['id']}: {e}")
+            raise HTTPException(
+                status_code=503,
+                detail="서류 저장에 실패했습니다. 잠시 후 다시 시도해주세요.",
+            )
+        # 공개 URL을 만들지 않는다. 열람은 서명 URL로만 한다.
+        # organization_claims 에는 verifications.image_storage_path 에 해당하는
+        # 경로 전용 컬럼이 없어서, document_url 에 역참조 불가능한 storage:// URI 로
+        # 담는다. 경로는 접두사를 떼면 그대로 복원된다. 이 값을 <img src> 로 쓰면
+        # 조용히 새는 대신 눈에 띄게 깨진다.
+        claim_data["document_url"] = f"storage://{VERIFICATION_BUCKET}/{storage_path}"
 
         # ===== 3-Layer BRN Verification Pipeline =====
         brn_result = await _run_brn_verification_pipeline(

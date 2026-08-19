@@ -39,6 +39,29 @@ class AccountSettings(SharedAuthSettings):
     VERIFICATION_AUTO_APPROVE_THRESHOLD: float = 0.85
     VERIFICATION_AUTO_REJECT_THRESHOLD: float = 0.60
 
+    # ---------------------------------------------------------------
+    # 인증 이미지 스토리지 (비공개 버킷 + 서명 URL)
+    # ---------------------------------------------------------------
+    # 이 버킷에는 미성년 선수의 얼굴/도복/마스크 사진, 협회 등록증,
+    # 사업자등록증(대표자 성명·주소·사업자번호)이 들어간다. 절대 공개 버킷이면 안 되고,
+    # DB에도 공개 URL을 저장하지 않는다. DB에는 객체 경로만 저장하고,
+    # 읽어야 할 때마다 짧은 수명의 서명 URL(signed URL)을 발급한다.
+    VERIFICATION_STORAGE_BUCKET: str = os.getenv(
+        "VERIFICATION_STORAGE_BUCKET", "verification-images"
+    )
+
+    # 서명 URL 유효기간(초).
+    # 이 URL의 유일한 소비자는 업로드 직후 곧바로 이미지를 내려받는 VerificationProcessor다.
+    # 발급 → 다운로드까지 정상 경로에서는 수 초면 끝나고, 여유를 둬도 Gemini 호출
+    # 타임아웃(30초)의 몇 배면 충분하다. 300초는 느린 네트워크/재시도를 흡수하면서도
+    # URL이 로그·리퍼러·프록시 캐시로 새더라도 유효 창을 5분으로 묶어둔다.
+    # 관리자 열람용으로 재사용할 때도 같은 값을 쓰되, 길게 늘리지 말 것.
+    VERIFICATION_SIGNED_URL_TTL_SECONDS: int = 300
+
+    # 업로드 크기 상한 (bytes). Gemini inline_data 요청 본문에도 그대로 실리므로
+    # 무한정 키우면 API 호출이 실패한다.
+    VERIFICATION_MAX_UPLOAD_BYTES: int = 10 * 1024 * 1024
+
     # Email (Resend)
     RESEND_API_KEY: str = os.getenv("RESEND_API_KEY", "")
     EMAIL_VERIFICATION_EXPIRE_HOURS: int = 24
@@ -49,6 +72,20 @@ class AccountSettings(SharedAuthSettings):
 
     # Account deletion
     ACCOUNT_DELETION_GRACE_DAYS: int = 30
+
+    # --- 탈퇴 회원 파기 잡 (app/deletion/) ---
+    # 파기는 되돌릴 수 없으므로 두 개의 스위치를 모두 켜야 실제로 실행된다.
+    #
+    # 1) ENABLE_ACCOUNT_SCHEDULER: 기본 False.
+    #    켠 채로 배포하면 예정일이 지난 회원의 파기가 즉시 시작된다.
+    #    운영 배포 → 로그 확인 → 명시적으로 True 로 올리는 순서를 강제한다.
+    ENABLE_ACCOUNT_SCHEDULER: bool = False
+    # 2) ACCOUNT_DELETION_DRY_RUN: 기본 True.
+    #    스케줄러를 실수로 켜더라도 첫 동작은 "무엇이 지워질지" 로그만 남긴다.
+    #    실제 파기는 이 값을 False 로 내려야 시작된다.
+    ACCOUNT_DELETION_DRY_RUN: bool = True
+    ACCOUNT_DELETION_INTERVAL_MINUTES: int = 60
+    ACCOUNT_DELETION_BATCH_LIMIT: int = 50
 
     # NTS (국세청) API for BRN verification
     NTS_API_KEY: str = os.getenv("NTS_API_KEY", "")

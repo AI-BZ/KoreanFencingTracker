@@ -1,0 +1,639 @@
+{% extends "base.html" %}
+
+{% block title %}{{ i18n.auth.login.page_title|default('로그인 - FencingMind') }}{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+    <div class="auth-card login-card">
+        <!-- 헤더 -->
+        <div class="auth-header">
+            <img src="/static/images/logo/FencingMind_logo_long_white.png" alt="FencingMind" class="auth-logo-img">
+            <p class="auth-tagline">세계 최초의 펜싱 AI 데이터 플랫폼</p>
+        </div>
+
+        <!-- 서비스 소개 카드 -->
+        <div class="service-cards">
+            {% for svc in available_services %}
+            <div class="service-card{% if not svc.is_active %} coming-soon{% endif %}">
+                <span class="service-card-icon">{{ svc.icon|safe }}</span>
+                <span class="service-card-name">{{ svc.display_name }}</span>
+                {% if not svc.is_active %}<span class="service-card-badge">Coming Soon</span>{% endif %}
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- 인증 섹션 -->
+        <div class="auth-section">
+            <h2 class="auth-section-title">가입 / 로그인</h2>
+
+            <!-- OAuth 버튼 -->
+            <div class="auth-buttons">
+                <a href="/auth/login/kakao{% if redirect_url %}?redirect={{ redirect_url }}{% endif %}" class="oauth-btn kakao-btn">
+                    <svg class="oauth-icon" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 3c-5.5 0-10 3.58-10 8 0 2.81 1.87 5.28 4.7 6.7-.15.58-.52 2.1-.6 2.43-.1.4.14.4.31.29.13-.08 2.05-1.4 2.88-1.97.84.13 1.73.2 2.64.2 5.5 0 10-3.58 10-8s-4.5-8-10-8z"/>
+                    </svg>
+                    {{ i18n.auth.login.kakao_btn|default('카카오로 시작하기') }}
+                </a>
+
+                <a href="/auth/login/google{% if redirect_url %}?redirect={{ redirect_url }}{% endif %}" class="oauth-btn google-btn">
+                    <svg class="oauth-icon" viewBox="0 0 24 24">
+                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                    </svg>
+                    {{ i18n.auth.login.google_btn|default('Google로 계속하기') }}
+                </a>
+            </div>
+
+            <!-- 구분선 -->
+            <div class="auth-divider">
+                <span>또는</span>
+            </div>
+
+            <!-- 이메일 인증코드 -->
+            <div id="emailSection">
+                <!-- Step 1: 이메일 입력 -->
+                <div id="emailInputStep">
+                    <div class="email-form-row">
+                        <input
+                            type="email"
+                            id="emailInput"
+                            placeholder="이메일 주소"
+                            class="fm-input email-input"
+                            autocomplete="email"
+                        >
+                        <button type="button" id="sendCodeBtn" class="fm-btn fm-btn-primary send-code-btn" disabled onclick="sendEmailCode()">
+                            인증코드 받기
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Step 2: 코드 입력 (전송 후 표시) -->
+                <div id="codeInputStep" style="display: none;">
+                    <p class="code-sent-msg">
+                        <span id="sentEmailDisplay"></span>으로 인증코드를 발송했습니다.
+                    </p>
+                    <div class="code-form-row">
+                        <input
+                            type="text"
+                            id="codeInput"
+                            placeholder="6자리 코드"
+                            class="fm-input code-input"
+                            maxlength="6"
+                            pattern="[0-9]{6}"
+                            inputmode="numeric"
+                            autocomplete="one-time-code"
+                        >
+                        <button type="button" id="verifyCodeBtn" class="fm-btn fm-btn-primary verify-code-btn" disabled onclick="verifyEmailCode()">
+                            확인
+                        </button>
+                    </div>
+                    <div class="code-actions">
+                        <span id="resendTimer" class="resend-timer"></span>
+                        <button type="button" id="resendBtn" class="resend-btn" style="display: none;" onclick="resendCode()">재발송</button>
+                    </div>
+                    <div id="codeError" class="code-error" style="display: none;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 하단 안내 -->
+        <div class="auth-footer-note">
+            <p>가입 시 <a href="/legal/terms" target="_blank">이용약관</a> 및 <a href="/legal/privacy" target="_blank">개인정보처리방침</a>에 동의하는 것으로 간주됩니다.</p>
+        </div>
+    </div>
+</div>
+
+<style>
+.auth-container {
+    min-height: calc(100vh - 160px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+}
+
+.login-card {
+    max-width: 460px;
+}
+
+.auth-card {
+    background: var(--bg-card);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    box-shadow: var(--shadow-lg);
+    padding: 2.5rem;
+    width: 100%;
+}
+
+.auth-header {
+    text-align: center;
+    margin-bottom: 1.5rem;
+}
+
+.auth-logo-img {
+    height: 40px;
+    width: auto;
+    margin-bottom: 0.75rem;
+}
+
+.auth-header h1 {
+    font-size: 1.6rem;
+    font-weight: 700;
+    margin-bottom: 0.25rem;
+    background: linear-gradient(135deg, var(--text-primary), var(--accent-gold));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.auth-tagline {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+/* Service cards */
+.service-cards {
+    display: flex;
+    gap: 0.6rem;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.service-card {
+    flex: 1;
+    min-width: 70px;
+    max-width: 90px;
+    text-align: center;
+    padding: 0.75rem 0.4rem;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    transition: all 0.3s ease;
+    position: relative;
+}
+
+.service-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--border-light);
+    background: rgba(255, 255, 255, 0.06);
+    box-shadow: var(--shadow-sm);
+}
+
+.service-card.coming-soon {
+    opacity: 0.5;
+}
+
+.service-card-icon {
+    display: block;
+    font-size: 1.5rem;
+    margin-bottom: 0.35rem;
+}
+
+.service-card-name {
+    display: block;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.service-card-badge {
+    display: inline-block;
+    font-size: 0.55rem;
+    background: rgba(245, 158, 11, 0.2);
+    color: var(--warning-color);
+    padding: 1px 5px;
+    border-radius: 3px;
+    margin-top: 3px;
+}
+
+/* Auth section */
+.auth-section-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 1rem;
+}
+
+.auth-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.oauth-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    padding: 0.85rem 1rem;
+    border-radius: 10px;
+    font-size: 0.95rem;
+    font-weight: 500;
+    text-decoration: none;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.oauth-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+}
+
+.oauth-icon {
+    width: 22px;
+    height: 22px;
+}
+
+.kakao-btn {
+    background: #FEE500;
+    color: #000;
+}
+
+.google-btn {
+    background: #fff;
+    color: #333;
+}
+
+.auth-divider {
+    display: flex;
+    align-items: center;
+    margin: 1.25rem 0;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+    content: '';
+    flex: 1;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.auth-divider span {
+    padding: 0 0.75rem;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
+/* Input styles */
+.fm-input {
+    padding: 0.75rem 1rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    font-size: 0.95rem;
+    color: var(--text-primary);
+    font-family: inherit;
+    transition: all 0.3s ease;
+}
+
+.fm-input::placeholder {
+    color: var(--text-muted);
+}
+
+.fm-input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    background: rgba(255, 255, 255, 0.08);
+    box-shadow: 0 0 16px var(--glow-primary);
+}
+
+/* Button styles */
+.fm-btn {
+    padding: 0.75rem 1.25rem;
+    border: none;
+    border-radius: 10px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+}
+
+.fm-btn-primary {
+    background: linear-gradient(135deg, var(--accent-primary), #a02320);
+    color: #fff;
+    box-shadow: 0 4px 15px var(--glow-primary);
+}
+
+.fm-btn-primary:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 25px var(--glow-primary);
+}
+
+.fm-btn-primary:disabled {
+    background: var(--bg-tertiary);
+    color: var(--text-muted);
+    box-shadow: none;
+    cursor: not-allowed;
+}
+
+/* Email section */
+.email-form-row {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.email-input {
+    flex: 1;
+}
+
+/* Code input step */
+.code-sent-msg {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.75rem;
+}
+
+.code-sent-msg span {
+    font-weight: 600;
+    color: var(--accent-gold);
+}
+
+.code-form-row {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.code-input {
+    flex: 1;
+    font-size: 1.1rem;
+    letter-spacing: 6px;
+    text-align: center;
+    font-weight: 600;
+}
+
+.code-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.resend-timer {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.resend-btn {
+    background: none;
+    border: none;
+    color: var(--accent-gold);
+    font-size: 0.8rem;
+    cursor: pointer;
+    padding: 0;
+    text-decoration: underline;
+    font-family: inherit;
+}
+
+.code-error {
+    margin-top: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 8px;
+    color: var(--danger-color);
+    font-size: 0.8rem;
+}
+
+/* Footer note */
+.auth-footer-note {
+    margin-top: 1.5rem;
+    text-align: center;
+}
+
+.auth-footer-note p {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+.auth-footer-note a {
+    color: var(--accent-gold);
+    text-decoration: none;
+}
+
+.auth-footer-note a:hover {
+    text-decoration: underline;
+}
+
+@media (max-width: 480px) {
+    .auth-card {
+        padding: 1.5rem;
+        border-radius: 16px;
+    }
+    .service-cards {
+        gap: 0.4rem;
+    }
+    .service-card {
+        min-width: 56px;
+        padding: 0.6rem 0.3rem;
+    }
+    .service-card-icon {
+        font-size: 1.25rem;
+    }
+    .service-card-name {
+        font-size: 0.65rem;
+    }
+    .email-form-row {
+        flex-direction: column;
+    }
+    .code-form-row {
+        flex-direction: column;
+    }
+}
+</style>
+
+<script>
+let emailToken = null;
+let resendCooldown = 0;
+let resendInterval = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+    const emailInput = document.getElementById('emailInput');
+    const sendCodeBtn = document.getElementById('sendCodeBtn');
+    const codeInput = document.getElementById('codeInput');
+    const verifyCodeBtn = document.getElementById('verifyCodeBtn');
+
+    emailInput.addEventListener('input', function() {
+        const isValid = this.value.includes('@') && this.value.includes('.');
+        sendCodeBtn.disabled = !isValid;
+    });
+
+    emailInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !sendCodeBtn.disabled) {
+            e.preventDefault();
+            sendEmailCode();
+        }
+    });
+
+    codeInput.addEventListener('input', function() {
+        this.value = this.value.replace(/[^0-9]/g, '');
+        verifyCodeBtn.disabled = this.value.length !== 6;
+    });
+
+    codeInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !verifyCodeBtn.disabled) {
+            e.preventDefault();
+            verifyEmailCode();
+        }
+    });
+});
+
+
+async function sendEmailCode() {
+    const emailInput = document.getElementById('emailInput');
+    const sendCodeBtn = document.getElementById('sendCodeBtn');
+    const email = emailInput.value.trim();
+
+    if (!email) return;
+
+    sendCodeBtn.disabled = true;
+    sendCodeBtn.textContent = '발송 중...';
+
+    try {
+        const formData = new FormData();
+        formData.append('email', email);
+
+        const res = await fetch('/auth/email/send-code', {
+            method: 'POST',
+            body: formData,
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+            throw new Error(data.detail || '발송 실패');
+        }
+
+        emailToken = data.token;
+
+        document.getElementById('emailInputStep').style.display = 'none';
+        document.getElementById('codeInputStep').style.display = 'block';
+        document.getElementById('sentEmailDisplay').textContent = email;
+        document.getElementById('codeInput').focus();
+
+        startResendCooldown();
+
+    } catch (e) {
+        sendCodeBtn.disabled = false;
+        sendCodeBtn.textContent = '인증코드 받기';
+        showCodeError(e.message);
+    }
+}
+
+
+async function verifyEmailCode() {
+    const codeInput = document.getElementById('codeInput');
+    const verifyCodeBtn = document.getElementById('verifyCodeBtn');
+    const code = codeInput.value.trim();
+
+    if (!code || code.length !== 6 || !emailToken) return;
+
+    verifyCodeBtn.disabled = true;
+    verifyCodeBtn.textContent = '확인 중...';
+    hideCodeError();
+
+    try {
+        const formData = new FormData();
+        formData.append('token', emailToken);
+        formData.append('code', code);
+
+        const res = await fetch('/auth/email/verify-code', {
+            method: 'POST',
+            body: formData,
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+            throw new Error(data.detail || '인증 실패');
+        }
+
+        if (data.is_new) {
+            window.location.href = '/auth/register?token=' + encodeURIComponent(data.token);
+        } else {
+            const redirectUrl = '{{ redirect_url }}' || 'https://data.fencingmind.ai';
+            document.cookie = 'access_token=' + data.access_token + '; path=/; domain=.fencingmind.ai; secure; samesite=lax; max-age=86400';
+            const displayInfo = encodeURIComponent(JSON.stringify({email: data.email}));
+            document.cookie = 'user_display=' + displayInfo + '; path=/; domain=.fencingmind.ai; secure; samesite=lax; max-age=86400';
+            window.location.href = redirectUrl;
+        }
+
+    } catch (e) {
+        verifyCodeBtn.disabled = false;
+        verifyCodeBtn.textContent = '확인';
+        showCodeError(e.message);
+    }
+}
+
+
+function startResendCooldown() {
+    resendCooldown = 60;
+    const timerEl = document.getElementById('resendTimer');
+    const resendBtn = document.getElementById('resendBtn');
+
+    resendBtn.style.display = 'none';
+    timerEl.textContent = resendCooldown + '초 후 재발송 가능';
+
+    resendInterval = setInterval(function() {
+        resendCooldown--;
+        if (resendCooldown <= 0) {
+            clearInterval(resendInterval);
+            timerEl.textContent = '';
+            resendBtn.style.display = 'inline';
+        } else {
+            timerEl.textContent = resendCooldown + '초 후 재발송 가능';
+        }
+    }, 1000);
+}
+
+
+async function resendCode() {
+    const email = document.getElementById('sentEmailDisplay').textContent;
+    const resendBtn = document.getElementById('resendBtn');
+
+    resendBtn.style.display = 'none';
+    hideCodeError();
+
+    try {
+        const formData = new FormData();
+        formData.append('email', email);
+
+        const res = await fetch('/auth/email/send-code', {
+            method: 'POST',
+            body: formData,
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+            throw new Error(data.detail || '재발송 실패');
+        }
+
+        emailToken = data.token;
+        document.getElementById('codeInput').value = '';
+        document.getElementById('verifyCodeBtn').disabled = true;
+        startResendCooldown();
+
+    } catch (e) {
+        showCodeError(e.message);
+        document.getElementById('resendBtn').style.display = 'inline';
+    }
+}
+
+
+function showCodeError(msg) {
+    const el = document.getElementById('codeError');
+    el.textContent = msg;
+    el.style.display = 'block';
+}
+
+function hideCodeError() {
+    document.getElementById('codeError').style.display = 'none';
+}
+</script>
+{% endblock %}
