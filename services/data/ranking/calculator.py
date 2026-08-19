@@ -618,14 +618,24 @@ class RankingCalculator:
                     age_group = raw_age_group or extract_age_group(event_name)
                     age_group = AGE_GROUP_NORMALIZE.get(age_group, age_group)
 
-                total_participants = event.get("total_participants", 0)
+                # 참가 인원(base_points 산정 기준): 실제 완주자 수 아래로 내려가면 안 된다.
+                # final_rankings 에 순위가 매겨진 선수 수 = 그 종목을 실제로 완주한 인원의 하한
+                # (순위를 받으려면 참가·완주했어야 하므로). server.load_data_from_supabase 가
+                # 넘기는 total_participants 는 풀 참가자 집계라, 결선 진출자 일부가 풀 데이터에서
+                # 누락되면 완주자 수보다 작게 나오는 이벤트가 있다(포인트 구간이 한 단계 하락).
+                # max 로 보정: 저장값이 이미 완주자 수 이상이면 불변, 작을 때만 완주자 수로 올린다.
+                # (NT 나이리그 서브랭킹은 _generate_national_sub_rankings 가 sub_total=len(players)
+                #  로 자체 계산하므로 이 값에 영향받지 않는다 — 2026-06-22 규칙 유지)
+                final_rankings = event.get("final_rankings", [])
+                finisher_count = sum(1 for fr in final_rankings if fr.get("name"))
+                total_participants = max(event.get("total_participants", 0), finisher_count)
 
                 # 개인전만 처리 (단체전 제외)
                 if "단" in event_name or "단체" in event_name:
                     continue
 
                 # 최종 순위에서 결과 추출
-                for ranking in event.get("final_rankings", []):
+                for ranking in final_rankings:
                     rank = ranking.get("rank", 0)
                     name = ranking.get("name", "")
                     team = ranking.get("team", "")
