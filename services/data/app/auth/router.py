@@ -10,6 +10,7 @@ Auth Router - Account 서비스 리다이렉트 shim
 """
 import os
 from typing import Optional
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse
@@ -22,13 +23,34 @@ router = APIRouter(prefix="/auth", tags=["auth-shim"])
 ACCOUNT_URL = os.getenv("ACCOUNT_SERVICE_URL", "https://account.fencingmind.ai")
 
 
+def _account_url(request: Request, path: str, **params: Optional[str]) -> str:
+    """account 서비스 URL 조립.
+
+    현재 요청의 언어(request.state.lang)를 lang 쿼리파라미터로 붙여서
+    account 로그인/로그아웃 화면이 같은 언어로 뜨도록 한다.
+    account 미들웨어는 ?lang= 를 최우선으로 인식한다.
+
+    쿼리는 urlencode 로 조립한다 — redirect 값 자체에 ?/& 가 들어가면
+    문자열 이어붙이기로는 파라미터 경계가 깨진다.
+    lang 은 미들웨어가 request.state 를 채우지 않은 경로에서도 안전하도록
+    getattr 폴백을 쓴다.
+    """
+    query = {key: value for key, value in params.items() if value}
+
+    lang = getattr(request.state, "lang", None)
+    if lang:
+        query["lang"] = lang
+
+    url = f"{ACCOUNT_URL}{path}"
+    if query:
+        url += "?" + urlencode(query)
+    return url
+
+
 @router.get("/login")
 async def login_redirect(request: Request, redirect: Optional[str] = None):
     """로그인 → account 서비스로 리다이렉트"""
-    url = f"{ACCOUNT_URL}/auth/login"
-    if redirect:
-        url += f"?redirect={redirect}"
-    return RedirectResponse(url=url)
+    return RedirectResponse(url=_account_url(request, "/auth/login", redirect=redirect))
 
 
 @router.get("/me")
@@ -41,18 +63,18 @@ async def get_my_profile(request: Request):
 
 
 @router.get("/verification")
-async def verification_redirect():
+async def verification_redirect(request: Request):
     """인증 페이지 → account 서비스로 리다이렉트"""
-    return RedirectResponse(url=f"{ACCOUNT_URL}/account/verification")
+    return RedirectResponse(url=_account_url(request, "/account/verification"))
 
 
 @router.post("/logout")
-async def logout_redirect():
+async def logout_redirect(request: Request):
     """로그아웃 → account 서비스로 리다이렉트"""
-    return RedirectResponse(url=f"{ACCOUNT_URL}/auth/logout", status_code=303)
+    return RedirectResponse(url=_account_url(request, "/auth/logout"), status_code=303)
 
 
 @router.get("/logout")
-async def logout_redirect_get():
+async def logout_redirect_get(request: Request):
     """로그아웃 (GET) → account 서비스로 리다이렉트"""
-    return RedirectResponse(url=f"{ACCOUNT_URL}/auth/logout")
+    return RedirectResponse(url=_account_url(request, "/auth/logout"))

@@ -8,6 +8,8 @@ Detects language from:
 4. Default to Korean
 """
 
+import os
+
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -117,14 +119,20 @@ class LanguageMiddleware(BaseHTTPMiddleware):
 
         response = await call_next(request)
 
-        # Set language cookie
+        # Set language cookie (.fencingmind.ai 공유 — shared_core.i18n.middleware 와 동일 방식)
+        # domain 이 없으면 host-only 쿠키가 되어 account.fencingmind.ai 요청에 전송되지 않는다.
+        # COOKIE_DOMAIN 을 빈 값으로 두면(로컬 http 개발) domain 생략 + secure=False 로 떨어져
+        # http://localhost 에서도 쿠키가 저장된다.
+        cookie_domain = os.getenv("COOKIE_DOMAIN", ".fencingmind.ai")
+        cookie_kwargs = {'domain': cookie_domain} if cookie_domain else {}
         response.set_cookie(
             key='lang',
             value=lang,
             max_age=365 * 24 * 60 * 60,  # 1 year
             httponly=False,
-            secure=True,
-            samesite='lax'
+            secure=bool(cookie_domain),
+            samesite='lax',
+            **cookie_kwargs
         )
 
         return response

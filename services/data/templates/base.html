@@ -124,7 +124,8 @@
                 <input type="text" id="global-search" aria-label="{{ _t('선수 또는 팀 검색...') }}" placeholder="{{ _t('선수 또는 팀 검색...') }}">
             </div>
             <div class="auth-nav" id="authNav">
-                <a href="https://account.fencingmind.ai/auth/login?redirect={{ request.url | urlencode }}" class="auth-btn login-btn" id="loginBtn" onclick="localStorage.setItem('fencingmind_login_redirect', window.location.href)">{{ _t('로그인') }}</a>
+                {# lang= 은 account 로그인 화면 자체의 언어. redirect 는 request.url(=/{{ lang }}/... 경로 prefix 포함)이라 로그인 후 복귀도 같은 언어로 떨어진다. #}
+                <a href="https://account.fencingmind.ai/auth/login?lang={{ lang|default('ko') }}&amp;redirect={{ request.url | urlencode }}" class="auth-btn login-btn" id="loginBtn" onclick="localStorage.setItem('fencingmind_login_redirect', window.location.href)">{{ _t('로그인') }}</a>
             </div>
             <!-- Language Switcher (desktop) -->
             <div class="lang-switcher">
