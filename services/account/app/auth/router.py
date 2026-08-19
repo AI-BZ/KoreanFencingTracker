@@ -609,12 +609,17 @@ async def get_oauth_providers(request: Request):
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request, redirect: Optional[str] = None):
     """로그인 페이지 표시 (서비스 소개 + 인증 선택)"""
-    available_services = _get_available_services()
+    i18n_ctx = create_language_context(request)
+    available_services = _get_available_services(i18n_ctx["lang"])
+    # 오픈 리다이렉트 방지: 템플릿의 redirect_url 은 OAuth 링크(?redirect=)와
+    # 이메일 인증 성공 후 JS 이동에 그대로 쓰이므로, /login/{provider} 와 동일하게
+    # 허용 도메인 검사를 통과한 값만 넘긴다. 검사에 걸리면 기본 목적지로 떨어진다.
+    safe_redirect = redirect if redirect and _is_safe_redirect(redirect) else ""
     return _templates.TemplateResponse("auth/login.html", {
         "request": request,
-        "redirect_url": redirect or "",
+        "redirect_url": safe_redirect,
         "available_services": available_services,
-        **create_language_context(request),
+        **i18n_ctx,
     })
 
 
@@ -728,20 +733,54 @@ async def oauth_callback(
 # 회원가입
 # =============================================
 
-def _get_available_services() -> list[dict]:
-    """서비스 목록 조회 (services 테이블 → fallback: SERVICE_DESCRIPTIONS)"""
+# services 테이블과 SERVICE_DESCRIPTIONS 모두 ko/en 두 언어만 보유한다.
+# 그 외 언어는 shared_core.i18n 과 동일하게 en → ko 순으로 폴백한다.
+_SERVICE_CONTENT_LANGS = ("ko", "en")
+
+
+def _service_content_lang(lang: str) -> str:
+    """서비스 메타데이터가 실제로 보유한 언어로 정규화 (미보유 언어 → en)."""
+    return lang if lang in _SERVICE_CONTENT_LANGS else "en"
+
+
+def _pick_localized(row: dict, field: str, lang: str) -> str:
+    """{field}_{lang} → {field}_en → {field}_ko 순으로 첫 유효값 반환.
+
+    존재하지 않는 컬럼/키는 무시하므로 스키마에 없는 언어를 요청해도 예외가 나지 않는다.
+    """
+    for code in (lang, "en", "ko"):
+        value = row.get(f"{field}_{code}")
+        if value:
+            return value
+    return ""
+
+
+def _get_available_services(lang: str = "ko") -> list[dict]:
+    """서비스 목록 조회 (services 테이블 → fallback: SERVICE_DESCRIPTIONS)
+
+    Args:
+        lang: 표시 언어 코드. ko/en 외의 언어는 en → ko 순으로 폴백.
+    """
+    content_lang = _service_content_lang(lang)
+
     try:
         supabase = get_supabase()
+        # 언어별 컬럼을 모두 가져와야 _pick_localized 의 lang → en → ko 폴백이 동작한다.
+        # name_en 을 빼면 어떤 언어로 요청하든 name_ko 로만 떨어진다.
+        # `description` 은 구형 단일 컬럼(일부 행은 null)이라 마지막 폴백으로만 쓴다.
         result = supabase.table("services").select(
-            "id, name_ko, description, is_active, sort_order"
+            "id, name_ko, name_en, description_ko, description_en, "
+            "description, is_active, sort_order"
         ).order("sort_order").execute()
         if result.data:
             return [
                 {
                     "service_key": s["id"],
                     "icon": SERVICE_DESCRIPTIONS.get(s["id"], {}).get("icon", ""),
-                    "display_name": s.get("name_ko") or s["id"],
-                    "description": s.get("description") or "",
+                    "display_name": _pick_localized(s, "name", content_lang) or s["id"],
+                    "description": _pick_localized(s, "description", content_lang)
+                    or s.get("description")
+                    or "",
                     "is_active": s.get("is_active", False),
                 }
                 for s in result.data
@@ -754,8 +793,8 @@ def _get_available_services() -> list[dict]:
         {
             "service_key": key,
             "icon": svc["icon"],
-            "display_name": get_svc_name(svc, "ko"),
-            "description": ", ".join(get_svc_features(svc, "ko")[:2]),
+            "display_name": get_svc_name(svc, content_lang),
+            "description": ", ".join(get_svc_features(svc, content_lang)[:2]),
             "is_active": not svc.get("coming_soon", False),
         }
         for key, svc in SERVICE_DESCRIPTIONS.items()

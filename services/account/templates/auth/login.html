@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ i18n.auth.login.page_title|default('로그인 - FencingMind') }}{% endblock %}
+{% block title %}{{ t('auth.login.page_title', '로그인 - FencingMind') }}{% endblock %}
 
 {% block content %}
 <div class="auth-container">
@@ -8,7 +8,7 @@
         <!-- 헤더 -->
         <div class="auth-header">
             <img src="/static/images/logo/FencingMind_logo_long_white.png" alt="FencingMind" class="auth-logo-img">
-            <p class="auth-tagline">세계 최초의 펜싱 AI 데이터 플랫폼</p>
+            <p class="auth-tagline">{{ t('auth.login.tagline', '세계 최초의 펜싱 AI 데이터 플랫폼') }}</p>
         </div>
 
         <!-- 서비스 소개 카드 -->
@@ -17,14 +17,14 @@
             <div class="service-card{% if not svc.is_active %} coming-soon{% endif %}">
                 <span class="service-card-icon">{{ svc.icon|safe }}</span>
                 <span class="service-card-name">{{ svc.display_name }}</span>
-                {% if not svc.is_active %}<span class="service-card-badge">Coming Soon</span>{% endif %}
+                {% if not svc.is_active %}<span class="service-card-badge">{{ t('auth.login.coming_soon', 'Coming Soon') }}</span>{% endif %}
             </div>
             {% endfor %}
         </div>
 
         <!-- 인증 섹션 -->
         <div class="auth-section">
-            <h2 class="auth-section-title">가입 / 로그인</h2>
+            <h2 class="auth-section-title">{{ t('auth.login.section_title', '가입 / 로그인') }}</h2>
 
             <!-- OAuth 버튼 -->
             <div class="auth-buttons">
@@ -32,7 +32,7 @@
                     <svg class="oauth-icon" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M12 3c-5.5 0-10 3.58-10 8 0 2.81 1.87 5.28 4.7 6.7-.15.58-.52 2.1-.6 2.43-.1.4.14.4.31.29.13-.08 2.05-1.4 2.88-1.97.84.13 1.73.2 2.64.2 5.5 0 10-3.58 10-8s-4.5-8-10-8z"/>
                     </svg>
-                    {{ i18n.auth.login.kakao_btn|default('카카오로 시작하기') }}
+                    {{ t('auth.login.kakao_btn', '카카오로 시작하기') }}
                 </a>
 
                 <a href="/auth/login/google{% if redirect_url %}?redirect={{ redirect_url }}{% endif %}" class="oauth-btn google-btn">
@@ -42,13 +42,13 @@
                         <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
                         <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
                     </svg>
-                    {{ i18n.auth.login.google_btn|default('Google로 계속하기') }}
+                    {{ t('auth.login.google_btn', 'Google로 계속하기') }}
                 </a>
             </div>
 
             <!-- 구분선 -->
             <div class="auth-divider">
-                <span>또는</span>
+                <span>{{ t('auth.login.divider_or', '또는') }}</span>
             </div>
 
             <!-- 이메일 인증코드 -->
@@ -59,12 +59,12 @@
                         <input
                             type="email"
                             id="emailInput"
-                            placeholder="이메일 주소"
+                            placeholder="{{ t('auth.login.email_placeholder', '이메일 주소') }}"
                             class="fm-input email-input"
                             autocomplete="email"
                         >
                         <button type="button" id="sendCodeBtn" class="fm-btn fm-btn-primary send-code-btn" disabled onclick="sendEmailCode()">
-                            인증코드 받기
+                            {{ t('auth.login.send_code_btn', '인증코드 받기') }}
                         </button>
                     </div>
                 </div>
@@ -72,13 +72,15 @@
                 <!-- Step 2: 코드 입력 (전송 후 표시) -->
                 <div id="codeInputStep" style="display: none;">
                     <p class="code-sent-msg">
-                        <span id="sentEmailDisplay"></span>으로 인증코드를 발송했습니다.
+                        {{ t('auth.login.code_sent',
+                             '{email}으로 인증코드를 발송했습니다.',
+                             email='<span id="sentEmailDisplay"></span>')|safe }}
                     </p>
                     <div class="code-form-row">
                         <input
                             type="text"
                             id="codeInput"
-                            placeholder="6자리 코드"
+                            placeholder="{{ t('auth.login.code_placeholder', '6자리 코드') }}"
                             class="fm-input code-input"
                             maxlength="6"
                             pattern="[0-9]{6}"
@@ -86,12 +88,12 @@
                             autocomplete="one-time-code"
                         >
                         <button type="button" id="verifyCodeBtn" class="fm-btn fm-btn-primary verify-code-btn" disabled onclick="verifyEmailCode()">
-                            확인
+                            {{ t('auth.login.verify_btn', '확인') }}
                         </button>
                     </div>
                     <div class="code-actions">
                         <span id="resendTimer" class="resend-timer"></span>
-                        <button type="button" id="resendBtn" class="resend-btn" style="display: none;" onclick="resendCode()">재발송</button>
+                        <button type="button" id="resendBtn" class="resend-btn" style="display: none;" onclick="resendCode()">{{ t('auth.login.resend_btn', '재발송') }}</button>
                     </div>
                     <div id="codeError" class="code-error" style="display: none;"></div>
                 </div>
@@ -100,7 +102,11 @@
 
         <!-- 하단 안내 -->
         <div class="auth-footer-note">
-            <p>가입 시 <a href="/legal/terms" target="_blank">이용약관</a> 및 <a href="/legal/privacy" target="_blank">개인정보처리방침</a>에 동의하는 것으로 간주됩니다.</p>
+            {%- set terms_link = '<a href="/legal/terms" target="_blank">' ~ t('common.footer.terms', '이용약관') ~ '</a>' -%}
+            {%- set privacy_link = '<a href="/legal/privacy" target="_blank">' ~ t('common.footer.privacy', '개인정보처리방침') ~ '</a>' -%}
+            <p>{{ t('auth.login.signup_notice',
+                    '가입 시 {terms_link} 및 {privacy_link}에 동의하는 것으로 간주됩니다.',
+                    terms_link=terms_link, privacy_link=privacy_link)|safe }}</p>
         </div>
     </div>
 </div>
@@ -448,6 +454,17 @@
 </style>
 
 <script>
+const LOGIN_I18N = {{ {
+    'send_code_btn': t('auth.login.send_code_btn', '인증코드 받기'),
+    'verify_btn': t('auth.login.verify_btn', '확인'),
+    'sending': t('auth.login_js.sending', '발송 중...'),
+    'send_failed': t('auth.login_js.send_failed', '발송 실패'),
+    'verifying': t('auth.login_js.verifying', '확인 중...'),
+    'verify_failed': t('auth.login_js.verify_failed', '인증 실패'),
+    'resend_failed': t('auth.login_js.resend_failed', '재발송 실패'),
+    'resend_countdown': t('auth.login_js.resend_countdown', '{seconds}초 후 재발송 가능')
+}|tojson }};
+
 let emailToken = null;
 let resendCooldown = 0;
 let resendInterval = null;
@@ -492,7 +509,7 @@ async function sendEmailCode() {
     if (!email) return;
 
     sendCodeBtn.disabled = true;
-    sendCodeBtn.textContent = '발송 중...';
+    sendCodeBtn.textContent = LOGIN_I18N.sending;
 
     try {
         const formData = new FormData();
@@ -506,7 +523,7 @@ async function sendEmailCode() {
         const data = await res.json();
 
         if (!res.ok) {
-            throw new Error(data.detail || '발송 실패');
+            throw new Error(data.detail || LOGIN_I18N.send_failed);
         }
 
         emailToken = data.token;
@@ -520,7 +537,7 @@ async function sendEmailCode() {
 
     } catch (e) {
         sendCodeBtn.disabled = false;
-        sendCodeBtn.textContent = '인증코드 받기';
+        sendCodeBtn.textContent = LOGIN_I18N.send_code_btn;
         showCodeError(e.message);
     }
 }
@@ -534,7 +551,7 @@ async function verifyEmailCode() {
     if (!code || code.length !== 6 || !emailToken) return;
 
     verifyCodeBtn.disabled = true;
-    verifyCodeBtn.textContent = '확인 중...';
+    verifyCodeBtn.textContent = LOGIN_I18N.verifying;
     hideCodeError();
 
     try {
@@ -550,7 +567,7 @@ async function verifyEmailCode() {
         const data = await res.json();
 
         if (!res.ok) {
-            throw new Error(data.detail || '인증 실패');
+            throw new Error(data.detail || LOGIN_I18N.verify_failed);
         }
 
         if (data.is_new) {
@@ -565,9 +582,14 @@ async function verifyEmailCode() {
 
     } catch (e) {
         verifyCodeBtn.disabled = false;
-        verifyCodeBtn.textContent = '확인';
+        verifyCodeBtn.textContent = LOGIN_I18N.verify_btn;
         showCodeError(e.message);
     }
+}
+
+
+function formatResendCountdown(seconds) {
+    return LOGIN_I18N.resend_countdown.replace('{seconds}', seconds);
 }
 
 
@@ -577,7 +599,7 @@ function startResendCooldown() {
     const resendBtn = document.getElementById('resendBtn');
 
     resendBtn.style.display = 'none';
-    timerEl.textContent = resendCooldown + '초 후 재발송 가능';
+    timerEl.textContent = formatResendCountdown(resendCooldown);
 
     resendInterval = setInterval(function() {
         resendCooldown--;
@@ -586,7 +608,7 @@ function startResendCooldown() {
             timerEl.textContent = '';
             resendBtn.style.display = 'inline';
         } else {
-            timerEl.textContent = resendCooldown + '초 후 재발송 가능';
+            timerEl.textContent = formatResendCountdown(resendCooldown);
         }
     }, 1000);
 }
@@ -611,7 +633,7 @@ async function resendCode() {
         const data = await res.json();
 
         if (!res.ok) {
-            throw new Error(data.detail || '재발송 실패');
+            throw new Error(data.detail || LOGIN_I18N.resend_failed);
         }
 
         emailToken = data.token;
