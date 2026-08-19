@@ -2534,12 +2534,22 @@ def summarize_bracket_entry(bracket: Optional[NormalizedBracket]) -> Dict[str, A
     if not bracket or not bracket.rounds:
         return summary
 
-    for round_name in bracket.rounds:
+    for round_idx, round_name in enumerate(bracket.rounds):
         bouts = [b for b in bracket.bouts_by_round.get(round_name, []) if _is_real_bout(b)]
         # 부전승 판정은 is_bye 플래그와 '한쪽 이름 없음'의 합집합(is_bye_bout).
         # 이전에는 b.is_bye 만 봤다 — 플래그가 안 선 부전승이 실제 경기로 세어졌고,
         # 그러면 영원히 결과가 들어오지 않을 경기를 기다리며 라운드가 미완료로 남는다.
-        byes = [b for b in bouts if is_bye_bout(b)]
+        #
+        # ★ 부전승은 브래킷 첫 라운드에만 존재한다 (2026-08-19).
+        # 둘째 라운드부터 한쪽이 비어 있는 것은 부전승이 아니라 '앞 라운드가 아직
+        # 안 끝나서 대진이 정해지지 않은 것'이다. 이걸 구분하지 않으면 아직 시작도
+        # 안 한 대회에서 "64강 0/0 · 부전승 27" 같은 표시가 나간다
+        # (실측: 제66회 여자 사브르 예선 64강 32경기 전부 빈 슬롯).
+        empty = [b for b in bouts if is_bye_bout(b)]
+        is_starting_round = (round_idx == 0)
+        byes = empty if is_starting_round else []
+        pending = [] if is_starting_round else empty
+
         contested = [b for b in bouts if not is_bye_bout(b) and not b.is_forfeit]
         total = len(bouts)
         entered = sum(1 for b in bouts if is_bout_result_entered(b))
@@ -2552,7 +2562,8 @@ def summarize_bracket_entry(bracket: Optional[NormalizedBracket]) -> Dict[str, A
             'contested': len(contested),     # 부전승·기권 제외
             'contested_entered': contested_entered,
             'real': total - len(byes),       # ★ 실제 경기 수 (기권은 편성된 경기이므로 포함)
-            'byes': len(byes),               # ★ 부전승 수
+            'byes': len(byes),               # ★ 부전승 수 (첫 라운드에만)
+            'pending': len(pending),         # ★ 대진 미정 (앞 라운드 진행 중)
         })
         summary['total'] += total
         summary['entered'] += entered

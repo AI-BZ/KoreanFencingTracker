@@ -182,7 +182,13 @@
                     {# 경기 수는 '실제 대결'만 센다. 부전승은 경기가 아니다 —
                        풀의 기권 규약(FIE t.95)과 같은 기준이다. 예전에는 브래킷 슬롯 수를
                        경기 수로 적어 256강이 32경기인데 128경기로 나갔다. #}
-                    <span class="step-count fm-num">{{ r.contested_entered if r.contested_entered is defined else r.entered }}/{{ r.contested if r.contested is defined else r.total }}</span>
+                    {# 대진이 아직 안 정해진 라운드는 'x/0' 대신 미정으로 적는다.
+                       앞 라운드가 끝나야 상대가 결정되므로 경기 수를 셀 수 없다. #}
+                    {% if r.contested %}
+                    <span class="step-count fm-num">{{ r.contested_entered }}/{{ r.contested }}</span>
+                    {% else %}
+                    <span class="step-count step-pending">{{ '대진 미정' if is_ko else 'TBD' }}</span>
+                    {% endif %}
                     {% if r.byes %}
                     <span class="step-byes">{{ '부전승' if is_ko else 'byes' }} <span class="fm-num">{{ r.byes }}</span></span>
                     {% endif %}
