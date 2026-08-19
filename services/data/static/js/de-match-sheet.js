@@ -153,103 +153,220 @@
 
     // ---------- 브래킷 인접성 ----------
 
-    function roundContainers(block) {
-        var treeRoot = block.closest('.bracket-tree');
-        if (treeRoot) return [].slice.call(treeRoot.querySelectorAll(':scope > .bracket-round'));
-        var listRoot = block.closest('.bracket-list-view');
-        if (listRoot) return [].slice.call(listRoot.querySelectorAll(':scope > .round-panel'));
-        return [];
-    }
-
     function blocksIn(container, isTree) {
         if (!container) return [];
         return [].slice.call(container.querySelectorAll(isTree ? '.bracket-match' : '.match-card'));
     }
 
-    // 한 경기에서 다음 라운드로 올라갈 선수: 확정 1명 또는 후보 2명.
-    function survivorsOf(b) {
+    /* 이 경기에서 다음 라운드로 올라갈 사람이 이미 정해졌으면 그 선수, 아니면 null.
+       부전승은 상대가 없으므로 진출이 확정이다. 그 외에는 결과가 나온 경기만 확정으로 본다. */
+    function confirmedWinner(b) {
         var slots = slotsOf(b);
-        var a = parseSlot(slots[0]);
-        var c = parseSlot(slots[1]);
-        var named = [a, c].filter(function (s) { return !s.empty; });
+        var named = [parseSlot(slots[0]), parseSlot(slots[1])].filter(function (s) { return !s.empty; });
 
-        if (b.classList.contains('bye-match')) {
-            return { confirmed: named[0] || null, candidates: [] };
-        }
+        if (b.classList.contains('bye-match')) return named[0] || null;
         if (b.dataset.state === 'done') {
             var w = named.filter(function (s) { return s.winner; });
-            if (w.length === 1) return { confirmed: w[0], candidates: [] };
+            if (w.length === 1) return w[0];
         }
-        return { confirmed: null, candidates: named };
+        return null;
     }
 
-    /* 다음 라운드 계산.
-       반환 kind:
-         'final'    결승 (다음 라운드 없음, 이 라운드가 1경기)
+    /* ============================================================================
+       브래킷 사다리(ladder)와 경로 투영
+
+       투영의 근거는 단 하나, 대진표의 기하다.
+       라운드 k 번 경기의 승자는 다음 라운드 k>>1 번 경기로 간다 (0-based).
+       그러므로 어떤 선수의 r 라운드 뒤 상대는 "형제 서브트리에 있는 사람 전원"이며,
+       그 서브트리가 아직 안 끝났으면 후보가 2배씩 늘어난다 (1 → 2 → 4 → 8 …).
+       아래 라운드 결과가 확정될수록 후보는 저절로 줄어든다. 예측이 아니라 산수다.
+
+       ⚠️ 그려진 라운드만 세면 안 된다.
+       한 경기도 치르지 않은 라운드는 컨테이너 자체가 DOM 에 없다.
+       실측(제66회 대통령배 남자 사브르): 예선에 128강 64경기만 있고 예선 64강은 통째로 없다.
+       그래서 "그려진 라운드 목록" 대신 시작 라운드의 경기 수를 반으로 접어 내려가
+       이 단계가 가져야 할 라운드 사다리를 만든다. 라운드 이름은 대진표의 기하이지
+       추측이 아니다 — 사람 이름은 언제나 그려진 DOM 에서만 가져온다 (제1원칙).
+
+       ⚠️ 예선 64강과 본선 64강은 다른 경기다.
+       사다리는 반드시 .de-phase-panel[data-phase] 하나 안에서만 만든다.
+       라운드를 이름이 아니라 (단계, 사다리 칸) 으로 식별하므로 두 64강이 섞일 수 없다.
+       ============================================================================ */
+
+    // 라운드 이름 ↔ 경기 수. 실데이터 어휘: 256강 128강 64강 32강 16강 8강 준결승 결승
+    function roundSlots(name) {
+        if (!name) return 0;
+        if (name === '결승') return 1;
+        if (name === '준결승') return 2;
+        var m = String(name).match(/^(\d+)강$/);
+        if (!m) return 0;
+        var n = parseInt(m[1], 10);
+        return (isPow2(n) && n >= 4) ? n / 2 : 0;
+    }
+    function slotsRoundName(count) {
+        if (count === 1) return '결승';
+        if (count === 2) return '준결승';
+        return String(count * 2) + '강';
+    }
+
+    function roundNameOf(roundEl) {
+        return roundEl ? (roundEl.dataset.round || roundEl.dataset.roundPanel || '') : '';
+    }
+
+    /* 단계별 사다리. isTree 를 지정하면 그 뷰(트리/리스트)로만 만든다 —
+       모바일은 리스트 뷰의 .match-card 를 누르므로 클릭된 블록과 같은 뷰여야 좌표가 맞는다. */
+    function phaseContexts(isTree) {
+        var raw = phasePanels().map(function (p) {
+            var rr = phaseRounds(p.el, isTree);
+            return { phase: p.phase, isTree: rr.isTree, rounds: rr.rounds };
+        });
+
+        return raw.map(function (r, i) {
+            // 라운드를 이름이 아니라 경기 수로 색인한다 ('준결승'/'4강' 같은 표기 차이에 흔들리지 않게)
+            var byCount = {};
+            r.rounds.forEach(function (el) {
+                var c = roundSlots(roundNameOf(el));
+                if (c && !byCount[c]) byCount[c] = el;
+            });
+
+            /* 이 단계가 끝나는 지점.
+               dual DE 의 예선은 결승까지 가지 않는다 — 본선 시작 라운드(공유 라운드)에서 멈춘다.
+               예: 예선 128강 → 예선 64강 승자 32명이 본선 64강으로 합류. */
+            var stopCount = 1;
+            var next = raw[i + 1];
+            if (next && next.rounds.length) {
+                stopCount = roundSlots(roundNameOf(next.rounds[0])) || 1;
+            }
+
+            var ladder = [];
+            var startCount = roundSlots(roundNameOf(r.rounds[0]));
+            for (var c = startCount; c >= stopCount && c >= 1; c = c / 2) {
+                var el = byCount[c] || null;
+                ladder.push({
+                    name: el ? roundNameOf(el) : slotsRoundName(c),
+                    el: el,
+                    count: c,
+                    blocks: undefined      // 지연 계산 (아래 ladderBlocks)
+                });
+                if (c === stopCount) break;
+            }
+
+            return {
+                phase: r.phase,
+                isTree: r.isTree,
+                ladder: ladder,
+                isLastPhase: i === raw.length - 1
+            };
+        });
+    }
+
+    /* 좌표로 쓸 수 있는 블록 배열, 아니면 null.
+       DOM 순서를 브래킷 위치로 쓰려면 그 라운드가 통째로 그려져 있어야 한다.
+       실측상 렌더된 라운드는 match_number 오름차순·연속이므로 개수만 맞으면 순서는 곧 위치다.
+       반쪽만 그려진 라운드(사브르 본선 64강: 32칸 중 1개)는 좌표로 인정하지 않는다. */
+    function ladderBlocks(ctx, li) {
+        var lv = ctx.ladder[li];
+        if (!lv) return null;
+        if (lv.blocks === undefined) {
+            var bs = lv.el ? blocksIn(lv.el, ctx.isTree) : null;
+            lv.blocks = (bs && bs.length === lv.count) ? bs : null;
+        }
+        return lv.blocks;
+    }
+
+    /* (li, bi) 경기의 승자 자리를 차지할 수 있는 사람들.
+       확정된 승자가 있으면 그 한 명, 아니면 두 슬롯을 각각 따라 내려간다.
+       빈 슬롯은 아래 라운드의 해당 경기(2·bi + slot)로 갈라진다.
+       acc.resolved 는 "이 자리가 이미 경기 결과로 정해졌는가" — 확정/예상 표기의 근거다. */
+    function occupants(ctx, li, bi, acc, guard) {
+        if (li < 0 || guard > 10) { acc.resolved = false; return; }
+        var blocks = ladderBlocks(ctx, li);
+        var b = blocks ? blocks[bi] : null;
+
+        if (!b) {                       // 아직 없는 라운드 → 아래 두 경기로 갈라진다
+            acc.resolved = false;
+            occupants(ctx, li - 1, bi * 2, acc, guard + 1);
+            occupants(ctx, li - 1, bi * 2 + 1, acc, guard + 1);
+            return;
+        }
+
+        var won = confirmedWinner(b);
+        if (won) { acc.people.push(won); return; }
+
+        acc.resolved = false;
+        var slots = slotsOf(b);
+        for (var k = 0; k < 2; k++) {
+            var sl = parseSlot(slots[k]);
+            if (!sl.empty) acc.people.push(sl);
+            else occupants(ctx, li - 1, bi * 2 + k, acc, guard + 1);
+        }
+    }
+
+    function dedupePeople(list) {
+        var seen = {}, out = [];
+        list.forEach(function (p) {
+            if (!p || p.empty || !p.ko) return;
+            var k = p.ko + '|' + (p.team || '');
+            if (seen[k]) return;
+            seen[k] = true;
+            out.push(p);
+        });
+        return out;
+    }
+
+    /* 사다리 (ctx, level, index) 에 있는 선수가 앞으로 만날 수 있는 상대를
+       startLevel 부터 이 단계 끝까지 한 라운드씩. */
+    function projectFrom(ctx, anchorLevel, anchorIndex, startLevel) {
+        var out = [];
+        for (var lv = Math.max(startLevel, anchorLevel + 1); lv < ctx.ladder.length; lv++) {
+            var k = lv - anchorLevel;                        // 기준점에서 몇 라운드 위인가
+            var acc = { people: [], resolved: true };
+            // 내 자리는 anchorIndex >> k. 상대는 그 형제 서브트리에서 온다.
+            occupants(ctx, lv - 1, (anchorIndex >> (k - 1)) ^ 1, acc, 0);
+            var people = dedupePeople(acc.people);
+            out.push({
+                phase: ctx.phase,
+                round: ctx.ladder[lv].name,
+                people: people,
+                confirmed: acc.resolved && people.length === 1
+            });
+        }
+        return out;
+    }
+
+    // 대진표에서 누른 블록의 사다리 좌표
+    function locateBlock(ctxs, block) {
+        var roundEl = block.closest('.bracket-round') || block.closest('.round-panel');
+        if (!roundEl) return null;
+        for (var i = 0; i < ctxs.length; i++) {
+            for (var j = 0; j < ctxs[i].ladder.length; j++) {
+                if (ctxs[i].ladder[j].el !== roundEl) continue;
+                var blocks = ladderBlocks(ctxs[i], j);
+                var idx = blocks ? blocks.indexOf(block) : -1;
+                if (idx < 0) return null;                    // 반쪽만 그려진 라운드 → 위치 불명
+                return { ctx: ctxs[i], level: j, index: idx };
+            }
+        }
+        return null;
+    }
+
+    /* 경기 시트의 "다음 상대". 반환 kind:
+         'final'    결승 (더 갈 곳이 없다)
          'to-main'  예선 DE 마지막 라운드 → 본선 진출 (시드 재배정이라 상대 확정 불가)
-         'unknown'  전제가 깨짐 → 후보를 지어내지 않는다
-         'ok'       { round, confirmed, candidates } */
+         'unknown'  대진 위치를 못 잡았다 → 후보를 지어내지 않는다
+         'ok'       { rounds: [...] } */
     function computeNext(info) {
-        var containers = roundContainers(info.block);
-        var idx = containers.indexOf(info.roundEl);
-        if (idx < 0) return { kind: 'unknown' };
-
-        var blocks = blocksIn(info.roundEl, info.isTree);
-        var i = blocks.indexOf(info.block);
-        if (i < 0) return { kind: 'unknown' };
-
-        var nextEl = containers[idx + 1];
-        if (!nextEl) {
-            if (info.phase === 'first') return { kind: 'to-main' };
-            if (blocks.length === 1) return { kind: 'final' };
-            return { kind: 'unknown' };
+        var ctxs = phaseContexts(info.isTree);
+        var loc = locateBlock(ctxs, info.block);
+        if (!loc) return { kind: 'unknown' };
+        if (loc.level >= loc.ctx.ladder.length - 1) {
+            return { kind: loc.ctx.isLastPhase ? 'final' : 'to-main' };
         }
-
-        var nextBlocks = blocksIn(nextEl, info.isTree);
-        // 가드: 부전승이 시작 라운드 밖에서 렌더 생략되는 등으로 개수가 어긋나면 계산하지 않는다.
-        if (!isPow2(blocks.length) || nextBlocks.length !== blocks.length / 2) {
-            return { kind: 'unknown' };
-        }
-
-        var sibling = blocks[i ^ 1];
-        if (!sibling) return { kind: 'unknown' };
-        var s = survivorsOf(sibling);
-
         return {
             kind: 'ok',
-            round: nextEl.dataset.round || nextEl.dataset.roundPanel || '',
-            confirmed: s.confirmed,
-            candidates: s.candidates,
-            index: i,
-            blocks: blocks,
-            containers: containers,
-            containerIndex: idx
-        };
-    }
-
-    // 그다음 라운드: 4경기 그룹의 나머지 두 경기에서 살아남을 선수들 (전부 예상)
-    function computeAfter(info, next) {
-        if (!next || next.kind !== 'ok') return null;
-        var blocks = next.blocks;
-        var i = next.index;
-        if (blocks.length < 4) return null;
-        if (!next.containers[next.containerIndex + 2]) return null;   // 만날 라운드가 없음
-
-        var others = [blocks[i ^ 2], blocks[i ^ 3]].filter(Boolean);
-        if (others.length !== 2) return null;
-
-        var out = [];
-        others.forEach(function (b) {
-            var s = survivorsOf(b);
-            if (s.confirmed) out.push(s.confirmed);
-            else s.candidates.forEach(function (c) { out.push(c); });
-        });
-        if (!out.length) return null;
-
-        var afterEl = next.containers[next.containerIndex + 2];
-        return {
-            round: afterEl.dataset.round || afterEl.dataset.roundPanel || '',
-            people: out
+            rounds: projectFrom(loc.ctx, loc.level, loc.index, loc.level + 1),
+            toMain: !loc.ctx.isLastPhase,
+            multiPhase: ctxs.length > 1
         };
     }
 
@@ -356,46 +473,72 @@
             ? t('{name}의 다음 상대').replace('{name}', esc(winner.display || winner.ko))
             : esc(t('이 경기 승자의 다음 상대'));
 
+        // 같은 페이지에 예선 64강과 본선 64강이 함께 있다. 라운드명만 쓰면 어느 쪽인지 알 수 없다.
+        var first = next.rounds[0];
+        var sub = first ? routeRoundLabel(first, next.multiPhase) : '';
         var head = '<div class="ms-sec-title">' + esc(t('다음 상대')) +
-                   (next.round ? ' <span class="ms-sec-sub">' + esc(t(next.round)) + '</span>' : '') + '</div>' +
+                   (sub ? ' <span class="ms-sec-sub">' + esc(sub) + '</span>' : '') + '</div>' +
                    '<div class="ms-who">' + who + '</div>';
 
         var body;
-        if (next.confirmed) {
-            body = candidateHtml(next.confirmed, true);
-        } else if (next.candidates.length === 2) {
-            body = candidateHtml(next.candidates[0], false) +
+        var people = first ? first.people : [];
+        if (first && first.confirmed && people.length === 1) {
+            body = candidateHtml(people[0], true);
+        } else if (people.length === 2) {
+            body = candidateHtml(people[0], false) +
                    '<div class="ms-or">' + esc(t('또는')) + '</div>' +
-                   candidateHtml(next.candidates[1], false);
-        } else if (next.candidates.length === 1) {
-            body = candidateHtml(next.candidates[0], false);
+                   candidateHtml(people[1], false);
+        } else if (people.length === 1) {
+            body = candidateHtml(people[0], false);
         } else {
             body = '<div class="ms-hint">' + esc(t('아직 상대가 정해지지 않았습니다')) + '</div>';
         }
         el.innerHTML = head + body;
     }
 
-    function renderAfter(info, after) {
+    /* 후보 칩. inline-flex + gap 이라 텍스트 노드를 그대로 두면 "[ 48 ] 이름" 처럼 벌어진다.
+       시드 전체를 span 하나로 묶어 플렉스 아이템을 2개로 만든다.
+
+       ⚠️ 대괄호 숫자는 고정된 선수 시드가 아니라 "그 선수가 있는 라운드에서의 자리 번호"다.
+       실측(제54회 문체부장관기 남중 플뢰레, 하주원/알레펜싱클럽): 128강 41 → 32강 24 → 16강 9 → 8강 8.
+       그래서 같은 사람이라도 어느 라운드에서 읽었느냐에 따라 숫자가 달라진다.
+       동일인 판정은 반드시 이름+소속으로 한다 (dedupePeople 이 그렇게 한다). 숫자로 묶지 말 것. */
+    function chipHtml(p) {
+        var href = '/player/' + encodeURIComponent(p.ko) + (p.team ? '?team=' + encodeURIComponent(p.team) : '');
+        return '<a class="ms-chip" href="' + esc(href) + '">' +
+               (p.seed ? '<span class="ms-chip-seed">[' + num(p.seed) + ']</span>' : '') +
+               '<span>' + esc(p.display || p.ko) + '</span></a>';
+    }
+
+    /* "8명 중 1명" — 후보 수를 숨기지 않는다. 색이 아니라 글자로 확신의 정도를 말한다.
+       .fm-badge 는 inline-flex + gap:4px 이라 숫자 span 과 뒤 텍스트가 두 아이템으로 갈라져
+       "8 명 중 1명" 처럼 벌어진다. 전체를 span 하나로 묶어 플렉스 아이템을 1개로 만든다. */
+    function oddsLabel(n) {
+        return '<span>' + t('{n}명 중 1명').replace('{n}', num(n)) + '</span>';
+    }
+
+    function renderAfter(info, after, multiPhase) {
         var el = document.getElementById('ms-after');
         if (!el) return;
-        if (!after || info.state === 'tbd') { el.hidden = true; el.innerHTML = ''; return; }
+        if (!after || !after.people.length || info.state === 'tbd') {
+            el.hidden = true; el.innerHTML = ''; return;
+        }
         el.hidden = false;
 
-        // 칩은 inline-flex + gap 이라 텍스트 노드를 그대로 두면 "[ 48 ] 이름" 처럼 벌어진다.
-        // 시드 전체를 span 하나로 묶어 플렉스 아이템을 2개로 만든다.
-        var items = after.people.map(function (p) {
-            return '<span class="ms-chip">' +
-                   (p.seed ? '<span class="ms-chip-seed">[' + num(p.seed) + ']</span>' : '') +
-                   '<span>' + esc(p.display || p.ko) + '</span></span>';
-        }).join('');
+        var sure = after.confirmed && after.people.length === 1;
+        var pill = sure
+            ? '<span class="fm-badge fm-badge--micro fm-badge--pill ms-pill ms-pill--sure">' + esc(t('확정')) + '</span>'
+            : '<span class="fm-badge fm-badge--micro fm-badge--pill ms-pill">' + oddsLabel(after.people.length) + '</span>';
+        var sub = routeRoundLabel(after, multiPhase);
 
         el.innerHTML =
             '<details class="ms-details">' +
               '<summary class="ms-summary">' + esc(t('그다음 라운드')) +
-              (after.round ? ' <span class="ms-sec-sub">' + esc(t(after.round)) + '</span>' : '') +
-              ' <span class="fm-badge fm-badge--micro fm-badge--pill ms-pill">' + esc(t('예상')) + '</span></summary>' +
-              '<div class="ms-chips">' + items + '</div>' +
-              '<div class="ms-hint">' + esc(t('이 중 한 명과 만날 수 있습니다')) + '</div>' +
+              (sub ? ' <span class="ms-sec-sub">' + esc(sub) + '</span>' : '') +
+              ' ' + pill + '</summary>' +
+              '<div class="ms-chips">' + after.people.map(chipHtml).join('') + '</div>' +
+              // 한 명으로 확정된 자리에 "이 중 한 명" 은 거짓말이 된다
+              (sure ? '' : '<div class="ms-hint">' + esc(t('이 중 한 명과 만날 수 있습니다')) + '</div>') +
             '</details>';
     }
 
@@ -584,12 +727,17 @@
         return [{ el: root, phase: '' }];
     }
 
-    // 한 단계의 라운드 컨테이너를 DOM 순서(=시간 순서)대로.
-    // 트리 뷰와 리스트 뷰는 같은 경기를 두 번 렌더하므로 하나만 골라 중복 집계를 막는다.
-    function phaseRounds(panelEl) {
-        var tree = panelEl.querySelector('.bracket-tree');
-        if (tree) {
-            return { isTree: true, rounds: [].slice.call(tree.querySelectorAll(':scope > .bracket-round')) };
+    /* 한 단계의 라운드 컨테이너를 DOM 순서(=시간 순서)대로.
+       트리 뷰와 리스트 뷰는 같은 경기를 두 번 렌더하므로 하나만 골라 중복 집계를 막는다.
+       want: true=트리만, false=리스트만, 생략=트리 우선.
+       모바일에서 눌린 것은 리스트 뷰의 .match-card 라 좌표 계산은 그 뷰로 맞춰야 한다. */
+    function phaseRounds(panelEl, want) {
+        if (want !== false) {
+            var tree = panelEl.querySelector('.bracket-tree');
+            if (tree) {
+                return { isTree: true, rounds: [].slice.call(tree.querySelectorAll(':scope > .bracket-round')) };
+            }
+            if (want === true) return { isTree: true, rounds: [] };
         }
         var list = panelEl.querySelector('.bracket-list-view');
         if (list) {
@@ -665,18 +813,17 @@
     }
 
     function buildRoute(ko, team) {
-        var panels = phasePanels();
-        var multiPhase = panels.length > 1;
+        var ctxs = phaseContexts();
+        var multiPhase = ctxs.length > 1;
         var nodes = [];
         var player = null;
 
-        panels.forEach(function (p, pi) {
-            var rr = phaseRounds(p.el);
-            rr.rounds.forEach(function (roundEl, ri) {
-                var blocks = blocksIn(roundEl, rr.isTree);
-                var realCount = blocks.filter(function (b) {
-                    return !b.classList.contains('bye-match');
-                }).length;
+        ctxs.forEach(function (ctx) {
+            ctx.ladder.forEach(function (lv, li) {
+                if (!lv.el) return;                       // 아직 한 경기도 없는 라운드
+                var blocks = blocksIn(lv.el, ctx.isTree);
+                // 좌표로 쓸 수 있는 라운드에서만 위치를 기록한다 (반쪽 렌더는 위치 불명)
+                var trusted = ladderBlocks(ctx, li);
 
                 blocks.forEach(function (b) {
                     var slots = slotsOf(b);
@@ -698,16 +845,19 @@
                     else result = 'scheduled';
 
                     nodes.push({
-                        phase: p.phase,
-                        round: roundEl.dataset.round || roundEl.dataset.roundPanel || '',
+                        phase: ctx.phase,
+                        round: lv.name,
                         me: me,
                         opp: opp,
                         result: result,
                         forfeitMine: !!me.forfeit,
                         forfeitOpp: !!(opp && opp.forfeit),
-                        isLastRoundOfPhase: ri === rr.rounds.length - 1,
-                        isLastPhase: pi === panels.length - 1,
-                        roundRealCount: realCount
+                        isLastRoundOfPhase: li === ctx.ladder.length - 1,
+                        isLastPhase: ctx.isLastPhase,
+                        roundRealCount: lv.count,
+                        ctx: ctx,
+                        level: li,
+                        index: trusted ? trusted.indexOf(b) : -1
                     });
                 });
             });
@@ -802,6 +952,100 @@
         return '<li class="msr-end msr-end--up">' + esc(t('본선 DE 진출')) + '</li>';
     }
 
+    /* ---------- 앞으로 만날 상대 (경로 투영) ----------
+
+       기준점(anchor) 을 왜 따로 잡는가:
+       진행 중 대회는 최신 라운드가 반쪽만 그려져 DOM 순서가 브래킷 위치가 아니다.
+       그럴 때는 같은 단계에서 위치를 신뢰할 수 있는 가장 나중 노드를 기준점으로 삼고
+       거기서 위치를 접어 올린다 (라운드 하나 올라갈 때마다 index >> 1).
+       기준점이 아예 없으면 후보를 지어내지 않고 그 사실을 말한다. */
+    function projectRoute(route) {
+        var nodes = route.nodes;
+        var last = nodes[nodes.length - 1];
+        if (!last || !last.ctx) return null;
+        if (last.result === 'lose') return null;          // 탈락 — 앞이 없다
+
+        var ctx = last.ctx;
+        var anchor = null;
+        nodes.forEach(function (n) {
+            if (n.ctx === ctx && n.index >= 0) anchor = n;   // 같은 단계의 마지막 신뢰 좌표
+        });
+        if (!anchor) return { unresolved: true, toMain: !ctx.isLastPhase, rounds: [] };
+
+        var rounds = projectFrom(ctx, anchor.level, anchor.index, last.level + 1);
+
+        // 방어: 나 자신이 상대 후보로 들어오면 안 된다 (형제 서브트리라 원래 불가능하다)
+        var meKo = route.player.ko, meTeam = route.player.team;
+        rounds.forEach(function (r) {
+            r.people = r.people.filter(function (p) {
+                return !(p.ko === meKo && (!p.team || !meTeam || p.team === meTeam));
+            });
+        });
+
+        return { unresolved: false, toMain: !ctx.isLastPhase, rounds: rounds };
+    }
+
+    /* 펼침 규칙:
+       가까운 두 라운드는 기본으로 펼쳐 둔다 — 대회장에서 지금 궁금한 건 그 두 개다.
+       그보다 먼 라운드는 후보가 8·16·32명으로 불어나 목록이 화면을 삼키므로
+       접어 두고 요약(라운드 + "N명 중 1명")만 보여준다.
+       단, 먼 라운드라도 결과가 나와 후보가 2명 이하로 줄었으면 접지 않는다 —
+       접는 이유는 거리(距離)가 아니라 길이(長)이기 때문이다. */
+    function projOpen(distance, people) {
+        return distance <= 2 || people.length <= 2;
+    }
+
+    function projRow(r, distance, multiPhase) {
+        var label = esc(routeRoundLabel({ round: r.round, phase: r.phase }, multiPhase));
+        var sure = r.confirmed && r.people.length === 1;
+
+        if (!r.people.length) {
+            return '<li class="msr-proj msr-proj--none">' +
+                     '<div class="msr-proj-top"><span class="msr-round">' + label + '</span>' +
+                     '<span class="fm-badge fm-badge--micro fm-badge--pill ms-pill">' +
+                     esc(t('상대 미정')) + '</span></div></li>';
+        }
+
+        var pill = sure
+            ? '<span class="fm-badge fm-badge--micro fm-badge--pill ms-pill ms-pill--sure">' + esc(t('확정')) + '</span>'
+            : '<span class="fm-badge fm-badge--micro fm-badge--pill ms-pill">' + oddsLabel(r.people.length) + '</span>';
+        var top = '<span class="msr-round">' + label + '</span>' + pill;
+        var chips = '<div class="ms-chips">' + r.people.map(chipHtml).join('') + '</div>';
+        var cls = 'msr-proj' + (sure ? ' msr-proj--sure' : '');
+
+        if (projOpen(distance, r.people)) {
+            return '<li class="' + cls + '">' +
+                     '<div class="msr-proj-top">' + top + '</div>' + chips + '</li>';
+        }
+        return '<li class="' + cls + ' msr-proj--fold">' +
+                 '<details><summary class="msr-proj-top">' + top + '</summary>' + chips + '</details>' +
+               '</li>';
+    }
+
+    function projectionHtml(route, proj) {
+        if (!proj) return '';
+        var out = '<li class="msr-sep"><span>' + esc(t('앞으로 만날 상대')) + '</span></li>';
+
+        if (proj.unresolved) {
+            out += '<li class="msr-proj msr-proj--none"><div class="ms-hint">' +
+                   esc(t('대진 위치를 확인할 수 없어 이후 상대를 계산하지 않습니다')) + '</div></li>';
+        } else if (!proj.rounds.length && !proj.toMain) {
+            return '';
+        } else {
+            // rounds 는 현재 라운드 바로 다음부터 연속이므로 i+1 이 곧 "몇 라운드 뒤"다
+            proj.rounds.forEach(function (r, i) {
+                out += projRow(r, i + 1, route.multiPhase);
+            });
+        }
+
+        // 예선 DE 는 여기서 멈춘다. 본선은 시드를 다시 매기므로 상대를 이어 붙일 수 없다.
+        if (proj.toMain) {
+            out += '<li class="msr-proj msr-proj--stop"><div class="ms-hint">' +
+                   esc(t('본선은 시드를 다시 매기므로 상대를 확정할 수 없습니다')) + '</div></li>';
+        }
+        return out;
+    }
+
     function renderRoute(ko, team) {
         var el = document.getElementById('ms-route-view');
         if (!el) return;
@@ -837,9 +1081,13 @@
               '</p>'
             : '';
 
+        var proj;
+        try { proj = projectRoute(route); } catch (e) { proj = null; }
+
         el.innerHTML = head + notice + '<ol class="msr-list">' +
                        items +
                        routeEndNode(route) +
+                       projectionHtml(route, proj) +
                        '<li class="msr-final" id="msr-final" hidden></li>' +
                        '</ol>';
         if (!reducedMotion()) {
@@ -1028,7 +1276,7 @@
 
         var next = computeNext(info);
         renderNext(info, next);
-        renderAfter(info, computeAfter(info, next));
+        renderAfter(info, next.kind === 'ok' ? next.rounds[1] : null, next.multiPhase);
         renderActions(info);
 
         if (info.state === 'tbd') hideH2H();

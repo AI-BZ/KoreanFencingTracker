@@ -3,7 +3,7 @@
 {% block title %}{{ tr_event(event.name) }} - {{ tr_comp(competition.competition.name) }}{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="/static/css/bracket.css?v=20260819c">
+<link rel="stylesheet" href="/static/css/bracket.css?v=20260819d">
 <link rel="stylesheet" href="/static/css/player-search.css?v=20260613">
 <style>
 /* =====================================================
@@ -4241,5 +4241,5 @@ function renderEventTeamTable(container, rankings, sortKey) {
     {# 경로 뷰 — 시트 전체를 이 선수의 대진 경로로 바꿔 쓴다 (390px 에서 스크롤 사냥 방지) #}
     <div class="ms-route-view" id="ms-route-view" hidden></div>
 </aside>
-<script src="/static/js/de-match-sheet.js?v=20260819a"></script>
+<script src="/static/js/de-match-sheet.js?v=20260819d"></script>
 {% endblock %}

@@ -3388,6 +3388,97 @@ details[open] .seeded-toggle-icon {
     flex: none;
 }
 
+/* ---------------------------------------------------------------------------
+   앞으로 만날 상대 (경로 투영)
+
+   치른 경기(.msr-node)와 앞으로의 후보(.msr-proj)를 형태로 갈라 놓는다.
+   치른 경기는 3열 그리드 + 실선, 후보는 세로 블록 + 점선.
+   확신의 정도는 색이 아니라 배지 글자("확정" / "8명 중 1명")가 1차 채널이다.
+   --------------------------------------------------------------------------- */
+.msr-sep {
+    display: flex;
+    align-items: center;
+    gap: var(--fm-space-2);
+    margin-top: var(--fm-space-2);
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fm-text-muted);
+}
+.msr-sep::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--fm-border);
+}
+
+.msr-proj {
+    padding: var(--fm-space-2) var(--fm-space-3);
+    border: 1px dashed var(--fm-border-light);
+    border-radius: var(--fm-radius-sm);
+}
+/* 확정된 상대는 실선으로. 점선/실선이 예상/확정의 두 번째 채널. */
+.msr-proj--sure {
+    border-style: solid;
+    border-color: var(--fm-accent-secondary);
+}
+.msr-proj--none,
+.msr-proj--stop {
+    border-style: none;
+    padding-top: 0;
+    padding-bottom: 0;
+}
+.msr-proj--none .ms-hint,
+.msr-proj--stop .ms-hint {
+    margin-top: 0;
+}
+
+.msr-proj-top {
+    display: flex;
+    align-items: center;
+    gap: var(--fm-space-2);
+    min-width: 0;
+}
+.msr-proj-top .msr-round {
+    flex: 1;
+    min-width: 0;
+}
+.msr-proj-top .ms-pill {
+    flex: none;
+}
+.msr-proj .ms-chips {
+    margin-top: 6px;
+}
+.msr-proj .ms-chip {
+    text-decoration: none;
+}
+.msr-proj--sure .ms-chip {
+    border-style: solid;
+    border-color: var(--fm-accent-secondary);
+    color: var(--fm-text-primary);
+}
+
+/* 접힌 라운드: 요약만 보이고 펼치면 명단.
+   summary 는 기본 마커를 지우고 +/− 를 직접 그린다 (.ms-summary 와 같은 규칙). */
+.msr-proj--fold > details > summary {
+    cursor: pointer;
+    list-style: none;
+}
+.msr-proj--fold > details > summary::-webkit-details-marker {
+    display: none;
+}
+.msr-proj--fold > details > summary::after {
+    content: '+';
+    flex: none;
+    width: 1em;
+    text-align: center;
+    color: var(--fm-text-muted);
+}
+.msr-proj--fold > details[open] > summary::after {
+    content: '−';
+}
+
 .msr-end {
     padding: var(--fm-space-2) var(--fm-space-3);
     border: 1px dashed var(--fm-border-light);
