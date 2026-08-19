@@ -46,98 +46,121 @@
     </div>
     {% endif %}
 
-    <!-- 2-Panel Layout -->
-    <div class="flex flex-col lg:flex-row lg:gap-8">
+    <!--
+      Single column: fencer header, then the sticky video workbench, then the
+      analysis sections. The old 440px side panel squeezed a 3.88:1 piste crop
+      into a 113px-tall player; a full-width stage fits that footage exactly.
+    -->
 
-    <!-- LEFT PANEL: Video + Clip Player -->
-    <div class="w-full lg:w-[440px] lg:flex-shrink-0 sticky top-16 lg:top-20 self-start max-h-[60vh] lg:max-h-[calc(100vh-6rem)] overflow-y-auto space-y-4 mb-4 lg:mb-0 report-left-panel z-10">
+    {% set HANDEDNESS_MIN_CONF = 0.6 %}
+    {% set TENDENCY_MIN_SAMPLE = 8 %}
+    {% set TENDENCY_ATTACK_HIGH = 0.60 %}
+    {% set TENDENCY_ATTACK_LOW = 0.40 %}
 
-    <!-- Video Player (if source video available) -->
-    {% if video_filename %}
-    <div class="glass-card p-2">
-        <video id="main-video" controls class="w-full rounded-lg bg-black" preload="metadata">
-            <source src="/videos/{{ video_filename }}" type="video/mp4">
-        </video>
-    </div>
-    {% elif youtube_url %}
-    <!-- YouTube Source Link (TV broadcast reports) -->
-    <div class="glass-card p-4">
-        <a href="{{ youtube_url }}" target="_blank" rel="noopener noreferrer"
-           class="flex items-center gap-3 text-gray-300 hover:text-white transition-colors group">
-            <div class="flex-shrink-0 w-10 h-10 bg-red-600/20 rounded-xl flex items-center justify-center border border-red-500/20 group-hover:bg-red-600/30 transition-colors">
-                <svg class="w-5 h-5 text-red-400" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
-                </svg>
-            </div>
-            <div class="flex-1 min-w-0">
-                <p class="text-sm font-medium">{{ t('report.youtube_source') if t else '원본 영상 보기 (YouTube)' }}</p>
-                <p class="text-xs text-gray-500 truncate">{{ youtube_url }}</p>
-            </div>
-            <svg class="w-4 h-4 text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
-            </svg>
-        </a>
-    </div>
+    {# "미확인" is a result, not a default: it means detection ran and fell short
+       of the threshold. Reports that never ran it (TV OCR, demo) carry no
+       handedness field at all and get no badge. #}
+    {% macro handedness_badge(f) %}
+    {% set attempted = f and (f.handedness is defined or f.handedness_confidence is defined) %}
+    {% set conf = (f.handedness_confidence if f and f.handedness_confidence else 0) %}
+    {% if not attempted %}
+    {% elif f.handedness and conf >= HANDEDNESS_MIN_CONF %}
+    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-500/15 text-blue-300 border border-blue-500/20">
+        {{ '왼손잡이' if f.handedness == 'left' else '오른손잡이' }}
+    </span>
+    {% else %}
+    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-white/10 text-gray-400 border border-white/10"
+          title="포즈 분석의 팔 신전 비대칭만으로는 신뢰할 만큼 판별되지 않았습니다">손잡이 미확인</span>
     {% endif %}
+    {% endmacro %}
 
-    <!-- Inline Clip Player (hidden until an event row is clicked) -->
-    <div id="clip-player-container" class="glass-card p-4 hidden">
-        <div class="flex justify-between items-center mb-3">
-            <h3 id="clip-title" class="text-lg font-semibold text-white">오버레이 클립</h3>
-            <button id="clip-close" class="text-gray-400 hover:text-white text-xl">&times;</button>
-        </div>
-        <video id="clip-video" controls autoplay class="w-full rounded-lg">
-            <source id="clip-source" type="video/mp4">
-        </video>
-        <div id="clip-loading" class="py-3 hidden">
-            <div class="flex items-start gap-3">
-                <svg class="w-5 h-5 text-brand-400 animate-spin flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
-                </svg>
-                <div class="flex-1 min-w-0">
-                    <p id="clip-loading-title" class="text-sm text-gray-200">클립 불러오는 중...</p>
-                    <p id="clip-loading-sub" class="text-xs text-gray-500 mt-0.5"></p>
+    {% macro tendency_badge(st) %}
+    {% if st %}
+    {% set atk = st.attacks | default(0) %}
+    {% set n = atk + (st.defenses | default(0)) %}
+    {% if n >= TENDENCY_MIN_SAMPLE %}
+    {% set ratio = atk / n %}
+    {% set why = '교전 ' ~ n ~ '회 중 공격 시도 ' ~ atk ~ '회 (' ~ (ratio * 100) | round | int ~ '%)' %}
+    {% if ratio >= TENDENCY_ATTACK_HIGH %}
+    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-red-500/15 text-red-300 border border-red-500/20" title="{{ why }}">공격형</span>
+    {% elif ratio <= TENDENCY_ATTACK_LOW %}
+    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-500/15 text-blue-300 border border-blue-500/20" title="{{ why }}">수비형</span>
+    {% else %}
+    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-white/10 text-gray-400 border border-white/10" title="{{ why }}">밸런스</span>
+    {% endif %}
+    {% endif %}
+    {% endif %}
+    {% endmacro %}
+
+    {% set is_demo = mock_mode or (job_id and job_id.startswith('demo')) %}
+    {% set has_main_video = video_filename is defined and video_filename %}
+    {% set has_clips = report_id is defined and report_id and not is_demo %}
+    {% set show_workbench = has_main_video or has_clips %}
+    {% set fstats = (report.continuous_summary.fencer_stats
+                     if report.continuous_summary is defined and report.continuous_summary
+                        and report.continuous_summary.fencer_stats else None) %}
+
+    {# final_score is "연속 분석" on pose-only reports — a label, not a score.
+       Only a real "N-M" goes into the .fm-num scoreboard numerals. #}
+    {% set fs_raw = report.summary.final_score | default('') | string %}
+    {% set fs_parts = fs_raw.split('-') %}
+    {% set fs_numeric = fs_parts | length == 2 and fs_parts[0].strip().isdigit() and fs_parts[1].strip().isdigit() %}
+
+    <!-- ① Fencer Header -->
+    <div class="glass-card p-5 sm:p-8 mb-4">
+        <div class="grid grid-cols-2 lg:grid-cols-[1fr_auto_1fr] gap-3 lg:gap-8 items-center">
+            <!-- Left fencer -->
+            <div class="order-1 lg:order-1 min-w-0">
+                <div class="flex items-center gap-2 mb-1">
+                    <span class="w-2.5 h-2.5 rounded-full bg-blue-500 flex-shrink-0"></span>
+                    <p class="text-base sm:text-lg font-bold text-blue-400 truncate">{{ left_name }}</p>
+                </div>
+                {% if left_club %}
+                <p class="text-xs text-gray-500 mb-2 truncate">{{ left_club }}</p>
+                {% endif %}
+                <div class="flex flex-wrap gap-1.5">
+                    {{ handedness_badge(report.left_fencer) }}
+                    {{ tendency_badge(fstats.left if fstats else None) }}
                 </div>
             </div>
-            <div id="clip-progress-track" class="mt-3 h-1.5 bg-white/10 rounded-full overflow-hidden hidden">
-                <div id="clip-progress-bar" class="h-full bg-brand-500 rounded-full transition-all duration-1000" style="width: 0%"></div>
+
+            <!-- Score -->
+            <div class="order-3 lg:order-2 col-span-2 lg:col-span-1 text-center">
+                {% if fs_numeric %}
+                <div class="flex items-center justify-center gap-3">
+                    <span class="text-4xl sm:text-5xl font-bold text-blue-400 fm-num">{{ fs_parts[0].strip() }}</span>
+                    <span class="text-2xl sm:text-3xl font-light text-gray-600">:</span>
+                    <span class="text-4xl sm:text-5xl font-bold text-red-400 fm-num">{{ fs_parts[1].strip() }}</span>
+                </div>
+                {% else %}
+                <span class="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-semibold bg-white/10 text-gray-300 border border-white/10">
+                    {{ fs_raw if fs_raw else '스코어 없음' }}
+                </span>
+                {% endif %}
+                <p class="text-[11px] text-gray-500 mt-2">
+                    {% if report.summary.match_duration %}<span class="fm-num">{{ report.summary.match_duration }}</span> &middot; {% endif %}터치 <span class="fm-num">{{ report.summary.total_touches }}</span>회
+                </p>
+            </div>
+
+            <!-- Right fencer -->
+            <div class="order-2 lg:order-3 min-w-0 text-right">
+                <div class="flex items-center justify-end gap-2 mb-1">
+                    <p class="text-base sm:text-lg font-bold text-red-400 truncate">{{ right_name }}</p>
+                    <span class="w-2.5 h-2.5 rounded-full bg-red-500 flex-shrink-0"></span>
+                </div>
+                {% if right_club %}
+                <p class="text-xs text-gray-500 mb-2 truncate">{{ right_club }}</p>
+                {% endif %}
+                <div class="flex flex-wrap gap-1.5 justify-end">
+                    {{ tendency_badge(fstats.right if fstats else None) }}
+                    {{ handedness_badge(report.right_fencer) }}
+                </div>
             </div>
         </div>
-        <p id="clip-error" class="text-center text-red-400 py-4 hidden"></p>
-    </div>
 
-    </div>
-    <!-- END LEFT PANEL -->
-
-    <!-- RIGHT PANEL: Analysis Content -->
-    <div class="flex-1 min-w-0">
-
-    <!-- Match Summary Header -->
-    <div class="glass-card p-8 mb-8">
-        <div class="flex flex-col lg:flex-row items-center justify-between gap-6">
-            <div class="flex items-center gap-8">
-                <!-- Score Display -->
-                <div class="flex items-center gap-4">
-                    <div class="text-center">
-                        <p class="text-sm font-semibold text-blue-400 mb-1">{{ left_name }}</p>
-                        {% if left_club %}
-                        <p class="text-[10px] text-blue-400 mb-1">{{ left_club }}</p>
-                        {% endif %}
-                        <p class="text-5xl font-bold text-blue-400 fm-num">{{ report.summary.final_score.split('-')[0] }}</p>
-                    </div>
-                    <span class="text-3xl font-light text-gray-600">:</span>
-                    <div class="text-center">
-                        <p class="text-sm font-semibold text-red-400 mb-1">{{ right_name }}</p>
-                        {% if right_club %}
-                        <p class="text-[10px] text-red-400 mb-1">{{ right_club }}</p>
-                        {% endif %}
-                        <p class="text-5xl font-bold text-red-400 fm-num">{{ report.summary.final_score.split('-')[1] }}</p>
-                    </div>
-                </div>
-
+        <div class="mt-5 pt-4 border-t border-white/10 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                 <!-- Match Info -->
-                <div class="flex flex-wrap gap-3">
+                <div class="flex flex-wrap gap-2">
                     {% if report.summary.weapon %}
                     <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium
                                  {% if report.summary.weapon == 'foil' %}weapon-badge-foil
@@ -180,14 +203,10 @@
                         <span class="fm-num">{{ report.summary.match_duration }}</span>
                     </span>
                     {% endif %}
-                    <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-white/10 text-gray-300">
-                        터치 {{ report.summary.total_touches }}회
-                    </span>
                 </div>
-            </div>
 
-            <!-- Analysis Metadata -->
-            <div class="text-right text-xs text-gray-500 space-y-1">
+                <!-- Analysis Metadata -->
+                <div class="text-left lg:text-right text-xs text-gray-500 space-y-1 flex-shrink-0">
                 <p>Phase {{ report.meta.phase }} Analysis</p>
                 <p>Pose: {{ report.meta.pose_model }}</p>
                 <p>Action: {{ report.meta.action_model }}</p>
@@ -220,6 +239,151 @@
         </div>
     </div>
 
+    <!-- ② Video Workbench — sticky, full width, tools act on whatever is playing -->
+    {% if show_workbench %}
+    <section id="workbench" class="workbench glass-card p-3 mb-6"
+             data-has-video="{{ '1' if has_main_video else '0' }}"
+             {% if has_main_video %}data-main-src="/videos/{{ video_filename }}"{% endif %}>
+
+        <div id="wb-viewport" class="wb-viewport">
+            <div id="wb-stage" class="wb-stage{% if not has_main_video %} hidden{% endif %}">
+                <video id="wb-video" playsinline preload="metadata"></video>
+                <canvas id="wb-canvas"></canvas>
+            </div>
+
+            {# Clip-only mode: TV reports have no local footage to seek, so the
+               stage stays empty until an AI overlay clip is loaded into it. #}
+            <div id="wb-placeholder" class="wb-placeholder{% if has_main_video %} hidden{% endif %}">
+                {% if youtube_url %}
+                <a href="{{ youtube_url }}" target="_blank" rel="noopener noreferrer"
+                   class="flex items-center gap-3 text-gray-300 hover:text-white transition-colors group max-w-md w-full">
+                    <span class="flex-shrink-0 w-10 h-10 bg-red-600/20 rounded-xl flex items-center justify-center border border-red-500/20 group-hover:bg-red-600/30 transition-colors">
+                        <svg class="w-5 h-5 text-red-400" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                        </svg>
+                    </span>
+                    <span class="flex-1 min-w-0 text-left">
+                        <span class="block text-sm font-medium">{{ t('report.youtube_source') if t else '원본 영상 보기 (YouTube)' }}</span>
+                        <span class="block text-xs text-gray-500 truncate">{{ youtube_url }}</span>
+                    </span>
+                </a>
+                {% endif %}
+                <p class="text-xs text-gray-500 mt-3 text-center">
+                    타임라인에서 장면을 누르면 AI 포즈 오버레이 클립이 여기에 열립니다.
+                </p>
+            </div>
+
+            <div id="wb-loading" class="wb-loading hidden">
+                <div class="flex items-start gap-3">
+                    <svg class="w-5 h-5 text-brand-400 animate-spin flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                    </svg>
+                    <div class="flex-1 min-w-0">
+                        <p id="wb-loading-title" class="text-sm text-gray-200">클립 불러오는 중...</p>
+                        <p id="wb-loading-sub" class="text-xs text-gray-500 mt-0.5"></p>
+                    </div>
+                </div>
+                <div id="wb-progress-track" class="mt-3 h-1.5 bg-white/10 rounded-full overflow-hidden hidden">
+                    <div id="wb-progress-bar" class="h-full bg-brand-500 rounded-full transition-all duration-1000" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <p id="wb-error" class="wb-error hidden"></p>
+            <div id="wb-toast" class="wb-toast hidden"></div>
+        </div>
+
+        <div id="wb-controls" class="wb-controls">
+            <!-- transport -->
+            <div class="wb-group">
+                <button id="wb-play" class="wb-btn wb-btn--wide" type="button" title="재생 (Space)">
+                    <span id="wb-play-label">&#9654;</span>
+                </button>
+                <button id="wb-frame-back" class="wb-btn" type="button" title="이전 프레임 (←)">&#9666;|</button>
+                <button id="wb-frame-fwd" class="wb-btn" type="button" title="다음 프레임 (→)">|&#9656;</button>
+            </div>
+
+            <input id="wb-seek" class="wb-seek" type="range" min="0" max="100" step="0.01" value="0"
+                   aria-label="재생 위치">
+
+            <div class="wb-group wb-readout">
+                <span id="wb-time" class="fm-num">0:00.00</span>
+                <span class="wb-sep">프레임</span>
+                <span id="wb-frame" class="fm-num">0</span>
+            </div>
+
+            <!-- speed: buttons on desktop, a select where the bar has no room -->
+            <div class="wb-group wb-group--desktop">
+                <span class="wb-sep">배속</span>
+                <button class="wb-btn" type="button" data-speed="1" title="1배속 (1)"><span class="fm-num">1&times;</span></button>
+                <button class="wb-btn" type="button" data-speed="0.5" title="1/2배속 (2)"><span class="fm-num">1/2</span></button>
+                <button class="wb-btn" type="button" data-speed="0.25" title="1/4배속 (3)"><span class="fm-num">1/4</span></button>
+                <button class="wb-btn" type="button" data-speed="0.1667" title="1/6배속 (4)"><span class="fm-num">1/6</span></button>
+            </div>
+            <label class="wb-group wb-group--mobile">
+                <span class="wb-sep">배속</span>
+                <select id="wb-speed-select" class="wb-select">
+                    <option value="1">1&times;</option>
+                    <option value="0.5">1/2</option>
+                    <option value="0.25">1/4</option>
+                    <option value="0.1667">1/6</option>
+                </select>
+            </label>
+
+            <!-- zoom + drawing: desktop only (a 3.88:1 crop is ~90px tall on a phone) -->
+            <div class="wb-group wb-group--desktop">
+                <span class="wb-sep">줌</span>
+                <button id="wb-zoom-out" class="wb-btn" type="button" title="축소">&minus;</button>
+                <span class="wb-readout"><span id="wb-zoom-val" class="fm-num">1.0</span>&times;</span>
+                <button id="wb-zoom-in" class="wb-btn" type="button" title="확대">+</button>
+                <button id="wb-zoom-reset" class="wb-btn" type="button" title="원래 크기"><span class="fm-num">1:1</span></button>
+            </div>
+
+            <div class="wb-group wb-group--desktop">
+                <button class="wb-btn" type="button" data-tool="navigate" title="탐색 / 팬 (V)">탐색</button>
+                <button class="wb-btn" type="button" data-tool="line" title="선 긋기 (D)">선</button>
+                <button class="wb-btn" type="button" data-tool="measure"
+                        title="거리 측정 (M) — 피스트 좌우 끝에서는 원근으로 ±10% 내외 오차가 있을 수 있습니다">측정</button>
+                <button id="wb-clear" class="wb-btn" type="button" title="그린 것 모두 지우기">지우기</button>
+                <button class="wb-btn wb-swatch wb-btn--on" type="button" data-color="#c9302c" title="빨강"
+                        style="--wb-swatch: #c9302c"></button>
+                <button class="wb-btn wb-swatch" type="button" data-color="#1e3a8a" title="파랑"
+                        style="--wb-swatch: #1e3a8a"></button>
+                <button id="wb-calib" class="wb-btn" type="button"
+                        title="BH 기준선 설정 — 선수의 어깨~발목 길이를 1.0 BH로 등록합니다">BH 기준</button>
+                <span id="wb-calib-state" class="wb-readout hidden"></span>
+            </div>
+
+            <!-- loop / source / collapse -->
+            <div class="wb-group wb-group--end">
+                <span id="wb-loop-chip" class="wb-chip hidden">
+                    <span>&#8635;</span>
+                    <span id="wb-loop-label">구간 반복</span>
+                    <button id="wb-loop-clear" class="wb-chip-x" type="button" title="구간 반복 해제 (Esc)">&times;</button>
+                </span>
+                <button id="wb-source-chip" class="wb-chip wb-chip--action hidden" type="button">원본 영상으로</button>
+                <button id="wb-collapse" class="wb-btn" type="button" aria-expanded="true"
+                        aria-controls="wb-viewport">&#9652; 접기</button>
+            </div>
+        </div>
+    </section>
+    {% elif youtube_url %}
+    <div class="glass-card p-4 mb-6">
+        <a href="{{ youtube_url }}" target="_blank" rel="noopener noreferrer"
+           class="flex items-center gap-3 text-gray-300 hover:text-white transition-colors group">
+            <span class="flex-shrink-0 w-10 h-10 bg-red-600/20 rounded-xl flex items-center justify-center border border-red-500/20">
+                <svg class="w-5 h-5 text-red-400" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                </svg>
+            </span>
+            <span class="flex-1 min-w-0">
+                <span class="block text-sm font-medium">{{ t('report.youtube_source') if t else '원본 영상 보기 (YouTube)' }}</span>
+                <span class="block text-xs text-gray-500 truncate">{{ youtube_url }}</span>
+            </span>
+        </a>
+    </div>
+    {% endif %}
+
     <!-- Unified Match Timeline (scoring touches + non-scoring exchanges, chronological) -->
     {% set event_badges = {
         'failed_attack': {'label': '공격 실패', 'bg': 'bg-red-500/10', 'text': 'text-red-400', 'border': 'border-red-500/20'},
@@ -240,7 +404,13 @@
                 &middot; <span class="text-gray-600 font-mono">▶ 3:18</span> = 영상 위치
             </p>
         </div>
-        <p class="text-xs text-gray-500 mb-4">항목을 누르면 왼쪽 플레이어에서 AI 포즈 오버레이 클립이 재생됩니다.</p>
+        {% if show_workbench %}
+        <p class="text-xs text-gray-500 mb-4">
+            {% if has_main_video %}항목을 누르면 위 워크벤치가 그 구간을 반복 재생합니다. AI 버튼은 포즈 오버레이 클립을 엽니다 (첫 생성 약 1분).
+            {% else %}항목을 누르면 위 워크벤치에서 AI 포즈 오버레이 클립이 재생됩니다 (첫 생성 약 1분).
+            {% endif %}
+        </p>
+        {% endif %}
 
         {% if ns_count > 0 %}
         <!-- Summary stat chips -->
@@ -265,26 +435,8 @@
             {% endif %}
         </div>
 
-        <!-- Per-fencer exchange stats -->
-        {% if report.continuous_summary is defined and report.continuous_summary and report.continuous_summary.fencer_stats %}
-        {% set fstats = report.continuous_summary.fencer_stats %}
-        <div class="grid grid-cols-2 gap-3 mb-4">
-            <div class="bg-blue-500/10 border border-blue-500/15 rounded-xl p-3">
-                <p class="text-xs font-semibold text-blue-400 mb-1">{{ left_name }} (왼쪽)</p>
-                <div class="flex gap-4 text-sm">
-                    <span class="text-blue-400">공격 <strong>{{ fstats.left.attacks }}</strong>회</span>
-                    <span class="text-blue-400">방어 <strong>{{ fstats.left.defenses }}</strong>회</span>
-                </div>
-            </div>
-            <div class="bg-red-500/10 border border-red-500/15 rounded-xl p-3">
-                <p class="text-xs font-semibold text-red-400 mb-1">{{ right_name }} (오른쪽)</p>
-                <div class="flex gap-4 text-sm">
-                    <span class="text-red-400">공격 <strong>{{ fstats.right.attacks }}</strong>회</span>
-                    <span class="text-red-400">방어 <strong>{{ fstats.right.defenses }}</strong>회</span>
-                </div>
-            </div>
-        </div>
-        {% endif %}
+        {# Per-fencer attack/defence counts moved to the 선수 비교 panel below,
+           which shows the same numbers side by side with the derived metrics. #}
 
         <!-- Filter tabs -->
         <div class="flex border-b border-white/10 mb-4" id="event-tabs">
@@ -308,11 +460,12 @@
             {% set mex = ev.exchange %}
             {% set scorer_name = left_name if touch.scorer == 'left' else right_name %}
             {% set attacker_name = left_name if touch.attacker_side == 'left' else right_name %}
-            {% set playable = report_id is defined and report_id and touch.frame is defined %}
+            {% set playable = has_clips and touch.frame is defined %}
             <div class="timeline-row flex items-center gap-3 p-3 rounded-xl border transition-colors {% if playable %}cursor-pointer{% endif %}
                         {% if touch.scorer == 'left' %}bg-blue-500/10 border-blue-500/15 hover:bg-blue-500/20{% else %}bg-red-500/10 border-red-500/15 hover:bg-red-500/20{% endif %}"
                  data-kind="touch"
                  {% if playable %}data-clip-type="touch" data-clip-number="{{ touch.touch_number }}"
+                 {% if mex is defined and mex and mex.start_frame is defined and mex.end_frame is defined %}data-start-frame="{{ mex.start_frame }}" data-end-frame="{{ mex.end_frame }}"{% else %}data-touch-frame="{{ touch.frame }}"{% endif %}
                  data-clip-label="득점 {{ touch.score_after }} — {{ scorer_name }}"{% endif %}>
                 <div class="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0
                             {% if touch.scorer == 'left' %}bg-blue-500{% else %}bg-red-500{% endif %}">
@@ -386,21 +539,19 @@
                     {% endif %}
                 </div>
                 {% if playable %}
-                <button class="clip-play-btn flex-shrink-0 w-8 h-8 rounded-full bg-white/10 hover:bg-brand-500/30 flex items-center justify-center transition-colors"
-                        data-clip-type="touch" data-clip-number="{{ touch.touch_number }}"
-                        title="클립 재생">
-                    <svg class="w-3.5 h-3.5 text-gray-400" fill="currentColor" viewBox="0 0 20 20"><polygon points="6,4 16,10 6,16"/></svg>
-                </button>
+                <button class="clip-play-btn" data-clip-type="touch" data-clip-number="{{ touch.touch_number }}"
+                        title="AI 스켈레톤 오버레이 클립 (첫 생성 약 1분)">AI</button>
                 {% endif %}
             </div>
             {% else %}
             {% set ex = ev.exchange %}
             {% set badge = event_badges.get(ex.event_type, {'label': ex.event_type_ko | default(ex.event_type), 'bg': 'bg-white/10', 'text': 'text-gray-400', 'border': 'border-white/10'}) %}
-            {% set playable = report_id is defined and report_id and ex.start_frame is defined %}
+            {% set playable = has_clips and ex.start_frame is defined %}
             <div class="timeline-row flex items-center gap-3 p-3 rounded-xl border border-white/5 hover:bg-white/[0.04] transition-colors {% if playable %}cursor-pointer{% endif %}"
                  data-kind="exchange"
                  {% if playable %}data-clip-type="exchange" data-clip-number="{{ ex.exchange_number }}"
-                 data-clip-label="교전 — {{ ex.event_type_ko | default(badge.label) }}"{% endif %}>
+                 data-start-frame="{{ ex.start_frame }}" data-end-frame="{{ ex.end_frame | default(ex.start_frame) }}"
+                 data-clip-label="교전 #{{ ex.exchange_number }} — {{ ex.event_type_ko | default(badge.label) }}"{% endif %}>
                 <div class="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center flex-shrink-0">
                     <span class="text-[9px] font-semibold text-gray-500">교전</span>
                 </div>
@@ -450,11 +601,8 @@
                     {% endif %}
                 </div>
                 {% if playable %}
-                <button class="clip-play-btn flex-shrink-0 w-8 h-8 rounded-full bg-white/10 hover:bg-brand-500/30 flex items-center justify-center transition-colors"
-                        data-clip-type="exchange" data-clip-number="{{ ex.exchange_number }}"
-                        title="클립 재생">
-                    <svg class="w-3.5 h-3.5 text-gray-400" fill="currentColor" viewBox="0 0 20 20"><polygon points="6,4 16,10 6,16"/></svg>
-                </button>
+                <button class="clip-play-btn" data-clip-type="exchange" data-clip-number="{{ ex.exchange_number }}"
+                        title="AI 스켈레톤 오버레이 클립 (첫 생성 약 1분)">AI</button>
                 {% endif %}
             </div>
             {% endif %}
@@ -466,6 +614,107 @@
             공격 성공/실패는 풋워크·스코어 기반의 확정 판정, 빠라드 등 세부 액션은 추정입니다.
         </p>
         {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- ④ Fencer Comparison -->
+    {% set lao = report.left_fencer.attack_outcomes if report.left_fencer else None %}
+    {% set rao = report.right_fencer.attack_outcomes if report.right_fencer else None %}
+    {% if fstats or lao or rao %}
+    {% set ns = namespace(fwl={}, fwr={}, bh_sum=0.0, bh_n=0, def_l=0, def_r=0, fail_l=0, fail_r=0) %}
+    {% for ex in report.exchanges | default([]) %}
+        {% if ex.footwork_left %}{% set _ = ns.fwl.update({ex.footwork_left: ns.fwl.get(ex.footwork_left, 0) + 1}) %}{% endif %}
+        {% if ex.footwork_right %}{% set _ = ns.fwr.update({ex.footwork_right: ns.fwr.get(ex.footwork_right, 0) + 1}) %}{% endif %}
+        {% if ex.min_distance_bh is defined and ex.min_distance_bh is not none %}
+            {% set ns.bh_sum = ns.bh_sum + ex.min_distance_bh %}
+            {% set ns.bh_n = ns.bh_n + 1 %}
+        {% endif %}
+        {% if ex.event_type == 'successful_defense' %}
+            {% if ex.defender == 'left' %}{% set ns.def_l = ns.def_l + 1 %}
+            {% elif ex.defender == 'right' %}{% set ns.def_r = ns.def_r + 1 %}{% endif %}
+        {% endif %}
+        {% if ex.event_type == 'failed_attack' %}
+            {% if ex.attacker == 'left' %}{% set ns.fail_l = ns.fail_l + 1 %}
+            {% elif ex.attacker == 'right' %}{% set ns.fail_r = ns.fail_r + 1 %}{% endif %}
+        {% endif %}
+    {% endfor %}
+    {% set fwl_top = (ns.fwl | dictsort(by='value', reverse=true) | first) if ns.fwl else None %}
+    {% set fwr_top = (ns.fwr | dictsort(by='value', reverse=true) | first) if ns.fwr else None %}
+    {% set def_left = lao.defense_success if lao and lao.defense_success is defined else ns.def_l %}
+    {% set def_right = rao.defense_success if rao and rao.defense_success is defined else ns.def_r %}
+
+    {% macro cmp_bar_row(label, lnum, rnum, unit) %}
+    {% set mx = [lnum | float, rnum | float, 0.001] | max %}
+    <div class="grid grid-cols-[1fr_5.5rem_1fr] sm:grid-cols-[1fr_7rem_1fr] items-center gap-2 sm:gap-3 py-2.5 border-b border-white/5">
+        <div class="flex items-center gap-2 min-w-0">
+            <span class="text-sm font-semibold text-blue-300 flex-shrink-0 w-14 text-right"><span class="fm-num">{{ lnum }}</span>{{ unit }}</span>
+            <div class="flex-1 h-2 bg-white/5 rounded-full overflow-hidden flex justify-end">
+                <div class="h-2 bg-blue-500/70 rounded-full" style="width: {{ ((lnum | float) / mx * 100) | round | int }}%"></div>
+            </div>
+        </div>
+        <div class="text-[11px] text-gray-400 text-center leading-tight px-1">{{ label }}</div>
+        <div class="flex items-center gap-2 min-w-0">
+            <div class="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
+                <div class="h-2 bg-red-500/70 rounded-full" style="width: {{ ((rnum | float) / mx * 100) | round | int }}%"></div>
+            </div>
+            <span class="text-sm font-semibold text-red-300 flex-shrink-0 w-14"><span class="fm-num">{{ rnum }}</span>{{ unit }}</span>
+        </div>
+    </div>
+    {% endmacro %}
+
+    {% macro cmp_footwork_cell(top, align) %}
+    {% if top %}<span class="{{ align }}">{{ top[0] }} <span class="fm-num">{{ top[1] }}</span>회</span>{% else %}-{% endif %}
+    {% endmacro %}
+
+    {% macro cmp_text_row(label, ltext, rtext) %}
+    <div class="grid grid-cols-[1fr_5.5rem_1fr] sm:grid-cols-[1fr_7rem_1fr] items-center gap-2 sm:gap-3 py-2.5 border-b border-white/5">
+        <div class="text-sm text-blue-300 text-right truncate">{{ ltext }}</div>
+        <div class="text-[11px] text-gray-400 text-center leading-tight px-1">{{ label }}</div>
+        <div class="text-sm text-red-300 truncate">{{ rtext }}</div>
+    </div>
+    {% endmacro %}
+
+    <div class="glass-card p-6 mb-8">
+        <div class="flex items-baseline justify-between flex-wrap gap-2 mb-4">
+            <h2 class="text-lg font-bold text-white">선수 비교</h2>
+            <p class="text-[11px]"><span class="text-blue-400">{{ left_name }}</span>
+                <span class="text-gray-600 mx-1">vs</span>
+                <span class="text-red-400">{{ right_name }}</span></p>
+        </div>
+
+        {% if fstats %}
+        {{ cmp_bar_row('공격 시도', fstats.left.attacks, fstats.right.attacks, '회') }}
+        {{ cmp_bar_row('방어 시도', fstats.left.defenses, fstats.right.defenses, '회') }}
+        {% endif %}
+
+        {% if lao and rao and lao.attack_success_rate is not none and rao.attack_success_rate is not none %}
+        {{ cmp_bar_row('공격 성공률', lao.attack_success_rate | round | int, rao.attack_success_rate | round | int, '%') }}
+        {% else %}
+        {{ cmp_bar_row('실패한 공격', ns.fail_l, ns.fail_r, '회') }}
+        {% endif %}
+
+        {{ cmp_bar_row('방어 성공', def_left, def_right, '회') }}
+
+        {% if fstats %}
+        {{ cmp_text_row('성향', tendency_badge(fstats.left), tendency_badge(fstats.right)) }}
+        {% endif %}
+
+        {% if fwl_top or fwr_top %}
+        {{ cmp_text_row('최빈 풋워크', cmp_footwork_cell(fwl_top, ''), cmp_footwork_cell(fwr_top, '')) }}
+        {% endif %}
+
+        {% if ns.bh_n > 0 %}
+        <div class="flex items-center justify-center gap-2 pt-4 text-xs text-gray-400">
+            <span>평균 최소 교전 거리</span>
+            <span class="text-white font-semibold"><span class="fm-num">{{ "%.2f" | format(ns.bh_sum / ns.bh_n) }}</span> BH</span>
+            <span class="text-gray-600">(양 선수 공통 · <span class="fm-num">{{ ns.bh_n }}</span>회 교전)</span>
+        </div>
+        {% endif %}
+
+        <p class="text-[10px] text-gray-600 mt-4">
+            포즈 분석 기반 추정 지표입니다. 심판 판정의 재현이 아닙니다.
+            {% if not (lao and rao) %}득점 확인 수단이 없는 리포트에서는 공격 성공률 대신 실패한 공격 횟수만 표기합니다.{% endif %}
+        </p>
     </div>
     {% endif %}
 
@@ -650,11 +899,7 @@
             <div class="flex items-center gap-3 mb-4">
                 <div class="w-3 h-3 rounded-full bg-blue-500"></div>
                 <h3 class="text-lg font-bold text-white">{{ left_name }}</h3>
-                {% if report.left_fencer.handedness %}
-                <span class="text-xs px-2 py-0.5 rounded-full {% if report.left_fencer.handedness == 'left' %}bg-yellow-100 text-yellow-700{% else %}bg-blue-100 text-blue-700{% endif %}">
-                    {{ '왼손잡이' if report.left_fencer.handedness == 'left' else '오른손잡이' }}
-                </span>
-                {% endif %}
+                {# Handedness badge lives in the fencer header (§5.1) — one place only. #}
                 {% if left_club %}
                 <span class="text-xs text-gray-500">{{ left_club }}</span>
                 {% endif %}
@@ -689,11 +934,7 @@
             <div class="flex items-center gap-3 mb-4">
                 <div class="w-3 h-3 rounded-full bg-red-500"></div>
                 <h3 class="text-lg font-bold text-white">{{ right_name }}</h3>
-                {% if report.right_fencer.handedness %}
-                <span class="text-xs px-2 py-0.5 rounded-full {% if report.right_fencer.handedness == 'left' %}bg-yellow-100 text-yellow-700{% else %}bg-blue-100 text-blue-700{% endif %}">
-                    {{ '왼손잡이' if report.right_fencer.handedness == 'left' else '오른손잡이' }}
-                </span>
-                {% endif %}
+                {# Handedness badge lives in the fencer header (§5.1) — one place only. #}
                 {% if right_club %}
                 <span class="text-xs text-gray-500">{{ right_club }}</span>
                 {% endif %}
@@ -1017,12 +1258,6 @@
         </a>
     </div>
 
-    </div>
-    <!-- END RIGHT PANEL -->
-
-    </div>
-    <!-- END 2-Panel Layout -->
-
 </div>
 
 {% endblock %}
@@ -1049,149 +1284,16 @@
         });
     });
 
-    // ---- Clip playback (inline left panel) ----
+    // ---- Workbench handoff ----
     const CLIP_REPORT_ID = {{ (report_id | tojson) if report_id is defined and report_id else 'null' }};
     // Unlisted reports answer only to their share token, so every clip request
     // has to carry the token the page itself was opened with.
     const CLIP_TOKEN = {{ (share_token | tojson) if share_token is defined and share_token else 'null' }};
-    const cachedClips = new Set();
-    let clipTimer = null;
-
-    function clipUrl(path) {
-        return CLIP_TOKEN ? `${path}?token=${encodeURIComponent(CLIP_TOKEN)}` : path;
-    }
-
-    function markCachedRows() {
-        document.querySelectorAll('[data-clip-type]').forEach(el => {
-            const key = el.dataset.clipType + ':' + el.dataset.clipNumber;
-            if (!cachedClips.has(key)) return;
-            const icon = el.querySelector('.clip-play-btn svg') || (el.classList.contains('clip-play-btn') ? el.querySelector('svg') : null);
-            if (icon) {
-                icon.classList.remove('text-gray-400', 'text-gray-500');
-                icon.classList.add('text-emerald-400');
-            }
-            if (el.classList.contains('clip-play-btn')) el.title = '클립 준비됨 — 즉시 재생';
-        });
-    }
-
-    // Prefetch which clips are already generated → those play instantly.
-    if (CLIP_REPORT_ID) {
-        fetch(clipUrl(`/api/analytics/clips/${CLIP_REPORT_ID}/status`))
-            .then(r => r.ok ? r.json() : null)
-            .then(data => {
-                if (!data || !data.cached) return;
-                (data.cached.touch || []).forEach(n => cachedClips.add('touch:' + n));
-                (data.cached.exchange || []).forEach(n => cachedClips.add('exchange:' + n));
-                markCachedRows();
-            })
-            .catch(() => {});
-    }
-
-    async function playClip(type, number, label) {
-        if (!CLIP_REPORT_ID) return;
-        const url = clipUrl(`/api/analytics/clips/${CLIP_REPORT_ID}/${type}/${number}`);
-        const key = type + ':' + number;
-        const isCached = cachedClips.has(key);
-
-        const container = document.getElementById('clip-player-container');
-        const video = document.getElementById('clip-video');
-        const source = document.getElementById('clip-source');
-        const loading = document.getElementById('clip-loading');
-        const loadingTitle = document.getElementById('clip-loading-title');
-        const loadingSub = document.getElementById('clip-loading-sub');
-        const progressTrack = document.getElementById('clip-progress-track');
-        const progressBar = document.getElementById('clip-progress-bar');
-        const error = document.getElementById('clip-error');
-        const title = document.getElementById('clip-title');
-
-        title.textContent = label || (type === 'touch' ? `득점 장면 #${number}` : `교전 장면 #${number}`);
-
-        container.classList.remove('hidden');
-        video.classList.add('hidden');
-        loading.classList.remove('hidden');
-        error.classList.add('hidden');
-        if (clipTimer) { clearInterval(clipTimer); clipTimer = null; }
-
-        if (isCached) {
-            loadingTitle.textContent = '클립 불러오는 중...';
-            loadingSub.textContent = '이미 생성된 클립 — 곧 재생됩니다.';
-            progressTrack.classList.add('hidden');
-        } else {
-            loadingTitle.textContent = 'AI 포즈 오버레이 클립을 처음 생성하고 있습니다';
-            progressTrack.classList.remove('hidden');
-            progressBar.style.width = '3%';
-            const startedAt = Date.now();
-            const expectedSec = 60;
-            const tick = () => {
-                const elapsed = Math.round((Date.now() - startedAt) / 1000);
-                loadingSub.textContent = `약 1분 소요 · ${elapsed}초 경과 — 한 번 생성된 클립은 다음부터 즉시 재생됩니다.`;
-                progressBar.style.width = Math.min(95, 3 + (elapsed / expectedSec) * 92) + '%';
-            };
-            tick();
-            clipTimer = setInterval(tick, 1000);
-        }
-
-        container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-
-        try {
-            const resp = await fetch(url);
-            if (!resp.ok) {
-                let detail;
-                try { detail = (await resp.json()).detail; } catch (_) {}
-                throw new Error(detail || `클립 생성 실패 (${resp.status})`);
-            }
-
-            const blob = await resp.blob();
-            const blobUrl = URL.createObjectURL(blob);
-            source.src = blobUrl;
-            video.load();
-
-            video.oncanplay = () => {
-                if (clipTimer) { clearInterval(clipTimer); clipTimer = null; }
-                loading.classList.add('hidden');
-                video.classList.remove('hidden');
-                video.play();
-                cachedClips.add(key);
-                markCachedRows();
-            };
-
-            video.onerror = () => {
-                if (clipTimer) { clearInterval(clipTimer); clipTimer = null; }
-                loading.classList.add('hidden');
-                error.textContent = '클립을 재생할 수 없습니다.';
-                error.classList.remove('hidden');
-                URL.revokeObjectURL(blobUrl);
-            };
-        } catch (e) {
-            if (clipTimer) { clearInterval(clipTimer); clipTimer = null; }
-            loading.classList.add('hidden');
-            error.textContent = e.message || '클립을 불러올 수 없습니다.';
-            error.classList.remove('hidden');
-        }
-    }
-
-    // Whole timeline row is clickable; the ▶ button works too.
-    document.querySelectorAll('.timeline-row[data-clip-type]').forEach(row => {
-        row.addEventListener('click', () => {
-            playClip(row.dataset.clipType, row.dataset.clipNumber, row.dataset.clipLabel);
-        });
-    });
-    document.querySelectorAll('.clip-play-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const label = btn.closest('[data-clip-label]')?.dataset.clipLabel;
-            playClip(btn.dataset.clipType, btn.dataset.clipNumber, label);
-        });
-    });
-
-    // Close inline clip player
-    document.getElementById('clip-close')?.addEventListener('click', () => {
-        const container = document.getElementById('clip-player-container');
-        const video = document.getElementById('clip-video');
-        container.classList.add('hidden');
-        video.pause();
-        if (clipTimer) { clearInterval(clipTimer); clipTimer = null; }
-    });
+    window.FM_REPORT = {
+        clipReportId: CLIP_REPORT_ID,
+        clipToken: CLIP_TOKEN,
+        fps: (REPORT_DATA.meta && REPORT_DATA.meta.fps) || 30,
+    };
 
     // BH → meters converter
     const bhInput = document.getElementById('bh-height-input');
@@ -1206,4 +1308,6 @@
         updateBhConversion();
     }
 </script>
+<!-- Loaded last: it reads window.FM_REPORT set by the script above. -->
+<script src="/static/js/workbench.js"></script>
 {% endblock %}
