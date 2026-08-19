@@ -597,6 +597,13 @@ class RankingCalculator:
             if any(kw in comp_name for kw in ("전국체육대회", "소년체육대회", "전국체전")):
                 continue
 
+            # 파견선수 선발전(예: 하계유니버시아드 파견선수 선발전)도 지명·선발 참가 대회다.
+            # 소수 후보(30여 명)만 대표 파견 자리를 두고 겨루므로 자유 참가가 아니다 →
+            # 자유 참가 원칙에 따라 랭킹 포인트 제외(결과 표시는 유지, 전국체전과 동일 처리).
+            # '겸 국가대표선수 선발대회'는 '파견'을 포함하지 않아 오폭하지 않는다.
+            if '파견' in comp_name and '선발' in comp_name:
+                continue
+
             # 유소년/청소년 국가대표 선발전: 랭킹 완전 제외
             # (일반 국가대표 선발대회와 완전히 다른 대회 — 대상/참가자/방식 상이)
             if ('유소년' in comp_name or '청소년' in comp_name) and '국가대표' in comp_name:
