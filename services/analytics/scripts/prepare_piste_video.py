@@ -42,6 +42,10 @@ Usage:
     # re-run transcode/previews from an existing config, no prompts at all
     PYTHONPATH=. .venv/bin/python3 scripts/prepare_piste_video.py VIDEO --piste 3 \\
         --config data/piste_configs/260815_Pool_piste3.json
+
+    # re-extract ONLY the scoreboard after widening its crop (piste file untouched)
+    PYTHONPATH=. .venv/bin/python3 scripts/prepare_piste_video.py VIDEO --piste 3 \\
+        --config data/piste_configs/260815_Pool_piste3.json --only scoreboard --force
 """
 
 from __future__ import annotations
@@ -62,7 +66,10 @@ SCHEMA_VERSION = 1
 CONFIG_SOURCE_MANUAL = "manual"
 
 CROP_MARGIN_PX = 120          # camera-drift margin above/below the piste crop band (4K px)
-SCOREBOARD_PAD_PX = 120       # camera-drift padding on all four scoreboard sides (4K px)
+# Camera-drift padding on all four scoreboard sides (4K px). 120 was too tight: on
+# 260815_bout_b the LED panel rode ~104px above the crop top and left the frame
+# for 11.2% of frames, losing a real touch's lamp event. 300 is ~3x the observed drift.
+SCOREBOARD_PAD_PX = 300
 
 WORK_FPS = 30
 SCALE_WIDTH = 1280
@@ -87,6 +94,9 @@ PREVIEW_SUBDIR = "previews"
 
 PREVIEW_EDGE_OFFSET_SEC = 10.0
 GATE_PREVIEW_MAX_DET = 10
+
+# Work-file outputs, in the order ffmpeg maps them. ``--only`` picks a subset.
+OUTPUT_KEYS: Tuple[str, ...] = ("piste", "scoreboard")
 
 SCOREBOARD_ROI_KEYS: Tuple[str, ...] = (
     "lamp_left",
@@ -354,12 +364,23 @@ def config_decode_path(config: Dict) -> str:
     return str(config.get("source_override") or config["source_video"])
 
 
-def build_ffmpeg_command(config: Dict) -> List[str]:
+def build_ffmpeg_command(
+    config: Dict,
+    outputs: Sequence[str] = OUTPUT_KEYS,
+) -> List[str]:
     """Build the single-decode / two-output ffmpeg invocation (plan 2.1).
 
     Every crop, scale and fps number comes from ``config`` — nothing is hardcoded.
     When the config has no scoreboard, this degrades to one output and no ``split``.
+
+    ``outputs`` selects which work files to write; the default writes both. Asking
+    for one output drops the ``split`` too, so re-extracting a re-cropped scoreboard
+    costs a decode but never re-transcodes the piste file.
     """
+    unknown = [o for o in outputs if o not in OUTPUT_KEYS]
+    if unknown:
+        raise ValueError(f"unknown output(s) {unknown}; expected some of {list(OUTPUT_KEYS)}")
+
     piste = config["piste"]
     crop = piste["crop"]
     fps = int(config.get("work_fps", WORK_FPS))
@@ -367,39 +388,60 @@ def build_ffmpeg_command(config: Dict) -> List[str]:
     piste_out = config["work_files"]["piste"]
     scoreboard = config.get("scoreboard")
 
+    # A config without a scoreboard silently drops that output rather than failing —
+    # the default selection has to keep working for piste-only configs.
+    want_piste = "piste" in outputs
+    want_sb = "scoreboard" in outputs and scoreboard is not None
+    if not want_piste and not want_sb:
+        raise ValueError(
+            f"no outputs selected (got {list(outputs)})"
+            + ("; this config has no scoreboard" if scoreboard is None else "")
+        )
+
     piste_chain = (
         f"crop={crop['w']}:{crop['h']}:{crop['x']}:{crop['y']},"
         f"scale={scale_w}:-2,fps={fps}"
     )
-
-    cmd: List[str] = ["ffmpeg", "-y", "-i", config_decode_path(config)]
-
-    if scoreboard is None:
-        cmd += ["-filter_complex", f"[0:v]{piste_chain}[piste]"]
-    else:
+    sb_chain = None
+    if want_sb:
         sb_crop = scoreboard["crop"]
         sb_chain = (
             f"crop={sb_crop['w']}:{sb_crop['h']}:{sb_crop['x']}:{sb_crop['y']},fps={fps}"
         )
-        cmd += [
-            "-filter_complex",
-            f"[0:v]split=2[p][s];[p]{piste_chain}[piste];[s]{sb_chain}[sb]",
-        ]
+
+    cmd: List[str] = ["ffmpeg", "-y", "-i", config_decode_path(config)]
+
+    if want_piste and want_sb:
+        filter_complex = f"[0:v]split=2[p][s];[p]{piste_chain}[piste];[s]{sb_chain}[sb]"
+    elif want_piste:
+        filter_complex = f"[0:v]{piste_chain}[piste]"
+    else:
+        filter_complex = f"[0:v]{sb_chain}[sb]"
+    cmd += ["-filter_complex", filter_complex]
 
     # Output 1: piste band, downscaled, audio kept for roadmap 8-8.
-    cmd += [
-        "-map", "[piste]",
-        "-map", "0:a?",
-        "-c:v", "libx264",
-        "-crf", str(PISTE_CRF),
-        "-preset", X264_PRESET,
-        "-c:a", "aac",
-        "-b:a", AUDIO_BITRATE,
-        str(piste_out),
-    ]
+    #
+    # ``0:a:0?`` — the FIRST audio stream, not all of them. An iPhone .MOV shot in
+    # HEVC carries a second audio stream of spatial audio (codec tag ``apac``)
+    # that ffmpeg has no decoder for, so mapping every audio stream kills the
+    # whole transcode with "Decoding requested, but no decoder found for: none"
+    # before either output is written. Only the first stream is the recorded
+    # room sound that roadmap 8-8 wants. The trailing ``?`` still matters: it
+    # keeps a source with no audio at all from failing.
+    if want_piste:
+        cmd += [
+            "-map", "[piste]",
+            "-map", "0:a:0?",
+            "-c:v", "libx264",
+            "-crf", str(PISTE_CRF),
+            "-preset", X264_PRESET,
+            "-c:a", "aac",
+            "-b:a", AUDIO_BITRATE,
+            str(piste_out),
+        ]
 
     # Output 2: scoreboard crop at native resolution, video only.
-    if scoreboard is not None:
+    if want_sb:
         cmd += [
             "-map", "[sb]",
             "-c:v", "libx264",
@@ -657,25 +699,36 @@ def select_scoreboard_rois_interactive(
 # Transcode
 # ----------------------------------------------------------------------
 
-def run_transcode(config: Dict, force: bool = False) -> bool:
-    """Run the single-decode transcode. Returns True when ffmpeg actually ran."""
+def run_transcode(
+    config: Dict,
+    force: bool = False,
+    outputs: Sequence[str] = OUTPUT_KEYS,
+) -> bool:
+    """Run the single-decode transcode. Returns True when ffmpeg actually ran.
+
+    ``outputs`` narrows which work files are written; only those are considered when
+    deciding whether everything already exists.
+    """
     piste_out = Path(config["work_files"]["piste"])
     sb_out_str = config["work_files"].get("scoreboard")
     sb_out = Path(sb_out_str) if sb_out_str else None
 
-    existing = piste_out.exists() and (sb_out is None or sb_out.exists())
-    if existing and not force:
+    wanted: List[Path] = []
+    if "piste" in outputs:
+        wanted.append(piste_out)
+    if "scoreboard" in outputs and sb_out is not None:
+        wanted.append(sb_out)
+
+    if wanted and all(p.exists() for p in wanted) and not force:
         print("  work files already exist, skipping transcode (use --force to redo):")
-        print(f"    {piste_out}")
-        if sb_out:
-            print(f"    {sb_out}")
+        for p in wanted:
+            print(f"    {p}")
         return False
 
-    piste_out.parent.mkdir(parents=True, exist_ok=True)
-    if sb_out:
-        sb_out.parent.mkdir(parents=True, exist_ok=True)
+    for p in wanted:
+        p.parent.mkdir(parents=True, exist_ok=True)
 
-    cmd = build_ffmpeg_command(config)
+    cmd = build_ffmpeg_command(config, outputs)
     print("  running:")
     print(f"    {shlex.join(cmd)}")
 
@@ -686,13 +739,24 @@ def run_transcode(config: Dict, force: bool = False) -> bool:
 
 
 def assert_frame_alignment(config: Dict) -> None:
-    """Assert the two work files share a frame index (plan 4.3). Fails loudly."""
+    """Assert the two work files share a frame index (plan 4.3). Fails loudly.
+
+    Needs both files on disk. After a ``--only`` run the other one is usually still
+    there from an earlier pass, and comparing against it is exactly the check we
+    want; when it is genuinely absent there is nothing to compare.
+    """
     sb_out = config["work_files"].get("scoreboard")
     if not sb_out:
         print("  frame alignment: no scoreboard work file, nothing to compare")
         return
 
-    piste_frames = probe_frame_count(config["work_files"]["piste"])
+    piste_out = config["work_files"]["piste"]
+    missing = [p for p in (piste_out, sb_out) if not Path(p).exists()]
+    if missing:
+        print(f"  frame alignment: skipped, not on disk: {', '.join(missing)}")
+        return
+
+    piste_frames = probe_frame_count(piste_out)
     sb_frames = probe_frame_count(sb_out)
     delta = abs(piste_frames - sb_frames)
     print(f"  frame counts: piste={piste_frames} scoreboard={sb_frames} delta={delta}")
@@ -910,6 +974,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--work-dir", default=str(DEFAULT_WORK_DIR))
     parser.add_argument("--config-dir", default=str(DEFAULT_CONFIG_DIR))
     parser.add_argument("--force", action="store_true", help="Re-run the transcode even if work files exist")
+    parser.add_argument("--only", choices=("piste", "scoreboard", "both"), default="both",
+                        help="Write just one work file (e.g. re-crop the scoreboard without "
+                             "re-transcoding the piste file). Default: both")
     parser.add_argument("--source-override", help="Decode this file instead of VIDEO (dev shortcut)")
     parser.add_argument("--skip-transcode", action="store_true", help="Write config + previews only")
     return parser
@@ -1008,11 +1075,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print(f"[3/5] config written: {config_path}")
 
     # ---------------- transcode ----------------
+    outputs = OUTPUT_KEYS if args.only == "both" else (args.only,)
+
     if args.skip_transcode:
         print("[4/5] transcode skipped (--skip-transcode)")
     else:
-        print("[4/5] transcode (one decode, two outputs)")
-        run_transcode(config, force=args.force)
+        print(f"[4/5] transcode (one decode, outputs: {', '.join(outputs)})")
+        run_transcode(config, force=args.force, outputs=outputs)
         assert_frame_alignment(config)
 
     # ---------------- previews on the work files ----------------

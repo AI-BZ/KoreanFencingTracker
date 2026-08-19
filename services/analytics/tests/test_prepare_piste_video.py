@@ -12,6 +12,7 @@ import pytest
 
 from scripts.prepare_piste_video import (
     CROP_MARGIN_PX,
+    OUTPUT_KEYS,
     POSE_CONF,
     POSE_IMGSZ,
     POSE_MAX_DET,
@@ -20,6 +21,7 @@ from scripts.prepare_piste_video import (
     SCOREBOARD_PAD_PX,
     SCOREBOARD_ROI_KEYS,
     WORK_FPS,
+    build_arg_parser,
     build_config,
     build_ffmpeg_command,
     build_preview_timestamps,
@@ -203,9 +205,9 @@ def test_derive_piste_crop_rejects_inverted_band():
 # ------------------------------------------------------------------
 
 def test_derive_scoreboard_crop_matches_plan_example():
-    """1800:960:480:280 padded by 120 on all four sides -> 1680,840,720,520."""
+    """1800:960:480:280 padded by 300 on all four sides -> 1500,660,1080,880."""
     crop = derive_scoreboard_crop(SCOREBOARD_RECT, SOURCE_W, SOURCE_H)
-    assert crop == {"x": 1680, "y": 840, "w": 720, "h": 520}
+    assert crop == {"x": 1500, "y": 660, "w": 1080, "h": 880}
 
 
 def test_derive_scoreboard_crop_pads_all_four_sides():
@@ -321,7 +323,7 @@ def test_build_config_piste_block(sample_config):
 def test_build_config_scoreboard_rois_stay_in_crop_coords(sample_config):
     """ROIs are measured on the scoreboard crop and must NOT be converted."""
     sb = sample_config["scoreboard"]
-    assert sb["crop"] == {"x": 1680, "y": 840, "w": 720, "h": 520}
+    assert sb["crop"] == {"x": 1500, "y": 660, "w": 1080, "h": 880}
     assert sb["rois"]["lamp_left"] == [40, 60, 120, 90]
     assert set(sb["rois"]) == set(SCOREBOARD_ROI_KEYS)
 
@@ -394,7 +396,7 @@ def test_ffmpeg_command_filters_come_from_config(sample_config):
     fc = _filter_complex(sample_config and build_ffmpeg_command(sample_config))
     assert "crop=3840:990:0:830" in fc      # piste crop, 4K coords
     assert "scale=1280:-2" in fc            # -2 keeps the height even
-    assert "crop=720:520:1680:840" in fc    # scoreboard crop, native resolution
+    assert "crop=1080:880:1500:660" in fc   # scoreboard crop, native resolution
     assert fc.count("fps=30") == 2          # both branches share the frame index
 
 
@@ -406,20 +408,21 @@ def test_ffmpeg_command_filters_track_config_changes():
     )
     fc = _filter_complex(build_ffmpeg_command(cfg))
     assert "crop=1920:640:0:180" in fc
-    # y padding clamps at the top edge (100-120 -> 0), so h is 420 not 440
-    assert "crop=540:420:80:0" in fc
+    # padding clamps at both the left and top edges (200-300 and 100-300 -> 0),
+    # so the scoreboard crop is 800x600 at the origin, not 900x800
+    assert "crop=800:600:0:0" in fc
 
 
 def test_ffmpeg_command_maps_and_audio(sample_config):
     cmd = build_ffmpeg_command(sample_config)
     assert cmd.count("-map") == 3
-    assert "[piste]" in cmd and "[sb]" in cmd and "0:a?" in cmd
+    assert "[piste]" in cmd and "[sb]" in cmd and "0:a:0?" in cmd
 
     piste_out = sample_config["work_files"]["piste"]
     sb_out = sample_config["work_files"]["scoreboard"]
 
     # Audio is preserved on the piste output (roadmap 8-8) ...
-    assert cmd.index("0:a?") < cmd.index(piste_out)
+    assert cmd.index("0:a:0?") < cmd.index(piste_out)
     assert cmd.index("aac") < cmd.index(piste_out)
     assert cmd.index("96k") < cmd.index(piste_out)
     # ... and stripped from the scoreboard output.
@@ -444,6 +447,85 @@ def test_ffmpeg_command_uses_source_override_for_decoding():
     cmd = build_ffmpeg_command(cfg)
     assert cmd[cmd.index("-i") + 1] == "/tmp/intermediate.mp4"
     assert SOURCE_VIDEO not in cmd
+
+
+# ------------------------------------------------------------------
+# Output selection (--only): re-extract one work file without redoing the other
+# ------------------------------------------------------------------
+
+def test_ffmpeg_command_default_outputs_are_unchanged(sample_config):
+    """The default must stay byte-identical to the two-output command."""
+    assert build_ffmpeg_command(sample_config, OUTPUT_KEYS) == build_ffmpeg_command(sample_config)
+    assert build_ffmpeg_command(sample_config, ("piste", "scoreboard")) == build_ffmpeg_command(
+        sample_config
+    )
+
+
+def test_ffmpeg_command_scoreboard_only_drops_the_piste_output(sample_config):
+    cmd = build_ffmpeg_command(sample_config, ("scoreboard",))
+    fc = _filter_complex(cmd)
+
+    assert "split" not in fc
+    assert fc == "[0:v]crop=1080:880:1500:660,fps=30[sb]"
+    assert fc.count("fps=30") == 1
+    assert "scale=" not in fc                      # the piste downscale is not run
+
+    assert sample_config["work_files"]["piste"] not in cmd
+    assert "[piste]" not in cmd
+    assert not any(c.startswith("0:a") for c in cmd)  # audio rides on the piste output only
+    assert cmd.count("-map") == 1
+    assert cmd[-1] == sample_config["work_files"]["scoreboard"]
+
+
+def test_ffmpeg_command_piste_only_drops_the_scoreboard_output(sample_config):
+    cmd = build_ffmpeg_command(sample_config, ("piste",))
+    fc = _filter_complex(cmd)
+
+    assert "split" not in fc
+    assert fc == "[0:v]crop=3840:990:0:830,scale=1280:-2,fps=30[piste]"
+    assert "[sb]" not in cmd
+    assert "-an" not in cmd
+    assert sample_config["work_files"]["scoreboard"] not in cmd
+    assert cmd.count("-map") == 2                  # video + optional audio
+    assert cmd[-1] == sample_config["work_files"]["piste"]
+
+
+def test_ffmpeg_command_piste_only_matches_the_no_scoreboard_command(sample_config):
+    """Asking for the piste alone yields the same filter graph as a scoreboard-less config."""
+    no_sb = build_config(
+        source_video=SOURCE_VIDEO, piste_number=3, source_fps=120.0,
+        source_resolution=(SOURCE_W, SOURCE_H), crop_band=CROP_BAND, foot_band=FOOT_BAND,
+    )
+    assert _filter_complex(build_ffmpeg_command(sample_config, ("piste",))) == _filter_complex(
+        build_ffmpeg_command(no_sb)
+    )
+
+
+def test_ffmpeg_command_rejects_an_empty_or_unknown_output_selection(sample_config):
+    with pytest.raises(ValueError):
+        build_ffmpeg_command(sample_config, ())
+    with pytest.raises(ValueError):
+        build_ffmpeg_command(sample_config, ("bogus",))
+
+
+def test_ffmpeg_command_rejects_scoreboard_output_when_config_has_none():
+    cfg = build_config(
+        source_video="/tmp/a.mov", piste_number=1, source_fps=120.0,
+        source_resolution=(3840, 2160), crop_band=CROP_BAND, foot_band=FOOT_BAND,
+    )
+    with pytest.raises(ValueError):
+        build_ffmpeg_command(cfg, ("scoreboard",))
+
+
+def test_only_flag_maps_to_output_keys():
+    parser = build_arg_parser()
+    base = ["v.mov", "--piste", "3"]
+
+    assert parser.parse_args(base).only == "both"
+    assert parser.parse_args(base + ["--only", "scoreboard"]).only == "scoreboard"
+    assert parser.parse_args(base + ["--only", "piste"]).only == "piste"
+    with pytest.raises(SystemExit):
+        parser.parse_args(base + ["--only", "bogus"])
 
 
 def test_ffmpeg_command_without_scoreboard_has_no_split():
@@ -473,3 +555,22 @@ def test_ffmpeg_command_without_scoreboard_has_no_split():
 ])
 def test_classify_foot_y(foot_y, expected):
     assert classify_foot_y(foot_y, [170, 255]) is expected
+
+
+def test_ffmpeg_command_maps_only_the_first_audio_stream(sample_config):
+    """An iPhone HEVC .MOV carries a second, undecodable spatial-audio stream.
+
+    Mapping every audio stream ("0:a?") makes ffmpeg abort the whole transcode
+    with "no decoder found for: none" before either output exists — reproduced on
+    260816_venue2_bout.MOV. Only the first stream is the room sound we want.
+    """
+    cmd = build_ffmpeg_command(sample_config)
+    audio_maps = [c for c in cmd if c.startswith("0:a")]
+    assert audio_maps == ["0:a:0?"]
+
+
+def test_ffmpeg_command_keeps_audio_optional(sample_config):
+    """The trailing '?' survives, so a source with no audio still transcodes."""
+    cmd = build_ffmpeg_command(sample_config)
+    assert "0:a:0?" in cmd
+    assert "0:a:0" not in cmd

@@ -51,3 +51,8 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+
+# Personal own-footage reports must never be tracked even if a stray lands
+# outside data/reports/private/ (it happened live on 2026-08-19: an OCR pass
+# wrote name-bearing reports to the public dir and they served ungated).
+data/reports/2608*

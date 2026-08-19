@@ -96,6 +96,11 @@
     {% set has_main_video = video_filename is defined and video_filename %}
     {% set has_clips = report_id is defined and report_id and not is_demo %}
     {% set show_workbench = has_main_video or has_clips %}
+    {# The skeleton overlay draws onto the source footage, so it needs both a
+       joint sidecar and a local video. A clip-only TV report has neither the
+       main video nor a matching frame timeline, and gets no toggle at all
+       rather than a control that silently does nothing. #}
+    {% set show_skeleton_toggle = has_main_video and (has_keypoints is defined and has_keypoints) %}
     {% set fstats = (report.continuous_summary.fencer_stats
                      if report.continuous_summary is defined and report.continuous_summary
                         and report.continuous_summary.fencer_stats else None) %}
@@ -247,7 +252,15 @@
 
         <div id="wb-viewport" class="wb-viewport">
             <div id="wb-stage" class="wb-stage{% if not has_main_video %} hidden{% endif %}">
-                <video id="wb-video" playsinline preload="metadata"></video>
+                {# muted in the markup, not in JS: slow-motion review turns the
+                   audio into noise, so it must be silent before the first frame
+                   paints. The toggle below restores sound on request. #}
+                <video id="wb-video" playsinline preload="metadata" muted></video>
+                {# Two stacked canvases, both on the video's own pixel grid. The
+                   skeleton sits underneath so the coach's own annotations always
+                   win, and so redraw() can clear the drawing layer without
+                   wiping the overlay. #}
+                <canvas id="wb-skeleton"></canvas>
                 <canvas id="wb-canvas"></canvas>
             </div>
 
@@ -269,7 +282,8 @@
                 </a>
                 {% endif %}
                 <p class="text-xs text-gray-500 mt-3 text-center">
-                    타임라인에서 장면을 누르면 AI 포즈 오버레이 클립이 여기에 열립니다.
+                    타임라인에서 장면을 누르면 AI 정밀 분석 클립이 여기에 열립니다.
+                    처음 만드는 클립은 2~4분이 걸리고, 그 다음부터는 기다림 없이 재생됩니다.
                 </p>
             </div>
 
@@ -354,6 +368,17 @@
                 <span id="wb-calib-state" class="wb-readout hidden"></span>
             </div>
 
+            <!-- overlay + audio: unlike the drawing tools these stay on phones,
+                 where reviewing is exactly what the workbench is used for -->
+            <div class="wb-group">
+                {% if show_skeleton_toggle %}
+                <button id="wb-skeleton-toggle" class="wb-btn" type="button"
+                        title="추적된 두 선수의 관절을 원본 영상 위에 그대로 그립니다 — 클립을 만들지 않고 즉시 표시됩니다">스켈레톤</button>
+                {% endif %}
+                <button id="wb-mute" class="wb-btn" type="button"
+                        title="소리 켜기 — 느린 배속에서는 소리가 뭉개지므로 기본은 음소거입니다">음소거</button>
+            </div>
+
             <!-- loop / source / collapse -->
             <div class="wb-group wb-group--end">
                 <span id="wb-loop-chip" class="wb-chip hidden">
@@ -406,8 +431,11 @@
         </div>
         {% if show_workbench %}
         <p class="text-xs text-gray-500 mb-4">
-            {% if has_main_video %}항목을 누르면 위 워크벤치가 그 구간을 반복 재생합니다. AI 버튼은 포즈 오버레이 클립을 엽니다 (첫 생성 약 1분).
-            {% else %}항목을 누르면 위 워크벤치에서 AI 포즈 오버레이 클립이 재생됩니다 (첫 생성 약 1분).
+            {% if has_main_video %}항목을 누르면 위 워크벤치가 그 구간을 반복 재생합니다.
+                {%- if show_skeleton_toggle %} <span class="text-gray-400">스켈레톤</span> 버튼은 원본 영상 위에 관절을 즉시 그려 주고, <span class="text-gray-400">AI 정밀 분석</span> 버튼은 거리·관절 데이터를 새겨 넣은 별도 클립을 만들어 첫 생성에 시간이 걸립니다.
+                {%- else %} <span class="text-gray-400">AI 정밀 분석</span> 버튼은 거리·관절 데이터를 새겨 넣은 별도 클립을 만들어 첫 생성에 시간이 걸립니다.
+                {%- endif %}
+            {% else %}항목을 누르면 위 워크벤치에서 <span class="text-gray-400">AI 정밀 분석</span> 클립이 재생됩니다 — 거리·관절 데이터를 새겨 넣은 별도 클립이라 첫 생성에 시간이 걸립니다.
             {% endif %}
         </p>
         {% endif %}
@@ -540,7 +568,7 @@
                 </div>
                 {% if playable %}
                 <button class="clip-play-btn" data-clip-type="touch" data-clip-number="{{ touch.touch_number }}"
-                        title="AI 스켈레톤 오버레이 클립 (첫 생성 약 1분)">AI</button>
+                        title="관절 추적·거리 데이터가 표시된 분석 클립 생성 (최초 1회 생성 시간 소요)"><span class="clip-btn-full">AI 정밀 분석</span><span class="clip-btn-short"><span>AI</span><span>분석</span></span></button>
                 {% endif %}
             </div>
             {% else %}
@@ -602,7 +630,7 @@
                 </div>
                 {% if playable %}
                 <button class="clip-play-btn" data-clip-type="exchange" data-clip-number="{{ ex.exchange_number }}"
-                        title="AI 스켈레톤 오버레이 클립 (첫 생성 약 1분)">AI</button>
+                        title="관절 추적·거리 데이터가 표시된 분석 클립 생성 (최초 1회 생성 시간 소요)"><span class="clip-btn-full">AI 정밀 분석</span><span class="clip-btn-short"><span>AI</span><span>분석</span></span></button>
                 {% endif %}
             </div>
             {% endif %}
@@ -1289,9 +1317,17 @@
     // Unlisted reports answer only to their share token, so every clip request
     // has to carry the token the page itself was opened with.
     const CLIP_TOKEN = {{ (share_token | tojson) if share_token is defined and share_token else 'null' }};
+    // Null unless a joint sidecar exists for this report: the workbench uses the
+    // presence of this URL, not a feature flag, to decide whether to wire the
+    // skeleton overlay at all. Blocks are scoped separately in Jinja, so the
+    // availability check is repeated here rather than reusing the content block's.
+    const KEYPOINTS_URL = {{ (('/api/analytics/keypoints/' ~ report_id) | tojson)
+                             if (has_keypoints is defined and has_keypoints
+                                 and report_id is defined and report_id) else 'null' }};
     window.FM_REPORT = {
         clipReportId: CLIP_REPORT_ID,
         clipToken: CLIP_TOKEN,
+        keypointsUrl: KEYPOINTS_URL,
         fps: (REPORT_DATA.meta && REPORT_DATA.meta.fps) || 30,
     };
 

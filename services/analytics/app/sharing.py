@@ -34,6 +34,16 @@ VISIBILITY_UNLISTED = "unlisted"
 #: Gitignored subdirectory of data/reports where unlisted reports live.
 PRIVATE_SUBDIR = "private"
 
+#: Subdirectory holding the joint-keypoint sidecar for each report.
+#:
+#: This is structural, not cosmetic. ``iter_report_files`` globs ``*.json``
+#: non-recursively in both report directories and every caller — the token
+#: index, the public listing, the directory fingerprint — treats each hit as a
+#: report. A sidecar written next to its report would therefore be parsed as
+#: one: it would be listed in /reports and walked by build_token_index. Putting
+#: it one level down keeps it out of that glob entirely.
+KEYPOINTS_SUBDIR = "keypoints"
+
 #: Bytes of entropy per token. 18 bytes → 24 url-safe characters, which is
 #: past the point where guessing is feasible and still fits in a chat message.
 TOKEN_BYTES = 18
@@ -79,8 +89,37 @@ def is_accessible(report: dict, token: Optional[str] = None) -> bool:
 
     Public reports ignore the token entirely; unlisted ones require an exact
     match.
+
+    Decides from ``meta`` alone, which is why the routes use
+    :func:`is_accessible_at` instead: a report is sensitive from the moment it
+    is written into the private directory, and ``meta`` does not know that until
+    someone runs the share command.
     """
     return not is_unlisted(report) or token_matches(report, token)
+
+
+def is_unlisted_at(report: dict, *, in_private: bool) -> bool:
+    """Whether the report is unlisted, counting where it lives as an answer.
+
+    ``meta`` is written by a human running scripts/share_report.py; the
+    directory is chosen by the analysis that produced the file. Between those
+    two moments a bout with minors' names in its id sat one guess away from
+    anyone. Treating the location as decisive closes that window, and makes the
+    protection structural rather than a step someone has to remember.
+    """
+    return in_private or is_unlisted(report)
+
+
+def is_accessible_at(report: dict, token: Optional[str] = None, *, in_private: bool) -> bool:
+    """Whether a request carrying ``token`` may read this report, given where it lives.
+
+    The location-aware counterpart to :func:`is_accessible`, and the one every
+    route uses. Fails closed by construction: a private report with no
+    ``share_token`` at all is readable by nobody, because there is no token that
+    could match. That is the intended answer — a report we cannot prove is
+    shareable is not shareable.
+    """
+    return not is_unlisted_at(report, in_private=in_private) or token_matches(report, token)
 
 
 # ------------------------------------------------------------------
@@ -144,6 +183,29 @@ def private_dir(reports_dir) -> Path:
     return Path(reports_dir) / PRIVATE_SUBDIR
 
 
+def is_private_path(reports_dir, path) -> bool:
+    """Whether ``path`` lies inside the gitignored private report directory.
+
+    This is the fact :func:`is_unlisted_at` decides on, so it has to be hard to
+    fool. Both sides are fully resolved before comparing: a path spelled
+    ``…/private/../public.json`` reads as being under ``private`` on a plain
+    string or component test, and would then be handed the protection of a
+    directory it is not actually in — or, read the other way, let a caller claim
+    privacy for a file sitting in the public tree.
+
+    Never raises. Callers ask about files that do not exist yet (a report about
+    to be written) and about paths that may not resolve at all, and a security
+    predicate that throws is a predicate that gets wrapped in a bare ``except``
+    somewhere and quietly turned into ``False``.
+    """
+    try:
+        priv = private_dir(reports_dir).resolve()
+        target = Path(path).resolve()
+    except (OSError, RuntimeError, ValueError):
+        return False
+    return target == priv or priv in target.parents
+
+
 def is_safe_report_id(report_id: str) -> bool:
     """Reject ids that could climb out of the reports directory.
 
@@ -179,6 +241,50 @@ def resolve_report_path(reports_dir, report_id: str) -> Optional[Path]:
     for candidate in (
         private_dir(reports_dir) / f"{report_id}.json",
         reports_dir / f"{report_id}.json",
+    ):
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def keypoints_dir(reports_dir) -> Path:
+    """Path to the keypoint-sidecar directory beside the reports in ``reports_dir``."""
+    return Path(reports_dir) / KEYPOINTS_SUBDIR
+
+
+def keypoints_path_for_report(report_path) -> Path:
+    """Where the joint-keypoint sidecar for ``report_path`` belongs.
+
+    Derived from the report's own path rather than from a fixed root, so the
+    sidecar follows the report: a report written to ``data/reports/private/``
+    gets its sidecar in ``data/reports/private/keypoints/``, and sharing a
+    report never leaves its keypoints behind in the public tree.
+    """
+    report_path = Path(report_path)
+    return report_path.parent / KEYPOINTS_SUBDIR / f"{report_path.stem}.json"
+
+
+def resolve_keypoints_path(reports_dir, report_id: str) -> Optional[Path]:
+    """Find the keypoint sidecar for ``report_id``, private dir first.
+
+    Mirrors :func:`resolve_report_path` deliberately, including its
+    private-wins-on-tie rule and its id gate. The sidecar is the analysis in
+    another form — every joint of two named fencers, frame by frame — so it
+    answers to the same access rule as the report, and resolving a stale public
+    copy in preference to the private one would serve an unlisted bout's
+    skeleton with no gate at all. Preferring private means a duplicate fails
+    closed instead.
+
+    The id reaches us from a URL path segment and is pasted into a filename, so
+    ``is_safe_report_id`` gates it here too rather than trusting the caller.
+    """
+    if not is_safe_report_id(report_id):
+        return None
+
+    reports_dir = Path(reports_dir)
+    for candidate in (
+        keypoints_dir(private_dir(reports_dir)) / f"{report_id}.json",
+        keypoints_dir(reports_dir) / f"{report_id}.json",
     ):
         if candidate.is_file():
             return candidate
@@ -241,6 +347,12 @@ def build_token_index(reports_dir) -> Dict[str, str]:
     Resolving a share link means finding which of ~90 report files carries the
     token. Parsing them all on every request would be wasteful, and stat-ing
     them is not, so the parse happens once per change to either directory.
+
+    Indexing uses the same location-aware rule the routes gate on. It has to:
+    a report can now be unlisted purely by living in the private directory,
+    carrying a token but no ``visibility`` field, and keying the index off
+    ``meta`` alone would leave that report unreachable by id (right) *and* by
+    the very link printed in its own file (wrong).
     """
     global _token_index, _index_signature
 
@@ -263,7 +375,7 @@ def build_token_index(reports_dir) -> Dict[str, str]:
         if not isinstance(data, dict):
             continue
         token = get_share_token(data)
-        if token and is_unlisted(data):
+        if token and is_unlisted_at(data, in_private=is_private_path(reports_dir, path)):
             index[token] = path.stem
 
     _token_index, _index_signature = index, signature

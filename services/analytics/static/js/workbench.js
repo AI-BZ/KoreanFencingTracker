@@ -24,6 +24,7 @@
     var FPS = Number(cfg.fps) > 0 ? Number(cfg.fps) : 30;
     var CLIP_REPORT_ID = cfg.clipReportId || null;
     var CLIP_TOKEN = cfg.clipToken || null;
+    var KEYPOINTS_URL = cfg.keypointsUrl || null;
 
     var SPEEDS = [1, 0.5, 0.25, 1 / 6];
     var ZOOM_MIN = 1;
@@ -32,12 +33,34 @@
     var TOUCH_LEAD_SEC = 3;           // touch rows without a matched exchange
     var TOUCH_TAIL_SEC = 1;
     var COLLAPSE_KEY = 'fm-workbench-collapsed';
+    var SKELETON_KEY = 'fm-workbench-skeleton';
+    var MUTE_KEY = 'fm-workbench-muted';
+
+    // COCO-17 joint order, as documented by the keypoints endpoint:
+    // 0 nose, 1/2 eyes, 3/4 ears, 5/6 shoulders, 7/8 elbows, 9/10 wrists,
+    // 11/12 hips, 13/14 knees, 15/16 ankles.
+    var SKELETON_EDGES = [
+        [5, 7], [7, 9], [6, 8], [8, 10],            // arms — the weapon side
+        [5, 6], [5, 11], [6, 12], [11, 12],         // torso box
+        [11, 13], [13, 15], [12, 14], [14, 16],     // legs — footwork reads here
+        [0, 5], [0, 6],                             // neck
+        [0, 1], [0, 2], [1, 3], [2, 4]              // face
+    ];
+    var SKELETON_JOINTS = 17;
+
+    // Taegukgi blue/red, lifted toward the light end: the annotation swatches
+    // (#1e3a8a / #c9302c) disappear against a bright piste, and these are read
+    // over video rather than over the page background.
+    var SKELETON_LEFT_COLOR = '#3d8bfd';
+    var SKELETON_RIGHT_COLOR = '#ff4d4f';
+    var SKELETON_OUTLINE = 'rgba(8, 8, 12, 0.85)';
 
     // ---- elements ----
     var viewport = document.getElementById('wb-viewport');
     var stage = document.getElementById('wb-stage');
     var video = document.getElementById('wb-video');
     var canvas = document.getElementById('wb-canvas');
+    var skelCanvas = document.getElementById('wb-skeleton');
     var placeholder = document.getElementById('wb-placeholder');
     var loading = document.getElementById('wb-loading');
     var loadingTitle = document.getElementById('wb-loading-title');
@@ -59,9 +82,12 @@
     var loopLabel = document.getElementById('wb-loop-label');
     var sourceChip = document.getElementById('wb-source-chip');
     var collapseBtn = document.getElementById('wb-collapse');
+    var skeletonBtn = document.getElementById('wb-skeleton-toggle');
+    var muteBtn = document.getElementById('wb-mute');
     var toast = document.getElementById('wb-toast');
 
     var ctx = canvas ? canvas.getContext('2d') : null;
+    var skelCtx = skelCanvas ? skelCanvas.getContext('2d') : null;
 
     // ---- state ----
     var hasMainVideo = root.dataset.hasVideo === '1';
@@ -80,6 +106,11 @@
     var bhPixels = null;              // intrinsic px that equal 1.0 BH
     var loop = null;                  // {start, end, label}
     var panning = null;
+
+    var skeletonOn = false;
+    var skeletonData = null;          // the fetched sidecar, cached for the session
+    var skeletonFetching = false;
+    var skelRaf = null;
 
     var cachedClips = new Set();
 
@@ -154,8 +185,17 @@
                 canvas.height = vh;
             }
         }
+        if (skelCanvas) {
+            // Same intrinsic grid as the drawing canvas. Resizing a canvas also
+            // clears it, so the repaint below is not optional.
+            if (skelCanvas.width !== vw || skelCanvas.height !== vh) {
+                skelCanvas.width = vw;
+                skelCanvas.height = vh;
+            }
+        }
         applyTransform();
         redraw();
+        drawSkeleton();
     }
 
     function applyTransform() {
@@ -261,6 +301,215 @@
     }
 
     // ------------------------------------------------------------------
+    // skeleton overlay
+    //
+    // A sidecar of per-frame joint coordinates painted straight onto the source
+    // video — no clip generation, no server round trip per scrub. It lives on
+    // its own canvas underneath #wb-canvas: the drawing tools clear theirs on
+    // every redraw(), so sharing one would make the two layers fight, and the
+    // coach's own annotations must always sit on top.
+    // ------------------------------------------------------------------
+
+    /** currentTime -> nearest sample index. Never interpolated. */
+    function skeletonSampleIndex(sec) {
+        var fps = skeletonData.fps > 0 ? skeletonData.fps : FPS;
+        var every = skeletonData.sample_every > 0 ? skeletonData.sample_every : 1;
+        var left = (skeletonData.poses && skeletonData.poses.left) || [];
+        var count = skeletonData.sample_count > 0 ? skeletonData.sample_count : left.length;
+        // Samples sit sample_every frames apart (0.1s at 30fps), and this tool is
+        // used at 1/4–1/6 speed, so the nearest sample is close enough. Inventing
+        // an in-between pose would be inventing data.
+        return clamp(Math.round(Math.round(sec * fps) / every), 0, Math.max(0, count - 1));
+    }
+
+    function drawSkeletonSide(list, idx, color, lw, sx, sy) {
+        if (!list) return;
+        var flat = list[idx];
+        // null = nothing detected for this side in this sample.
+        if (!flat || flat.length < SKELETON_JOINTS * 3) return;
+
+        var confScale = skeletonData.conf_scale > 0 ? skeletonData.conf_scale : 100;
+        var minConf = typeof skeletonData.min_confidence === 'number'
+            ? skeletonData.min_confidence : 0.3;
+
+        // A joint below threshold is "not seen", not "seen at (0,0)" — dropping
+        // it also drops every edge that touches it.
+        var pts = [];
+        for (var j = 0; j < SKELETON_JOINTS; j++) {
+            var o = j * 3;
+            pts.push((flat[o + 2] / confScale) >= minConf
+                ? { x: flat[o] * sx, y: flat[o + 1] * sy }
+                : null);
+        }
+
+        skelCtx.lineCap = 'round';
+        skelCtx.lineJoin = 'round';
+
+        // Dark pass then coloured pass: a bare stroke disappears against a
+        // brightly lit piste, and a shadow blur per path is far more expensive.
+        // The outline is a fixed multiple of the line so the dark halo stays a
+        // thin edge at every resolution instead of swallowing the colour.
+        for (var pass = 0; pass < 2; pass++) {
+            skelCtx.strokeStyle = pass === 0 ? SKELETON_OUTLINE : color;
+            skelCtx.lineWidth = pass === 0 ? lw * 1.9 : lw;
+            skelCtx.beginPath();
+            for (var e = 0; e < SKELETON_EDGES.length; e++) {
+                var a = pts[SKELETON_EDGES[e][0]];
+                var b = pts[SKELETON_EDGES[e][1]];
+                if (!a || !b) continue;
+                skelCtx.moveTo(a.x, a.y);
+                skelCtx.lineTo(b.x, b.y);
+            }
+            skelCtx.stroke();
+        }
+
+        for (var k = 0; k < pts.length; k++) {
+            if (!pts[k]) continue;
+            skelCtx.beginPath();
+            skelCtx.arc(pts[k].x, pts[k].y, lw * 1.5, 0, Math.PI * 2);
+            skelCtx.fillStyle = SKELETON_OUTLINE;
+            skelCtx.fill();
+            skelCtx.beginPath();
+            skelCtx.arc(pts[k].x, pts[k].y, lw * 0.95, 0, Math.PI * 2);
+            skelCtx.fillStyle = color;
+            skelCtx.fill();
+        }
+    }
+
+    function drawSkeleton() {
+        if (!skelCtx) return;
+        skelCtx.clearRect(0, 0, skelCanvas.width, skelCanvas.height);
+        // An AI clip already has a skeleton burned in by the server, and its
+        // frame numbers do not line up with the main video's, so a second
+        // overlay there would be drawing the wrong pose on the wrong frame.
+        if (!skeletonOn || showingClip || !skeletonData) return;
+
+        var poses = skeletonData.poses || {};
+        var idx = skeletonSampleIndex(video.currentTime);
+        // Normally 1:1 — the sidecar is in the video's own pixel space. The
+        // ratio only matters if the served video was re-encoded at another size.
+        var sx = skeletonData.frame_width > 0 ? skelCanvas.width / skeletonData.frame_width : 1;
+        var sy = skeletonData.frame_height > 0 ? skelCanvas.height / skeletonData.frame_height : 1;
+        // Scaled to the frame so the overlay looks the same on 720p and 1080p;
+        // the floor keeps it legible on the small crops some reports carry.
+        var lw = Math.max(2.5, skelCanvas.width / 420);
+
+        drawSkeletonSide(poses.left, idx, SKELETON_LEFT_COLOR, lw, sx, sy);
+        drawSkeletonSide(poses.right, idx, SKELETON_RIGHT_COLOR, lw, sx, sy);
+    }
+
+    function skeletonTick() {
+        skelRaf = null;
+        drawSkeleton();
+        if (skeletonOn && !showingClip && !video.paused && !video.ended) {
+            skelRaf = requestAnimationFrame(skeletonTick);
+        }
+    }
+
+    /** timeupdate alone fires ~4x/sec, which reads as a stutter against 30fps. */
+    function startSkeletonLoop() {
+        if (skelRaf !== null) return;
+        if (!skeletonOn || showingClip || !skeletonData) return;
+        if (video.paused || video.ended) return;
+        skelRaf = requestAnimationFrame(skeletonTick);
+    }
+
+    function stopSkeletonLoop() {
+        if (skelRaf !== null) { cancelAnimationFrame(skelRaf); skelRaf = null; }
+    }
+
+    function syncSkeletonBtn() {
+        if (!skeletonBtn) return;
+        skeletonBtn.classList.toggle('wb-btn--on', skeletonOn && !showingClip);
+        skeletonBtn.disabled = showingClip;
+        skeletonBtn.title = showingClip
+            ? 'AI 정밀 분석 클립에는 이미 스켈레톤이 입혀져 있습니다 — 원본 영상으로 돌아가면 다시 사용할 수 있습니다'
+            : '추적된 두 선수의 관절을 원본 영상 위에 그대로 그립니다 — 클립을 만들지 않고 즉시 표시됩니다';
+    }
+
+    function applySkeletonState(on, persist) {
+        skeletonOn = !!on;
+        if (persist) {
+            try {
+                localStorage.setItem(SKELETON_KEY, skeletonOn ? '1' : '0');
+            } catch (_) { /* private mode */ }
+        }
+        syncSkeletonBtn();
+        drawSkeleton();
+        if (skeletonOn) { startSkeletonLoop(); } else { stopSkeletonLoop(); }
+    }
+
+    function setSkeletonEnabled(on, fromUser) {
+        if (!skeletonBtn) return;
+        if (!on || skeletonData) {
+            applySkeletonState(on, fromUser);
+            return;
+        }
+        if (skeletonFetching) return;
+        // ~1MB, so it is pulled on first enable rather than on every page load.
+        skeletonFetching = true;
+        showToast('스켈레톤 데이터를 불러오는 중...');
+        fetch(clipUrl(KEYPOINTS_URL))
+            .then(function (r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
+            .then(function (data) {
+                if (!data || !data.poses) throw new Error('malformed sidecar');
+                skeletonData = data;
+                skeletonFetching = false;
+                applySkeletonState(true, fromUser);
+                if (fromUser) {
+                    showToast('스켈레톤 표시 중 — 원본 영상 위에 두 선수의 관절이 그려집니다.');
+                }
+            })
+            .catch(function () {
+                // Fail loudly and back off the toggle: a control that looks on
+                // but draws nothing is worse than one that says it failed. The
+                // stored preference is left alone so a transient error recovers.
+                skeletonFetching = false;
+                applySkeletonState(false, false);
+                showToast('스켈레톤 데이터를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.');
+            });
+    }
+
+    // ------------------------------------------------------------------
+    // audio
+    //
+    // Muted by default because slow-motion playback garbles the sound. The
+    // preference is a property of the workbench, not of one source, and the
+    // same <video> carries both the main footage and the generated clips.
+    // ------------------------------------------------------------------
+
+    var mutedPref = true;
+
+    function syncMuteBtn() {
+        if (!muteBtn) return;
+        muteBtn.textContent = video.muted ? '음소거' : '소리 켬';
+        muteBtn.classList.toggle('wb-btn--on', !video.muted);
+        muteBtn.title = video.muted
+            ? '소리 켜기 — 느린 배속에서는 소리가 뭉개지므로 기본은 음소거입니다'
+            : '음소거하기';
+    }
+
+    function applyMute(muted, persist) {
+        mutedPref = !!muted;
+        video.muted = mutedPref;
+        if (persist) {
+            try {
+                localStorage.setItem(MUTE_KEY, mutedPref ? '1' : '0');
+            } catch (_) { /* private mode */ }
+        }
+        syncMuteBtn();
+    }
+
+    /** Re-assert after a src swap so the choice survives source <-> clip. */
+    function reassertMute() {
+        if (video.muted !== mutedPref) video.muted = mutedPref;
+        syncMuteBtn();
+    }
+
+    // ------------------------------------------------------------------
     // playback
     // ------------------------------------------------------------------
 
@@ -339,13 +588,289 @@
                 : el.querySelector('.clip-play-btn');
             if (btn) {
                 btn.classList.add('clip-cached');
-                btn.title = 'AI 오버레이 클립 준비됨 — 즉시 재생';
+                btn.title = 'AI 정밀 분석 클립 준비됨 — 즉시 재생';
             }
         });
     }
 
     function stopClipTimer() {
         if (clipTimer) { clearInterval(clipTimer); clipTimer = null; }
+    }
+
+    /**
+     * Clip generation is a background job on the server: POST /start, poll
+     * /status, then GET the bytes. A single blocking GET used to work, but the
+     * 1280px pose pass now runs 2-4 minutes and the tunnel in front of us gives
+     * up long before that.
+     */
+    var CLIP_POLL_MS = 2000;              // the server ticks its job state ~1/s
+    var CLIP_POLL_SLOW_MS = 3000;         // past the expected window, ease off
+    var CLIP_POLL_SLOW_AFTER_SEC = 150;
+    var CLIP_GIVE_UP_SEC = 600;           // 4 min worst case + queue slack
+    var CLIP_NET_RETRIES = 5;             // ~10s of transient network trouble
+    var CLIP_BYTES_ATTEMPTS = 3;
+
+    var clipRunId = 0;                    // bumped to invalidate an in-flight run
+    var activeClipKey = null;             // the clip currently being fetched
+    var clipPollWait = null;              // pending poll delay, resolvable on cancel
+    var clipProgress = null;              // per-run copy/progress state
+
+    function clipError(message) {
+        var err = new Error(message);
+        err.userMessage = message;
+        return err;
+    }
+
+    /** Map an HTTP failure onto something a coach can act on. */
+    function clipHttpMessage(status, data) {
+        var detail = data && data.detail;
+        var text = typeof detail === 'string' ? detail : '';
+        if (status === 404 || status === 403) {
+            if (/report not found/i.test(text) || !text || /^not found$/i.test(text)) {
+                if (/report not found/i.test(text)) {
+                    return '이 리포트에 접근할 수 없습니다. 공유 링크가 만료되었거나 주소가 잘못되었습니다.';
+                }
+                return '서버가 이 클립 요청을 처리하지 못했습니다. 페이지를 새로고침한 뒤 다시 시도해 주세요.';
+            }
+            return text;
+        }
+        if (status === 405 || status === 501) {
+            return '이 서버는 아직 클립 생성을 지원하지 않습니다. 페이지를 새로고침한 뒤 다시 시도해 주세요.';
+        }
+        if (status === 502 || status === 503 || status === 504) {
+            return '서버 응답이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.';
+        }
+        return text || ('클립을 불러오지 못했습니다 (' + status + ')');
+    }
+
+    /** Sleep that a cancel can cut short, so a stale run stops within a tick. */
+    function clipSleep(ms) {
+        return new Promise(function (resolve) {
+            var handle = setTimeout(function () { clipPollWait = null; resolve(); }, ms);
+            clipPollWait = { id: handle, resolve: resolve };
+        });
+    }
+
+    function hideClipLoading() {
+        if (loading) loading.classList.add('hidden');
+        root.classList.remove('workbench--loading');
+        if (stage) stage.style.visibility = '';
+    }
+
+    /**
+     * Invalidate whatever clip request is in flight. Every await in the run
+     * re-checks the run id afterwards, so a poll that resolves minutes later
+     * cannot put a clip on the stage the coach has already navigated away from.
+     */
+    function cancelClipRun() {
+        clipRunId += 1;
+        activeClipKey = null;
+        clipProgress = null;
+        stopClipTimer();
+        if (clipPollWait) {
+            clearTimeout(clipPollWait.id);
+            var wake = clipPollWait.resolve;
+            clipPollWait = null;
+            wake();
+        }
+        video.oncanplay = null;
+        video.onerror = null;
+        hideClipLoading();
+    }
+
+    function fmtElapsed(sec) {
+        if (sec < 60) return sec + '초';
+        var m = Math.floor(sec / 60);
+        var s = sec % 60;
+        return s ? m + '분 ' + s + '초' : m + '분';
+    }
+
+    function clipQueueCopy(pos) {
+        if (typeof pos === 'number' && pos > 0) return '대기 중 ' + pos + '번째';
+        return '앞선 작업이 끝나기를 기다리는 중';
+    }
+
+    /** Fetching bytes: either a clip that was already on disk, or a fresh one. */
+    function showFetchCopy(sub) {
+        if (loadingTitle) loadingTitle.textContent = 'AI 정밀 분석 클립 불러오는 중...';
+        if (loadingSub) loadingSub.textContent = sub || '이미 생성된 클립 — 곧 재생됩니다.';
+        if (progressTrack) progressTrack.classList.add('hidden');
+        stopClipTimer();
+        clipProgress = null;
+    }
+
+    /**
+     * The bar eases toward its ceiling instead of ramping against a fixed
+     * estimate: a 2-minute job and a 4-minute job both keep it visibly moving,
+     * and nothing parks at 95% while the coach waits.
+     */
+    function clipProgressPct(runningSec) {
+        return 8 + 84 * (1 - Math.exp(-runningSec / 150));
+    }
+
+    function startClipProgress(state) {
+        clipProgress = state;
+        if (loadingTitle) {
+            loadingTitle.textContent = 'AI 정밀 분석 클립을 처음 생성하고 있습니다';
+        }
+        if (progressBar) {
+            // Snap back to the start without animating down from the last run.
+            progressBar.style.transitionDuration = '0s';
+            progressBar.style.width = '0%';
+            requestAnimationFrame(function () { progressBar.style.transitionDuration = ''; });
+        }
+        if (progressTrack) progressTrack.classList.remove('hidden');
+
+        state.tick = function () {
+            var now = Date.now();
+            var elapsed = Math.round((now - state.startedAt) / 1000);
+            if (state.phase === 'queued') {
+                if (loadingSub) {
+                    loadingSub.textContent = clipQueueCopy(state.queuePos) + ' · ' +
+                        fmtElapsed(elapsed) + ' 경과 — 순서가 되면 바로 생성이 시작됩니다.';
+                }
+                if (progressBar) {
+                    progressBar.style.width = Math.min(8, 2 + elapsed * 0.2).toFixed(1) + '%';
+                }
+                return;
+            }
+            if (loadingSub) {
+                loadingSub.textContent = '보통 2~4분 걸립니다 · ' + fmtElapsed(elapsed) +
+                    ' 경과 — 한 번 만들어두면 다음부터는 기다림 없이 재생됩니다.';
+            }
+            if (progressBar) {
+                var running = (now - (state.runningSince || state.startedAt)) / 1000;
+                progressBar.style.width = clipProgressPct(running).toFixed(1) + '%';
+            }
+        };
+        state.tick();
+        stopClipTimer();
+        clipTimer = setInterval(state.tick, 1000);
+    }
+
+    function applyClipStatus(state, status, queuePos) {
+        if (!state) return;
+        state.phase = status === 'queued' ? 'queued' : 'running';
+        state.queuePos = typeof queuePos === 'number' ? queuePos : null;
+        if (state.phase === 'running' && !state.runningSince) state.runningSince = Date.now();
+        if (state.tick) state.tick();
+    }
+
+    async function fetchClipJson(url, opts) {
+        var resp;
+        try {
+            resp = await fetch(url, opts);
+        } catch (_) {
+            throw clipError('서버에 연결하지 못했습니다. 네트워크를 확인한 뒤 다시 시도해 주세요.');
+        }
+        var data = null;
+        try { data = await resp.json(); } catch (_) { /* body was not json */ }
+        return { status: resp.status, ok: resp.ok, data: data };
+    }
+
+    /** Resolves to a Blob, or null when the server says 202 (not on disk yet). */
+    async function fetchClipBytes(base) {
+        var resp;
+        try {
+            resp = await fetch(clipUrl(base));
+        } catch (_) {
+            throw clipError('클립을 내려받지 못했습니다. 네트워크를 확인한 뒤 다시 시도해 주세요.');
+        }
+        if (resp.status === 202) return null;
+        if (resp.status !== 200) {
+            var data = null;
+            try { data = await resp.json(); } catch (_) { /* body was not json */ }
+            throw clipError(clipHttpMessage(resp.status, data));
+        }
+        return await resp.blob();
+    }
+
+    async function startClipJob(base) {
+        var res = await fetchClipJson(clipUrl(base + '/start'), { method: 'POST' });
+        if (!res.ok) throw clipError(clipHttpMessage(res.status, res.data));
+        return res.data || {};
+    }
+
+    /** Poll until the job is ready; throws with the server's message on failure. */
+    async function pollClipJob(base, run, state) {
+        var startedAt = Date.now();
+        var netFails = 0;
+        var idleReads = 0;
+        while (true) {
+            var waited = (Date.now() - startedAt) / 1000;
+            await clipSleep(waited > CLIP_POLL_SLOW_AFTER_SEC ? CLIP_POLL_SLOW_MS : CLIP_POLL_MS);
+            if (run !== clipRunId) return;
+            if ((Date.now() - startedAt) / 1000 > CLIP_GIVE_UP_SEC) {
+                throw clipError('클립 생성이 예상보다 오래 걸리고 있습니다. 잠시 후 다시 시도해 주세요.');
+            }
+            var res;
+            try {
+                res = await fetchClipJson(clipUrl(base + '/status'));
+            } catch (err) {
+                netFails += 1;
+                if (netFails > CLIP_NET_RETRIES) throw err;
+                continue;
+            }
+            if (run !== clipRunId) return;
+            if (!res.ok) throw clipError(clipHttpMessage(res.status, res.data));
+            netFails = 0;
+            var data = res.data || {};
+            if (data.status === 'ready') return;
+            if (data.status === 'failed') {
+                throw clipError(data.error || '클립 생성에 실패했습니다.');
+            }
+            if (data.status === 'idle') {
+                // The job is not registered — server restart, or the start call
+                // and this poll crossed. Let the caller re-drive it.
+                idleReads += 1;
+                if (idleReads > 1) return;
+                continue;
+            }
+            idleReads = 0;
+            applyClipStatus(state, data.status, data.queue_position);
+        }
+    }
+
+    /** Put the fetched bytes on the stage — unchanged from the blocking flow. */
+    function presentClip(blob, key, run) {
+        if (clipBlobUrl) URL.revokeObjectURL(clipBlobUrl);
+        clipBlobUrl = URL.createObjectURL(blob);
+        showingClip = true;
+        shapes = [];
+        zoom = 1; panX = 0; panY = 0;
+        // The clip carries a server-rendered skeleton already; ours would be
+        // a second one drawn against main-video frame numbers.
+        stopSkeletonLoop();
+        syncSkeletonBtn();
+        drawSkeleton();
+        video.src = clipBlobUrl;
+        video.load();
+
+        video.oncanplay = function () {
+            if (run !== clipRunId) return;
+            activeClipKey = null;
+            stopClipTimer();
+            clipProgress = null;
+            hideClipLoading();
+            updateLayout();
+            reassertMute();
+            video.play().catch(function () {});
+            cachedClips.add(key);
+            markCachedRows();
+            if (sourceChip && hasMainVideo) sourceChip.classList.remove('hidden');
+        };
+        video.onerror = function () {
+            if (run !== clipRunId) return;
+            activeClipKey = null;
+            stopClipTimer();
+            clipProgress = null;
+            hideClipLoading();
+            if (errorEl) {
+                // The bytes are on the server either way, so a retry is quick.
+                errorEl.textContent = '클립을 재생할 수 없습니다. 다시 눌러 주세요.';
+                errorEl.classList.remove('hidden');
+            }
+        };
     }
 
     function showStage() {
@@ -355,7 +880,15 @@
     }
 
     function restoreMainVideo() {
-        if (!hasMainVideo || !showingClip) return;
+        // Going back to the source cancels a clip that is still generating —
+        // otherwise its poll would resolve minutes later and take the stage.
+        var wasLoadingClip = !!activeClipKey;
+        cancelClipRun();
+        if (!hasMainVideo) return;
+        if (!showingClip) {
+            if (wasLoadingClip) showStage();
+            return;
+        }
         showingClip = false;
         if (clipBlobUrl) { URL.revokeObjectURL(clipBlobUrl); clipBlobUrl = null; }
         video.src = mainSrc;
@@ -365,13 +898,28 @@
         if (sourceChip) sourceChip.classList.add('hidden');
         setLoop(null);
         showStage();
+        // Back on the source video, so the overlay is meaningful again. The
+        // actual repaint lands in updateLayout() once loadedmetadata fires.
+        syncSkeletonBtn();
+        drawSkeleton();
     }
 
     async function playClip(type, number, label) {
         if (!CLIP_REPORT_ID) return;
-        var url = clipUrl('/api/analytics/clips/' + CLIP_REPORT_ID + '/' + type + '/' + number);
         var key = type + ':' + number;
-        var isCached = cachedClips.has(key);
+
+        // Clicking the same row again while it is generating must not open a
+        // second request cycle — the server dedupes, but we should not ask it to.
+        if (activeClipKey === key) {
+            root.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            return;
+        }
+
+        cancelClipRun();
+        var run = clipRunId;
+        activeClipKey = key;
+
+        var base = '/api/analytics/clips/' + CLIP_REPORT_ID + '/' + type + '/' + number;
 
         showStage();
         setLoop(null);
@@ -379,78 +927,54 @@
         root.classList.add('workbench--loading');
         if (loading) loading.classList.remove('hidden');
         if (errorEl) errorEl.classList.add('hidden');
-        stopClipTimer();
-
-        if (isCached) {
-            if (loadingTitle) loadingTitle.textContent = 'AI 오버레이 클립 불러오는 중...';
-            if (loadingSub) loadingSub.textContent = '이미 생성된 클립 — 곧 재생됩니다.';
-            if (progressTrack) progressTrack.classList.add('hidden');
-        } else {
-            if (loadingTitle) loadingTitle.textContent = 'AI 포즈 오버레이 클립을 처음 생성하고 있습니다';
-            if (progressTrack) progressTrack.classList.remove('hidden');
-            if (progressBar) progressBar.style.width = '3%';
-            var startedAt = Date.now();
-            var expectedSec = 60;
-            var tick = function () {
-                var elapsed = Math.round((Date.now() - startedAt) / 1000);
-                if (loadingSub) {
-                    loadingSub.textContent = '약 1분 소요 · ' + elapsed +
-                        '초 경과 — 한 번 생성된 클립은 다음부터 즉시 재생됩니다.';
-                }
-                if (progressBar) {
-                    progressBar.style.width = Math.min(95, 3 + (elapsed / expectedSec) * 92) + '%';
-                }
-            };
-            tick();
-            clipTimer = setInterval(tick, 1000);
-        }
-
         root.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
         try {
-            var resp = await fetch(url);
-            if (!resp.ok) {
-                var detail;
-                try { detail = (await resp.json()).detail; } catch (_) { /* body was not json */ }
-                throw new Error(detail || '클립 생성 실패 (' + resp.status + ')');
-            }
-            var blob = await resp.blob();
-            if (clipBlobUrl) URL.revokeObjectURL(clipBlobUrl);
-            clipBlobUrl = URL.createObjectURL(blob);
-            showingClip = true;
-            shapes = [];
-            zoom = 1; panX = 0; panY = 0;
-            video.src = clipBlobUrl;
-            video.load();
-
-            video.oncanplay = function () {
-                stopClipTimer();
-                if (loading) loading.classList.add('hidden');
-                root.classList.remove('workbench--loading');
-                if (stage) stage.style.visibility = '';
-                updateLayout();
-                video.play().catch(function () {});
-                cachedClips.add(key);
-                markCachedRows();
-                if (sourceChip && hasMainVideo) sourceChip.classList.remove('hidden');
-            };
-            video.onerror = function () {
-                stopClipTimer();
-                if (loading) loading.classList.add('hidden');
-                root.classList.remove('workbench--loading');
-                if (stage) stage.style.visibility = '';
-                if (errorEl) {
-                    errorEl.textContent = '클립을 재생할 수 없습니다.';
-                    errorEl.classList.remove('hidden');
+            // A clip we already played this session is on disk: go straight for
+            // the bytes, exactly as the old flow did, so a replay stays instant.
+            var believedCached = cachedClips.has(key);
+            showFetchCopy(believedCached ? null : '서버에 클립을 요청하는 중입니다...');
+            var attempt = 0;
+            while (true) {
+                if (!believedCached) {
+                    var job = await startClipJob(base);
+                    if (run !== clipRunId) return;
+                    if (job.status === 'ready') {
+                        showFetchCopy();
+                    } else {
+                        var state = {
+                            startedAt: Date.now(),
+                            runningSince: job.status === 'running' ? Date.now() : 0,
+                            phase: job.status === 'queued' ? 'queued' : 'running',
+                            queuePos: null
+                        };
+                        startClipProgress(state);
+                        await pollClipJob(base, run, state);
+                        if (run !== clipRunId) return;
+                        showFetchCopy('생성 완료 — 클립을 불러오는 중입니다.');
+                    }
                 }
-            };
+                var blob = await fetchClipBytes(base);
+                if (run !== clipRunId) return;
+                if (blob) { presentClip(blob, key, run); return; }
+
+                // 202: not on disk after all. Either our cache belief was stale
+                // or the job vanished between the poll and the fetch.
+                cachedClips.delete(key);
+                believedCached = false;
+                attempt += 1;
+                if (attempt >= CLIP_BYTES_ATTEMPTS) {
+                    throw clipError('클립을 받아오지 못했습니다. 잠시 후 다시 시도해 주세요.');
+                }
+            }
         } catch (e) {
+            if (run !== clipRunId) return;
+            activeClipKey = null;
             stopClipTimer();
-            if (loading) loading.classList.add('hidden');
-            root.classList.remove('workbench--loading');
-            if (stage) stage.style.visibility = '';
+            clipProgress = null;
+            hideClipLoading();
             if (errorEl) {
-                errorEl.textContent = e.message || '클립을 불러올 수 없습니다.';
+                errorEl.textContent = e.userMessage || '클립을 불러올 수 없습니다.';
                 errorEl.classList.remove('hidden');
             }
         }
@@ -560,6 +1084,29 @@
             loopClear.addEventListener('click', function () { setLoop(null); });
         }
         if (sourceChip) sourceChip.addEventListener('click', restoreMainVideo);
+
+        if (skeletonBtn && KEYPOINTS_URL) {
+            skeletonBtn.addEventListener('click', function () {
+                if (showingClip) return;
+                setSkeletonEnabled(!skeletonOn, true);
+            });
+            var storedSkeleton = null;
+            try { storedSkeleton = localStorage.getItem(SKELETON_KEY); } catch (_) { /* private mode */ }
+            syncSkeletonBtn();
+            // Default off; only a stored opt-in pays the sidecar fetch on load.
+            if (storedSkeleton === '1') setSkeletonEnabled(true, false);
+        } else if (skeletonBtn) {
+            // Markup without a sidecar URL: nothing to draw, so do not pretend.
+            skeletonBtn.classList.add('hidden');
+        }
+
+        if (muteBtn) {
+            muteBtn.addEventListener('click', function () { applyMute(!video.muted, true); });
+            var storedMute = null;
+            try { storedMute = localStorage.getItem(MUTE_KEY); } catch (_) { /* private mode */ }
+            // Default muted: only an explicit '0' turns the sound back on.
+            applyMute(storedMute !== '0', false);
+        }
 
         if (collapseBtn) {
             collapseBtn.addEventListener('click', function () {
@@ -709,10 +1256,19 @@
     }
 
     video.addEventListener('loadedmetadata', updateLayout);
+    video.addEventListener('loadedmetadata', reassertMute);
     video.addEventListener('play', syncPlayLabel);
     video.addEventListener('pause', syncPlayLabel);
     video.addEventListener('timeupdate', onTimeUpdate);
     window.addEventListener('resize', updateLayout);
+
+    // The overlay follows playback on rAF, and falls back to the media events
+    // for the paused cases (scrubbing, frame stepping) where no frames render.
+    video.addEventListener('play', startSkeletonLoop);
+    video.addEventListener('pause', function () { stopSkeletonLoop(); drawSkeleton(); });
+    video.addEventListener('ended', function () { stopSkeletonLoop(); drawSkeleton(); });
+    video.addEventListener('timeupdate', drawSkeleton);
+    video.addEventListener('seeked', drawSkeleton);
 
     // Redraw measurement labels when the coach changes the height used for the
     // metre conversion — the shapes are unchanged, only their labels are.

@@ -8,6 +8,7 @@ Port: 76
 import json
 import os
 import sys
+import threading
 import uuid
 import time
 import logging
@@ -33,10 +34,12 @@ from app.gallery import get_demo_reports, extract_youtube_id
 from app.report_renderer import prepare_report_view, build_timeline
 from app.sharing import (
     find_report_by_token,
-    is_accessible,
+    is_accessible_at,
+    is_private_path,
     is_unlisted,
     iter_report_files,
     redacted_for_client,
+    resolve_keypoints_path,
     resolve_report_path,
 )
 
@@ -49,26 +52,54 @@ def _reports_dir() -> Path:
     return _BASE_DIR / "data" / "reports"
 
 
-def _load_report(report_id: str) -> Optional[dict]:
-    """Load a saved report by id, looking in the private directory first.
+def _load_report_located(report_id: str) -> Tuple[Optional[dict], bool]:
+    """Load a saved report by id and say whether it came from the private tree.
 
     Every route that reads a report from disk goes through here, so none of them
     can miss the private directory (and serve a 404 for a report that exists) or
     reach it by a path the id could have escaped.
 
-    An id that is unsafe, absent or unparseable all come back as None: callers
-    turn all three into the same 404, so a corrupt file cannot be told apart
-    from a missing one by probing.
+    The location travels with the report because the access rule needs both.
+    A report written into data/reports/private is unlisted by virtue of living
+    there, before anyone runs the share command — and a route holding only the
+    parsed dict cannot see that. Returning the two together means no gate can
+    accidentally decide from ``meta`` alone.
+
+    An id that is unsafe, absent or unparseable all come back as
+    ``(None, False)``: callers turn all three into the same 404, so a corrupt
+    file cannot be told apart from a missing one by probing.
     """
     path = resolve_report_path(_reports_dir(), report_id)
     if path is None:
-        return None
+        return None, False
     try:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
     except (json.JSONDecodeError, OSError, UnicodeDecodeError):
-        return None
-    return data if isinstance(data, dict) else None
+        return None, False
+    if not isinstance(data, dict):
+        return None, False
+    return data, is_private_path(_reports_dir(), path)
+
+
+def _load_report(report_id: str) -> Optional[dict]:
+    """Load a saved report by id, discarding where it was found.
+
+    For callers that only want the content and do no access check of their own.
+    A gate must not use this: without the location it cannot tell a freshly
+    generated private report from a public one.
+    """
+    return _load_report_located(report_id)[0]
+
+
+def _has_keypoints(report_id: str) -> bool:
+    """Whether a joint-keypoint sidecar exists for this report id.
+
+    The template uses this to decide whether to offer the skeleton toggle at
+    all: a report analysed before sidecars existed has none, and a button that
+    404s is worse than no button.
+    """
+    return resolve_keypoints_path(_reports_dir(), report_id) is not None
 
 
 @asynccontextmanager
@@ -278,8 +309,8 @@ async def get_job_status(job_id: str, token: Optional[str] = None):
         # Check if report exists on disk (completed before restart). The bare
         # 200/404 difference is itself a signal that an unlisted report exists,
         # so this branch answers to the same token as the page does.
-        report_dict = _load_report(job_id)
-        if report_dict is not None and is_accessible(report_dict, token):
+        report_dict, in_private = _load_report_located(job_id)
+        if report_dict is not None and is_accessible_at(report_dict, token, in_private=in_private):
             return JobStatus(job_id=job_id, status="completed", progress_pct=100.0)
         raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
 
@@ -304,8 +335,8 @@ async def get_results(job_id: str, token: Optional[str] = None):
         # the whole report, so it is the most valuable door of the lot: it has
         # to be as gated as the page, and the payload has to lose the share
         # token before it goes out or one guessed id yields the key to the rest.
-        report_dict = _load_report(job_id)
-        if report_dict is not None and is_accessible(report_dict, token):
+        report_dict, in_private = _load_report_located(job_id)
+        if report_dict is not None and is_accessible_at(report_dict, token, in_private=in_private):
             return redacted_for_client(report_dict)
         raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
 
@@ -340,8 +371,8 @@ async def get_report(job_id: str, format: str = "json", token: Optional[str] = N
         # Job not in memory — check persisted reports on disk. Same rule as the
         # page: an unlisted report is unreachable by id, and a wrong token is
         # indistinguishable from a report that was never there.
-        report_dict = _load_report(job_id)
-        if report_dict is None or not is_accessible(report_dict, token):
+        report_dict, in_private = _load_report_located(job_id)
+        if report_dict is None or not is_accessible_at(report_dict, token, in_private=in_private):
             raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
     elif job["status"] != "completed" or job["result"] is None:
         return JSONResponse(
@@ -514,11 +545,11 @@ async def report_page(request: Request, job_id: str, token: Optional[str] = None
         mock_mode = job.get("mock_mode", False)
     else:
         # Job not in memory — check persisted reports on disk
-        report_dict = _load_report(job_id)
+        report_dict, in_private = _load_report_located(job_id)
         # An unlisted report has to be as unreachable by id here as it is on
         # /report/saved — same detail string, so a bad token is indistinguishable
         # from a report that was never there.
-        if report_dict is None or not is_accessible(report_dict, token):
+        if report_dict is None or not is_accessible_at(report_dict, token, in_private=in_private):
             raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
         mock_mode = False
 
@@ -555,6 +586,7 @@ async def report_page(request: Request, job_id: str, token: Optional[str] = None
         "video_filename": video_filename,
         "youtube_url": youtube_url,
         "share_token": None,
+        "has_keypoints": _has_keypoints(job_id),
     })
 
 
@@ -802,17 +834,18 @@ def _render_saved_report(
         "video_filename": video_filename,
         "youtube_url": youtube_url,
         "share_token": share_token,
+        "has_keypoints": _has_keypoints(report_id),
     })
 
 
 @app.get("/report/saved/{video_id}")
 async def saved_report_page(request: Request, video_id: str, token: Optional[str] = None):
     """Load a saved report JSON from data/reports/ and render it."""
-    report_dict = _load_report(video_id)
+    report_dict, in_private = _load_report_located(video_id)
 
     # An unlisted report is reachable only through its token. The detail string
     # is the same one a missing report gets, so probing ids leaks nothing.
-    if report_dict is None or not is_accessible(report_dict, token):
+    if report_dict is None or not is_accessible_at(report_dict, token, in_private=in_private):
         raise HTTPException(status_code=404, detail=f"Report not found: {video_id}")
 
     return _render_saved_report(request, video_id, report_dict, share_token=token)
@@ -892,6 +925,39 @@ def _compute_touch_clip_bounds(
     )
 
 
+@app.get("/api/analytics/keypoints/{report_id}")
+async def get_report_keypoints(report_id: str, token: Optional[str] = None):
+    """Serve the joint-keypoint sidecar so the page can overlay a skeleton.
+
+    Gated exactly like the clip endpoints, and for the same reason: the sidecar
+    is the analysis in another form — every joint of two named fencers, frame by
+    frame — so leaving it open would reopen an unlisted bout through a side
+    door. The 404 detail is byte-identical to the one a missing report gets, so
+    a wrong token cannot be told apart from an id that was never there.
+
+    "Report exists but has no sidecar" is a different 404 on purpose: it is only
+    reached once access has already been granted, so it leaks nothing, and the
+    page needs to tell "not allowed" from "nothing to draw".
+    """
+    report_dict, in_private = _load_report_located(report_id)
+    if report_dict is None or not is_accessible_at(report_dict, token, in_private=in_private):
+        raise HTTPException(status_code=404, detail=f"Report not found: {report_id}")
+
+    path = resolve_keypoints_path(_reports_dir(), report_id)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Keypoints not found")
+
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, OSError, UnicodeDecodeError):
+        # A corrupt sidecar reads as an absent one — same answer the page
+        # already knows how to handle, rather than a 500 on a cosmetic feature.
+        raise HTTPException(status_code=404, detail="Keypoints not found")
+
+    return JSONResponse(data)
+
+
 @app.get("/api/analytics/clips/{report_id}/status")
 async def get_clips_status(report_id: str, token: Optional[str] = None):
     """List which overlay clips are already cached for a report.
@@ -906,8 +972,8 @@ async def get_clips_status(report_id: str, token: Optional[str] = None):
     # too. A report file that is simply absent keeps its old answer — an empty
     # listing — because 404-ing on it would break every caller that polls before
     # the report is written.
-    report_dict = _load_report(report_id)
-    if report_dict is not None and not is_accessible(report_dict, token):
+    report_dict, in_private = _load_report_located(report_id)
+    if report_dict is not None and not is_accessible_at(report_dict, token, in_private=in_private):
         raise HTTPException(status_code=404, detail=f"Report not found: {report_id}")
 
     clips_dir = _BASE_DIR / "data" / "clips" / "overlay" / report_id
@@ -922,46 +988,64 @@ async def get_clips_status(report_id: str, token: Optional[str] = None):
     return JSONResponse({"report_id": report_id, "cached": cached})
 
 
-@app.get("/api/analytics/clips/{report_id}/{event_type}/{event_number}")
-async def get_event_clip(
+# ------------------------------------------------------------------
+# On-demand clip generation: job store
+# ------------------------------------------------------------------
+#
+# Generating one pose-overlay clip is a full YOLO pass over its frames. Since
+# the piste gate raised the pose input from 640 to 1280 that takes 2-4 minutes,
+# and Cloudflare's tunnel stops waiting at ~100s — so any request that generates
+# inline is a guaranteed 504 no matter what our own timeouts say. Generation
+# therefore happens in a background job and every request only ever *reports*
+# on one. No route below may call gen.generate_clip() itself.
+
+_CLIP_JOBS: Dict[str, dict] = {}
+_CLIP_JOBS_LOCK = threading.Lock()
+_CLIP_JOB_SEQ = 0
+
+# Concurrency cap. Clip generation is GPU/CPU bound and saturates the machine
+# on its own; ten rows clicked in a row must not become ten simultaneous YOLO
+# passes, which would thrash memory and make *every* clip slower than running
+# them one after another. Two at a time, the rest wait their turn and are
+# reported to the caller as "queued" with a position.
+_CLIP_MAX_CONCURRENT = 2
+_CLIP_SLOTS = threading.Semaphore(_CLIP_MAX_CONCURRENT)
+
+
+def _clip_cache_path(report_id: str, event_type: str, event_number: int) -> Path:
+    """The one cache location every producer and consumer of a clip agrees on."""
+    clips_dir = _BASE_DIR / "data" / "clips" / "overlay" / report_id
+    return clips_dir / f"{event_type}_{event_number:03d}.mp4"
+
+
+def _clip_is_cached(clip_path: Path) -> bool:
+    """A usable clip on disk. The size floor rejects truncated writes."""
+    try:
+        return clip_path.exists() and clip_path.stat().st_size > 1000
+    except OSError:
+        return False
+
+
+def _clip_job_key(report_id: str, event_type: str, event_number: int) -> str:
+    return f"{report_id}/{event_type}/{event_number}"
+
+
+def _resolve_event_clip(
+    report_dict: dict,
     report_id: str,
     event_type: str,
     event_number: int,
-    token: Optional[str] = None,
-):
+) -> Tuple[dict, str, int, int]:
+    """Resolve a clip request to (event, video_path, start_frame, end_frame).
+
+    Shared by the GET route and the /start route so the two cannot drift: they
+    must resolve to the same bounds or they would write different bytes into the
+    same cache path.
+
+    The validation order is load-bearing and unchanged — event lookup, then
+    frame data, then the source video — because a report with no touches has to
+    keep answering "Touch #N not found" rather than "Source video not found".
     """
-    On-demand clip generation with caching.
-
-    Generates a pose-overlay mp4 clip for a specific touch or exchange event.
-    Clips are cached in data/clips/overlay/{report_id}/.
-    """
-    from fastapi.responses import StreamingResponse
-
-    # Validate event_type
-    if event_type not in ("touch", "exchange"):
-        raise HTTPException(status_code=400, detail=f"Invalid event_type: {event_type}")
-
-    # Load report
-    report_dict = _load_report(report_id)
-
-    # Clips are the analysis in video form, so they answer to the same rule as
-    # the page — and to the same detail string.
-    if report_dict is None or not is_accessible(report_dict, token):
-        raise HTTPException(status_code=404, detail=f"Report not found: {report_id}")
-
-    # Check cache
-    clips_dir = _BASE_DIR / "data" / "clips" / "overlay" / report_id
-    clip_filename = f"{event_type}_{event_number:03d}.mp4"
-    clip_path = clips_dir / clip_filename
-
-    if clip_path.exists() and clip_path.stat().st_size > 1000:
-        return StreamingResponse(
-            open(str(clip_path), "rb"),
-            media_type="video/mp4",
-            headers={"Content-Disposition": f"inline; filename={clip_filename}"},
-        )
-
-    # Find the event
     if event_type == "touch":
         events = report_dict.get("touches", [])
         event = next((t for t in events if t.get("touch_number") == event_number), None)
@@ -1003,38 +1087,306 @@ async def get_event_clip(
             detail="Source video not found. Cannot generate clip.",
         )
 
-    # Generate clip
-    try:
-        from ml.clip_overlay import ClipOverlayGenerator
+    return event, video_path, start_frame, end_frame
 
-        # for_report reproduces the pose settings the report was analysed with:
-        # a piste-gated report re-rendered with the stock estimator draws the
-        # foreground referee instead of the fencers (the user caught this on a
-        # real clip). Plain TV reports get the default estimator unchanged.
-        if event_type == "touch":
-            # Touch: smart bounds already computed, use small padding for margin
-            gen = ClipOverlayGenerator.for_report(
-                report_dict, pad_before=0.5, pad_after=0.0,
-            )
-            event_info = gen._extract_touch_info(event)
-        else:
-            # Exchange: start/end are already exchange boundaries, small padding
-            gen = ClipOverlayGenerator.for_report(
-                report_dict, pad_before=0.5, pad_after=0.3,
-            )
-            event_info = gen._extract_exchange_info(event)
 
-        gen.generate_clip(
-            video_path, start_frame, end_frame, str(clip_path), event_info,
+def _generate_event_clip(
+    report_dict: dict,
+    event_type: str,
+    event: dict,
+    video_path: str,
+    start_frame: int,
+    end_frame: int,
+    clip_path: Path,
+) -> None:
+    """Render one overlay clip. Blocking, minutes long — never call from a route.
+
+    Byte-for-byte the generation the endpoint used to do inline, so clips made
+    on demand stay interchangeable with the ones the batch endpoint writes.
+    """
+    from ml.clip_overlay import ClipOverlayGenerator
+
+    # for_report reproduces the pose settings the report was analysed with:
+    # a piste-gated report re-rendered with the stock estimator draws the
+    # foreground referee instead of the fencers (the user caught this on a
+    # real clip). Plain TV reports get the default estimator unchanged.
+    if event_type == "touch":
+        # Touch: smart bounds already computed, use small padding for margin
+        gen = ClipOverlayGenerator.for_report(
+            report_dict, pad_before=0.5, pad_after=0.0,
         )
-    except Exception as e:
-        _logger.error("Clip generation failed: %s", e)
-        raise HTTPException(status_code=500, detail=f"Clip generation failed: {e}")
+        event_info = gen._extract_touch_info(event)
+    else:
+        # Exchange: start/end are already exchange boundaries, small padding
+        gen = ClipOverlayGenerator.for_report(
+            report_dict, pad_before=0.5, pad_after=0.3,
+        )
+        event_info = gen._extract_exchange_info(event)
 
-    return StreamingResponse(
-        open(str(clip_path), "rb"),
-        media_type="video/mp4",
-        headers={"Content-Disposition": f"inline; filename={clip_filename}"},
+    gen.generate_clip(
+        video_path, start_frame, end_frame, str(clip_path), event_info,
+    )
+
+
+def _claim_clip_job(key: str) -> Tuple[str, str, bool]:
+    """Join the live job for `key`, or create one. Returns (job_id, status, created).
+
+    Lookup and insert happen under one lock because generation runs in a
+    threadpool worker while requests are served from the event loop: two clicks
+    on the same row really can check-then-insert concurrently, and the loser
+    would start a second four-minute YOLO pass writing the same file.
+
+    A job that already finished (ready with its file since deleted, or failed)
+    is not joined — the caller is asking again precisely because it wants a
+    retry.
+    """
+    global _CLIP_JOB_SEQ
+    with _CLIP_JOBS_LOCK:
+        job = _CLIP_JOBS.get(key)
+        if job is not None and job["status"] in ("queued", "running"):
+            return job["job_id"], job["status"], False
+
+        _CLIP_JOB_SEQ += 1
+        job = {
+            "job_id": uuid.uuid4().hex,
+            "seq": _CLIP_JOB_SEQ,
+            "status": "queued",
+            "error": None,
+            "created_at": time.monotonic(),
+            "started_at": None,
+            "finished_at": None,
+        }
+        _CLIP_JOBS[key] = job
+        return job["job_id"], job["status"], True
+
+
+def _clip_job_snapshot(key: str) -> Optional[dict]:
+    """A consistent copy of one job plus its queue position, taken under lock."""
+    with _CLIP_JOBS_LOCK:
+        job = _CLIP_JOBS.get(key)
+        if job is None:
+            return None
+        snap = dict(job)
+        if job["status"] == "queued":
+            # Position among everything still waiting for a slot, oldest first.
+            ahead = sum(
+                1 for other in _CLIP_JOBS.values()
+                if other["status"] == "queued" and other["seq"] < job["seq"]
+            )
+            snap["queue_position"] = ahead + 1
+        else:
+            snap["queue_position"] = None
+        return snap
+
+
+def _run_clip_job(
+    key: str,
+    job_id: str,
+    report_dict: dict,
+    event_type: str,
+    event: dict,
+    video_path: str,
+    start_frame: int,
+    end_frame: int,
+    clip_path: Path,
+) -> None:
+    """Background worker: wait for a slot, generate, record the outcome."""
+    # Blocks here while the machine is busy; the job stays "queued" meanwhile,
+    # which is exactly what the poller should be told.
+    with _CLIP_SLOTS:
+        with _CLIP_JOBS_LOCK:
+            job = _CLIP_JOBS.get(key)
+            if job is None or job["job_id"] != job_id:
+                return  # superseded by a newer job for the same clip
+            job["status"] = "running"
+            job["started_at"] = time.monotonic()
+
+        try:
+            _generate_event_clip(
+                report_dict, event_type, event,
+                video_path, start_frame, end_frame, clip_path,
+            )
+            if not _clip_is_cached(clip_path):
+                raise RuntimeError("Clip generation produced no usable output")
+        except Exception as e:
+            # A half-written mp4 would pass the size check forever and be served
+            # as a good clip, so a failed run must leave nothing behind.
+            try:
+                clip_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+            _logger.error("Clip generation failed for %s: %s", key, e)
+            _finish_clip_job(key, job_id, "failed", str(e))
+            return
+
+        _finish_clip_job(key, job_id, "ready", None)
+
+
+def _finish_clip_job(key: str, job_id: str, status: str, error: Optional[str]) -> None:
+    with _CLIP_JOBS_LOCK:
+        job = _CLIP_JOBS.get(key)
+        if job is None or job["job_id"] != job_id:
+            return
+        job["status"] = status
+        job["error"] = error
+        job["finished_at"] = time.monotonic()
+
+
+def _clip_job_elapsed(snap: Optional[dict]) -> float:
+    if snap is None:
+        return 0.0
+    end = snap["finished_at"] if snap["finished_at"] is not None else time.monotonic()
+    return round(max(0.0, end - snap["created_at"]), 3)
+
+
+@app.post("/api/analytics/clips/{report_id}/{event_type}/{event_number}/start")
+async def start_event_clip(
+    report_id: str,
+    event_type: str,
+    event_number: int,
+    background_tasks: BackgroundTasks,
+    token: Optional[str] = None,
+):
+    """Ask for a clip to exist. Returns immediately — never generates inline.
+
+    Gated exactly like the clip read routes, with the same 404 detail, because
+    starting a job on an unlisted report both confirms it exists and spends our
+    GPU on it.
+    """
+    if event_type not in ("touch", "exchange"):
+        raise HTTPException(status_code=400, detail=f"Invalid event_type: {event_type}")
+
+    report_dict, in_private = _load_report_located(report_id)
+    if report_dict is None or not is_accessible_at(report_dict, token, in_private=in_private):
+        raise HTTPException(status_code=404, detail=f"Report not found: {report_id}")
+
+    clip_path = _clip_cache_path(report_id, event_type, event_number)
+    if _clip_is_cached(clip_path):
+        # Already on disk: nothing to schedule, and no job to leave lying around.
+        return JSONResponse({"status": "ready", "cached": True, "job_id": None})
+
+    # Resolve before claiming, so a bad request 404s now rather than becoming a
+    # job that fails four minutes later.
+    event, video_path, start_frame, end_frame = _resolve_event_clip(
+        report_dict, report_id, event_type, event_number,
+    )
+
+    key = _clip_job_key(report_id, event_type, event_number)
+    job_id, status, created = _claim_clip_job(key)
+    if created:
+        clip_path.parent.mkdir(parents=True, exist_ok=True)
+        background_tasks.add_task(
+            _run_clip_job,
+            key, job_id, report_dict, event_type, event,
+            video_path, start_frame, end_frame, clip_path,
+        )
+
+    return JSONResponse({"status": status, "cached": False, "job_id": job_id})
+
+
+@app.get("/api/analytics/clips/{report_id}/{event_type}/{event_number}/status")
+async def get_event_clip_status(
+    report_id: str,
+    event_type: str,
+    event_number: int,
+    token: Optional[str] = None,
+):
+    """Poll one clip. The file on disk outranks whatever the job store says."""
+    if event_type not in ("touch", "exchange"):
+        raise HTTPException(status_code=400, detail=f"Invalid event_type: {event_type}")
+
+    report_dict, in_private = _load_report_located(report_id)
+    if report_dict is None or not is_accessible_at(report_dict, token, in_private=in_private):
+        raise HTTPException(status_code=404, detail=f"Report not found: {report_id}")
+
+    clip_path = _clip_cache_path(report_id, event_type, event_number)
+    key = _clip_job_key(report_id, event_type, event_number)
+    snap = _clip_job_snapshot(key)
+
+    if _clip_is_cached(clip_path):
+        # Playable regardless of job state — a clip written by the batch
+        # endpoint has no job at all.
+        return JSONResponse({
+            "status": "ready",
+            "error": None,
+            "elapsed_sec": _clip_job_elapsed(snap),
+            "queue_position": None,
+        })
+
+    if snap is None or snap["status"] == "ready":
+        # "ready" with no file means the clip was removed after the fact; from
+        # the caller's side that is indistinguishable from never having asked,
+        # and the right next move is the same — POST /start.
+        return JSONResponse({
+            "status": "idle",
+            "error": None,
+            "elapsed_sec": 0.0,
+            "queue_position": None,
+        })
+
+    return JSONResponse({
+        "status": snap["status"],
+        "error": snap["error"],
+        "elapsed_sec": _clip_job_elapsed(snap),
+        "queue_position": snap["queue_position"],
+    })
+
+
+@app.get("/api/analytics/clips/{report_id}/{event_type}/{event_number}")
+async def get_event_clip(
+    report_id: str,
+    event_type: str,
+    event_number: int,
+    token: Optional[str] = None,
+):
+    """Serve a cached pose-overlay clip, or say how to get one made.
+
+    This route used to generate inline and reliably 504'd behind Cloudflare on
+    the ~2-4 minute render. It now never generates: a cached clip streams as
+    before, anything else is a 202 pointing at the job endpoints.
+    """
+    from fastapi.responses import StreamingResponse
+
+    # Validate event_type
+    if event_type not in ("touch", "exchange"):
+        raise HTTPException(status_code=400, detail=f"Invalid event_type: {event_type}")
+
+    # Load report
+    report_dict, in_private = _load_report_located(report_id)
+
+    # Clips are the analysis in video form, so they answer to the same rule as
+    # the page — and to the same detail string.
+    if report_dict is None or not is_accessible_at(report_dict, token, in_private=in_private):
+        raise HTTPException(status_code=404, detail=f"Report not found: {report_id}")
+
+    # Check cache
+    clip_path = _clip_cache_path(report_id, event_type, event_number)
+    clip_filename = clip_path.name
+
+    if _clip_is_cached(clip_path):
+        return StreamingResponse(
+            open(str(clip_path), "rb"),
+            media_type="video/mp4",
+            headers={"Content-Disposition": f"inline; filename={clip_filename}"},
+        )
+
+    # Not cached. Validate the request the same way and in the same order as
+    # before — a nonexistent touch is still a 404, not a job invitation.
+    _resolve_event_clip(report_dict, report_id, event_type, event_number)
+
+    base = f"/api/analytics/clips/{report_id}/{event_type}/{event_number}"
+    snap = _clip_job_snapshot(_clip_job_key(report_id, event_type, event_number))
+    return JSONResponse(
+        status_code=202,
+        content={
+            "status": snap["status"] if snap else "idle",
+            "detail": (
+                "Clip is not generated yet. POST to the start URL, then poll the "
+                "status URL until it reports \"ready\", then request this URL again."
+            ),
+            "start_url": f"{base}/start",
+            "status_url": f"{base}/status",
+        },
     )
 
 
@@ -1046,11 +1398,11 @@ async def generate_all_clips(
     token: Optional[str] = None,
 ):
     """Generate all overlay clips for a report (background task)."""
-    report_dict = _load_report(report_id)
+    report_dict, in_private = _load_report_located(report_id)
 
     # Same gate as the read endpoints: this one reads the report and writes the
     # clips the read endpoints then serve, so leaving it open reopens both.
-    if report_dict is None or not is_accessible(report_dict, token):
+    if report_dict is None or not is_accessible_at(report_dict, token, in_private=in_private):
         raise HTTPException(status_code=404, detail=f"Report not found: {report_id}")
 
     video_path = report_dict.get("meta", {}).get("video_path")

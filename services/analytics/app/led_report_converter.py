@@ -90,6 +90,14 @@ WARNING_CLOCK_UNREAD = "clock_roi_unread"
 WARNING_SCORE_UNREADABLE = "score_after_unreadable"
 WARNING_SCORE_NOT_MONOTONIC = "score_not_monotonic"
 
+#: Warning types the tracked path supplies via ``extra_warnings``. Declared here
+#: so every warning this report can carry is named in one place.
+WARNING_COVERAGE_GAP = "lamp_coverage_gap"
+WARNING_LAMP_ANNULLED = "lamp_event_annulled"
+WARNING_LAMP_UNDETERMINED = "lamp_event_undetermined"
+WARNING_LAMP_INCONSISTENT = "lamp_scorer_inconsistent"
+WARNING_SCORE_LOWER_BOUND = "score_is_lower_bound"
+
 
 # ------------------------------------------------------------------
 # Pure helpers
@@ -214,11 +222,16 @@ def count_by_scorer(touches: Sequence[dict], side: str) -> int:
     )
 
 
-def build_warnings(touches: Sequence[dict]) -> List[dict]:
+def build_warnings(touches: Sequence[dict], clock_available: bool = True) -> List[dict]:
     """Quality warnings about the scoreboard read itself.
 
     Each warning is a ``{type, message, severity}`` dict, the shape
     ``templates/report.html`` renders and the merge appends verbatim.
+
+    ``clock_available`` is False for the tracked path, which has no clock ROI at
+    all. Empty match times are then expected rather than a misconfiguration, and
+    warning about a ROI the run never had would send the reader to fix something
+    that does not exist.
     """
     warnings: List[dict] = []
 
@@ -238,7 +251,7 @@ def build_warnings(touches: Sequence[dict]) -> List[dict]:
     # match_time across a whole bout is not a real clock reading. Needs >= 2
     # touches to mean anything — a single touch trivially has one value.
     match_times = {t.get("match_time", "") for t in touches}
-    if len(touches) >= 2 and len(match_times) == 1:
+    if clock_available and len(touches) >= 2 and len(match_times) == 1:
         only = next(iter(match_times))
         detail = "값이 비어 있음" if not only else f"모든 터치가 '{only}'"
         warnings.append({
@@ -320,6 +333,9 @@ def led_events_to_match_report(
     fps: float = 30.0,
     total_frames: int = 0,
     analysis_time_sec: float = 0.0,
+    clock_available: bool = True,
+    extra_warnings: Optional[Sequence[dict]] = None,
+    analysis_mode: str = "led_scoreboard_ocr",
 ) -> dict:
     """Convert ``VideoProcessor`` ``MatchEvent``s into an OCR report dict.
 
@@ -341,6 +357,14 @@ def led_events_to_match_report(
             itself is never scaled.
         total_frames: Work-file frame count, for ``summary``.
         analysis_time_sec: Wall-clock seconds spent detecting.
+        clock_available: False when the detector had no clock ROI, which
+            suppresses the "check your clock ROI" warning that would otherwise
+            fire on every tracked run. See :func:`build_warnings`.
+        extra_warnings: Warnings the detector produced that this module cannot
+            derive from the touches alone — coverage gaps, annulled lamps. They
+            are prepended, because a gap explains the touches that follow it.
+        analysis_mode: Recorded in ``meta`` so a reader can tell which detector
+            produced the report.
 
     Returns:
         A report dict ready to be written as ``<piste stem>_report.json``.
@@ -377,10 +401,10 @@ def led_events_to_match_report(
             "total_touches_scored": right_touches,
             "total_touches_conceded": left_touches,
         },
-        "warnings": build_warnings(touches),
+        "warnings": list(extra_warnings or []) + build_warnings(touches, clock_available),
         "meta": {
             "source_type": "coach",
-            "analysis_mode": "led_scoreboard_ocr",
+            "analysis_mode": analysis_mode,
             "converter": "led_report_converter",
         },
     }

@@ -166,6 +166,18 @@ canvas {
     pointer-events: none;
 }
 
+/* Two overlays share the video's pixel grid. The skeleton is machine output;
+   the drawing canvas is the coach's own work, so it always sits on top. DOM
+   order already gives this — the z-index states it so a markup reorder cannot
+   silently bury the annotations. */
+#wb-skeleton {
+    z-index: 1;
+}
+
+#wb-canvas {
+    z-index: 2;
+}
+
 .wb-viewport--draw {
     cursor: crosshair;
 }
@@ -209,7 +221,7 @@ canvas {
 /* Keep the loading state visible: the stage is absolutely positioned, so an
    empty viewport would collapse to zero height under the spinner. */
 .workbench--loading .wb-viewport {
-    min-height: 9rem;
+    min-height: 11rem;
 }
 
 .wb-error {
@@ -379,20 +391,54 @@ canvas {
     color: #fff;
 }
 
-/* Timeline "AI" overlay-clip buttons */
+/* Timeline "AI 정밀 분석" clip buttons. The rows are dense flex layouts, so the
+   label must never wrap or push the description text out — it stays on one line
+   and shortens on narrow screens instead. */
 .clip-play-btn {
     flex-shrink: 0;
     min-width: 2rem;
     height: 1.5rem;
-    padding: 0 0.375rem;
+    padding: 0 0.5rem;
     border-radius: 0.375rem;
     border: 1px solid var(--fm-border, rgba(255, 255, 255, 0.08));
     background: rgba(255, 255, 255, 0.06);
     color: var(--fm-text-muted, #9a9aad);
     font-size: 0.625rem;
     font-weight: 700;
-    letter-spacing: 0.03em;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
     transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+/* One label, two shapes. Below 768px the wording stacks onto two lines instead
+   of widening the row, which keeps the button at the same 32px the bare "AI"
+   occupied and leaves every row height untouched. Measured: at 390px the
+   one-line label pushed the description into extra wraps and grew twelve rows
+   from 2277px to 3068px; stacked, they stay at 2277px. 640px is the worst
+   width — it is where these rows also gain their footwork badges — so the
+   stacked form covers it too. The meaning is never dropped, only re-wrapped. */
+.clip-btn-short {
+    display: none;
+}
+
+@media (max-width: 767px) {
+    .clip-play-btn {
+        height: auto;
+        min-height: 1.5rem;
+        padding: 0.1875rem 0.3125rem;
+        letter-spacing: 0;
+    }
+
+    .clip-btn-full {
+        display: none;
+    }
+
+    .clip-btn-short {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        line-height: 1.15;
+    }
 }
 
 .clip-play-btn:hover {

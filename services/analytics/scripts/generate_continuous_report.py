@@ -31,6 +31,7 @@ from analyzer.touch_matching import (
     classify_exchange_sides,
     summarize_attack_outcomes,
 )
+from app.sharing import keypoints_path_for_report, resolve_report_path
 from ml.weapon_analyzers import build_priority_judge
 
 
@@ -638,6 +639,149 @@ def write_gate_audit_frames(
     return written
 
 
+# ------------------------------------------------------------------
+# Joint-keypoint sidecar
+# ------------------------------------------------------------------
+
+#: Schema version written into every sidecar. Bump it when the shape changes —
+#: the page reads this before trusting the rest of the file.
+KEYPOINTS_SCHEMA_VERSION = 1
+
+#: Confidence is stored as an int to keep the file small; this is the divisor
+#: the reader applies to get back a 0..1 float. Written into the sidecar as
+#: ``conf_scale`` so a future change to it does not silently rescale old files.
+KEYPOINTS_CONF_SCALE = 100
+
+
+def _flatten_pose(fencer) -> list:
+    """One fencer's 17 joints as a flat ``[x, y, c, x, y, c, ...]`` int list.
+
+    Flat rather than nested, and int rather than float: a bout is thousands of
+    samples x 2 fencers x 17 joints, and the nested-float form of the same data
+    is several times larger for a skeleton that is drawn at pixel resolution
+    anyway. Coordinates stay in the analysed video's own pixel space — the page
+    knows the video it is overlaying, and rescaling here would bake in an
+    assumption about the player's size.
+    """
+    flat = []
+    for kp in fencer.keypoints:
+        flat.append(int(round(kp.x)))
+        flat.append(int(round(kp.y)))
+        # Clamp rather than trust: a confidence outside 0..1 would otherwise
+        # reach the page as an out-of-range alpha after dividing by conf_scale.
+        conf = int(round(float(kp.confidence) * KEYPOINTS_CONF_SCALE))
+        flat.append(max(0, min(KEYPOINTS_CONF_SCALE, conf)))
+    return flat
+
+
+def build_keypoints_sidecar(
+    pose_results,
+    *,
+    report_id: str,
+    fps: float,
+    sample_every: int,
+    frame_width: int,
+    frame_height: int,
+) -> dict:
+    """Turn per-frame ``PoseResult`` objects into the sidecar document.
+
+    Pure: no I/O, no globals. The pipeline already computes these coordinates on
+    every sampled frame and then discards them once the report's aggregates are
+    built; this keeps them so the page can draw a live skeleton over the source
+    video.
+
+    ``pose_results`` is consumed in list order — element *i* is sample *i*,
+    which is original video frame ``i * sample_every``. That is the same
+    indexing ``analyze_continuous`` is handed (it runs with
+    ``sample_every_n=1`` over an already-sampled sequence), so the sidecar and
+    the report agree about what a frame number means.
+
+    Per side, per sample, the result is either a flat 51-int array or ``None``
+    for "no detection". A fencer with no ``side`` is skipped: side is what the
+    page keys the two skeletons on, and guessing one would draw the wrong
+    fencer. When two poses claim the same side in one sample the higher
+    ``person_confidence`` wins, so a spurious second detection cannot displace
+    the real fencer.
+    """
+    poses = {"left": [], "right": []}
+
+    for result in pose_results:
+        best = {"left": None, "right": None}
+        best_conf = {"left": 0.0, "right": 0.0}
+        for fencer in result.fencers:
+            side = getattr(fencer, "side", None)
+            if side not in ("left", "right"):
+                continue
+            conf = float(getattr(fencer, "person_confidence", 0.0) or 0.0)
+            if best[side] is None or conf > best_conf[side]:
+                best[side] = fencer
+                best_conf[side] = conf
+        for side in ("left", "right"):
+            poses[side].append(
+                _flatten_pose(best[side]) if best[side] is not None else None
+            )
+
+    return {
+        "version": KEYPOINTS_SCHEMA_VERSION,
+        "report_id": report_id,
+        "fps": float(fps),
+        "sample_every": int(sample_every),
+        "frame_width": int(frame_width),
+        "frame_height": int(frame_height),
+        "sample_count": len(poses["left"]),
+        "min_confidence": POSE_KEYPOINT_CONFIDENCE,
+        "conf_scale": KEYPOINTS_CONF_SCALE,
+        # No frames array: it would be a third of the file to store
+        # i * sample_every, which the reader can compute.
+        "poses": poses,
+    }
+
+
+def preserve_existing_meta(new_meta: dict, existing_meta) -> dict:
+    """Merge a previous run's ``meta`` under this run's, key by key.
+
+    Regenerating a report rebuilds ``meta`` from scratch, which silently
+    destroyed every field set by hand afterwards — ``share_token`` and
+    ``visibility`` above all, so every share link already handed out stopped
+    working with no error anywhere.
+
+    The rule is deliberately "keep whatever the fresh run did not set" rather
+    than a list of field names. A list would have to be extended every time
+    another tool starts writing to meta (and the lamp-detection pass already
+    does), whereas this cannot mask a fresh value — a key the new run wrote
+    always wins — and cannot miss a hand-set one.
+    """
+    merged = dict(new_meta)
+    if not isinstance(existing_meta, dict):
+        return merged
+    for key, value in existing_meta.items():
+        if key not in merged:
+            merged[key] = value
+    return merged
+
+
+def _load_existing_meta(reports_dir, report_id: str) -> dict:
+    """Read ``meta`` from an already-saved report of the same id, or ``{}``.
+
+    The I/O half of the preserve-meta rule, kept apart from
+    :func:`preserve_existing_meta` so the merge itself stays pure. An absent,
+    unreadable or malformed previous report all come back as ``{}``: a
+    regeneration must never fail because of the file it is about to replace.
+    """
+    path = resolve_report_path(reports_dir, report_id)
+    if path is None:
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            existing = json.load(f)
+    except (json.JSONDecodeError, OSError, UnicodeDecodeError):
+        return {}
+    if not isinstance(existing, dict):
+        return {}
+    meta = existing.get("meta")
+    return meta if isinstance(meta, dict) else {}
+
+
 def main():
     parser = argparse.ArgumentParser(description="Generate continuous analysis report")
     parser.add_argument("video", type=str, help="Path to video file")
@@ -656,6 +800,15 @@ def main():
     parser.add_argument(
         "--merge-ocr", type=str, default=None,
         help="Path to existing OCR report JSON to merge scoring data (auto-detected if not specified)",
+    )
+    parser.add_argument(
+        "--no-merge-ocr", action="store_true",
+        help=(
+            "Produce a pose-only report: skip OCR merging entirely, including "
+            "auto-detection. Needed when a scoreboard read exists but is not "
+            "trustworthy — leaving --merge-ocr off is not enough, because the "
+            "auto-detector would find that same file and merge it silently."
+        ),
     )
     parser.add_argument(
         "--weapon", type=str, default=None,
@@ -731,6 +884,10 @@ def main():
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     duration_sec = total_frames / fps
+    # Read now, while the capture is open: the keypoint sidecar records the
+    # pixel space its coordinates live in, and cap is released before then.
+    frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
     # Extract frames
     print(f"\n{'='*60}")
@@ -820,7 +977,16 @@ def main():
     # Load OCR report early so we can extract scoring_frames for analyze_continuous()
     ocr_report = None
     ocr_path = args.merge_ocr
-    if ocr_path is None:
+    if args.no_merge_ocr:
+        # Explicitly pose-only. This has to be its own flag because *omitting*
+        # --merge-ocr does not mean "no touches" — it means "go and find one",
+        # and find_ocr_report matches on the video stem, so an OCR report sitting
+        # in the output directory gets merged silently. That is how a scoreboard
+        # read which had already been rejected as unreliable would have ended up
+        # in a user-facing report anyway, with nothing in the output saying so.
+        ocr_path = None
+        print("  OCR merge disabled (--no-merge-ocr): pose-only report, no touches.")
+    elif ocr_path is None:
         auto_detected = find_ocr_report(video_path.stem, output_dir)
         if auto_detected is not None:
             ocr_path = str(auto_detected)
@@ -1329,8 +1495,42 @@ def main():
     # Store video_path in meta for clip generation
     report_dict["meta"]["video_path"] = str(video_path.resolve())
 
+    # Carry hand-set meta across a regeneration. Resolved through
+    # resolve_report_path so a report that has since been shared — and therefore
+    # moved to data/reports/private/ — is still found, which is precisely the
+    # case where losing meta costs the most (share_token and visibility both
+    # live there, and dropping them kills every link already sent out).
+    existing_meta = _load_existing_meta(output_dir, report_id)
+    if existing_meta:
+        preserved = sorted(k for k in existing_meta if k not in report_dict["meta"])
+        report_dict["meta"] = preserve_existing_meta(report_dict["meta"], existing_meta)
+        if preserved:
+            print(f"  Preserved meta from previous report: {', '.join(preserved)}")
+
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(report_dict, f, indent=2, ensure_ascii=False)
+
+    # Joint-keypoint sidecar: the coordinates the analysis already computed on
+    # every sampled frame, kept so the page can draw a live skeleton. Written
+    # beside the report (in keypoints/) rather than inside it — inlining
+    # thousands of samples would multiply the report's size for data no report
+    # consumer reads.
+    keypoints_path = keypoints_path_for_report(output_path)
+    keypoints_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(keypoints_path, "w", encoding="utf-8") as f:
+        json.dump(
+            build_keypoints_sidecar(
+                pose_results,
+                report_id=report_id,
+                fps=fps,
+                sample_every=args.sample_every,
+                frame_width=frame_width,
+                frame_height=frame_height,
+            ),
+            f,
+            separators=(",", ":"),
+        )
+    keypoints_kb = keypoints_path.stat().st_size / 1024
 
     # Gate audit (optional): a second, one-frame-at-a-time pass over the video
     # so the operator can see which people the piste gate kept. It runs after
@@ -1378,6 +1578,7 @@ def main():
     print(f"  Report Generated")
     print(f"{'='*60}")
     print(f"  Output:      {output_path}")
+    print(f"  Keypoints:   {keypoints_path} ({keypoints_kb:.1f} KB)")
     print(f"  Exchanges:   {continuous_result.total_exchanges}")
     for etype, count in sorted(type_counts.items()):
         print(f"    {etype}: {count}")

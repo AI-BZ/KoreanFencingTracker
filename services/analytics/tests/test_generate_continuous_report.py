@@ -869,3 +869,60 @@ class TestWeaponOverrideAppliesWithoutOcr:
                     "the --weapon override is nested inside an OCR branch; "
                     "pose-only runs would ignore the flag"
                 )
+
+
+class TestNoMergeOcrFlag:
+    """--no-merge-ocr must defeat OCR *auto-detection*, not just an explicit path.
+
+    Omitting --merge-ocr does not mean "pose-only": the generator falls back to
+    find_ocr_report(), which matches on the video stem and happily picks up a
+    report sitting in the output directory. That is a real hazard rather than a
+    hypothetical one — a scoreboard read for a bout was reviewed and rejected as
+    unreliable (self-contradictory scores, lamp/scorer disagreement), and the
+    pose-only re-run would have merged that exact file back in with nothing in
+    the output to say so.
+    """
+
+    def _parser_args(self, argv):
+        import sys
+        from unittest.mock import patch
+        import scripts.generate_continuous_report as gcr
+
+        # Parse through the real CLI so the test breaks if the flag is renamed
+        # or dropped, rather than asserting against a hand-built namespace.
+        captured = {}
+        real_parse = None
+
+        import argparse
+        orig = argparse.ArgumentParser.parse_args
+
+        def _capture(self_, *a, **k):
+            ns = orig(self_, argv)
+            captured["ns"] = ns
+            raise SystemExit(0)  # stop before any video work
+
+        with patch.object(argparse.ArgumentParser, "parse_args", _capture), \
+                patch.object(sys, "argv", ["gen"] + argv):
+            with pytest.raises(SystemExit):
+                gcr.main()
+        return captured["ns"]
+
+    def test_flag_defaults_off(self):
+        ns = self._parser_args(["video.mp4"])
+        assert ns.no_merge_ocr is False
+        assert ns.merge_ocr is None
+
+    def test_flag_parses(self):
+        ns = self._parser_args(["video.mp4", "--no-merge-ocr"])
+        assert ns.no_merge_ocr is True
+
+    def test_autodetect_would_otherwise_find_the_rejected_report(self, tmp_path):
+        """The precondition that makes the flag necessary.
+
+        If this ever stops holding, the flag is still correct but the comment
+        above is no longer the reason for it.
+        """
+        (tmp_path / "260816_venue2_bout_piste12_report.json").write_text("{}")
+        found = find_ocr_report("260816_venue2_bout_piste12", tmp_path)
+        assert found is not None
+        assert found.name == "260816_venue2_bout_piste12_report.json"
