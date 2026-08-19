@@ -164,9 +164,25 @@ class LampConfig:
     green_hue_min: int = 35
     green_hue_max: int = 90
 
-    #: Fraction of halo pixels of one hue needed to call the colour. Measured
-    #: chromatic lamps score 0.91–1.00 and white ones 0.00–0.09.
-    colour_fraction: float = 0.5
+    #: Fraction of halo pixels of one hue needed to call the colour.
+    #:
+    #: The two populations are nowhere near each other, so this only has to land
+    #: between them: white lamps measure 0.00–0.09 across all three venues, and
+    #: chromatic ones 0.91–1.00 at the two close-up venues.
+    #:
+    #: It was 0.5, which is the midpoint of that gap but not the safe part of
+    #: it. On the far-away ``kor_domestic_v3`` venue a lamp ROI spans a pair of
+    #: lamps and most of its halo comes from the *unlit* neighbour, which
+    #: dilutes the hue fraction: single green lamps there read 0.58–0.94, but
+    #: the two **double-lamp** events — both fencers valid, i.e. exactly the
+    #: foil priority calls this whole path exists to find — read 0.46 and 0.47
+    #: and were therefore called white and dropped as non-touches. That is two
+    #: real touches lost out of thirteen, and it cost the bout's score.
+    #:
+    #: 0.3 is still 3x the highest white ever measured and now clears the
+    #: lowest chromatic by the same margin. Raising the floor on the white side
+    #: is not possible — those are 0.00 — so the threshold belongs down here.
+    colour_fraction: float = 0.3
 
     #: A lamp activation shorter than this is a pixel artefact, not a lamp.
     #: Real activations run ~2.3 s (70 frames).
@@ -264,6 +280,16 @@ class MachineProfile:
     skipped automatically on any frame where they fall outside the crop, which
     is the normal case on a tight crop — their y offsets are negative, i.e.
     *above* the housing.
+
+    ``lamp_config`` overrides the caller's :class:`LampConfig` for this machine.
+    It exists because "how bright is an unlit lens" and "how much hue survives in
+    a lit one" are properties of the machine and its exposure, exactly like the
+    ROIs — not of the caller. On the 2026-07-15 venue the unlit lenses are white
+    plastic under bright hall light and sit at 0.31 saturated fraction, so the
+    default ``on_fraction`` of 0.3 reads every frame as lit; and its green lamp
+    is washed out badly enough that only 0.4-0.6 of the halo keeps a green hue
+    against the default 0.5 requirement. Leaving this ``None`` keeps the caller's
+    config, which is what every previously calibrated venue does.
     """
 
     name: str
@@ -271,6 +297,12 @@ class MachineProfile:
     lamp_rois: Mapping[str, Rect]
     digit_rois: Mapping[str, Rect]
     pillar_rois: Mapping[str, Rect] = field(default_factory=dict)
+    lamp_config: Optional["LampConfig"] = None
+    #: Same idea as ``lamp_config`` for the score-digit comparison. How far apart
+    #: two settled masks of the *same* number land depends on how many pixels the
+    #: glyph spans and how often a fencer crosses in front of it, both of which
+    #: are properties of this camera on this box. ``None`` keeps the caller's.
+    score_config: Optional["ScoreChangeConfig"] = None
 
     def __post_init__(self) -> None:
         for label, rois in (("lamp_rois", self.lamp_rois), ("digit_rois", self.digit_rois)):
@@ -320,9 +352,126 @@ KOR_DOMESTIC_V2 = MachineProfile(
     pillar_rois={LEFT: (0, -100, 28, 75), RIGHT: (170, -97, 32, 75)},
 )
 
+#: Measured on the 2026-07-16 venue (``260716`` DE footage, piste 3). Same style
+#: of panel as :data:`KOR_DOMESTIC_V1` — four round lamps in a row over a clock
+#: row over a two-digit-per-side score row — but shot from much further away, so
+#: every feature is roughly a third of the size it is there: a score glyph spans
+#: ~20x33 px instead of ~36x40, and the whole housing is 142x90.
+#:
+#: Two things about this venue that the geometry has to respect:
+#:
+#: * There is a small always-lit white indicator between the two lamp pairs, at
+#:   the bottom of the lamp row. The lamp ROIs are therefore shorter than the
+#:   lamps themselves (22 px of a ~24 px oval, top-aligned) so that the
+#:   indicator's saturated pixels cannot be counted as a lamp activation.
+#: * The score field is two digits per side with a *period* digit between them.
+#:   The digit ROIs stop well short of it on both sides — a wider ROI would read
+#:   the period counter as part of somebody's score.
+#:
+#: Measured lamp separation on set 1 (76 sampled frames): unlit ROIs sit at
+#: 0.08-0.14 saturated fraction and lit ones at 0.33-0.58, so the default
+#: ``LampConfig.on_fraction`` of 0.3 lands in the gap. Chromatic halo fractions
+#: are 0.90-0.93 for red and 0.65-0.91 for green against 0.00-0.04 for white.
+KOR_DOMESTIC_V3 = MachineProfile(
+    name="kor_domestic_v3",
+    housing_size=(142, 90),
+    lamp_rois={LEFT: (7, 6, 62, 22), RIGHT: (74, 6, 62, 22)},
+    digit_rois={LEFT: (8, 50, 36, 38), RIGHT: (93, 50, 41, 38)},
+)
+
+#: The 2026-07-15 pool venue, piste 2, first framing (``260715`` bout A). Same
+#: machine family as :data:`KOR_DOMESTIC_V1` — four lenses in a row over a clock
+#: row over a one-digit-per-side score row with a period digit between them.
+#:
+#: What is different here is photometric, not geometric, and it is why this
+#: profile carries its own :class:`LampConfig`. Measured over the whole bout at
+#: the ROIs below:
+#:
+#: * Unlit lenses are white plastic under bright hall light: saturated fraction
+#:   0.31 median (left) / 0.27 (right), against 0.50-0.58 for a lit red lamp and
+#:   0.77-0.86 for a lit green one. ``on_fraction`` therefore moves to 0.45,
+#:   which sits between the unlit p90 (0.38) and the dimmest lit event (0.50).
+#: * The green lamp is close to blown out, so its halo keeps little saturation:
+#:   at the default ``halo_saturation_min`` of 40 its green fraction is only
+#:   0.16-0.30 and every right-side valid hit would be filed as off-target. At 30
+#:   it reads 0.40-0.58, against 0.81-0.96 for red and 0.00 for a white lamp — so
+#:   ``colour_fraction`` drops to 0.35, still far above anything a white lamp
+#:   produces.
+#:
+#: Both lenses of a side glow together when either fires, which is why the ROIs
+#: stay per-side pairs. They stop above the always-lit white indicator that sits
+#: between the pairs, at the bottom of the lamp row.
+KOR_DOMESTIC_260715_P2A = MachineProfile(
+    name="kor_domestic_260715_p2a",
+    housing_size=(158, 100),
+    lamp_rois={LEFT: (22, 26, 57, 16), RIGHT: (79, 26, 58, 16)},
+    digit_rois={LEFT: (18, 62, 42, 34), RIGHT: (98, 62, 44, 34)},
+    lamp_config=LampConfig(
+        on_fraction=0.45, halo_saturation_min=30, colour_fraction=0.35
+    ),
+)
+
+#: The same venue and machine as :data:`KOR_DOMESTIC_260715_P2A`, filmed closer
+#: (bout B): the housing spans 160x108 instead of 158x100 and every feature moves
+#: with it, so it needs its own entry even though nothing about the machine
+#: changed.
+#:
+#: Two thresholds differ from bout A's, both measured on this bout:
+#:
+#: * ``on_fraction`` 0.40, because a lit red lamp here averages 0.41-0.51 rather
+#:   than 0.50-0.58 while the unlit lenses sit lower too (0.26 median, p90 0.36).
+#: * ``merge_gap_frames`` 20, because at that margin single frames of a real
+#:   activation dip under the threshold; the default 12 split one 2.3 s red event
+#:   into three fragments 16 frames apart. Nothing here is near 20 frames of
+#:   genuine separation — every activation on both bouts runs 69 frames.
+#: It also needs its own ``similarity_min``. Measured across all fourteen lamp
+#: events of this bout, a side whose number changed scores 0.194-0.275 and a side
+#: whose number did not scores 0.571-0.872 — so the default 0.78 sits *inside*
+#: the unchanged population and reports a change on almost every event, which
+#: then contradicts the lamp and is discarded as inconsistent. 0.50 sits in the
+#: empty band. The reason the unchanged scores run so low here is this camera:
+#: it is close enough that a fencer crosses the panel often, and the digits are
+#: 1s and 0s whose thin masks lose more overlap to that than a fat glyph would.
+KOR_DOMESTIC_260715_P2B = MachineProfile(
+    name="kor_domestic_260715_p2b",
+    housing_size=(160, 108),
+    lamp_rois={LEFT: (15, 27, 66, 18), RIGHT: (81, 27, 66, 18)},
+    digit_rois={LEFT: (18, 70, 36, 36), RIGHT: (108, 69, 36, 36)},
+    lamp_config=LampConfig(
+        on_fraction=0.40, halo_saturation_min=30, colour_fraction=0.35,
+        merge_gap_frames=20,
+    ),
+    score_config=ScoreChangeConfig(similarity_min=0.50),
+)
+
+#: The 2026-07-16 venue seen from piste 9 (``260716`` DE set 1). Same hall as
+#: :data:`KOR_DOMESTIC_V3`, which was calibrated from piste 3, but a different
+#: machine at a different distance — the housing is 148x88 against that one's
+#: 142x90 and the features sit a few pixels differently inside it, so the two are
+#: not interchangeable.
+#:
+#: Unlit lenses read 0.33 (left) / 0.29 (right) saturated fraction against
+#: 0.54-0.59 for red and 0.67-0.81 for green, so ``on_fraction`` is 0.45 here as
+#: well. The colour thresholds are relaxed for the same reason as the 07-15
+#: venue: at ``halo_saturation_min`` 30 green reads 0.55-0.87 and red 0.57-0.95,
+#: while white lamps read exactly 0.00 on both counts.
+KOR_DOMESTIC_260716_P9 = MachineProfile(
+    name="kor_domestic_260716_p9",
+    housing_size=(148, 88),
+    lamp_rois={LEFT: (14, 11, 60, 16), RIGHT: (74, 11, 60, 16)},
+    digit_rois={LEFT: (12, 48, 40, 32), RIGHT: (100, 48, 38, 32)},
+    lamp_config=LampConfig(
+        on_fraction=0.45, halo_saturation_min=30, colour_fraction=0.35
+    ),
+)
+
 MACHINE_PROFILES: Dict[str, MachineProfile] = {
     KOR_DOMESTIC_V1.name: KOR_DOMESTIC_V1,
     KOR_DOMESTIC_V2.name: KOR_DOMESTIC_V2,
+    KOR_DOMESTIC_V3.name: KOR_DOMESTIC_V3,
+    KOR_DOMESTIC_260715_P2A.name: KOR_DOMESTIC_260715_P2A,
+    KOR_DOMESTIC_260715_P2B.name: KOR_DOMESTIC_260715_P2B,
+    KOR_DOMESTIC_260716_P9.name: KOR_DOMESTIC_260716_P9,
 }
 
 #: Housing/placard template rectangles on frame 0 of each reference video, in
@@ -1487,6 +1636,14 @@ def track_scoreboard_video(
     the panel may have drifted far enough by then that neighbouring frames no
     longer share its bbox, so choosing a lamps-off frame is the caller's job.
     """
+    # A machine that carries its own lamp thresholds wins over the caller's: the
+    # numbers describe this box under this exposure, and a caller passing the
+    # default would otherwise silently un-calibrate the venue.
+    if profile.lamp_config is not None:
+        lamp_config = profile.lamp_config
+    if profile.score_config is not None:
+        score_config = profile.score_config
+
     capture = cv2.VideoCapture(str(video_path))
     if not capture.isOpened():
         raise FileNotFoundError(f"cannot open scoreboard video: {video_path}")

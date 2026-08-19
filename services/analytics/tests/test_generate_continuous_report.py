@@ -926,3 +926,56 @@ class TestNoMergeOcrFlag:
         found = find_ocr_report("260816_venue2_bout_piste12", tmp_path)
         assert found is not None
         assert found.name == "260816_venue2_bout_piste12_report.json"
+
+
+class TestContinuousOnlyWarningIsConditional:
+    """The `continuous_only` warning must not appear on a merged report.
+
+    It was appended unconditionally, hundreds of lines after the merge block had
+    already set ``analysis_mode = "continuous_with_ocr"``. A merged report then
+    carried a warning saying it contained no scoring data while its own metadata
+    said it did — observed on both 260815 piste reports, which had 6 and 4
+    merged touches alongside the warning.
+    """
+
+    def _guarded_by_ocr_report(self):
+        import ast
+        import inspect
+
+        import scripts.generate_continuous_report as module
+
+        tree = ast.parse(inspect.getsource(module))
+
+        def mentions_continuous_only(node):
+            for sub in ast.walk(node):
+                if isinstance(sub, ast.Constant) and sub.value == "continuous_only":
+                    return True
+            return False
+
+        appends = [
+            node for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "append"
+            and mentions_continuous_only(node)
+        ]
+        assert appends, "no append of a continuous_only warning found"
+
+        guarded = []
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.If):
+                continue
+            if "ocr_report" not in ast.dump(node.test):
+                continue
+            for stmt in node.body:
+                for target in appends:
+                    if any(n is target for n in ast.walk(stmt)):
+                        guarded.append(target)
+        return appends, guarded
+
+    def test_warning_is_inside_an_ocr_report_guard(self):
+        appends, guarded = self._guarded_by_ocr_report()
+        assert len(guarded) == len(appends), (
+            "the continuous_only warning is appended outside any `ocr_report` "
+            "guard, so merged reports will claim they have no scoring data"
+        )

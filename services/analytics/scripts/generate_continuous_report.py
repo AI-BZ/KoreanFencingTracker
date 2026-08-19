@@ -1482,11 +1482,17 @@ def main():
     # Add warnings
     for qw in continuous_result.quality_warnings:
         report_dict["warnings"].append(qw)
-    report_dict["warnings"].append({
-        "type": "continuous_only",
-        "message": "이 리포트는 연속 포즈 분석 결과입니다. 득점 정보(OCR/LED)가 포함되지 않아 공격 성공률이 정확하지 않을 수 있습니다.",
-        "severity": "info",
-    })
+    # Only when scoring data really is absent. This used to be appended
+    # unconditionally, several hundred lines after the merge block had already
+    # set analysis_mode to "continuous_with_ocr" — so every merged report
+    # carried a warning saying it had no scoring data while its own metadata
+    # said it did, and the reader had no way to tell which to believe.
+    if ocr_report is None:
+        report_dict["warnings"].append({
+            "type": "continuous_only",
+            "message": "이 리포트는 연속 포즈 분석 결과입니다. 득점 정보(OCR/LED)가 포함되지 않아 공격 성공률이 정확하지 않을 수 있습니다.",
+            "severity": "info",
+        })
 
     # Save
     report_id = f"{video_stem}_continuous_report"

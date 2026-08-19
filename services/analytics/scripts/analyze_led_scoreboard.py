@@ -623,6 +623,14 @@ def build_parser() -> argparse.ArgumentParser:
              "Default 'unknown' — the rule can never fire.",
     )
     parser.add_argument(
+        "--start-score", nargs=2, type=int, default=(0, 0), metavar=("LEFT", "RIGHT"),
+        help="Score already on the panel when the recording starts (--tracked "
+             "only). The tracked reader tallies score *changes*, so a clip that "
+             "opens mid-bout — a DE period 2 or 3, say — would otherwise report "
+             "1-0 for what the panel actually shows as 8-6. Read the opening "
+             "frame and pass what it says. Default 0 0.",
+    )
+    parser.add_argument(
         "--not-for-merge", default=None, metavar="REASON",
         help="Mark the report as never mergeable, with the reason. For a read "
              "that is known to be wrong in a way its own numbers do not show — "
@@ -636,7 +644,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def track_from_config(video, tracker):
+def track_from_config(video, tracker, start_score=(0, 0)):
     """Run the tracked detector for a validated ``tracker`` block.
 
     Split out of :func:`run_tracked` so a second tool can reproduce this exact
@@ -654,11 +662,13 @@ def track_from_config(video, tracker):
         placard_bbox=tracker["placard_bbox"],
         profile=profile,
         anchor_frame=tracker["anchor_frame"],
+        start_score=(int(start_score[0]), int(start_score[1])),
     )
     return analysis, time.time() - started
 
 
-def run_tracked(video, tracker, fps, clock_at_cut="unknown", bout_type="pool"):
+def run_tracked(video, tracker, fps, clock_at_cut="unknown", bout_type="pool",
+                start_score=(0, 0)):
     """``--tracked`` detection: returns ``(events, extra_warnings, elapsed)``."""
     from analyzer.scoreboard_tracker import (
         END_OF_BOUT_TARGET,
@@ -674,7 +684,9 @@ def run_tracked(video, tracker, fps, clock_at_cut="unknown", bout_type="pool"):
         f"housing={tracker['housing_bbox']} placard={tracker['placard_bbox']}"
     )
 
-    analysis, elapsed = track_from_config(video, tracker)
+    if tuple(start_score) != (0, 0):
+        print(f"  Start:      panel already at {start_score[0]}-{start_score[1]}")
+    analysis, elapsed = track_from_config(video, tracker, start_score=start_score)
 
     gap_frames = sum(g.frame_count for g in analysis.coverage_gaps)
     print(
@@ -778,6 +790,7 @@ def main(argv=None) -> int:
             video, tracker, fps,
             clock_at_cut=args.clock_at_cut,
             bout_type=args.bout_type,
+            start_score=args.start_score,
         )
     else:
         print(f"  ROIs:       {', '.join(f'{k}={v}' for k, v in rois.items())}")
