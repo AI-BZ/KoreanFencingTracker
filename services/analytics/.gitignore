@@ -8,6 +8,12 @@ data/labeled/
 data/facts/
 data/uploads/
 
+# FIE referee exam footage. Third-party broadcast video used only as a
+# validation set for the priority judge — it is never served and never
+# committed. The manifest next to it carries the published answer key, which is
+# equally not ours to redistribute.
+data/ref_exam/
+
 # Scratch output only — piste work files live in data/raw/own/ because reports
 # reference them via meta.video_path and clip generation re-reads them.
 # Anything here (gate-audit frames) is regenerable.
