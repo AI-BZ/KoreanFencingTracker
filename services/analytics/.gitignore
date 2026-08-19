@@ -14,6 +14,12 @@ data/uploads/
 # equally not ours to redistribute.
 data/ref_exam/
 
+# Auto-harvested priority labels: broadcast clips cut from third-party video,
+# plus preview frames of them. The CSV is regenerable from the video at any
+# time by scripts/collect_priority_labels.py, and the clips are not ours to
+# redistribute.
+data/priority_labels/
+
 # Scratch output only — piste work files live in data/raw/own/ because reports
 # reference them via meta.video_path and clip generation re-reads them.
 # Anything here (gate-audit frames) is regenerable.
