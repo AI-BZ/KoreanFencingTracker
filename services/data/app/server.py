@@ -4926,9 +4926,13 @@ async def api_rankings(
     is_national_team = (age_group == "NT")
 
     # 중학교 이상이면서 카테고리 미지정 시 기본값 PRO
-    # NT는 항상 PRO (국가대표 선발대회는 전문 대회)
+    # NT 는 전문/동호인으로 나뉘지 않는다 — 국가대표 선발대회 참가자 전체가 한 모집단이다.
+    # 아래 calculate_rankings 에 이미 category=None 을 넘기고 있으므로 여기서 "PRO" 를 넣으면
+    # 계산에는 안 쓰이면서 응답의 category_name 에만 '전문' 이 붙어, 화면 제목이
+    # "국가대표 (전문)" 이 되고 CLUB 으로 요청해도 '전문' 이라고 답하게 된다.
+    # 초등부와 같이 카테고리 없음으로 둔다.
     if is_national_team:
-        category = "PRO"
+        category = None
     elif age_group in CATEGORY_APPLICABLE_AGE_GROUPS and not category:
         category = "PRO"
     elif age_group not in CATEGORY_APPLICABLE_AGE_GROUPS:
@@ -5074,7 +5078,9 @@ async def api_ranking_options():
             {"code": "HS", "name": "고등", "has_category": True},
             {"code": "UNI", "name": "대학", "has_category": True},
             {"code": "SR", "name": "일반", "has_category": True},
-            {"code": "NT", "name": "🇰🇷 국가대표", "has_category": True, "is_national": True},
+            # NT 는 전문/동호인 구분이 없다 (api_rankings 가 category 를 무시한다).
+            # 이 값이 UI 의 카테고리 토글 노출 여부를 정하는 계약이므로 실제 동작과 맞춰 둔다.
+            {"code": "NT", "name": "🇰🇷 국가대표", "has_category": False, "is_national": True},
         ],
         "categories": [
             {"code": "PRO", "name": "전문"},
