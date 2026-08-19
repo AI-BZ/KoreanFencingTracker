@@ -3,7 +3,7 @@
 The fixed-ROI reader (:mod:`analyzer.lamp_detector` + :mod:`analyzer.score_reader`
 driven by :class:`analyzer.video_processor.VideoProcessor`) assumes the scoreboard
 sits at the same pixels all bout. On handheld/tripod-with-drift coach footage it
-does not: on ``260815_Pool_…_scoreboard.mp4`` the panel wanders 367 px
+does not: on ``260815_bout_a_…_scoreboard.mp4`` the panel wanders 367 px
 horizontally and 306 px vertically over 166 s, so a fixed lamp ROI spends most of
 the bout pointed at the wall. That path reported 40 lamp events for a 6-touch
 pool bout and misread the final score.

@@ -303,6 +303,28 @@ def check_crop_matches_video(config: dict, width: int, height: int) -> None:
     )
 
 
+def load_existing_meta(path) -> dict:
+    """Read ``meta`` from the report this run is about to replace, or ``{}``.
+
+    The I/O half of the preserve-meta rule, kept apart from the pure merge in
+    :func:`app.led_report_converter.preserve_existing_meta`. An absent,
+    unreadable or malformed previous report all come back as ``{}``: a
+    regeneration must never fail because of the file it is replacing.
+    """
+    path = Path(path)
+    if not path.exists():
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            existing = json.load(f)
+    except (json.JSONDecodeError, OSError, UnicodeDecodeError):
+        return {}
+    if not isinstance(existing, dict):
+        return {}
+    meta = existing.get("meta")
+    return meta if isinstance(meta, dict) else {}
+
+
 # ------------------------------------------------------------------
 # Tracked-mode warnings (importable, pure)
 # ------------------------------------------------------------------
@@ -598,6 +620,12 @@ def main(argv=None) -> int:
         extra_warnings = []
     print(f"  Detected {len(events)} lamp events in {elapsed:.1f}s")
 
+    # Read the meta of the report we are about to replace BEFORE building the
+    # new one, so a hand-set share token survives regeneration. Done even for
+    # --dry-run so the preview is the file that would actually be written.
+    output_path = Path(args.output_dir) / f"{stem}_report.json"
+    existing_meta = load_existing_meta(output_path)
+
     report = led_events_to_match_report(
         events,
         video_path=str(video),
@@ -611,7 +639,11 @@ def main(argv=None) -> int:
         clock_available=not args.tracked,
         extra_warnings=extra_warnings,
         analysis_mode="led_scoreboard_tracked" if args.tracked else "led_scoreboard_ocr",
+        existing_meta=existing_meta,
     )
+    carried = [k for k in existing_meta if k not in ("source_type", "analysis_mode", "converter")]
+    if carried:
+        print(f"  Carried over from the previous report: {', '.join(sorted(carried))}")
 
     if args.dry_run:
         print("\nAll MatchEvents (including non-scoring):")
@@ -625,9 +657,7 @@ def main(argv=None) -> int:
         print("\n  --dry-run: nothing written.")
         return 0
 
-    output_dir = Path(args.output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    output_path = output_dir / f"{stem}_report.json"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(report, f, ensure_ascii=False, indent=2)
 

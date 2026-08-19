@@ -14,6 +14,7 @@ import pytest
 from analyzer.models import MatchEvent
 from analyzer.touch_matching import _LAMP_PATTERNS, _SINGLE_LAMP_SIDE
 from app.led_report_converter import (
+    preserve_existing_meta,
     DEFAULT_LEFT_NAME,
     DEFAULT_RIGHT_NAME,
     LAMP_DOUBLE,
@@ -43,6 +44,7 @@ from scripts.analyze_led_scoreboard import (
     REQUIRED_ROI_KEYS,
     TRACKER_HOUSING_KEY,
     check_crop_matches_video,
+    load_existing_meta,
     TRACKER_PLACARD_KEY,
     TRACKER_PROFILE_KEY,
     extract_report_stem,
@@ -1287,3 +1289,94 @@ class TestCropOriginRebasesTheAnchors:
     def test_a_malformed_recorded_origin_is_an_error(self, recorded):
         with pytest.raises(ConfigError):
             extract_tracker(self._config(1500, 660, recorded=recorded))
+
+
+# ------------------------------------------------------------------
+# Regenerating a report must not unlock it
+# ------------------------------------------------------------------
+
+
+class TestPreserveExistingMeta:
+    """A rewrite keeps whatever the fresh run did not set.
+
+    ``visibility`` and ``share_token`` are written to the file long after it is
+    generated. Rebuilding meta from scratch dropped them, which does not fail —
+    it silently unlocks a report someone deliberately locked.
+    """
+
+    def test_a_share_token_survives_a_rewrite(self):
+        merged = preserve_existing_meta(
+            {"analysis_mode": "led_scoreboard_tracked"},
+            {"share_token": "keep-me", "visibility": "unlisted"},
+        )
+
+        assert merged["share_token"] == "keep-me"
+        assert merged["visibility"] == "unlisted"
+
+    def test_the_fresh_run_wins_every_key_it_sets(self):
+        merged = preserve_existing_meta(
+            {"analysis_mode": "led_scoreboard_tracked"},
+            {"analysis_mode": "led_scoreboard_ocr", "share_token": "keep-me"},
+        )
+
+        assert merged["analysis_mode"] == "led_scoreboard_tracked"
+        assert merged["share_token"] == "keep-me"
+
+    def test_an_unknown_future_key_is_carried_without_being_named(self):
+        """The rule is positional, not a rescue list — so it cannot go stale."""
+        merged = preserve_existing_meta({"a": 1}, {"invented_next_year": "x"})
+
+        assert merged["invented_next_year"] == "x"
+
+    @pytest.mark.parametrize("existing", [None, {}, "not a dict", 42, []])
+    def test_a_missing_or_malformed_previous_meta_is_ignored(self, existing):
+        merged = preserve_existing_meta({"a": 1}, existing)
+
+        assert merged == {"a": 1}
+
+    def test_the_previous_meta_is_not_mutated(self):
+        existing = {"share_token": "keep-me"}
+        preserve_existing_meta({"a": 1}, existing)
+
+        assert existing == {"share_token": "keep-me"}
+
+    def test_the_converter_carries_a_lock_through_a_full_conversion(self):
+        report = led_events_to_match_report(
+            [], video_path="v.mp4", weapon="foil",
+            existing_meta={"visibility": "unlisted", "share_token": "keep-me"},
+        )
+
+        assert report["meta"]["share_token"] == "keep-me"
+        assert report["meta"]["visibility"] == "unlisted"
+        assert report["meta"]["converter"] == "led_report_converter"
+
+    def test_the_converter_without_existing_meta_is_unchanged(self):
+        report = led_events_to_match_report([], video_path="v.mp4", weapon="foil")
+
+        assert set(report["meta"]) == {"source_type", "analysis_mode", "converter"}
+
+
+class TestLoadExistingMeta:
+    """The I/O half. A regeneration must never fail because of the file it replaces."""
+
+    def test_it_reads_meta_from_a_previous_report(self, tmp_path):
+        path = tmp_path / "r.json"
+        path.write_text(json.dumps({"meta": {"share_token": "abc"}}), encoding="utf-8")
+
+        assert load_existing_meta(path) == {"share_token": "abc"}
+
+    def test_an_absent_file_yields_an_empty_dict(self, tmp_path):
+        assert load_existing_meta(tmp_path / "nope.json") == {}
+
+    @pytest.mark.parametrize("content", ["{not json", "[]", '"a string"', '{"meta": 5}', "{}"])
+    def test_malformed_content_yields_an_empty_dict_rather_than_raising(self, tmp_path, content):
+        path = tmp_path / "r.json"
+        path.write_text(content, encoding="utf-8")
+
+        assert load_existing_meta(path) == {}
+
+    def test_a_directory_in_place_of_a_report_does_not_raise(self, tmp_path):
+        target = tmp_path / "r.json"
+        target.mkdir()
+
+        assert load_existing_meta(target) == {}

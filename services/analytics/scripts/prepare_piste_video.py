@@ -30,7 +30,7 @@ Usage:
 
     # fully non-interactive (geometry from the CLI)
     PYTHONPATH=. .venv/bin/python3 scripts/prepare_piste_video.py \\
-        "/Volumes/Film/DCIM/100APPLE/260815_Pool.mov" --piste 3 --no-gui \\
+        "/Volumes/Film/DCIM/100APPLE/260815_bout_a.mov" --piste 3 --no-gui \\
         --crop-band 950:1700 --foot-band 1340:1595 --scoreboard 1800:960:480:280 \\
         --scoreboard-roi lamp_left=40:60:120:90 --scoreboard-roi lamp_right=560:60:120:90 \\
         --scoreboard-roi score_left=80:200:140:160 --scoreboard-roi score_right=500:200:140:160 \\
@@ -41,11 +41,11 @@ Usage:
 
     # re-run transcode/previews from an existing config, no prompts at all
     PYTHONPATH=. .venv/bin/python3 scripts/prepare_piste_video.py VIDEO --piste 3 \\
-        --config data/piste_configs/260815_Pool_piste3.json
+        --config data/piste_configs/260815_bout_a_piste3.json
 
     # re-extract ONLY the scoreboard after widening its crop (piste file untouched)
     PYTHONPATH=. .venv/bin/python3 scripts/prepare_piste_video.py VIDEO --piste 3 \\
-        --config data/piste_configs/260815_Pool_piste3.json --only scoreboard --force
+        --config data/piste_configs/260815_bout_a_piste3.json --only scoreboard --force
 """
 
 from __future__ import annotations

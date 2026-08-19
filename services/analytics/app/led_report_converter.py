@@ -317,6 +317,33 @@ def format_duration(total_frames: int, fps: float, touches: Sequence[dict]) -> s
     return "0:00"
 
 
+def preserve_existing_meta(new_meta: dict, existing_meta) -> dict:
+    """Merge a previous run's ``meta`` under this run's, key by key.
+
+    Rebuilding a report from scratch rebuilds ``meta`` from scratch too, which
+    silently destroys every field written to the file after it was generated —
+    ``visibility`` and ``share_token`` above all. Losing those does not fail
+    loudly; it quietly *unlocks* a report that someone deliberately locked.
+
+    The rule is "keep whatever the fresh run did not set" rather than a list of
+    field names to rescue. A list has to be extended every time another tool
+    starts writing to meta, and forgetting to extend it looks exactly like
+    working. This cannot mask a fresh value — a key the new run wrote always
+    wins — and cannot miss a hand-set one.
+
+    ``scripts/generate_continuous_report.py`` carries the same rule for the
+    continuous path. The duplication is deliberate: sharing it would mean an
+    ``app`` module importing from ``scripts``, and the rule is six lines.
+    """
+    merged = dict(new_meta)
+    if not isinstance(existing_meta, dict):
+        return merged
+    for key, value in existing_meta.items():
+        if key not in merged:
+            merged[key] = value
+    return merged
+
+
 # ------------------------------------------------------------------
 # Entry point
 # ------------------------------------------------------------------
@@ -336,6 +363,7 @@ def led_events_to_match_report(
     clock_available: bool = True,
     extra_warnings: Optional[Sequence[dict]] = None,
     analysis_mode: str = "led_scoreboard_ocr",
+    existing_meta: Optional[dict] = None,
 ) -> dict:
     """Convert ``VideoProcessor`` ``MatchEvent``s into an OCR report dict.
 
@@ -365,6 +393,10 @@ def led_events_to_match_report(
             are prepended, because a gap explains the touches that follow it.
         analysis_mode: Recorded in ``meta`` so a reader can tell which detector
             produced the report.
+        existing_meta: ``meta`` of the report this one is about to replace, if
+            any. Keys it holds that this run does not set are carried forward —
+            see :func:`preserve_existing_meta`. Omitting it on a rewrite unlocks
+            a shared report.
 
     Returns:
         A report dict ready to be written as ``<piste stem>_report.json``.
@@ -402,9 +434,9 @@ def led_events_to_match_report(
             "total_touches_conceded": left_touches,
         },
         "warnings": list(extra_warnings or []) + build_warnings(touches, clock_available),
-        "meta": {
+        "meta": preserve_existing_meta({
             "source_type": "coach",
             "analysis_mode": analysis_mode,
             "converter": "led_report_converter",
-        },
+        }, existing_meta),
     }
