@@ -5,19 +5,31 @@ Uses YOLO11-Pose for skeleton overlay and cv2.putText for
 distance/footwork/parry HUD text.
 """
 
+import json
 import logging
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 import cv2
 import numpy as np
 
-from ml.pose_estimator import PoseEstimator
+from ml.pose_estimator import PisteGate, PoseEstimator
 from ml.pose_analyzer import PoseAnalyzer
 
 _logger = logging.getLogger(__name__)
+
+# services/analytics — piste configs record `work_files`/CLI paths relative to it.
+_SERVICE_ROOT = Path(__file__).resolve().parent.parent
+
+# Fallbacks for the optional `piste.pose_*` tunables. These mirror
+# PISTE_DEFAULT_* in scripts/generate_continuous_report.py, which is what the
+# report was actually analysed with when a config omits them. Using the plain
+# PoseEstimator defaults here instead would silently re-create the referee bug.
+_PISTE_DEFAULT_POSE_CONF = 0.35
+_PISTE_DEFAULT_POSE_IMGSZ = 1280
+_PISTE_DEFAULT_POSE_MAX_DET = 8
 
 
 class ClipOverlayGenerator:
@@ -29,12 +41,219 @@ class ClipOverlayGenerator:
         pad_seconds: float = 2.0,
         pad_before: Optional[float] = None,
         pad_after: Optional[float] = None,
+        piste_gate: Optional[PisteGate] = None,
+        imgsz: Optional[int] = None,
+        max_det: Optional[int] = None,
+        confidence: Optional[float] = None,
     ):
-        self.estimator = PoseEstimator(model_path=model_path)
+        """
+        Args:
+            model_path: YOLO11-Pose weights; estimator default when omitted.
+            pad_seconds: Symmetric clip padding, in seconds.
+            pad_before/pad_after: Asymmetric overrides for `pad_seconds`.
+            piste_gate: Target-piste foot-band gate, in WORK-FILE pixels. Must
+                match the gate the report was analysed with.
+            imgsz/max_det/confidence: PoseEstimator overrides. Every one of
+                these is `None` by default and only supplied arguments are
+                forwarded, so the no-argument call builds exactly the estimator
+                it always did — TV-broadcast clips are unaffected.
+        """
+        estimator_kwargs: Dict[str, Any] = {}
+        if confidence is not None:
+            estimator_kwargs["confidence"] = confidence
+        if imgsz is not None:
+            estimator_kwargs["imgsz"] = imgsz
+        if max_det is not None:
+            estimator_kwargs["max_det"] = max_det
+        if piste_gate is not None:
+            estimator_kwargs["piste_gate"] = piste_gate
+
+        self.estimator = PoseEstimator(model_path=model_path, **estimator_kwargs)
         self.analyzer = PoseAnalyzer()
         self.pad_seconds = pad_seconds
         self.pad_before = pad_before  # None → falls back to pad_seconds
         self.pad_after = pad_after    # None → falls back to pad_seconds
+
+    # ------------------------------------------------------------------
+    # Construction from a report
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def for_report(
+        cls,
+        report_dict: dict,
+        *,
+        base_dir=None,
+        **kwargs,
+    ) -> "ClipOverlayGenerator":
+        """
+        Build a generator whose pose settings match how the report was analysed.
+
+        A report analysed with `--piste-config` was gated to one piste with a
+        wide detection pool; re-running the clip overlay with the stock
+        estimator would draw the foreground referee instead of the fencers
+        (measured referee confidence 0.84-0.90 vs fencers 0.55-0.85). This reads
+        `meta.piste_config` back out of the report and reproduces those settings.
+
+        Reports outlive their config files and this runs inside a web request,
+        so every failure mode — no `meta.piste_config`, a path that no longer
+        resolves, unreadable or malformed JSON, a `piste` block without a usable
+        `foot_band_work` — degrades to the plain default generator with a
+        warning. It never raises: a clip drawn with default pose settings is a
+        degraded clip, an exception is a 500.
+
+        Args:
+            report_dict: Parsed report JSON.
+            base_dir: Directory to resolve a relative `meta.piste_config`
+                against first (typically the report's own directory). The
+                current directory and the service root are tried after it.
+            **kwargs: Passed through to `__init__` (pad_before, pad_after, ...).
+                Explicit values win over anything derived from the config.
+        """
+        try:
+            settings = cls._piste_estimator_settings(report_dict, base_dir=base_dir)
+        except Exception:  # never let clip generation die on a config problem
+            _logger.warning(
+                "Unexpected error reading piste config from report meta; "
+                "falling back to default pose settings",
+                exc_info=True,
+            )
+            settings = {}
+
+        settings.update(kwargs)
+        return cls(**settings)
+
+    @classmethod
+    def _piste_estimator_settings(
+        cls,
+        report_dict: dict,
+        base_dir=None,
+    ) -> Dict[str, Any]:
+        """
+        Derive `__init__` pose kwargs from `report_dict["meta"]["piste_config"]`.
+
+        Returns an empty dict — i.e. "construct the default generator" — for
+        every report that has no usable piste config, including plain TV reports.
+        """
+        meta = report_dict.get("meta") if isinstance(report_dict, dict) else None
+        raw = meta.get("piste_config") if isinstance(meta, dict) else None
+        if not raw:
+            # TV-shaped report: the default estimator is correct, not degraded.
+            return {}
+
+        path = cls._resolve_piste_config_path(raw, base_dir=base_dir)
+        if path is None:
+            _logger.warning(
+                "Piste config %r referenced by the report was not found; "
+                "clip overlay falls back to default pose settings",
+                str(raw),
+            )
+            return {}
+
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                config = json.load(f)
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            _logger.warning(
+                "Piste config %s could not be read (%s); clip overlay falls "
+                "back to default pose settings", path, exc,
+            )
+            return {}
+
+        piste = config.get("piste") if isinstance(config, dict) else None
+        if not isinstance(piste, dict):
+            _logger.warning(
+                "Piste config %s has no 'piste' object; clip overlay falls back "
+                "to default pose settings", path,
+            )
+            return {}
+
+        gate = cls._build_piste_gate(piste.get("foot_band_work"))
+        if gate is None:
+            # Without the foot band there is no gate, and a raised max_det on
+            # its own is strictly worse than the default — it widens the pool
+            # with nothing to filter it.
+            _logger.warning(
+                "Piste config %s has no usable 'piste.foot_band_work' (%r); "
+                "clip overlay falls back to default pose settings",
+                path, piste.get("foot_band_work"),
+            )
+            return {}
+
+        return {
+            "piste_gate": gate,
+            "confidence": cls._positive_number(
+                piste, "pose_conf", _PISTE_DEFAULT_POSE_CONF, float, path,
+            ),
+            "imgsz": cls._positive_number(
+                piste, "pose_imgsz", _PISTE_DEFAULT_POSE_IMGSZ, int, path,
+            ),
+            "max_det": cls._positive_number(
+                piste, "pose_max_det", _PISTE_DEFAULT_POSE_MAX_DET, int, path,
+            ),
+        }
+
+    @staticmethod
+    def _resolve_piste_config_path(raw, base_dir=None) -> Optional[Path]:
+        """
+        Resolve `meta.piste_config`, which is stored exactly as typed on the CLI.
+
+        Absolute paths are used as-is. Relative ones are tried against
+        `base_dir` (when given), then the current directory, then the service
+        root. Returns None when no candidate exists.
+        """
+        candidate = Path(str(raw)).expanduser()
+        if candidate.is_absolute():
+            return candidate if candidate.exists() else None
+
+        roots = []
+        if base_dir is not None:
+            roots.append(Path(base_dir))
+        roots.append(Path.cwd())
+        roots.append(_SERVICE_ROOT)
+
+        for root in roots:
+            resolved = root / candidate
+            if resolved.exists():
+                return resolved
+        return None
+
+    @staticmethod
+    def _build_piste_gate(band) -> Optional[PisteGate]:
+        """Build a PisteGate from `piste.foot_band_work`, or None if unusable."""
+        if isinstance(band, (str, bytes)) or not isinstance(band, (list, tuple)):
+            return None
+        if len(band) != 2:
+            return None
+        if any(isinstance(v, bool) for v in band):
+            return None
+        try:
+            y_min, y_max = float(band[0]), float(band[1])
+        except (TypeError, ValueError):
+            return None
+        if not y_min < y_max:  # also rejects NaN
+            return None
+        return PisteGate(y_min, y_max)
+
+    @staticmethod
+    def _positive_number(piste: dict, key: str, default, kind, path):
+        """Read an optional positive `piste.<key>`, falling back to `default`."""
+        value = piste.get(key)
+        if value is None:
+            return default
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            _logger.warning(
+                "Piste config %s has non-numeric 'piste.%s' (%r); using %r",
+                path, key, value, default,
+            )
+            return default
+        if not value > 0:
+            _logger.warning(
+                "Piste config %s has non-positive 'piste.%s' (%r); using %r",
+                path, key, value, default,
+            )
+            return default
+        return kind(value)
 
     # ------------------------------------------------------------------
     # Public API
@@ -101,18 +320,24 @@ class ClipOverlayGenerator:
                 if not ret:
                     break
 
-                # Run YOLO
+                # Run YOLO.
+                # max_det MUST come from the estimator, never a literal: it is a
+                # YOLO *call* argument, so anyone it cuts is never returned and
+                # cannot be recovered downstream. Hardcoding 2 hands back the two
+                # highest-confidence people, which on a multi-piste recording is
+                # the foreground referee and scorer (conf 0.84-0.90), not the
+                # fencers (0.55-0.85) — and would starve the piste gate entirely.
                 self.estimator._load_model()
                 yolo_results = self.estimator._model(
                     frame,
                     device=self.estimator.device,
                     imgsz=self.estimator.imgsz,
                     conf=self.estimator.confidence,
-                    max_det=2,
+                    max_det=self.estimator.max_det,
                     verbose=False,
                 )
 
-                # Parse for PoseAnalyzer
+                # Parse for PoseAnalyzer (applies the piste gate when set)
                 pose_result = self.estimator._parse_results(yolo_results)
 
                 # Build pose analysis for this frame
@@ -124,9 +349,11 @@ class ClipOverlayGenerator:
                 ja_left = self.analyzer._compute_joint_angles_for_side(pr, "left")
                 ja_right = self.analyzer._compute_joint_angles_for_side(pr, "right")
 
-                # Draw skeleton overlay
+                # Draw skeleton overlay — only for the people the gate kept
                 annotated = self._annotate_frame(
-                    frame, yolo_results, analysis, event_info,
+                    frame,
+                    self._gated_yolo_results(yolo_results, pose_result),
+                    analysis, event_info,
                     joint_angles_left=ja_left, joint_angles_right=ja_right,
                 )
                 writer.write(annotated)
@@ -274,6 +501,54 @@ class ClipOverlayGenerator:
     # Internal helpers
     # ------------------------------------------------------------------
 
+    def _gated_yolo_results(self, yolo_results, fencers):
+        """
+        Narrow the YOLO result to the people the piste gate kept, for drawing.
+
+        `Results.plot()` draws *every* detection in the result. Raising
+        `max_det` for the gate therefore has a side effect on the overlay: the
+        eight-person candidate pool would all be drawn, referee included. The
+        gate's verdict lives in the parsed `fencers`, so the plotted result is
+        re-indexed to match it.
+
+        Without a gate this is a no-op — the non-gate path is left byte-for-byte
+        as it was. Any problem re-indexing falls back to the unfiltered result,
+        because a clip with extra skeletons beats no clip at all.
+        """
+        if self.estimator.piste_gate is None:
+            return yolo_results
+        if not yolo_results or len(yolo_results) == 0:
+            return yolo_results
+
+        try:
+            result = yolo_results[0]
+            boxes = getattr(result, "boxes", None)
+            if boxes is None:
+                return yolo_results
+            boxes_data = boxes.data.cpu().numpy()
+
+            # FencerPose.bbox is float() of these exact values, so identity of
+            # the 4-tuple is an exact match, not a tolerance comparison.
+            wanted = {tuple(f.bbox) for f in fencers}
+            keep = [
+                i for i, box in enumerate(boxes_data)
+                if (float(box[0]), float(box[1]),
+                    float(box[2]), float(box[3])) in wanted
+            ]
+            if len(keep) == len(boxes_data):
+                return yolo_results
+            if not keep:
+                # Nobody on the target piste this frame (halt, occlusion) —
+                # draw the raw frame rather than someone else's skeleton.
+                return []
+            return [result[keep]]
+        except Exception:
+            _logger.debug(
+                "Could not restrict overlay to gated fencers; drawing all "
+                "detections", exc_info=True,
+            )
+            return yolo_results
+
     def _annotate_frame(
         self,
         frame: np.ndarray,
@@ -332,14 +607,30 @@ class ClipOverlayGenerator:
                 zone = dist.distance_zone.value if dist.distance_zone else "?"
                 lines.append(f"Dist: {dist.distance_bh:.2f} BH ({zone})")
 
-        # Footwork from live analysis
-        if pose_analysis and hasattr(pose_analysis, "footwork_left"):
+        # Footwork: prefer the report's values over the live single-frame analysis.
+        #
+        # `analysis` here is computed from ONE frame, and footwork is inherently
+        # temporal — you cannot tell advance from retreat without a window — so
+        # the live values are ~always None and the HUD rendered
+        # "FW L:unknown R:unknown" even for an exchange the report had labelled
+        # fleche/advance. The report's per-exchange footwork is derived over the
+        # whole exchange and is the number the viewer is being shown elsewhere,
+        # so it is what belongs on the clip. Live values remain the fallback for
+        # callers that pass no event_info.
+        fl_str = fr_str = None
+        if event_info:
+            fl_str = event_info.get("footwork_left")
+            fr_str = event_info.get("footwork_right")
+        if fl_str is None and fr_str is None and pose_analysis and hasattr(
+            pose_analysis, "footwork_left"
+        ):
             fl = pose_analysis.footwork_left
             fr = pose_analysis.footwork_right
             if fl or fr:
-                fl_str = fl.footwork_type.value if fl else "?"
-                fr_str = fr.footwork_type.value if fr else "?"
-                lines.append(f"FW  L:{fl_str}  R:{fr_str}")
+                fl_str = fl.footwork_type.value if fl else None
+                fr_str = fr.footwork_type.value if fr else None
+        if fl_str is not None or fr_str is not None:
+            lines.append(f"FW  L:{fl_str or '?'}  R:{fr_str or '?'}")
 
         # Parry from live analysis
         if pose_analysis and hasattr(pose_analysis, "parry_left"):

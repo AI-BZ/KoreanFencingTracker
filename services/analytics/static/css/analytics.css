@@ -54,11 +54,9 @@
         padding: 0 !important;
     }
 
-    .report-left-panel {
-        position: static !important;
-        width: 100% !important;
-        max-height: none !important;
-        overflow-y: visible !important;
+    /* A printed report is a document, not a player. */
+    .workbench {
+        display: none !important;
     }
 
     .shadow-sm, .glass-card {
@@ -116,11 +114,315 @@ canvas {
     }
 }
 
-/* Left panel scrollbar */
-.report-left-panel::-webkit-scrollbar {
-    width: 4px;
+/* ==================================================================
+   Video workbench
+   The stage is sized in JS to exactly the painted video box, so the
+   canvas overlay can sit at inset:0 and share the video's pixel grid.
+   ================================================================== */
+
+.workbench {
+    position: sticky;
+    top: 4rem;                      /* below the sticky navbar (h-16) */
+    z-index: 40;
 }
-.report-left-panel::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.15);
-    border-radius: 2px;
+
+.wb-viewport {
+    position: relative;
+    overflow: hidden;
+    border-radius: 0.75rem;
+    background: #000;
+    max-height: 45vh;
+}
+
+.workbench--empty .wb-viewport {
+    max-height: none;
+    background: var(--fm-bg-tertiary, #1a1a25);
+}
+
+.workbench--collapsed .wb-viewport {
+    display: none;
+}
+
+.wb-stage {
+    position: absolute;
+    top: 0;
+    left: 0;
+    transform-origin: 0 0;
+    will-change: transform;
+}
+
+.wb-stage > video {
+    display: block;
+    width: 100%;
+    height: 100%;
+    background: #000;
+}
+
+.wb-stage > canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+
+.wb-viewport--draw {
+    cursor: crosshair;
+}
+
+.workbench--zoomed .wb-viewport:not(.wb-viewport--draw) {
+    cursor: grab;
+}
+
+.wb-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem 1rem;
+    min-height: 9rem;
+}
+
+.wb-loading {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 1rem 1.25rem;
+    background: rgba(10, 10, 15, 0.85);
+}
+
+/* These win over Tailwind's .hidden regardless of stylesheet order — the CDN
+   injects its rules at runtime, so equal-specificity ties are not reliable. */
+.wb-loading.hidden,
+.wb-placeholder.hidden,
+.wb-error.hidden,
+.wb-toast.hidden,
+.wb-stage.hidden,
+.wb-chip.hidden,
+.wb-readout.hidden,
+.wb-group.hidden {
+    display: none;
+}
+
+/* Keep the loading state visible: the stage is absolutely positioned, so an
+   empty viewport would collapse to zero height under the spinner. */
+.workbench--loading .wb-viewport {
+    min-height: 9rem;
+}
+
+.wb-error {
+    position: absolute;
+    inset-inline: 0;
+    bottom: 1rem;
+    text-align: center;
+    color: var(--fm-danger, #ef4444);
+    font-size: 0.8125rem;
+}
+
+.wb-toast {
+    position: absolute;
+    left: 50%;
+    bottom: 0.75rem;
+    transform: translateX(-50%);
+    max-width: 90%;
+    padding: 0.5rem 0.875rem;
+    border-radius: 0.5rem;
+    background: rgba(10, 10, 15, 0.92);
+    border: 1px solid var(--fm-border-light, rgba(255, 255, 255, 0.15));
+    color: var(--fm-text-secondary, #b4b4c4);
+    font-size: 0.75rem;
+    text-align: center;
+}
+
+/* ---- control bar ---- */
+
+.wb-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.625rem 0.25rem 0.125rem;
+}
+
+.wb-group {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.wb-group--end {
+    margin-left: auto;
+}
+
+/* Breakpoint handling lives here rather than in Tailwind's hidden/lg:flex
+   pair, so that a JS .hidden toggle and the breakpoint never fight over
+   equal-specificity display rules. */
+.wb-group--desktop {
+    display: none;
+}
+
+.wb-group--mobile {
+    display: flex;
+}
+
+@media (min-width: 1024px) {
+    .wb-group--desktop {
+        display: flex;
+    }
+
+    .wb-group--mobile {
+        display: none;
+    }
+}
+
+.wb-sep {
+    font-size: 0.6875rem;
+    color: var(--fm-text-muted, #9a9aad);
+    padding: 0 0.125rem;
+}
+
+.wb-btn {
+    min-width: 2rem;
+    height: 1.875rem;
+    padding: 0 0.5rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--fm-border, rgba(255, 255, 255, 0.08));
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--fm-text-secondary, #b4b4c4);
+    font-size: 0.75rem;
+    line-height: 1;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.wb-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+}
+
+.wb-btn--wide {
+    min-width: 2.75rem;
+}
+
+.wb-btn--on {
+    background: rgba(201, 48, 44, 0.22);
+    border-color: rgba(201, 48, 44, 0.45);
+    color: #fff;
+}
+
+.wb-swatch {
+    min-width: 1.5rem;
+    padding: 0;
+    background: var(--wb-swatch, #c9302c);
+}
+
+.wb-swatch:hover {
+    background: var(--wb-swatch, #c9302c);
+    filter: brightness(1.2);
+}
+
+.wb-readout {
+    font-size: 0.75rem;
+    color: var(--fm-text-secondary, #b4b4c4);
+    white-space: nowrap;
+}
+
+.wb-select {
+    height: 1.875rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--fm-border, rgba(255, 255, 255, 0.08));
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--fm-text-secondary, #b4b4c4);
+    font-size: 0.75rem;
+    padding: 0 0.375rem;
+}
+
+.wb-seek {
+    flex: 1 1 8rem;
+    min-width: 6rem;
+    height: 1.875rem;
+    accent-color: var(--fm-accent-primary, #c9302c);
+    background: transparent;
+}
+
+.wb-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    height: 1.875rem;
+    padding: 0 0.5rem;
+    border-radius: 999px;
+    border: 1px solid rgba(201, 48, 44, 0.35);
+    background: rgba(201, 48, 44, 0.15);
+    color: #fff;
+    font-size: 0.6875rem;
+    white-space: nowrap;
+    max-width: 16rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.wb-chip--action {
+    border-color: var(--fm-border-light, rgba(255, 255, 255, 0.15));
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--fm-text-secondary, #b4b4c4);
+}
+
+.wb-chip-x {
+    color: var(--fm-text-muted, #9a9aad);
+    font-size: 0.875rem;
+    line-height: 1;
+}
+
+.wb-chip-x:hover {
+    color: #fff;
+}
+
+/* Timeline "AI" overlay-clip buttons */
+.clip-play-btn {
+    flex-shrink: 0;
+    min-width: 2rem;
+    height: 1.5rem;
+    padding: 0 0.375rem;
+    border-radius: 0.375rem;
+    border: 1px solid var(--fm-border, rgba(255, 255, 255, 0.08));
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--fm-text-muted, #9a9aad);
+    font-size: 0.625rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.clip-play-btn:hover {
+    background: rgba(201, 48, 44, 0.25);
+    color: #fff;
+}
+
+/* Already generated → plays instantly */
+.clip-play-btn.clip-cached {
+    color: #34d399;
+    border-color: rgba(52, 211, 153, 0.4);
+}
+
+/* Mobile is a review device: the stage shrinks and the measuring tools go
+   away, because a 3.88:1 crop is ~90px tall here and pinch/drag fights the
+   page scroll. */
+@media (max-width: 1023px) {
+    .wb-viewport {
+        max-height: 32vh;
+    }
+
+    .workbench {
+        top: 4rem;
+    }
+
+    .wb-controls {
+        gap: 0.375rem;
+    }
+
+    .wb-group--end {
+        margin-left: 0;
+    }
 }
