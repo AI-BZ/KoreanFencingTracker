@@ -451,7 +451,8 @@ async def batch_rescrape(
     update_rankings: bool = False,
     phantom: bool = False,
     backup_path: Optional[str] = None,
-    only_ids: Optional[List[int]] = None
+    only_ids: Optional[List[int]] = None,
+    page_override: Optional[int] = None
 ):
     """배치 DE 리스크래핑 실행"""
     start_time = time.time()
@@ -531,7 +532,11 @@ async def batch_rescrape(
             comp = comp_info_map.get(comp_id, {})
             comp_name = comp.get("comp_name", "Unknown")
             comp_idx = comp.get("comp_idx", "")
-            page_num = page_map.get(comp_idx, 1)
+            # page_map 은 우리 DB 의 start_date 순서로 목록 페이지를 **추정**한다.
+            # KFA 목록 순서와 어긋나면 엉뚱한 페이지에서 대회 링크를 못 찾고,
+            # 그 결과가 예외가 아니라 '빈 DE'(q0) 로 돌아와 '보존'처럼 보인다.
+            # (2026-08-19: COMPM00663 이 page 2 인데 3 으로 추정돼 2종목이 q0)
+            page_num = page_override or page_map.get(comp_idx, 1)
 
             logger.info(f"\n[{comp_idx_counter}/{total_comps}] {comp_name} "
                         f"(page {page_num}, {len(comp_events)}개)")
@@ -647,6 +652,8 @@ async def main():
                         help="쉼표로 구분한 event id 만 처리 (예: 321,2912)")
     parser.add_argument("--log-dir", type=str, default="logs",
                         help="로그 디렉토리")
+    parser.add_argument("--page", type=int, default=None,
+                        help="대회 목록 페이지 번호를 직접 지정 (page_map 추정이 어긋날 때)")
 
     args = parser.parse_args()
 
@@ -672,7 +679,8 @@ async def main():
         update_rankings=args.update_rankings,
         phantom=args.phantom,
         backup_path=args.backup,
-        only_ids=only_ids
+        only_ids=only_ids,
+        page_override=args.page
     )
 
 
