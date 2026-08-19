@@ -54,6 +54,54 @@
     var SKELETON_LEFT_COLOR = '#3d8bfd';
     var SKELETON_RIGHT_COLOR = '#ff4d4f';
     var SKELETON_OUTLINE = 'rgba(8, 8, 12, 0.85)';
+    var BADGE_BG = 'rgba(8, 8, 12, 0.75)';
+
+    // ---- in-scene annotation ----
+    //
+    // The joints alone are "sticks that move". Everything below turns the same
+    // sidecar into the three things a coach actually reads off a phrase: how far
+    // apart they are, who is pushing, and where the touch landed. All of it is
+    // derived client-side from data the page already has — no new request, no
+    // server change.
+
+    // COCO-17 indices the metrics need. Same joints ml/pose_analysis/body_metrics.py
+    // uses, because the number drawn on the video has to be the number printed
+    // in the touch table.
+    var KP_L_SHOULDER = 5, KP_R_SHOULDER = 6;
+    var KP_L_HIP = 11, KP_R_HIP = 12;
+    var KP_L_ANKLE = 15, KP_R_ANKLE = 16;
+
+    // Cut points are analyzer/config.py DISTANCE_ZONE_THRESHOLDS verbatim. The
+    // hexes are literal because a canvas cannot read a CSS custom property; they
+    // are the light end of the zone colours the report's touch table already
+    // uses, read over bright piste rather than over the page background.
+    var DISTANCE_ZONES = [
+        { key: 'infighting',     ko: '인파이팅',       color: '#f87171', upper: 0.8 },
+        { key: 'extension',      ko: '찌르기 거리',     color: '#60a5fa', upper: 1.2 },
+        { key: 'lunge',          ko: '런지 거리',       color: '#4ade80', upper: 1.5 },
+        { key: 'advance_lunge',  ko: '전진 런지 거리',  color: '#fbbf24', upper: 1.8 },
+        { key: 'out_of_distance', ko: '원거리',         color: 'rgba(255,255,255,0.55)', upper: Infinity }
+    ];
+    var ZONE_HYSTERESIS_BH = 0.05;    // stops the colour strobing on a boundary
+    var DISTANCE_WINDOW = 5;          // = DISTANCE_SMOOTHING_WINDOW server-side
+    var VELOCITY_BHS = 0.25;          // advance/retreat cut, BH per second
+    var VELOCITY_HOLD = 2;            // samples a new state must survive
+    var NEAREST_HALF_WINDOW = 3;      // frames either side of min_distance_frame
+    var TOUCH_GLOW_LEAD = 3;          // frames before the touch anchor
+    var TOUCH_GLOW_TAIL = 15;
+
+    var FOOTWORK_KO = {
+        advance: '전진', retreat: '후퇴', lunge: '런지',
+        fleche: '플레시', stationary: '제자리'
+        // unknown deliberately absent — an unnamed action is left unnamed.
+    };
+
+    var OVERLAY_KEYS = {
+        bones: 'fm-wb-ov-bones',
+        dist: 'fm-wb-ov-dist',
+        badge: 'fm-wb-ov-badge',
+        caption: 'fm-wb-ov-caption'
+    };
 
     // ---- elements ----
     var viewport = document.getElementById('wb-viewport');
@@ -85,6 +133,13 @@
     var skeletonBtn = document.getElementById('wb-skeleton-toggle');
     var muteBtn = document.getElementById('wb-mute');
     var toast = document.getElementById('wb-toast');
+    // The caption band and the sub-toggle popover are optional markup: reports
+    // rendered before they existed must still get the canvas annotations, so
+    // every use below is guarded rather than assumed.
+    var captionBar = document.getElementById('wb-caption');
+    var captionText = document.getElementById('wb-caption-text');
+    var ovMenuBtn = document.getElementById('wb-ov-menu-btn');
+    var ovMenu = document.getElementById('wb-ov-menu');
 
     var ctx = canvas ? canvas.getContext('2d') : null;
     var skelCtx = skelCanvas ? skelCanvas.getContext('2d') : null;
@@ -111,6 +166,15 @@
     var skeletonData = null;          // the fetched sidecar, cached for the session
     var skeletonFetching = false;
     var skelRaf = null;
+
+    // Which annotation layers the master toggle turns on. All four default on;
+    // the popover (when present) persists departures from that.
+    var overlayParts = { bones: true, dist: true, badge: true, caption: true };
+    var insight = null;               // exchanges/touches/names, see buildInsight()
+    var metricCache = {};             // sample index -> metrics, cleared on growth
+    var zoneState = null;             // {idx, zone} — carries the hysteresis
+    var motionState = { left: null, right: null };
+    var captionKey = null;            // last string written, so DOM writes are rare
 
     var cachedClips = new Set();
 
@@ -376,16 +440,535 @@
         }
     }
 
-    function drawSkeleton() {
+    // ------------------------------------------------------------------
+    // annotation metrics
+    //
+    // Every number here is recomputed from the sidecar in the sidecar's own
+    // pixel space — never in canvas space — so it matches what the server
+    // measured whatever size the video is served at.
+    // ------------------------------------------------------------------
+
+    /** Sidecar sample -> 17 points (or nulls), in the sidecar's pixel space. */
+    function jointsAt(list, idx) {
+        if (!list) return null;
+        var flat = list[idx];
+        if (!flat || flat.length < SKELETON_JOINTS * 3) return null;
+        var confScale = skeletonData.conf_scale > 0 ? skeletonData.conf_scale : 100;
+        var minConf = typeof skeletonData.min_confidence === 'number'
+            ? skeletonData.min_confidence : 0.3;
+        var pts = [];
+        for (var j = 0; j < SKELETON_JOINTS; j++) {
+            var o = j * 3;
+            pts.push((flat[o + 2] / confScale) >= minConf
+                ? { x: flat[o], y: flat[o + 1] }
+                : null);
+        }
+        return pts;
+    }
+
+    function midOf(a, b) {
+        if (!a || !b) return null;
+        return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    }
+
+    /**
+     * Shoulder-centre to ankle-centre, in pixels — one body height.
+     * Mirrors compute_body_height() in ml/pose_analysis/body_metrics.py.
+     */
+    function bodyHeightOf(pts) {
+        if (!pts) return null;
+        var sh = midOf(pts[KP_L_SHOULDER], pts[KP_R_SHOULDER]);
+        var ank = midOf(pts[KP_L_ANKLE], pts[KP_R_ANKLE]);
+        if (!sh || !ank) return null;
+        var h = Math.hypot(sh.x - ank.x, sh.y - ank.y);
+        return h > 0 ? h : null;
+    }
+
+    /** Per-sample geometry, memoised: the smoothing window re-reads neighbours. */
+    function metricsAt(idx) {
+        var hit = metricCache[idx];
+        if (hit !== undefined) return hit;
+
+        var poses = skeletonData.poses || {};
+        var lp = jointsAt(poses.left, idx);
+        var rp = jointsAt(poses.right, idx);
+        var m = {
+            left: sideMetrics(lp),
+            right: sideMetrics(rp),
+            dist: null
+        };
+        if (m.left && m.right) {
+            var avgBh = (m.left.bh + m.right.bh) / 2;
+            // X only: the camera is side-on, so vertical separation is parallax,
+            // not distance. Same choice as compute_distance_bh().
+            if (avgBh > 0) m.dist = Math.abs(m.left.hip.x - m.right.hip.x) / avgBh;
+        }
+
+        // Bounded so a long scrub cannot grow this without limit; the window
+        // only ever looks a few samples back, so dropping the rest is free.
+        if (Object.keys(metricCache).length > 600) metricCache = {};
+        metricCache[idx] = m;
+        return m;
+    }
+
+    function sideMetrics(pts) {
+        if (!pts) return null;
+        var hip = midOf(pts[KP_L_HIP], pts[KP_R_HIP]);
+        var bh = bodyHeightOf(pts);
+        if (!hip || !bh) return null;
+        var sh = midOf(pts[KP_L_SHOULDER], pts[KP_R_SHOULDER]);
+        return { pts: pts, hip: hip, bh: bh, shoulder: sh || hip };
+    }
+
+    /**
+     * Moving average over a DISTANCE_WINDOW-wide window *centred* on the sample
+     * — which is what smooth_distances() in ml/pose_analysis/body_metrics.py
+     * does, and the reason the label agrees with the report's min_distance_bh.
+     * A trailing window lags the closing motion and reads high at exactly the
+     * moment that matters (measured: +0.29 BH at the closest point of exchange
+     * 13, against +0.02 centred).
+     *
+     * Computed from the sidecar on demand rather than from a running buffer, so
+     * a seek lands on the same number the frame showed during playback. Both
+     * poses are needed to draw the line at all, so a sample the server would
+     * have filled from its neighbours is still skipped here.
+     */
+    function smoothedDistance(idx) {
+        if (metricsAt(idx).dist === null) return null;
+        var half = Math.floor(DISTANCE_WINDOW / 2);
+        var sum = 0, n = 0;
+        for (var i = idx - half; i <= idx + half; i++) {
+            if (i < 0) continue;
+            var d = metricsAt(i).dist;
+            if (d !== null) { sum += d; n++; }
+        }
+        return n ? sum / n : null;
+    }
+
+    function zoneIndexFor(bh) {
+        for (var i = 0; i < DISTANCE_ZONES.length; i++) {
+            if (bh < DISTANCE_ZONES[i].upper) return i;
+        }
+        return DISTANCE_ZONES.length - 1;
+    }
+
+    /**
+     * Zone with hysteresis: the label only moves once the distance is clear of
+     * the boundary it last crossed, so a fencer sitting on 1.20 BH does not make
+     * the line flash between blue and green.
+     */
+    function zoneFor(bh, idx) {
+        var plain = zoneIndexFor(bh);
+        // More than a sample or two of gap means a seek: nothing to be sticky about.
+        if (!zoneState || Math.abs(idx - zoneState.idx) > 2) {
+            zoneState = { idx: idx, zone: plain };
+            return DISTANCE_ZONES[plain];
+        }
+        var held = zoneState.zone;
+        var lower = held > 0 ? DISTANCE_ZONES[held - 1].upper : -Infinity;
+        var upper = DISTANCE_ZONES[held].upper;
+        if (bh >= lower - ZONE_HYSTERESIS_BH && bh < upper + ZONE_HYSTERESIS_BH) {
+            zoneState = { idx: idx, zone: held };
+            return DISTANCE_ZONES[held];
+        }
+        zoneState = { idx: idx, zone: plain };
+        return DISTANCE_ZONES[plain];
+    }
+
+    /** Hip-centre x speed by central difference, normalised to BH per second. */
+    function rawMotion(idx, side) {
+        var cur = metricsAt(idx)[side];
+        if (!cur) return null;
+        var prev = idx > 0 ? metricsAt(idx - 1)[side] : null;
+        var next = metricsAt(idx + 1)[side];
+        if (!prev || !next) return null;
+        var every = skeletonData.sample_every > 0 ? skeletonData.sample_every : 1;
+        var fps = skeletonData.fps > 0 ? skeletonData.fps : FPS;
+        var dt = (2 * every) / fps;
+        var vx = (next.hip.x - prev.hip.x) / dt / cur.bh;
+        // The left fencer advances toward +x, the right fencer toward -x.
+        var toward = side === 'left' ? vx : -vx;
+        if (toward > VELOCITY_BHS) return 'advance';
+        if (toward < -VELOCITY_BHS) return 'retreat';
+        return 'hold';
+    }
+
+    /**
+     * The badge word, held for VELOCITY_HOLD samples before it changes. At 1/6
+     * speed a raw per-sample state flickers faster than it can be read.
+     */
+    function motionFor(idx, side) {
+        var raw = rawMotion(idx, side);
+        var st = motionState[side];
+        if (!st || Math.abs(idx - st.idx) > 2) {
+            motionState[side] = { idx: idx, shown: raw, cand: raw, count: 0 };
+            return raw;
+        }
+        if (st.idx !== idx) {
+            if (raw === st.shown) {
+                st.cand = raw;
+                st.count = 0;
+            } else if (raw === st.cand) {
+                st.count += 1;
+                if (st.count >= VELOCITY_HOLD - 1) { st.shown = raw; st.count = 0; }
+            } else {
+                st.cand = raw;
+                st.count = 0;
+            }
+            st.idx = idx;
+        }
+        return st.shown;
+    }
+
+    var MOTION_KO = { advance: '전진', retreat: '후퇴', hold: '정지' };
+
+    // ------------------------------------------------------------------
+    // report slice: exchanges, touches and names
+    // ------------------------------------------------------------------
+
+    /**
+     * The whole report JSON is already on the page, so the annotations read it
+     * directly. FM_REPORT.insight is preferred when the template supplies a
+     * pre-trimmed slice; the REPORT_DATA fallback keeps this working on pages
+     * rendered before that slice existed.
+     */
+    function buildInsight() {
+        var src = cfg.insight;
+        if (!src) {
+            /* global REPORT_DATA */
+            src = (typeof REPORT_DATA !== 'undefined') ? REPORT_DATA : null;
+        }
+        if (!src) return null;
+
+        var left = src.left_fencer || {};
+        var right = src.right_fencer || {};
+        var exchanges = (src.exchanges || []).map(function (e) {
+            return {
+                n: e.exchange_number,
+                start: e.start_frame,
+                end: e.end_frame,
+                eventKo: e.event_type_ko || '',
+                attacker: e.attacker || null,
+                defender: e.defender || null,
+                fwLeft: e.footwork_left || null,
+                fwRight: e.footwork_right || null,
+                minFrame: typeof e.min_distance_frame === 'number' ? e.min_distance_frame : null,
+                minBh: typeof e.min_distance_bh === 'number' ? e.min_distance_bh : null,
+                parryLeft: e.parry_left === true,
+                parryRight: e.parry_right === true
+            };
+        }).filter(function (e) {
+            return typeof e.start === 'number' && typeof e.end === 'number';
+        }).sort(function (a, b) { return a.start - b.start; });
+
+        var touches = (src.touches || []).map(function (t) {
+            return {
+                frame: t.frame,
+                scorer: t.scorer || null,
+                scoreAfter: t.score_after || '',
+                outcomeKo: t.attack_outcome_ko || '',
+                lampRed: t.lamp_red === true,
+                lampGreen: t.lamp_green === true
+            };
+        }).filter(function (t) {
+            return typeof t.frame === 'number';
+        }).sort(function (a, b) { return a.frame - b.frame; });
+
+        return {
+            leftName: left.name || '좌 선수',
+            rightName: right.name || '우 선수',
+            exchanges: exchanges,
+            touches: touches
+        };
+    }
+
+    /** Last entry whose key <= frame, by binary search over ~20 rows. */
+    function lastAtOrBefore(list, frame, keyOf) {
+        var lo = 0, hi = list.length - 1, found = -1;
+        while (lo <= hi) {
+            var mid = (lo + hi) >> 1;
+            if (keyOf(list[mid]) <= frame) { found = mid; lo = mid + 1; } else { hi = mid - 1; }
+        }
+        return found;
+    }
+
+    function activeExchange(frame) {
+        if (!insight) return null;
+        var i = lastAtOrBefore(insight.exchanges, frame, function (e) { return e.start; });
+        if (i < 0) return null;
+        var e = insight.exchanges[i];
+        return frame <= e.end ? e : null;
+    }
+
+    function activeTouch(frame) {
+        if (!insight) return null;
+        var i = lastAtOrBefore(insight.touches, frame + TOUCH_GLOW_LEAD,
+                               function (t) { return t.frame; });
+        if (i < 0) return null;
+        var t = insight.touches[i];
+        return (frame >= t.frame - TOUCH_GLOW_LEAD && frame <= t.frame + TOUCH_GLOW_TAIL)
+            ? t : null;
+    }
+
+    function sideName(side) {
+        if (!insight) return '';
+        return side === 'left' ? insight.leftName : (side === 'right' ? insight.rightName : '');
+    }
+
+    // ------------------------------------------------------------------
+    // annotation drawing
+    // ------------------------------------------------------------------
+
+    function roundRectPath(c, x, y, w, h, r) {
+        var rad = Math.min(r, h / 2, w / 2);
+        c.beginPath();
+        c.moveTo(x + rad, y);
+        c.lineTo(x + w - rad, y);
+        c.quadraticCurveTo(x + w, y, x + w, y + rad);
+        c.lineTo(x + w, y + h - rad);
+        c.quadraticCurveTo(x + w, y + h, x + w - rad, y + h);
+        c.lineTo(x + rad, y + h);
+        c.quadraticCurveTo(x, y + h, x, y + h - rad);
+        c.lineTo(x, y + rad);
+        c.quadraticCurveTo(x, y, x + rad, y);
+        c.closePath();
+    }
+
+    /** A capsule of text, positioned by its left edge. Returns its width. */
+    function drawCapsule(text, x, cy, borderColor, fontPx) {
+        skelCtx.font = '600 ' + fontPx + 'px system-ui, sans-serif';
+        var padX = fontPx * 0.5;
+        var w = skelCtx.measureText(text).width + padX * 2;
+        var h = fontPx * 1.65;
+        roundRectPath(skelCtx, x, cy - h / 2, w, h, h / 2);
+        skelCtx.fillStyle = BADGE_BG;
+        skelCtx.fill();
+        skelCtx.strokeStyle = borderColor;
+        skelCtx.lineWidth = Math.max(1, fontPx / 14);
+        skelCtx.stroke();
+        skelCtx.fillStyle = '#ffffff';
+        skelCtx.textBaseline = 'middle';
+        skelCtx.fillText(text, x + padX, cy + fontPx * 0.05);
+        return w;
+    }
+
+    /**
+     * The distance line. Drawn between the two hip centres but levelled to their
+     * mean y: a sloped line reads as a direction, not as a gap.
+     */
+    function drawDistanceLine(m, idx, frame, ex, sx, sy, fontPx) {
+        var bh = smoothedDistance(idx);
+        if (bh === null) return;
+        var zone = zoneFor(bh, idx);
+
+        var x1 = m.left.hip.x * sx;
+        var x2 = m.right.hip.x * sx;
+        var y = ((m.left.hip.y + m.right.hip.y) / 2) * sy;
+        var tick = Math.max(6, skelCanvas.height * 0.035);
+
+        // Dark pass then coloured pass, as the bones do. Measured on the pool-bout
+        // bout: a bare line in the out-of-distance colour (55% white) is
+        // invisible against the lit piste, which is exactly the zone a coach is
+        // looking at while the fencers close.
+        skelCtx.lineCap = 'butt';
+        var lineW = Math.max(2, skelCanvas.width / 560);
+        for (var pass = 0; pass < 2; pass++) {
+            skelCtx.strokeStyle = pass === 0 ? SKELETON_OUTLINE : zone.color;
+            skelCtx.lineWidth = pass === 0 ? lineW * 2.6 : lineW;
+            skelCtx.beginPath();
+            skelCtx.moveTo(x1, y);
+            skelCtx.lineTo(x2, y);
+            skelCtx.moveTo(x1, y - tick); skelCtx.lineTo(x1, y + tick);
+            skelCtx.moveTo(x2, y - tick); skelCtx.lineTo(x2, y + tick);
+            skelCtx.stroke();
+        }
+
+        // At the closing instant the label stops describing the gap and names
+        // it: this frame is the one the report measured.
+        var nearest = ex && ex.minFrame !== null && ex.minBh !== null &&
+            Math.abs(frame - ex.minFrame) <= NEAREST_HALF_WINDOW;
+        var text = nearest
+            ? '최근접 ' + ex.minBh.toFixed(2) + ' BH'
+            : bh.toFixed(1) + ' BH · ' + zone.ko;
+
+        skelCtx.font = '600 ' + fontPx + 'px system-ui, sans-serif';
+        var w = skelCtx.measureText(text).width + fontPx;
+        var cx = clamp((x1 + x2) / 2, w / 2 + 4, skelCanvas.width - w / 2 - 4);
+        drawCapsule(text, cx - w / 2, y - tick - fontPx * 1.15,
+                    nearest ? '#ffffff' : zone.color, fontPx);
+
+        if (nearest) {
+            // A ring that widens across the window rather than animating on its
+            // own clock — at 1/4 speed it reads as one expanding pulse, and it
+            // lands on exactly the frames the report points at.
+            var t = (frame - (ex.minFrame - NEAREST_HALF_WINDOW)) / (NEAREST_HALF_WINDOW * 2);
+            var r = tick * (0.6 + 2.4 * clamp(t, 0, 1));
+            skelCtx.beginPath();
+            skelCtx.arc((x1 + x2) / 2, y, r, 0, Math.PI * 2);
+            skelCtx.strokeStyle = 'rgba(255,255,255,' + (0.85 * (1 - clamp(t, 0, 1)) + 0.15).toFixed(3) + ')';
+            skelCtx.lineWidth = Math.max(1.5, skelCanvas.width / 700);
+            skelCtx.stroke();
+        }
+    }
+
+    /**
+     * Name + direction + state, parked on the fencer's outside shoulder. The
+     * piste crop is ~330px tall, so there is no room above the head or below the
+     * feet — but there is always room to the outside, and the space between the
+     * two fencers is where the action is and must stay clear.
+     *
+     * The arrow is screen direction, not fencing direction: the word already
+     * carries "toward the opponent", and an arrow the viewer can check against
+     * the video beats one they have to decode.
+     */
+    function drawBadge(side, sm, motion, color, sx, sy, fontPx) {
+        var name = sideName(side);
+        if (!name) return;
+        var label = name;
+        if (motion === 'advance' || motion === 'retreat') {
+            var rightward = (side === 'left') === (motion === 'advance');
+            label = name + (rightward ? ' ▶ ' : ' ◀ ') + MOTION_KO[motion];
+        } else if (motion === 'hold') {
+            label = name + ' · 정지';
+        }
+
+        var xs = [];
+        for (var i = 0; i < sm.pts.length; i++) {
+            if (sm.pts[i]) xs.push(sm.pts[i].x * sx);
+        }
+        if (!xs.length) return;
+        var minX = Math.min.apply(null, xs);
+        var maxX = Math.max.apply(null, xs);
+
+        skelCtx.font = '600 ' + fontPx + 'px system-ui, sans-serif';
+        var w = skelCtx.measureText(label).width + fontPx;
+        var gap = fontPx * 0.6;
+        // Clamped inward at the ends of the piste — overlapping the body there
+        // beats running off the frame.
+        var x = side === 'left'
+            ? clamp(minX - gap - w, 4, skelCanvas.width - w - 4)
+            : clamp(maxX + gap, 4, skelCanvas.width - w - 4);
+        var cy = clamp(sm.shoulder.y * sy, fontPx, skelCanvas.height - fontPx);
+        drawCapsule(label, x, cy, color, fontPx);
+    }
+
+    /** Scorer-side edge glow. Camp colours, not lamp colours — see the caption. */
+    function drawTouchGlow(touch, frame) {
+        var span = TOUCH_GLOW_LEAD + TOUCH_GLOW_TAIL;
+        var t = clamp((frame - (touch.frame - TOUCH_GLOW_LEAD)) / span, 0, 1);
+        var alpha = 0.55 * (1 - t) + 0.1;
+        var w = skelCanvas.width * 0.18;
+        var h = skelCanvas.height;
+
+        var sides = [];
+        if (touch.lampRed && touch.lampGreen) {
+            // Both lamps lit: both fencers landed. The caption says who was
+            // awarded it; the screen shows that both arrived.
+            sides = ['left', 'right'];
+        } else if (touch.scorer === 'left' || touch.scorer === 'right') {
+            sides = [touch.scorer];
+        }
+
+        sides.forEach(function (side) {
+            var color = side === 'left' ? SKELETON_LEFT_COLOR : SKELETON_RIGHT_COLOR;
+            var g = side === 'left'
+                ? skelCtx.createLinearGradient(0, 0, w, 0)
+                : skelCtx.createLinearGradient(skelCanvas.width, 0, skelCanvas.width - w, 0);
+            g.addColorStop(0, hexToRgba(color, alpha));
+            g.addColorStop(1, hexToRgba(color, 0));
+            skelCtx.fillStyle = g;
+            skelCtx.fillRect(side === 'left' ? 0 : skelCanvas.width - w, 0, w, h);
+        });
+    }
+
+    function hexToRgba(hex, alpha) {
+        var n = parseInt(hex.slice(1), 16);
+        return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) +
+               ',' + alpha.toFixed(3) + ')';
+    }
+
+    // ------------------------------------------------------------------
+    // caption band (DOM, not canvas)
+    // ------------------------------------------------------------------
+
+    function fwKo(v) { return (v && FOOTWORK_KO[v]) || ''; }
+
+    function personPhrase(name, fw) {
+        var word = fwKo(fw);
+        return word ? name + ' ' + word : name;
+    }
+
+    function captionForTouch(t) {
+        var name = sideName(t.scorer);
+        if (!name) return null;
+        // "단독 유효타 (우선권 판정 없음)" -> "단독 유효타": the parenthetical is
+        // for the table, where there is room to read it.
+        var outcome = (t.outcomeKo || '').split('(')[0].trim();
+        var head = '터치 — ' + name + ' 득점' + (t.scoreAfter ? ' (' + t.scoreAfter + ')' : '');
+        return outcome ? head + ' · ' + outcome : head;
+    }
+
+    function captionForExchange(e) {
+        var head = '교전 ' + e.n + (e.eventKo ? ' · ' + e.eventKo : '');
+        if (e.attacker === 'left' || e.attacker === 'right') {
+            var defSide = e.defender === 'left' || e.defender === 'right'
+                ? e.defender : (e.attacker === 'left' ? 'right' : 'left');
+            var atkFw = e.attacker === 'left' ? e.fwLeft : e.fwRight;
+            var defFw = defSide === 'left' ? e.fwLeft : e.fwRight;
+            var parried = defSide === 'left' ? e.parryLeft : e.parryRight;
+            return head + ' — ' + personPhrase(sideName(e.attacker), atkFw) + ' 공격 → ' +
+                   personPhrase(sideName(defSide), defFw) + (parried ? ' (파라드)' : '');
+        }
+        return head + ' — ' + personPhrase(insight.leftName, e.fwLeft) +
+               ' · ' + personPhrase(insight.rightName, e.fwRight);
+    }
+
+    /**
+     * The band keeps its height when empty so the page never jumps; only its
+     * text fades. textContent is written when the sentence changes, not per
+     * frame — at 60fps rAF that is the difference between 1 write and 3600.
+     */
+    function setCaption(text) {
+        if (!captionBar) return;
+        var key = text || '';
+        if (key === captionKey) return;
+        captionKey = key;
+        if (captionText) captionText.textContent = key;
+        captionBar.classList.toggle('wb-caption--empty', !key);
+    }
+
+    function updateCaption(frame) {
+        if (!captionBar) return;
+        if (!overlayParts.caption || !skeletonOn || showingClip || !insight) {
+            setCaption('');
+            captionBar.classList.toggle('wb-caption--off', !overlayParts.caption || !skeletonOn);
+            return;
+        }
+        captionBar.classList.remove('wb-caption--off');
+        var t = activeTouch(frame);
+        if (t) { setCaption(captionForTouch(t) || ''); return; }
+        var e = activeExchange(frame);
+        setCaption(e ? captionForExchange(e) : '');
+    }
+
+    // ------------------------------------------------------------------
+    // the draw pass
+    // ------------------------------------------------------------------
+
+    function drawOverlay() {
         if (!skelCtx) return;
         skelCtx.clearRect(0, 0, skelCanvas.width, skelCanvas.height);
         // An AI clip already has a skeleton burned in by the server, and its
         // frame numbers do not line up with the main video's, so a second
         // overlay there would be drawing the wrong pose on the wrong frame.
-        if (!skeletonOn || showingClip || !skeletonData) return;
+        if (!skeletonOn || showingClip || !skeletonData) {
+            updateCaption(0);
+            return;
+        }
 
         var poses = skeletonData.poses || {};
         var idx = skeletonSampleIndex(video.currentTime);
+        var frame = frameOf(video.currentTime);
         // Normally 1:1 — the sidecar is in the video's own pixel space. The
         // ratio only matters if the served video was re-encoded at another size.
         var sx = skeletonData.frame_width > 0 ? skelCanvas.width / skeletonData.frame_width : 1;
@@ -393,14 +976,50 @@
         // Scaled to the frame so the overlay looks the same on 720p and 1080p;
         // the floor keeps it legible on the small crops some reports carry.
         var lw = Math.max(2.5, skelCanvas.width / 420);
+        // Text is sized against how large the video is actually painted, not
+        // against its intrinsic pixels. A glyph fixed in canvas units renders
+        // ~19 CSS px on a desktop stage and ~5 CSS px on a 390px phone, where it
+        // is simply unreadable. Capped against the frame height so it still
+        // cannot swallow a 330px piste crop, and zoom counts as painting bigger.
+        var painted = (stageW || skelCanvas.width) * zoom;
+        var fontPx = clamp(Math.round(18 * skelCanvas.width / painted),
+                           11, Math.round(skelCanvas.height * 0.11));
 
-        drawSkeletonSide(poses.left, idx, SKELETON_LEFT_COLOR, lw, sx, sy);
-        drawSkeletonSide(poses.right, idx, SKELETON_RIGHT_COLOR, lw, sx, sy);
+        var touch = insight ? activeTouch(frame) : null;
+        // Behind everything: it is a wash over the frame, not a mark on it.
+        if (touch) drawTouchGlow(touch, frame);
+
+        if (overlayParts.bones) {
+            drawSkeletonSide(poses.left, idx, SKELETON_LEFT_COLOR, lw, sx, sy);
+            drawSkeletonSide(poses.right, idx, SKELETON_RIGHT_COLOR, lw, sx, sy);
+        }
+
+        var m = metricsAt(idx);
+        var ex = insight ? activeExchange(frame) : null;
+
+        // A sample with no usable pose draws nothing for that layer rather than
+        // interpolating one — the same policy the bones already follow.
+        if (overlayParts.dist && m.left && m.right) {
+            drawDistanceLine(m, idx, frame, ex, sx, sy, fontPx);
+        }
+        if (overlayParts.badge) {
+            if (m.left) {
+                drawBadge('left', m.left, motionFor(idx, 'left'), SKELETON_LEFT_COLOR, sx, sy, fontPx);
+            }
+            if (m.right) {
+                drawBadge('right', m.right, motionFor(idx, 'right'), SKELETON_RIGHT_COLOR, sx, sy, fontPx);
+            }
+        }
+
+        updateCaption(frame);
     }
+
+    /** Kept as the old name because the media events wire straight to it. */
+    function drawSkeleton() { drawOverlay(); }
 
     function skeletonTick() {
         skelRaf = null;
-        drawSkeleton();
+        drawOverlay();
         if (skeletonOn && !showingClip && !video.paused && !video.ended) {
             skelRaf = requestAnimationFrame(skeletonTick);
         }
@@ -418,17 +1037,56 @@
         if (skelRaf !== null) { cancelAnimationFrame(skelRaf); skelRaf = null; }
     }
 
+    /** Everything derived from a run of samples; a seek invalidates all of it. */
+    function resetOverlayState() {
+        metricCache = {};
+        zoneState = null;
+        motionState = { left: null, right: null };
+        captionKey = null;
+    }
+
+    function loadOverlayPrefs() {
+        Object.keys(OVERLAY_KEYS).forEach(function (part) {
+            var v = null;
+            try { v = localStorage.getItem(OVERLAY_KEYS[part]); } catch (_) { /* private mode */ }
+            // Everything is on unless the coach has explicitly turned it off.
+            overlayParts[part] = v !== '0';
+        });
+    }
+
+    function syncOverlayToggles() {
+        if (!ovMenu) return;
+        ovMenu.querySelectorAll('[data-ov]').forEach(function (b) {
+            var part = b.dataset.ov;
+            if (!(part in overlayParts)) return;
+            b.classList.toggle('wb-btn--on', overlayParts[part]);
+            b.setAttribute('aria-pressed', overlayParts[part] ? 'true' : 'false');
+        });
+    }
+
+    function setOverlayPart(part, on) {
+        if (!(part in overlayParts)) return;
+        overlayParts[part] = !!on;
+        try {
+            localStorage.setItem(OVERLAY_KEYS[part], on ? '1' : '0');
+        } catch (_) { /* private mode */ }
+        syncOverlayToggles();
+        drawOverlay();
+    }
+
     function syncSkeletonBtn() {
+        if (ovMenuBtn) ovMenuBtn.disabled = showingClip || !skeletonOn;
         if (!skeletonBtn) return;
         skeletonBtn.classList.toggle('wb-btn--on', skeletonOn && !showingClip);
         skeletonBtn.disabled = showingClip;
         skeletonBtn.title = showingClip
-            ? 'AI 정밀 분석 클립에는 이미 스켈레톤이 입혀져 있습니다 — 원본 영상으로 돌아가면 다시 사용할 수 있습니다'
-            : '추적된 두 선수의 관절을 원본 영상 위에 그대로 그립니다 — 클립을 만들지 않고 즉시 표시됩니다';
+            ? 'AI 정밀 분석 클립에는 이미 오버레이가 입혀져 있습니다 — 원본 영상으로 돌아가면 다시 사용할 수 있습니다'
+            : '원본 영상 위에 두 선수의 관절·거리·상태를 그대로 그립니다 — 클립을 만들지 않고 즉시 표시됩니다';
     }
 
     function applySkeletonState(on, persist) {
         skeletonOn = !!on;
+        resetOverlayState();
         if (persist) {
             try {
                 localStorage.setItem(SKELETON_KEY, skeletonOn ? '1' : '0');
@@ -614,6 +1272,17 @@
     var activeClipKey = null;             // the clip currently being fetched
     var clipPollWait = null;              // pending poll delay, resolvable on cancel
     var clipProgress = null;              // per-run copy/progress state
+    var activeClipLabel = null;           // that clip's row label, e.g. "교전 #12 — …"
+
+    /**
+     * Loading copy carries the row label so the coach can still tell which row
+     * they clicked while the stage is covered — the timeline is scrolled away
+     * behind the workbench by then, and every clip otherwise loads with the
+     * same sentence.
+     */
+    function clipTitle(text) {
+        return activeClipLabel ? activeClipLabel + ' · ' + text : text;
+    }
 
     function clipError(message) {
         var err = new Error(message);
@@ -692,7 +1361,7 @@
 
     /** Fetching bytes: either a clip that was already on disk, or a fresh one. */
     function showFetchCopy(sub) {
-        if (loadingTitle) loadingTitle.textContent = 'AI 정밀 분석 클립 불러오는 중...';
+        if (loadingTitle) loadingTitle.textContent = clipTitle('AI 정밀 분석 클립 불러오는 중...');
         if (loadingSub) loadingSub.textContent = sub || '이미 생성된 클립 — 곧 재생됩니다.';
         if (progressTrack) progressTrack.classList.add('hidden');
         stopClipTimer();
@@ -711,7 +1380,7 @@
     function startClipProgress(state) {
         clipProgress = state;
         if (loadingTitle) {
-            loadingTitle.textContent = 'AI 정밀 분석 클립을 처음 생성하고 있습니다';
+            loadingTitle.textContent = clipTitle('AI 정밀 분석 클립을 처음 생성하고 있습니다');
         }
         if (progressBar) {
             // Snap back to the start without animating down from the last run.
@@ -918,6 +1587,7 @@
         cancelClipRun();
         var run = clipRunId;
         activeClipKey = key;
+        activeClipLabel = label || null;
 
         var base = '/api/analytics/clips/' + CLIP_REPORT_ID + '/' + type + '/' + number;
 
@@ -1085,6 +1755,31 @@
         }
         if (sourceChip) sourceChip.addEventListener('click', restoreMainVideo);
 
+        // Sub-toggles live in an optional popover next to the master button. If
+        // the markup is not there, the parts simply stay at their stored values.
+        loadOverlayPrefs();
+        syncOverlayToggles();
+        if (ovMenu) {
+            ovMenu.querySelectorAll('[data-ov]').forEach(function (b) {
+                b.addEventListener('click', function () {
+                    setOverlayPart(b.dataset.ov, !overlayParts[b.dataset.ov]);
+                });
+            });
+        }
+        if (ovMenuBtn && ovMenu) {
+            ovMenuBtn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                var open = ovMenu.classList.toggle('wb-ov-menu--open');
+                ovMenuBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+            });
+            document.addEventListener('click', function (e) {
+                if (!ovMenu.classList.contains('wb-ov-menu--open')) return;
+                if (ovMenu.contains(e.target) || e.target === ovMenuBtn) return;
+                ovMenu.classList.remove('wb-ov-menu--open');
+                ovMenuBtn.setAttribute('aria-expanded', 'false');
+            });
+        }
+
         if (skeletonBtn && KEYPOINTS_URL) {
             skeletonBtn.addEventListener('click', function () {
                 if (showingClip) return;
@@ -1098,6 +1793,8 @@
         } else if (skeletonBtn) {
             // Markup without a sidecar URL: nothing to draw, so do not pretend.
             skeletonBtn.classList.add('hidden');
+            if (ovMenuBtn) ovMenuBtn.classList.add('hidden');
+            if (captionBar) captionBar.classList.add('hidden');
         }
 
         if (muteBtn) {
@@ -1275,6 +1972,17 @@
     var heightInput = document.getElementById('bh-height-input');
     if (heightInput) heightInput.addEventListener('input', redraw);
 
+    // The exchange/touch slice the annotations narrate. Reports without one
+    // (gallery pages that ship no report payload) simply get bones and distance.
+    try {
+        insight = buildInsight();
+    } catch (_) {
+        insight = null;
+    }
+    // No sidecar means no overlay at all, so the caption band would be a bar of
+    // dead space under the video.
+    if (!KEYPOINTS_URL && captionBar) captionBar.classList.add('hidden');
+
     wireControls();
     wireStageInteraction();
     wireKeyboard();
@@ -1300,6 +2008,19 @@
         seekRange: seekRange,
         playClip: playClip,
         setSpeed: setSpeed,
-        restoreMainVideo: restoreMainVideo
+        restoreMainVideo: restoreMainVideo,
+        // The annotation maths is pure, so the numbers drawn on the video can be
+        // checked against the report's own figures without driving the UI. There
+        // is no JS test runner in this repo; this is how the check is run.
+        overlay: {
+            sampleIndex: skeletonSampleIndex,
+            metricsAt: metricsAt,
+            smoothedDistance: smoothedDistance,
+            zoneFor: function (bh) { return DISTANCE_ZONES[zoneIndexFor(bh)]; },
+            motionAt: rawMotion,
+            motionShownAt: motionFor,
+            insight: function () { return insight; },
+            parts: overlayParts
+        }
     };
 })();

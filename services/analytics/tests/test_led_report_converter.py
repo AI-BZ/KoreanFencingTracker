@@ -11,9 +11,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from analyzer.models import MatchEvent
+from analyzer.models import InferredMatchEvent, MatchEvent
 from analyzer.touch_matching import _LAMP_PATTERNS, _SINGLE_LAMP_SIDE
 from app.led_report_converter import (
+    META_NOT_FOR_MERGE,
+    META_NOT_FOR_MERGE_REASON,
+    WARNING_NOT_FOR_MERGE,
     preserve_existing_meta,
     DEFAULT_LEFT_NAME,
     DEFAULT_RIGHT_NAME,
@@ -21,8 +24,10 @@ from app.led_report_converter import (
     LAMP_SINGLE_LEFT,
     LAMP_SINGLE_RIGHT,
     LED_LAMP_CONFIDENCE,
+    TOUCH_SOURCE_END_OF_BOUT,
     WARNING_CLOCK_UNREAD,
     WARNING_COVERAGE_GAP,
+    WARNING_END_OF_BOUT_INFERRED,
     WARNING_LAMP_ANNULLED,
     WARNING_LAMP_UNDETERMINED,
     WARNING_NO_TOUCHES,
@@ -40,11 +45,14 @@ from app.led_report_converter import (
     scoring_events,
 )
 from scripts.analyze_led_scoreboard import (
+    CLOCK_AT_CUT_CHOICES,
     ConfigError,
     REQUIRED_ROI_KEYS,
     TRACKER_HOUSING_KEY,
+    build_parser,
     check_crop_matches_video,
     load_existing_meta,
+    main,
     TRACKER_PLACARD_KEY,
     TRACKER_PROFILE_KEY,
     extract_report_stem,
@@ -426,10 +434,10 @@ class TestLedEventsToMatchReport:
     def test_names_come_from_arguments(self):
         report = led_events_to_match_report(
             bout_events(), video_path="sb.mp4", weapon="foil",
-            left_name="박소윤", right_name="정다희",
+            left_name="우측 선수", right_name="좌측 선수",
         )
-        assert report["left_fencer"]["name"] == "박소윤"
-        assert report["right_fencer"]["name"] == "정다희"
+        assert report["left_fencer"]["name"] == "우측 선수"
+        assert report["right_fencer"]["name"] == "좌측 선수"
 
     def test_default_names_are_the_merge_sentinels(self):
         """generate_continuous_report only merges a name not in ("Left","Right").
@@ -1380,3 +1388,271 @@ class TestLoadExistingMeta:
         target.mkdir()
 
         assert load_existing_meta(target) == {}
+
+
+# ------------------------------------------------------------------
+# End-of-bout inference: the touch keys and the warning swap
+# ------------------------------------------------------------------
+
+
+def fake_lamp_resolution(onset_frame, verdict, score_before=(4, 2),
+                         left_valid=True, right_valid=False):
+    """Stand-in for a ``TouchResolution`` as ``tracked_warnings`` reads one."""
+    return SimpleNamespace(
+        event=SimpleNamespace(
+            onset_frame=onset_frame, left_valid=left_valid, right_valid=right_valid,
+        ),
+        verdict=verdict,
+        score_before=score_before,
+    )
+
+
+def fake_analysis_with(resolutions, score_reliable=True):
+    """``ScoreboardAnalysis`` stand-in whose undetermined/annulled lists are
+    derived from one resolution list, so identity survives the filtering the way
+    it does on the real object."""
+    return SimpleNamespace(
+        resolutions=list(resolutions),
+        coverage_gaps=[],
+        undetermined=[r for r in resolutions if r.verdict == "undetermined"],
+        annulled=[r for r in resolutions if r.verdict == "annulled"],
+        score_reliable=score_reliable,
+    )
+
+
+def fake_inference(index, scorer="left", applied=True):
+    return SimpleNamespace(applied=applied, index=index, scorer=scorer, reason="applied")
+
+
+class TestBuildTouchesCarriesTheInferenceKeys:
+    def test_an_ordinary_event_carries_neither_key(self):
+        [touch] = build_touches([make_event()])
+
+        assert "touch_source" not in touch
+        assert "inference_basis" not in touch
+
+    def test_an_inferred_event_carries_both_keys_verbatim(self):
+        basis = {
+            "onset_frame": 4903,
+            "frames_remaining": 89,
+            "clock_at_cut": "running",
+            "score_at_match_point": "4-2",
+            "lamps_lit": ["left"],
+        }
+        event = InferredMatchEvent(
+            frame=4903,
+            video_timestamp="2:43",
+            match_time="",
+            event_type="single_touch",
+            lamp_red=True,
+            lamp_green=False,
+            score_before="4-2",
+            score_after="5-2",
+            scorer="left",
+            description="추론된 마지막 득점",
+            touch_source=TOUCH_SOURCE_END_OF_BOUT,
+            inference_basis=basis,
+        )
+
+        [touch] = build_touches([event])
+
+        assert touch["touch_source"] == TOUCH_SOURCE_END_OF_BOUT
+        assert touch["inference_basis"] == basis
+
+    def test_an_inferred_touch_is_otherwise_an_ordinary_touch(self):
+        """It has to tally, render and match like any other point — the two extra
+        keys mark its provenance, they do not put it in a separate category."""
+        event = InferredMatchEvent(
+            frame=4903, video_timestamp="2:43", match_time="", event_type="single_touch",
+            lamp_red=True, lamp_green=False, score_before="4-2", score_after="5-2",
+            scorer="left", description="", touch_source=TOUCH_SOURCE_END_OF_BOUT,
+            inference_basis={"onset_frame": 4903},
+        )
+
+        [touch] = build_touches([event])
+
+        assert touch["touch_number"] == 1
+        assert touch["frame"] == 4903
+        assert touch["scorer"] == "left"
+        assert touch["lamp_pattern"] == LAMP_SINGLE_LEFT
+        assert touch["lamp_confidence"] == LED_LAMP_CONFIDENCE
+
+    def test_the_inferred_event_survives_the_scoring_filter_and_reaches_the_report(self):
+        event = InferredMatchEvent(
+            frame=4903, video_timestamp="2:43", match_time="", event_type="single_touch",
+            lamp_red=True, lamp_green=False, score_before="4-2", score_after="5-2",
+            scorer="left", description="", touch_source=TOUCH_SOURCE_END_OF_BOUT,
+            inference_basis={"onset_frame": 4903},
+        )
+
+        report = led_events_to_match_report(
+            [event], video_path="v.mp4", weapon="foil", clock_available=False,
+        )
+
+        assert report["summary"]["final_score"] == "5-2"
+        assert report["touches"][-1]["touch_source"] == TOUCH_SOURCE_END_OF_BOUT
+
+
+class TestTrackedWarningsAfterAnInference:
+    def test_a_promoted_undetermined_event_loses_its_unconfirmed_warning(self):
+        promoted = fake_lamp_resolution(4903, "undetermined")
+        analysis = fake_analysis_with([promoted])
+
+        warnings = tracked_warnings(analysis, fps=30.0, inference=fake_inference(0))
+
+        assert WARNING_LAMP_UNDETERMINED not in warning_types(warnings)
+        assert WARNING_END_OF_BOUT_INFERRED in warning_types(warnings)
+
+    def test_a_promoted_annulled_event_loses_its_annulment_warning(self):
+        promoted = fake_lamp_resolution(4903, "annulled")
+        analysis = fake_analysis_with([promoted])
+
+        warnings = tracked_warnings(analysis, fps=30.0, inference=fake_inference(0))
+
+        assert WARNING_LAMP_ANNULLED not in warning_types(warnings)
+        assert WARNING_END_OF_BOUT_INFERRED in warning_types(warnings)
+
+    def test_an_untouched_events_warning_is_unchanged(self):
+        """Only the promoted event is affected. Rewriting the others' text would
+        make this rule impossible to audit against a previous run."""
+        other = fake_lamp_resolution(1800, "undetermined")
+        promoted = fake_lamp_resolution(4903, "undetermined")
+        analysis = fake_analysis_with([other, promoted])
+
+        before = tracked_warnings(analysis, fps=30.0)
+        after = tracked_warnings(analysis, fps=30.0, inference=fake_inference(1))
+
+        untouched = [w for w in before if "1:00" in w["message"]]
+        assert untouched
+        assert all(w in after for w in untouched)
+
+    def test_a_promoted_annulment_is_dropped_from_a_shared_annulment_line(self):
+        """The annulled warning collapses every annulment into one entry, so the
+        promoted one has to leave the list rather than the entry."""
+        other = fake_lamp_resolution(1800, "annulled")
+        promoted = fake_lamp_resolution(4903, "annulled")
+        analysis = fake_analysis_with([other, promoted])
+
+        warnings = tracked_warnings(analysis, fps=30.0, inference=fake_inference(1))
+
+        [annulled] = [w for w in warnings if w["type"] == WARNING_LAMP_ANNULLED]
+        assert "1:00" in annulled["message"]
+        assert "2:43" not in annulled["message"]
+        assert "1건" in annulled["message"]
+
+    def test_the_new_warning_is_informational_and_names_the_three_conditions(self):
+        promoted = fake_lamp_resolution(4903, "undetermined")
+        analysis = fake_analysis_with([promoted])
+
+        [inferred] = [
+            w for w in tracked_warnings(analysis, fps=30.0, inference=fake_inference(0))
+            if w["type"] == WARNING_END_OF_BOUT_INFERRED
+        ]
+
+        assert inferred["severity"] == "info"
+        assert "4-2" in inferred["message"]          # match point
+        assert "시계" in inferred["message"]          # clock still running
+        assert "램프" in inferred["message"]          # the leader's own lamp
+        assert "left" in inferred["message"]
+
+    def test_an_inference_that_did_not_apply_changes_nothing(self):
+        promoted = fake_lamp_resolution(4903, "undetermined")
+        analysis = fake_analysis_with([promoted])
+        refused = SimpleNamespace(applied=False, index=None, scorer=None, reason="clock_unknown")
+
+        assert tracked_warnings(analysis, fps=30.0, inference=refused) == \
+            tracked_warnings(analysis, fps=30.0)
+
+    def test_no_inference_at_all_leaves_the_existing_behaviour_alone(self):
+        analysis = fake_analysis_with([fake_lamp_resolution(4903, "undetermined")])
+
+        assert tracked_warnings(analysis, fps=30.0) == tracked_warnings(analysis, fps=30.0, inference=None)
+
+    def test_an_out_of_range_index_silences_nothing(self):
+        """A stale inference must not be able to suppress a warning about an
+        event it was never computed against."""
+        analysis = fake_analysis_with([fake_lamp_resolution(4903, "undetermined")])
+
+        warnings = tracked_warnings(analysis, fps=30.0, inference=fake_inference(7))
+
+        assert WARNING_LAMP_UNDETERMINED in warning_types(warnings)
+        assert WARNING_END_OF_BOUT_INFERRED not in warning_types(warnings)
+
+
+class TestClockAtCutChoices:
+    def test_running_is_the_only_value_that_permits_the_rule(self):
+        assert CLOCK_AT_CUT_CHOICES["running"] is True
+        assert CLOCK_AT_CUT_CHOICES["expired"] is False
+        assert CLOCK_AT_CUT_CHOICES["unknown"] is None
+
+    def test_the_cli_defaults_to_unknown(self):
+        args = build_parser().parse_args(["--config", "c.json", "--weapon", "foil"])
+
+        assert args.clock_at_cut == "unknown"
+
+    def test_the_cli_rejects_a_clock_assertion_without_tracked(self):
+        with pytest.raises(SystemExit):
+            main(["--config", "c.json", "--weapon", "foil", "--clock-at-cut", "running"])
+
+
+class TestNotForMergeFlag:
+    """A report that must never be merged has to say so about itself.
+
+    Some reads are wrong in ways their own numbers cannot show — a partial
+    recovery looks like a short bout, and a clip starting mid-bout produces a
+    score progression that is internally consistent and absolutely wrong. A
+    batch job reading only ``touches`` would merge both happily.
+    """
+
+    def test_the_flag_is_absent_by_default(self):
+        report = led_events_to_match_report([], video_path="v.mp4", weapon="foil")
+
+        assert META_NOT_FOR_MERGE not in report["meta"]
+        assert not any(w["type"] == WARNING_NOT_FOR_MERGE for w in report["warnings"])
+
+    def test_a_reason_sets_the_meta_flag_and_records_why(self):
+        report = led_events_to_match_report(
+            [], video_path="v.mp4", weapon="foil",
+            not_for_merge="clip starts at 4-0",
+        )
+
+        assert report["meta"][META_NOT_FOR_MERGE] is True
+        assert report["meta"][META_NOT_FOR_MERGE_REASON] == "clip starts at 4-0"
+
+    def test_the_block_is_also_visible_to_a_human_reader(self):
+        report = led_events_to_match_report(
+            [], video_path="v.mp4", weapon="foil", not_for_merge="partial recovery",
+        )
+        blocks = [w for w in report["warnings"] if w["type"] == WARNING_NOT_FOR_MERGE]
+
+        assert len(blocks) == 1
+        assert blocks[0]["severity"] == "error"
+        assert "partial recovery" in blocks[0]["message"]
+
+    def test_the_block_warning_comes_first(self):
+        """Ahead of every quality warning — it governs whether to read the rest."""
+        report = led_events_to_match_report(
+            [], video_path="v.mp4", weapon="foil", not_for_merge="reason",
+            extra_warnings=[{"type": "x", "message": "m", "severity": "warning"}],
+        )
+
+        assert report["warnings"][0]["type"] == WARNING_NOT_FOR_MERGE
+
+    def test_the_flag_survives_a_regeneration_that_does_not_repeat_it(self):
+        """Otherwise re-running without the flag silently unblocks the report."""
+        first = led_events_to_match_report(
+            [], video_path="v.mp4", weapon="foil", not_for_merge="reason",
+        )
+        second = led_events_to_match_report(
+            [], video_path="v.mp4", weapon="foil", existing_meta=first["meta"],
+        )
+
+        assert second["meta"][META_NOT_FOR_MERGE] is True
+        assert second["meta"][META_NOT_FOR_MERGE_REASON] == "reason"
+
+    def test_an_empty_reason_does_not_block(self):
+        report = led_events_to_match_report(
+            [], video_path="v.mp4", weapon="foil", not_for_merge="",
+        )
+
+        assert META_NOT_FOR_MERGE not in report["meta"]

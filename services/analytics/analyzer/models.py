@@ -74,6 +74,26 @@ class MatchEvent:
         return asdict(self)
 
 
+@dataclass
+class InferredMatchEvent(MatchEvent):
+    """A ``MatchEvent`` no detector observed, reasoned out from the ones that were.
+
+    Only ``analyzer.scoreboard_tracker.infer_end_of_bout_touch`` produces these,
+    for the point a scoreboard operator never entered before the recording
+    stopped. It is a separate type rather than two more optional fields on
+    ``MatchEvent`` so that "was this read off the box" is answerable by looking
+    at the object, and so no existing event grows keys it will always leave
+    empty. ``app.led_report_converter.build_touches`` copies both fields onto the
+    touch dict — see ``INFERENCE_KEYS`` there.
+    """
+
+    #: ``app.led_report_converter.TOUCH_SOURCE_END_OF_BOUT``.
+    touch_source: str = ""
+    #: The evidence the inference rested on, so a reader can re-check it without
+    #: re-running the tracker.
+    inference_basis: Dict = field(default_factory=dict)
+
+
 # ------------------------------------------------------------------
 # Phase 2: Pose Estimation models
 # ------------------------------------------------------------------

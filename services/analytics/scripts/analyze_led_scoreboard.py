@@ -39,6 +39,14 @@ reference bout it recovers all six touches with no false positives.
 Everything after detection — the ``MatchEvent`` list, the converter, the report
 filename, the merge — is identical in both modes.
 
+The end-of-bout rule
+--------------------
+``--tracked --clock-at-cut running`` additionally lets
+``analyzer.scoreboard_tracker.infer_end_of_bout_touch`` promote a final
+unconfirmed lamp to the winning touch, for a recording that stopped before the
+operator entered the last point. It is off by default and refuses on anything
+but a bout that can only have ended — read that function before using it.
+
 Why the report is named after the PISTE work file, not the scoreboard one:
 ``generate_continuous_report.py`` analyses the piste work file and locates its
 OCR report by ``find_ocr_report(video_path.stem, output_dir)``, whose first tier
@@ -348,22 +356,105 @@ _GAP_REASON_KO = {
 }
 
 
-def tracked_warnings(analysis, fps: float = 30.0) -> List[dict]:
+#: ``--clock-at-cut`` choices → the ``clock_running_at_cut`` argument of
+#: ``infer_end_of_bout_touch``. The tracked profile has no clock ROI, so nothing
+#: in the pipeline can read the clock; this is the operator asserting what it
+#: showed when the recording stopped. ``unknown`` is the default and maps to
+#: ``None``, which the rule treats as refusal — an operator who says nothing
+#: must not be taken to have said "running".
+CLOCK_AT_CUT_CHOICES = {"running": True, "expired": False, "unknown": None}
+
+
+def _promoted_resolution(analysis, inference):
+    """The resolution ``inference`` promoted, or ``None``.
+
+    Resolved through ``analysis.resolutions`` by index rather than trusted from
+    the inference alone, so a stale inference computed against different
+    resolutions cannot silence a warning about an unrelated event.
+    """
+    if inference is None or not getattr(inference, "applied", False):
+        return None
+    index = getattr(inference, "index", None)
+    resolutions = getattr(analysis, "resolutions", None) or []
+    if index is None or not (0 <= index < len(resolutions)):
+        return None
+    return resolutions[index]
+
+
+def end_of_bout_event(analysis, inference, fps: float, clock_at_cut: str):
+    """The ``InferredMatchEvent`` for an applied end-of-bout inference.
+
+    Built here rather than inside the rule because the rule is pure and knows
+    nothing about ``MatchEvent``. Appending this to the detector's event list is
+    all it takes for the point to reach the report by the ordinary route:
+    ``scoring_events`` keeps it because it has a real ``scorer``, and
+    ``build_touches`` numbers it last because it has the highest frame.
+    """
+    from analyzer.models import EventType, InferredMatchEvent
+    from analyzer.scoreboard_tracker import LEFT, RIGHT
+    from app.led_report_converter import TOUCH_SOURCE_END_OF_BOUT
+
+    resolution = analysis.resolutions[inference.index]
+    event = resolution.event
+    before = resolution.score_before
+    after = inference.score_after
+    lamps_lit = [
+        side for side, lit in ((LEFT, event.left_valid), (RIGHT, event.right_valid))
+        if lit
+    ]
+    seconds = int(event.onset_frame / fps) if fps > 0 else 0
+
+    return InferredMatchEvent(
+        frame=event.onset_frame,
+        video_timestamp=f"{seconds // 60}:{seconds % 60:02d}",
+        match_time="",
+        event_type=EventType.SINGLE_TOUCH.value,
+        lamp_red=event.left_valid,
+        lamp_green=event.right_valid,
+        score_before=f"{before[0]}-{before[1]}",
+        score_after=f"{after[0]}-{after[1]}",
+        scorer=inference.scorer,
+        description=(
+            f"{'+'.join(lamps_lit) or 'no lamp'} 램프 — 점수판 갱신 전 영상 종료, "
+            f"경기 종료 규칙으로 {inference.scorer} 득점 확정"
+        ),
+        touch_source=TOUCH_SOURCE_END_OF_BOUT,
+        inference_basis={
+            "onset_frame": int(event.onset_frame),
+            "frames_remaining": int(analysis.frame_count - event.onset_frame),
+            "clock_at_cut": clock_at_cut,
+            "score_at_match_point": f"{before[0]}-{before[1]}",
+            "lamps_lit": lamps_lit,
+        },
+    )
+
+
+def tracked_warnings(analysis, fps: float = 30.0, inference=None) -> List[dict]:
     """Warnings only the tracked detector can raise, newest concern first.
 
     Everything here is about what the run could *not* see. The point of naming
     them in the report is that a missing touch is otherwise indistinguishable
     from a touch that never happened — which is exactly how this pipeline lost a
     real point on ``260815_bout_b`` before the panel was tracked at all.
+
+    ``inference`` is the :class:`~analyzer.scoreboard_tracker.EndOfBoutInference`
+    for this analysis, when the end-of-bout rule ran. An applied one is handled
+    *here*, in the same pass that writes the undetermined and annulled lines,
+    rather than by editing the list afterwards: the promoted event stops being
+    reported as unconfirmed and gains an ``end_of_bout_inferred`` line instead.
+    Doing it anywhere else risks a report that counts the point as a touch and
+    warns in the same breath that it could not be confirmed.
     """
     from app.led_report_converter import (
         WARNING_COVERAGE_GAP,
+        WARNING_END_OF_BOUT_INFERRED,
         WARNING_LAMP_ANNULLED,
         WARNING_LAMP_INCONSISTENT,
         WARNING_LAMP_UNDETERMINED,
         WARNING_SCORE_LOWER_BOUND,
     )
 
+    promoted = _promoted_resolution(analysis, inference)
     warnings: List[dict] = []
 
     for gap in analysis.coverage_gaps:
@@ -379,6 +470,8 @@ def tracked_warnings(analysis, fps: float = 30.0) -> List[dict]:
         })
 
     for resolution in analysis.undetermined:
+        if resolution is promoted:
+            continue
         warnings.append({
             "type": WARNING_LAMP_UNDETERMINED,
             "message": (
@@ -399,7 +492,7 @@ def tracked_warnings(analysis, fps: float = 30.0) -> List[dict]:
             "severity": "warning",
         })
 
-    annulled = analysis.annulled
+    annulled = [r for r in analysis.annulled if r is not promoted]
     if annulled:
         times = ", ".join(_clock(r.event.onset_frame, fps) for r in annulled)
         warnings.append({
@@ -407,6 +500,20 @@ def tracked_warnings(analysis, fps: float = 30.0) -> List[dict]:
             "message": (
                 f"유효 램프가 점등됐으나 점수가 변하지 않은 이벤트 {len(annulled)}건 "
                 f"({times}). 심판 무효 처리로 보고 터치에서 제외했습니다."
+            ),
+            "severity": "info",
+        })
+
+    if promoted is not None:
+        before = promoted.score_before
+        warnings.append({
+            "type": WARNING_END_OF_BOUT_INFERRED,
+            "message": (
+                f"{_clock(promoted.event.onset_frame, fps)} 마지막 램프 이후 점수판이 갱신되기 전에 "
+                f"영상이 끝났습니다. 세 조건이 모두 성립하여 "
+                f"({before[0]}-{before[1]} 매치 포인트, 경기 시계 진행 중, "
+                f"{inference.scorer} 선수 본인 유효 램프 점등) "
+                f"경기 종료 규칙으로 마지막 득점을 {inference.scorer} 득점으로 확정했습니다."
             ),
             "severity": "info",
         })
@@ -508,18 +615,56 @@ def build_parser() -> argparse.ArgumentParser:
              "config's 'tracker' block rather than 'scoreboard.rois'.",
     )
     parser.add_argument(
+        "--clock-at-cut", default="unknown", choices=tuple(CLOCK_AT_CUT_CHOICES),
+        help="What the match clock showed when the recording stopped (--tracked "
+             "only; the tracked profile has no clock ROI, so this is your "
+             "assertion, not a reading). 'running' is what lets the end-of-bout "
+             "rule promote a final unconfirmed lamp to the winning touch. "
+             "Default 'unknown' — the rule can never fire.",
+    )
+    parser.add_argument(
+        "--not-for-merge", default=None, metavar="REASON",
+        help="Mark the report as never mergeable, with the reason. For a read "
+             "that is known to be wrong in a way its own numbers do not show — "
+             "a partial recovery, or a clip starting mid-bout whose score "
+             "progression is therefore not the real one.",
+    )
+    parser.add_argument(
         "--dry-run", action="store_true",
         help="Print detected events and the derived score; write nothing.",
     )
     return parser
 
 
-def run_tracked(video, tracker, fps):
+def track_from_config(video, tracker):
+    """Run the tracked detector for a validated ``tracker`` block.
+
+    Split out of :func:`run_tracked` so a second tool can reproduce this exact
+    read — same profile, same anchor, same defaults — without reimplementing it
+    and drifting from what the report was generated with. Returns
+    ``(analysis, elapsed_seconds)``.
+    """
+    from analyzer.scoreboard_tracker import get_machine_profile, track_scoreboard_video
+
+    profile = get_machine_profile(tracker["profile_name"])
+    started = time.time()
+    analysis = track_scoreboard_video(
+        str(video),
+        housing_bbox=tracker["housing_bbox"],
+        placard_bbox=tracker["placard_bbox"],
+        profile=profile,
+        anchor_frame=tracker["anchor_frame"],
+    )
+    return analysis, time.time() - started
+
+
+def run_tracked(video, tracker, fps, clock_at_cut="unknown", bout_type="pool"):
     """``--tracked`` detection: returns ``(events, extra_warnings, elapsed)``."""
     from analyzer.scoreboard_tracker import (
+        END_OF_BOUT_TARGET,
         get_machine_profile,
+        infer_end_of_bout_touch,
         resolutions_to_match_events,
-        track_scoreboard_video,
     )
 
     profile = get_machine_profile(tracker["profile_name"])
@@ -529,15 +674,7 @@ def run_tracked(video, tracker, fps):
         f"housing={tracker['housing_bbox']} placard={tracker['placard_bbox']}"
     )
 
-    started = time.time()
-    analysis = track_scoreboard_video(
-        str(video),
-        housing_bbox=tracker["housing_bbox"],
-        placard_bbox=tracker["placard_bbox"],
-        profile=profile,
-        anchor_frame=tracker["anchor_frame"],
-    )
-    elapsed = time.time() - started
+    analysis, elapsed = track_from_config(video, tracker)
 
     gap_frames = sum(g.frame_count for g in analysis.coverage_gaps)
     print(
@@ -553,15 +690,41 @@ def run_tracked(video, tracker, fps):
     if not analysis.score_reliable:
         print("  Score:      LOWER BOUND — coverage was incomplete")
 
+    inference = infer_end_of_bout_touch(
+        analysis.resolutions,
+        target_score=END_OF_BOUT_TARGET[bout_type],
+        frame_count=analysis.frame_count,
+        fps=analysis.fps,
+        clock_running_at_cut=CLOCK_AT_CUT_CHOICES[clock_at_cut],
+    )
+    events = resolutions_to_match_events(analysis.resolutions, fps=fps)
+    if inference.applied:
+        promoted = analysis.resolutions[inference.index]
+        print(
+            f"  End-of-bout: APPLIED — frame {promoted.event.onset_frame} promoted to a "
+            f"{inference.scorer} touch, score {inference.score_after[0]}-"
+            f"{inference.score_after[1]} (clock asserted {clock_at_cut})"
+        )
+        events.append(end_of_bout_event(analysis, inference, fps, clock_at_cut))
+    else:
+        print(f"  End-of-bout: not applied (reason: {inference.reason})")
+
     return (
-        resolutions_to_match_events(analysis.resolutions, fps=fps),
-        tracked_warnings(analysis, fps=fps),
+        events,
+        tracked_warnings(analysis, fps=fps, inference=inference),
         elapsed,
     )
 
 
 def main(argv=None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+
+    if args.clock_at_cut != "unknown" and not args.tracked:
+        # The fixed-ROI path produces no TouchResolutions, so there is nothing
+        # for the end-of-bout rule to promote. Accepting the assertion and
+        # quietly doing nothing with it would look exactly like applying it.
+        parser.error("--clock-at-cut only applies to --tracked runs")
 
     try:
         config = load_piste_config(args.config)
@@ -611,7 +774,11 @@ def main(argv=None) -> int:
     print(f"  Frames:     {total_frames} @ {fps:.2f}fps")
 
     if args.tracked:
-        events, extra_warnings, elapsed = run_tracked(video, tracker, fps)
+        events, extra_warnings, elapsed = run_tracked(
+            video, tracker, fps,
+            clock_at_cut=args.clock_at_cut,
+            bout_type=args.bout_type,
+        )
     else:
         print(f"  ROIs:       {', '.join(f'{k}={v}' for k, v in rois.items())}")
         started = time.time()
@@ -640,6 +807,7 @@ def main(argv=None) -> int:
         extra_warnings=extra_warnings,
         analysis_mode="led_scoreboard_tracked" if args.tracked else "led_scoreboard_ocr",
         existing_meta=existing_meta,
+        not_for_merge=args.not_for_merge,
     )
     carried = [k for k in existing_meta if k not in ("source_type", "analysis_mode", "converter")]
     if carried:

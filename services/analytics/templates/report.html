@@ -110,6 +110,25 @@
     {% set fs_raw = report.summary.final_score | default('') | string %}
     {% set fs_parts = fs_raw.split('-') %}
     {% set fs_numeric = fs_parts | length == 2 and fs_parts[0].strip().isdigit() and fs_parts[1].strip().isdigit() %}
+    {%- set fs_display = (fs_parts[0].strip() ~ '-' ~ fs_parts[1].strip()) if fs_numeric else fs_raw %}
+
+    {#- The bout's real result, typed in by a coach (scripts/set_official_score.py),
+       because our own footage often starts late or stops early. It takes over the
+       big numerals; final_score stays on the line beneath so the observed value is
+       never destroyed and the two can never be mistaken for one another.
+
+       The `-` on every tag in this group keeps a report without an official score
+       rendering byte-for-byte as it did before the field existed. #}
+    {%- set ofs_raw = report.summary.official_final_score | default('') | string %}
+    {%- set ofs_parts = ofs_raw.split('-') %}
+    {%- set has_official = ofs_parts | length == 2 and ofs_parts[0].strip().isdigit() and ofs_parts[1].strip().isdigit() %}
+    {%- set ofs_display = (ofs_parts[0].strip() ~ '-' ~ ofs_parts[1].strip()) if has_official else '' %}
+    {%- set recording_note = report.summary.recording_note | default('') | string %}
+    {#- Once the end-of-bout rule confirms the missing point, the observed score
+       catches up with the official one. Repeating it as "(영상 내 5-2)" would
+       advertise a discrepancy that no longer exists, so the parenthetical only
+       appears while the two actually differ. #}
+    {%- set official_differs = has_official and ofs_display != fs_display %}
 
     <!-- ① Fencer Header -->
     <div class="glass-card p-5 sm:p-8 mb-4">
@@ -131,7 +150,14 @@
 
             <!-- Score -->
             <div class="order-3 lg:order-2 col-span-2 lg:col-span-1 text-center">
-                {% if fs_numeric %}
+                {% if has_official %}
+                <div class="flex items-center justify-center gap-3" title="코치가 직접 입력한 공식 최종 점수입니다 — 영상 분석 결과가 아닙니다">
+                    <span class="text-4xl sm:text-5xl font-bold text-blue-400 fm-num">{{ ofs_parts[0].strip() }}</span>
+                    <span class="text-2xl sm:text-3xl font-light text-gray-600">:</span>
+                    <span class="text-4xl sm:text-5xl font-bold text-red-400 fm-num">{{ ofs_parts[1].strip() }}</span>
+                </div>
+                <p class="text-[11px] text-gray-400 mt-1.5">경기 최종 <span class="fm-num">{{ ofs_display }}</span>{% if official_differs %} (영상 내 {% if fs_numeric %}<span class="fm-num">{{ fs_display }}</span>{% else %}{{ fs_display if fs_display else '스코어 없음' }}{% endif %}){% endif %}</p>
+                {% elif fs_numeric %}
                 <div class="flex items-center justify-center gap-3">
                     <span class="text-4xl sm:text-5xl font-bold text-blue-400 fm-num">{{ fs_parts[0].strip() }}</span>
                     <span class="text-2xl sm:text-3xl font-light text-gray-600">:</span>
@@ -142,6 +168,9 @@
                     {{ fs_raw if fs_raw else '스코어 없음' }}
                 </span>
                 {% endif %}
+                {%- if recording_note %}
+                <p class="text-[11px] text-gray-500 mt-1.5">{{ recording_note }}</p>
+                {%- endif %}
                 <p class="text-[11px] text-gray-500 mt-2">
                     {% if report.summary.match_duration %}<span class="fm-num">{{ report.summary.match_duration }}</span> &middot; {% endif %}터치 <span class="fm-num">{{ report.summary.total_touches }}</span>회
                 </p>
@@ -307,6 +336,16 @@
             <div id="wb-toast" class="wb-toast hidden"></div>
         </div>
 
+        {% if show_skeleton_toggle %}
+        {# 오버레이가 말하는 문장. 캔버스가 아니라 DOM 밴드인 이유는 이 영상이
+           330px 세로 크롭이어서, 화면 안에 글자를 구우면 설명하려는 동작을 그
+           글자가 가리기 때문이다. 문구가 비어도 높이는 유지해 교전 사이에서
+           페이지가 흔들리지 않는다. #}
+        <div id="wb-caption" class="wb-caption wb-caption--empty" aria-live="polite">
+            <span id="wb-caption-text" class="wb-caption-text"></span>
+        </div>
+        {% endif %}
+
         <div id="wb-controls" class="wb-controls">
             <!-- transport -->
             <div class="wb-group">
@@ -372,8 +411,23 @@
                  where reviewing is exactly what the workbench is used for -->
             <div class="wb-group">
                 {% if show_skeleton_toggle %}
-                <button id="wb-skeleton-toggle" class="wb-btn" type="button"
-                        title="추적된 두 선수의 관절을 원본 영상 위에 그대로 그립니다 — 클립을 만들지 않고 즉시 표시됩니다">스켈레톤</button>
+                {# 마스터 토글 + 서브 토글 팝오버. 서브 토글은 workbench.js가
+                   [data-ov] 로 찾아 붙이고 각각 localStorage에 남는다. 이 마크업이
+                   없어도 오버레이는 저장된 값(기본 전부 ON)으로 그대로 동작한다. #}
+                <span class="wb-ov">
+                    <button id="wb-skeleton-toggle" class="wb-btn" type="button"
+                            title="원본 영상 위에 두 선수의 관절·거리·상태를 그대로 그립니다 — 클립을 만들지 않고 즉시 표시됩니다">AI 오버레이</button>
+                    <button id="wb-ov-menu-btn" class="wb-btn" type="button"
+                            aria-haspopup="true" aria-expanded="false" aria-controls="wb-ov-menu"
+                            title="오버레이에 무엇을 표시할지 고릅니다">&#9662;</button>
+                    <div id="wb-ov-menu" class="wb-ov-menu" role="group"
+                         aria-label="오버레이 표시 항목">
+                        <button class="wb-btn" type="button" data-ov="bones" aria-pressed="true">뼈대</button>
+                        <button class="wb-btn" type="button" data-ov="dist" aria-pressed="true">거리</button>
+                        <button class="wb-btn" type="button" data-ov="badge" aria-pressed="true">상태 배지</button>
+                        <button class="wb-btn" type="button" data-ov="caption" aria-pressed="true">자막</button>
+                    </div>
+                </span>
                 {% endif %}
                 <button id="wb-mute" class="wb-btn" type="button"
                         title="소리 켜기 — 느린 배속에서는 소리가 뭉개지므로 기본은 음소거입니다">음소거</button>
@@ -432,7 +486,7 @@
         {% if show_workbench %}
         <p class="text-xs text-gray-500 mb-4">
             {% if has_main_video %}항목을 누르면 위 워크벤치가 그 구간을 반복 재생합니다.
-                {%- if show_skeleton_toggle %} <span class="text-gray-400">스켈레톤</span> 버튼은 원본 영상 위에 관절을 즉시 그려 주고, <span class="text-gray-400">AI 정밀 분석</span> 버튼은 거리·관절 데이터를 새겨 넣은 별도 클립을 만들어 첫 생성에 시간이 걸립니다.
+                {%- if show_skeleton_toggle %} <span class="text-gray-400">AI 오버레이</span> 버튼은 원본 영상 위에 관절·거리·상태를 즉시 그려 주고, <span class="text-gray-400">AI 정밀 분석</span> 버튼은 거리·관절 데이터를 새겨 넣은 별도 클립을 만들어 첫 생성에 시간이 걸립니다.
                 {%- else %} <span class="text-gray-400">AI 정밀 분석</span> 버튼은 거리·관절 데이터를 새겨 넣은 별도 클립을 만들어 첫 생성에 시간이 걸립니다.
                 {%- endif %}
             {% else %}항목을 누르면 위 워크벤치에서 <span class="text-gray-400">AI 정밀 분석</span> 클립이 재생됩니다 — 거리·관절 데이터를 새겨 넣은 별도 클립이라 첫 생성에 시간이 걸립니다.
@@ -494,11 +548,15 @@
                  data-kind="touch"
                  {% if playable %}data-clip-type="touch" data-clip-number="{{ touch.touch_number }}"
                  {% if mex is defined and mex and mex.start_frame is defined and mex.end_frame is defined %}data-start-frame="{{ mex.start_frame }}" data-end-frame="{{ mex.end_frame }}"{% else %}data-touch-frame="{{ touch.frame }}"{% endif %}
-                 data-clip-label="득점 {{ touch.score_after }} — {{ scorer_name }}"{% endif %}>
+                 data-clip-label="득점{% if ev.display_number is not none %} #{{ ev.display_number }}{% endif %} — {{ scorer_name }} {{ touch.score_after }}"{% endif %}>
                 <div class="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0
                             {% if touch.scorer == 'left' %}bg-blue-500{% else %}bg-red-500{% endif %}">
                     <span class="text-[11px] font-bold text-white fm-num">{{ touch.score_after }}</span>
                 </div>
+                {% if ev.display_number is not none %}
+                <span class="flex-shrink-0 px-1.5 py-0.5 rounded bg-white/5 font-mono text-[11px] text-gray-500 select-none"
+                      title="{% if ev.display_number_kind == 'exchange' %}교전 번호{% else %}득점 번호{% endif %} — 이 줄을 가리킬 때 쓰는 번호입니다">#<span class="fm-num">{{ ev.display_number }}</span></span>
+                {% endif %}
                 <div class="flex-shrink-0 w-16 text-right">
                     <span class="block text-sm font-mono text-gray-200"
                           title="{% if touch.match_time_estimated %}경기 잔여 시간 — 시계 OCR이 초를 부분 인식해 앞뒤 터치로 보정한 추정값{% else %}경기 잔여 시간{% endif %}">{% if touch.match_time_estimated %}~{% endif %}{{ touch.match_time }}</span>
@@ -579,10 +637,14 @@
                  data-kind="exchange"
                  {% if playable %}data-clip-type="exchange" data-clip-number="{{ ex.exchange_number }}"
                  data-start-frame="{{ ex.start_frame }}" data-end-frame="{{ ex.end_frame | default(ex.start_frame) }}"
-                 data-clip-label="교전 #{{ ex.exchange_number }} — {{ ex.event_type_ko | default(badge.label) }}"{% endif %}>
+                 data-clip-label="교전{% if ev.display_number is not none %} #{{ ev.display_number }}{% endif %} — {{ ex.event_type_ko | default(badge.label) }}"{% endif %}>
                 <div class="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center flex-shrink-0">
                     <span class="text-[9px] font-semibold text-gray-500">교전</span>
                 </div>
+                {% if ev.display_number is not none %}
+                <span class="flex-shrink-0 px-1.5 py-0.5 rounded bg-white/5 font-mono text-[11px] text-gray-500 select-none"
+                      title="{% if ev.display_number_kind == 'exchange' %}교전 번호{% else %}득점 번호{% endif %} — 이 줄을 가리킬 때 쓰는 번호입니다">#<span class="fm-num">{{ ev.display_number }}</span></span>
+                {% endif %}
                 <div class="flex-shrink-0 w-16 text-right">
                     <span class="block text-[11px] font-mono text-gray-500" title="영상 재생 위치 (비득점 교전은 경기 시계와 매칭되지 않습니다)">▶ {{ ex.start_time }}</span>
                     {% if ex.duration_sec is defined %}

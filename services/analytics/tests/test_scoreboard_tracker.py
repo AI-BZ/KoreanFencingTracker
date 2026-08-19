@@ -31,6 +31,8 @@ np = pytest.importorskip("numpy")
 from analyzer.models import EventType
 from analyzer.scoreboard_tracker import (
     CHROMATIC_COLOURS,
+    END_OF_BOUT_TAIL_SEC,
+    END_OF_BOUT_TARGET,
     COLOUR_GREEN,
     COLOUR_RED,
     COLOUR_WHITE,
@@ -39,6 +41,7 @@ from analyzer.scoreboard_tracker import (
     RIGHT,
     SIDES,
     VERDICT_ANNULLED,
+    VERDICT_INCONSISTENT,
     VERDICT_OFF_TARGET,
     VERDICT_TOUCH,
     VERDICT_UNDETERMINED,
@@ -59,6 +62,7 @@ from analyzer.scoreboard_tracker import (
     classify_colour,
     display_lit_fraction,
     event_intervals,
+    infer_end_of_bout_touch,
     mask_similarity,
     merge_runs,
     read_lamp,
@@ -1293,3 +1297,311 @@ class TestMachineProfile:
                 lamp_rois={LEFT: (0, 0, 10, 10), RIGHT: (20, 0, 10, 10)},
                 digit_rois={RIGHT: (20, 0, 10, 10)},
             )
+
+
+class TestALampAndAScoreThatContradictEachOtherAreNotATouch:
+    """A fencer cannot score without their own coloured lamp.
+
+    Output that claimed "left lamp only" and "both scores rose" reached a report
+    once. Neither reading can be trusted when they disagree, and picking the
+    more convenient one is how a tracker pointed at a wall gets to invent a bout.
+    """
+
+    def test_a_left_lamp_with_a_right_side_score_change_is_refused(self):
+        resolutions = resolve_touches(
+            [_event(left=COLOUR_RED)], [_comparison(changed={RIGHT})],
+        )
+
+        assert resolutions[0].verdict == VERDICT_INCONSISTENT
+        assert resolutions[0].scorer is None
+
+    def test_a_left_lamp_with_both_scores_changing_is_refused(self):
+        resolutions = resolve_touches(
+            [_event(left=COLOUR_RED)], [_comparison(changed={LEFT, RIGHT})],
+        )
+
+        assert resolutions[0].verdict == VERDICT_INCONSISTENT
+        assert resolutions[0].scorer is None
+
+    def test_a_right_lamp_with_a_left_side_score_change_is_refused(self):
+        resolutions = resolve_touches(
+            [_event(right=COLOUR_GREEN)], [_comparison(changed={LEFT})],
+        )
+
+        assert resolutions[0].verdict == VERDICT_INCONSISTENT
+
+    def test_a_refused_event_never_moves_the_score(self):
+        resolutions = resolve_touches(
+            [_event(left=COLOUR_RED)], [_comparison(changed={LEFT, RIGHT})],
+            start_score=(3, 1),
+        )
+
+        assert resolutions[0].score_before == (3, 1)
+        assert resolutions[0].score_after == (3, 1)
+
+    def test_a_refused_event_makes_every_later_total_untrustworthy(self):
+        resolutions = resolve_touches(
+            [_event(onset=100, left=COLOUR_RED), _event(onset=600, left=COLOUR_RED)],
+            [_comparison(changed={LEFT, RIGHT}), _comparison(changed={LEFT})],
+        )
+
+        assert resolutions[0].verdict == VERDICT_INCONSISTENT
+        assert resolutions[1].verdict == VERDICT_TOUCH
+        assert resolutions[1].tally_reliable is False
+
+    def test_both_lamps_with_both_scores_changing_is_a_legitimate_double(self):
+        """Two coloured lamps can legitimately award two points — not a conflict."""
+        resolutions = resolve_touches(
+            [_event(left=COLOUR_RED, right=COLOUR_GREEN)],
+            [_comparison(changed={LEFT, RIGHT})],
+        )
+
+        assert resolutions[0].verdict == VERDICT_TOUCH
+        assert resolutions[0].scorer == "both"
+
+    def test_both_lamps_with_one_score_changing_stays_a_priority_call(self):
+        resolutions = resolve_touches(
+            [_event(left=COLOUR_RED, right=COLOUR_GREEN)],
+            [_comparison(changed={LEFT})],
+        )
+
+        assert resolutions[0].verdict == VERDICT_TOUCH
+        assert resolutions[0].scorer == LEFT
+        assert resolutions[0].priority_call is True
+
+    def test_a_white_lamp_never_reaches_the_consistency_check(self):
+        """Off-target short-circuits earlier, so it reads off_target not inconsistent."""
+        resolutions = resolve_touches(
+            [_event(left=COLOUR_WHITE)], [_comparison(changed={LEFT, RIGHT})],
+        )
+
+        assert resolutions[0].verdict == VERDICT_OFF_TARGET
+
+    def test_a_consistent_single_lamp_touch_is_unaffected(self):
+        resolutions = resolve_touches(
+            [_event(left=COLOUR_RED)], [_comparison(changed={LEFT})],
+        )
+
+        assert resolutions[0].verdict == VERDICT_TOUCH
+        assert resolutions[0].scorer == LEFT
+
+
+# ----------------------------------------------------------------------
+# infer_end_of_bout_touch
+# ----------------------------------------------------------------------
+
+
+#: A pool bout's last frame, and a lamp comfortably inside the 10 s tail.
+_TAIL_FRAME_COUNT = 4992
+_TAIL_ONSET = 4903
+
+
+def _tail_resolution(
+    verdict=VERDICT_UNDETERMINED,
+    before=(4, 2),
+    onset=_TAIL_ONSET,
+    left=COLOUR_RED,
+    right=None,
+):
+    """A last-of-bout resolution: lamp lit, score frozen, nothing confirmed."""
+    return TouchResolution(
+        _event(onset=onset, end=onset + 30, left=left, right=right),
+        None, verdict, before, before, False,
+    )
+
+
+def _infer(resolutions, target_score=5, frame_count=_TAIL_FRAME_COUNT, fps=30.0,
+           clock=True, tail_window_sec=END_OF_BOUT_TAIL_SEC):
+    return infer_end_of_bout_touch(
+        resolutions,
+        target_score=target_score,
+        frame_count=frame_count,
+        fps=fps,
+        clock_running_at_cut=clock,
+        tail_window_sec=tail_window_sec,
+    )
+
+
+class TestEndOfBoutInferenceFires:
+    def test_a_pool_bout_cut_on_the_leaders_lamp_at_match_point_is_promoted(self):
+        # The measured case: red lamp at frame 4903 of 4992, score frozen 4-2,
+        # clock still running. The bout finished 5-2.
+        inference = _infer([_tail_resolution()])
+
+        assert inference.applied is True
+        assert inference.reason == "applied"
+        assert inference.index == 0
+        assert inference.scorer == LEFT
+        assert inference.score_after == (5, 2)
+
+    def test_a_de_bout_is_promoted_from_fourteen_to_fifteen(self):
+        inference = _infer([_tail_resolution(before=(11, 14), left=None, right=COLOUR_GREEN)],
+                           target_score=15)
+
+        assert inference.applied is True
+        assert inference.scorer == RIGHT
+        assert inference.score_after == (11, 15)
+
+    def test_an_annulled_last_event_in_the_tail_window_also_fires(self):
+        """A never-updated scoreboard and a referee-reset one look identical; the
+        tail window is what tells them apart, not the verdict."""
+        inference = _infer([_tail_resolution(verdict=VERDICT_ANNULLED)])
+
+        assert inference.applied is True
+        assert inference.scorer == LEFT
+        assert inference.score_after == (5, 2)
+
+    def test_the_promoted_event_is_the_last_by_onset_not_by_position(self):
+        early = _tail_resolution(onset=4903)
+        late = _tail_resolution(onset=4950)
+        inference = _infer([late, early])
+
+        assert inference.applied is True
+        assert inference.index == 0
+
+    def test_earlier_resolutions_do_not_prevent_the_promotion(self):
+        touch = TouchResolution(
+            _event(onset=900, left=COLOUR_RED), LEFT, VERDICT_TOUCH, (3, 2), (4, 2), False,
+        )
+        inference = _infer([touch, _tail_resolution()])
+
+        assert inference.applied is True
+        assert inference.index == 1
+
+    def test_a_lamp_on_the_last_frame_of_all_is_inside_the_window(self):
+        inference = _infer([_tail_resolution(onset=_TAIL_FRAME_COUNT - 1)])
+
+        assert inference.applied is True
+
+    def test_a_both_lamp_event_still_fires_when_the_leaders_lamp_is_among_them(self):
+        """Both lamps lit is a priority call the referee made and the operator
+        never entered — the leader's own lamp did fire, which is the condition."""
+        inference = _infer([_tail_resolution(left=COLOUR_RED, right=COLOUR_GREEN)])
+
+        assert inference.applied is True
+        assert inference.scorer == LEFT
+
+
+class TestEndOfBoutInferenceRefuses:
+    def test_an_expired_clock_means_the_bout_ended_on_time_not_on_a_point(self):
+        inference = _infer([_tail_resolution()], clock=False)
+
+        assert inference.applied is False
+        assert inference.reason == "clock_expired"
+        assert inference.scorer is None
+        assert inference.score_after is None
+
+    def test_an_unread_clock_is_not_permission(self):
+        inference = _infer([_tail_resolution()], clock=None)
+
+        assert inference.applied is False
+        assert inference.reason == "clock_unknown"
+
+    def test_no_resolutions_at_all_has_nothing_to_promote(self):
+        inference = _infer([])
+
+        assert inference.applied is False
+        assert inference.reason == "no_events"
+        assert inference.index is None
+
+    def test_a_last_event_that_is_already_a_touch_has_nothing_to_promote(self):
+        resolution = TouchResolution(
+            _event(onset=_TAIL_ONSET, left=COLOUR_RED), LEFT, VERDICT_TOUCH,
+            (4, 2), (5, 2), False,
+        )
+        inference = _infer([resolution])
+
+        assert inference.applied is False
+        assert inference.reason == "last_event_resolved"
+
+    def test_an_off_target_last_event_is_not_promoted(self):
+        inference = _infer([_tail_resolution(verdict=VERDICT_OFF_TARGET, left=COLOUR_WHITE)])
+
+        assert inference.applied is False
+        assert inference.reason == "last_event_resolved"
+
+    def test_an_inconsistent_last_event_is_not_promoted(self):
+        inference = _infer([_tail_resolution(verdict=VERDICT_INCONSISTENT)])
+
+        assert inference.applied is False
+        assert inference.reason == "last_event_resolved"
+
+    def test_a_lamp_well_before_the_end_is_a_mid_bout_annulment(self):
+        # 20 s of footage after the lamp: the bout carried on, so the referee
+        # waving it off is the ordinary reading and must stay.
+        inference = _infer([_tail_resolution(onset=_TAIL_FRAME_COUNT - 600)])
+
+        assert inference.applied is False
+        assert inference.reason == "not_in_tail_window"
+
+    def test_an_annulled_event_outside_the_tail_window_does_not_fire(self):
+        inference = _infer([
+            _tail_resolution(verdict=VERDICT_ANNULLED, onset=_TAIL_FRAME_COUNT - 600),
+        ])
+
+        assert inference.applied is False
+        assert inference.reason == "not_in_tail_window"
+
+    def test_a_score_short_of_match_point_does_not_fire(self):
+        inference = _infer([_tail_resolution(before=(3, 2))])
+
+        assert inference.applied is False
+        assert inference.reason == "not_match_point"
+
+    def test_both_fencers_on_match_point_is_not_a_lead(self):
+        """4-4 has no leader, so which of them the missing point belongs to is
+        precisely what is unknown."""
+        inference = _infer([_tail_resolution(before=(4, 4), right=COLOUR_GREEN)])
+
+        assert inference.applied is False
+        assert inference.reason == "not_match_point"
+
+    def test_both_fencers_on_match_point_in_a_de_bout_is_not_a_lead(self):
+        inference = _infer([_tail_resolution(before=(14, 14), right=COLOUR_GREEN)],
+                           target_score=15)
+
+        assert inference.applied is False
+        assert inference.reason == "not_match_point"
+
+    def test_the_trailing_fencers_lamp_proves_nothing_about_the_leader(self):
+        inference = _infer([_tail_resolution(left=None, right=COLOUR_GREEN)])
+
+        assert inference.applied is False
+        assert inference.reason == "lamp_not_leader"
+
+    def test_a_white_lamp_on_the_leaders_side_is_not_a_valid_hit(self):
+        inference = _infer([_tail_resolution(verdict=VERDICT_ANNULLED, left=COLOUR_WHITE)])
+
+        assert inference.applied is False
+        assert inference.reason == "lamp_not_leader"
+
+    def test_the_clock_is_checked_before_anything_else(self):
+        """Reason names the FIRST condition that failed, so a run with nothing to
+        promote and no clock reading reports the clock."""
+        inference = _infer([], clock=None)
+
+        assert inference.reason == "clock_unknown"
+
+
+class TestEndOfBoutInferenceDegenerateInputs:
+    def test_an_unusable_fps_refuses_rather_than_dividing_by_zero(self):
+        inference = _infer([_tail_resolution()], fps=0.0)
+
+        assert inference.applied is False
+        assert inference.reason == "not_in_tail_window"
+
+    def test_a_negative_fps_refuses(self):
+        inference = _infer([_tail_resolution()], fps=-30.0)
+
+        assert inference.applied is False
+        assert inference.reason == "not_in_tail_window"
+
+    def test_a_non_positive_tail_window_refuses(self):
+        inference = _infer([_tail_resolution()], tail_window_sec=0.0)
+
+        assert inference.applied is False
+        assert inference.reason == "not_in_tail_window"
+
+    def test_the_target_score_comes_from_the_bout_format_table(self):
+        assert END_OF_BOUT_TARGET["pool"] == 5
+        assert END_OF_BOUT_TARGET["de"] == 15

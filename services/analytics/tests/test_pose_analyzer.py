@@ -30,6 +30,7 @@ from analyzer.config import (
     DISTANCE_ZONE_THRESHOLDS,
 )
 from ml.pose_analyzer import PoseAnalyzer
+from ml.pose_analysis.kinematics import HandednessVerdict, detect_handedness_v2
 
 
 # ==================================================================
@@ -2050,6 +2051,227 @@ class TestHandednessDetection:
         handedness, confidence = self.analyzer.detect_handedness(seq, "left")
         assert handedness is None
         assert confidence == 0.0
+
+
+# ==================================================================
+# Handedness v2: which anatomical limb leads toward the opponent
+# ==================================================================
+
+
+def make_leading_limb_fencer(
+    side: str,
+    cx: float,
+    lead: str,
+    *,
+    ankle_offset: float = 20.0,
+    wrist_offset: float = 20.0,
+    limb_conf: float = 0.9,
+    torso_conf: float = 0.9,
+) -> FencerPose:
+    """A fencer whose ``lead`` anatomical limbs sit toward the opponent.
+
+    ``lead="left"`` places the anatomical left ankle and wrist on the side
+    facing the opponent, which is what a left-hander's en garde looks like.
+    The offsets are half the limb separation; torso spans 100px vertically
+    (shoulders at y=100, hips at y=200), so an offset of 20 gives a separation
+    ratio of 0.4 — comfortably over the 0.15 floor.
+    """
+    toward_opponent = 1.0 if side == "left" else -1.0
+    lead_dir = toward_opponent if lead == "left" else -toward_opponent
+
+    f = make_fencer(side, shoulder_cx=cx, hip_cx=cx, ankle_cx=cx, conf=torso_conf)
+    f.keypoints[KP_LEFT_ANKLE] = make_kp(cx + lead_dir * ankle_offset, 400.0, limb_conf)
+    f.keypoints[KP_RIGHT_ANKLE] = make_kp(cx - lead_dir * ankle_offset, 400.0, limb_conf)
+    f.keypoints[KP_LEFT_WRIST] = make_kp(cx + lead_dir * wrist_offset, 150.0, limb_conf)
+    f.keypoints[KP_RIGHT_WRIST] = make_kp(cx - lead_dir * wrist_offset, 150.0, limb_conf)
+    return f
+
+
+def make_leading_limb_sequence(
+    n_frames: int = 50,
+    lead: str = "left",
+    side: str = "left",
+    **fencer_kwargs,
+) -> List[PoseResult]:
+    """A bout where the ``side`` fencer leads with their ``lead`` limbs."""
+    other_side = "right" if side == "left" else "left"
+    subject_cx = 200.0 if side == "left" else 600.0
+    opponent_cx = 600.0 if side == "left" else 200.0
+
+    seq = []
+    for i in range(n_frames):
+        subject = make_leading_limb_fencer(side, subject_cx, lead, **fencer_kwargs)
+        opponent = make_leading_limb_fencer(other_side, opponent_cx, "right")
+        if side == "left":
+            seq.append(make_pose_result(i, subject, opponent))
+        else:
+            seq.append(make_pose_result(i, opponent, subject))
+    return seq
+
+
+class TestHandednessV2:
+    """The weapon arm and front foot point at the opponent, so the anatomical
+    limb nearer the opponent names the weapon side directly."""
+
+    def test_left_handed_detection(self):
+        """Anatomical left limbs leading → left-handed."""
+        seq = make_leading_limb_sequence(n_frames=50, lead="left", side="left")
+        v = detect_handedness_v2(seq, "left")
+        assert isinstance(v, HandednessVerdict)
+        assert v.handedness == "left"
+        assert v.confidence == 1.0  # every frame votes the same way
+        assert v.frames_used == 50
+        assert v.left_weight > 0 and v.right_weight == 0.0
+
+    def test_right_handed_detection(self):
+        """Anatomical right limbs leading → right-handed."""
+        seq = make_leading_limb_sequence(n_frames=50, lead="right", side="left")
+        v = detect_handedness_v2(seq, "left")
+        assert v.handedness == "right"
+        assert v.confidence == 1.0
+        assert v.right_weight > 0 and v.left_weight == 0.0
+
+    def test_frame_side_does_not_change_the_call(self):
+        """A left-hander on the right of frame is still left-handed.
+
+        The v1 detector's front/rear-arm assumption is keyed off which half of
+        the frame a fencer stands in; this signal is not, because the direction
+        it measures along is recomputed from the opponent's position.
+        """
+        seq = make_leading_limb_sequence(n_frames=50, lead="left", side="right")
+        v = detect_handedness_v2(seq, "right")
+        assert v.handedness == "left"
+        assert v.confidence == 1.0
+
+    def test_per_limb_breakdown_populated(self):
+        """Both limb pairs report a standalone verdict."""
+        seq = make_leading_limb_sequence(n_frames=50, lead="right", side="left")
+        v = detect_handedness_v2(seq, "left")
+        assert set(v.per_limb) == {"ankle", "wrist"}
+        for limb in ("ankle", "wrist"):
+            call, conf, frames = v.per_limb[limb]
+            assert call == "right"
+            assert conf == 1.0
+            assert frames == 50
+
+    def test_ankles_outvote_wrists_when_they_disagree(self):
+        """Ankles carry double the weight, so they win a straight conflict.
+
+        The weapon hand is occluded far more often than the front foot, so a
+        wrist that disagrees with the ankles is more likely mistracked than
+        right.
+        """
+        seq = []
+        for i in range(50):
+            f = make_leading_limb_fencer("left", 200.0, "left")
+            # Flip only the wrists, leaving the feet leading with the left.
+            f.keypoints[KP_LEFT_WRIST] = make_kp(180.0, 150.0, 0.9)
+            f.keypoints[KP_RIGHT_WRIST] = make_kp(220.0, 150.0, 0.9)
+            opponent = make_leading_limb_fencer("right", 600.0, "right")
+            seq.append(make_pose_result(i, f, opponent))
+
+        v = detect_handedness_v2(seq, "left")
+        assert v.handedness == "left"
+        assert v.per_limb["ankle"][0] == "left"
+        assert v.per_limb["wrist"][0] == "right"
+        # 2:1 weighting, so the margin is a third of the total, not zero.
+        assert v.confidence == pytest.approx(1 / 3, abs=0.01)
+
+    def test_limbs_too_close_together_is_undetermined(self):
+        """Feet and hands below the separation floor cannot name a leader."""
+        seq = make_leading_limb_sequence(
+            n_frames=50, lead="left", side="left",
+            ankle_offset=3.0, wrist_offset=3.0,  # 0.06 of body scale, floor is 0.15
+        )
+        v = detect_handedness_v2(seq, "left")
+        assert v.handedness is None
+        assert v.confidence == 0.0
+        assert v.frames_used == 0
+        assert v.left_weight == 0.0 and v.right_weight == 0.0
+
+    def test_too_few_frames_is_undetermined(self):
+        """Under min_frames the tally is not trusted, however lopsided."""
+        seq = make_leading_limb_sequence(n_frames=10, lead="left", side="left")
+        v = detect_handedness_v2(seq, "left")
+        assert v.handedness is None
+        assert v.confidence == 0.0
+        # The evidence is still reported so a caller can see how close it came.
+        assert v.frames_used == 10
+        assert v.left_weight > 0
+
+    def test_low_confidence_keypoints_are_skipped(self):
+        """A limb pair below min_keypoint_confidence casts no vote."""
+        seq = make_leading_limb_sequence(
+            n_frames=50, lead="left", side="left", limb_conf=0.2,
+        )
+        v = detect_handedness_v2(seq, "left")
+        assert v.handedness is None
+        assert v.frames_used == 0
+        assert v.per_limb["ankle"] == (None, 0.0, 0)
+
+    def test_min_keypoint_confidence_is_tunable(self):
+        """Lowering the gate lets the same low-confidence limbs vote."""
+        seq = make_leading_limb_sequence(
+            n_frames=50, lead="left", side="left", limb_conf=0.2,
+        )
+        v = detect_handedness_v2(seq, "left", min_keypoint_confidence=0.1)
+        assert v.handedness == "left"
+        assert v.frames_used == 50
+
+    def test_overlapping_fencers_are_skipped(self):
+        """With the two centroids nearly level there is no forward direction."""
+        seq = []
+        for i in range(50):
+            f = make_leading_limb_fencer("left", 400.0, "left")
+            opponent = make_leading_limb_fencer("right", 402.0, "right")  # 2px apart
+            seq.append(make_pose_result(i, f, opponent))
+        v = detect_handedness_v2(seq, "left")
+        assert v.handedness is None
+        assert v.frames_used == 0
+
+    def test_frames_without_both_fencers_are_skipped(self):
+        """One fencer alone cannot say which way "toward the opponent" is."""
+        seq = []
+        for i in range(50):
+            f = make_leading_limb_fencer("left", 200.0, "left")
+            seq.append(make_pose_result(i, f, None))
+        v = detect_handedness_v2(seq, "left")
+        assert v.handedness is None
+        assert v.frames_used == 0
+
+    def test_flat_torso_gives_no_body_scale(self):
+        """A torso with no vertical span cannot normalise a separation."""
+        seq = []
+        for i in range(50):
+            f = make_leading_limb_fencer("left", 200.0, "left")
+            for idx in (KP_LEFT_HIP, KP_RIGHT_HIP):
+                f.keypoints[idx] = make_kp(f.keypoints[idx].x, 100.0, 0.9)
+            opponent = make_leading_limb_fencer("right", 600.0, "right")
+            seq.append(make_pose_result(i, f, opponent))
+        v = detect_handedness_v2(seq, "left")
+        assert v.handedness is None
+        assert v.frames_used == 0
+
+    def test_mixed_bout_reports_a_margin_not_a_certainty(self):
+        """A fencer read as left in most frames and right in the rest."""
+        seq = []
+        for i in range(60):
+            lead = "left" if i % 4 else "right"  # 45 left, 15 right
+            f = make_leading_limb_fencer("left", 200.0, lead)
+            opponent = make_leading_limb_fencer("right", 600.0, "right")
+            seq.append(make_pose_result(i, f, opponent))
+        v = detect_handedness_v2(seq, "left")
+        assert v.handedness == "left"
+        assert v.confidence == pytest.approx(0.5, abs=0.01)  # (45-15)/60
+        assert v.frames_used == 60
+
+    def test_empty_sequence(self):
+        """No frames at all is undetermined, not an error."""
+        v = detect_handedness_v2([], "left")
+        assert v.handedness is None
+        assert v.confidence == 0.0
+        assert v.frames_used == 0
+        assert set(v.per_limb) == {"ankle", "wrist"}
 
 
 # ==================================================================

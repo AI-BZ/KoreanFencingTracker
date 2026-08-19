@@ -96,7 +96,34 @@ WARNING_COVERAGE_GAP = "lamp_coverage_gap"
 WARNING_LAMP_ANNULLED = "lamp_event_annulled"
 WARNING_LAMP_UNDETERMINED = "lamp_event_undetermined"
 WARNING_LAMP_INCONSISTENT = "lamp_scorer_inconsistent"
+WARNING_NOT_FOR_MERGE = "not_for_merge"
 WARNING_SCORE_LOWER_BOUND = "score_is_lower_bound"
+WARNING_END_OF_BOUT_INFERRED = "end_of_bout_inferred"
+
+#: ``meta`` key marking a report that must not be merged into a continuous
+#: report. Set when the read is known to be wrong in a way the numbers alone do
+#: not reveal — a partial recovery, or a clip that starts mid-bout so its score
+#: progression is not the real one. A reader of the touches cannot tell; this
+#: key is how the file says so about itself.
+META_NOT_FOR_MERGE = "not_for_merge"
+META_NOT_FOR_MERGE_REASON = "not_for_merge_reason"
+
+#: ``touch["touch_source"]`` for a point the box never confirmed, promoted by
+#: ``analyzer.scoreboard_tracker.infer_end_of_bout_touch``.
+TOUCH_SOURCE_END_OF_BOUT = "end_of_bout_inference"
+
+#: Optional ``MatchEvent`` attributes that :func:`build_touches` copies onto the
+#: touch dict when they are present.
+#:
+#: They exist so an inferred touch is *marked* as inferred wherever it travels.
+#: Every other touch in this report was read off the box; this one was reasoned
+#: out from the box going quiet, and a reader — human or downstream code — has
+#: to be able to tell which. ``description`` is not a place to put that: it is
+#: prose meant for a person, and a consumer that had to substring-match it would
+#: break the first time the wording changed. An ordinary touch carries neither
+#: key at all rather than carrying them empty, so "is this inferred" is a
+#: presence check and no existing report changes shape.
+INFERENCE_KEYS = ("touch_source", "inference_basis")
 
 
 # ------------------------------------------------------------------
@@ -172,6 +199,9 @@ def build_touches(events: Sequence, fps: float = 30.0) -> List[dict]:
 
     ``touch_number`` is a 1-based sequence over the surviving events, so dropped
     non-scoring events leave no gaps.
+
+    An event carrying any of :data:`INFERENCE_KEYS` has them copied onto its
+    touch; events without them — every event a detector produces — are untouched.
     """
     touches: List[dict] = []
     for number, event in enumerate(events, start=1):
@@ -180,7 +210,7 @@ def build_touches(events: Sequence, fps: float = 30.0) -> List[dict]:
         pattern = lamp_pattern(lamp_red, lamp_green)
         scorer = getattr(event, "scorer", None)
 
-        touches.append({
+        touch = {
             "touch_number": number,
             # Work-file frame index at 30 fps — NOT converted. See module docstring.
             "frame": int(getattr(event, "frame", 0)),
@@ -195,7 +225,12 @@ def build_touches(events: Sequence, fps: float = 30.0) -> List[dict]:
             "lamp_pattern": pattern,
             "lamp_confidence": LED_LAMP_CONFIDENCE if pattern is not None else 0.0,
             "lamp_scorer_conflict": lamp_scorer_conflict(pattern, scorer),
-        })
+        }
+        for key in INFERENCE_KEYS:
+            value = getattr(event, key, None)
+            if value is not None:
+                touch[key] = value
+        touches.append(touch)
     return touches
 
 
@@ -364,6 +399,7 @@ def led_events_to_match_report(
     extra_warnings: Optional[Sequence[dict]] = None,
     analysis_mode: str = "led_scoreboard_ocr",
     existing_meta: Optional[dict] = None,
+    not_for_merge: Optional[str] = None,
 ) -> dict:
     """Convert ``VideoProcessor`` ``MatchEvent``s into an OCR report dict.
 
@@ -397,11 +433,29 @@ def led_events_to_match_report(
             any. Keys it holds that this run does not set are carried forward —
             see :func:`preserve_existing_meta`. Omitting it on a rewrite unlocks
             a shared report.
+        not_for_merge: Reason this report must not be merged, or ``None``. Marks
+            :data:`META_NOT_FOR_MERGE` in ``meta`` and adds a matching warning,
+            so the block is visible both to a batch job reading ``meta`` and to a
+            person reading the report.
 
     Returns:
         A report dict ready to be written as ``<piste stem>_report.json``.
     """
     touches = build_touches(scoring_events(events), fps=fps)
+    meta = {
+        "source_type": "coach",
+        "analysis_mode": analysis_mode,
+        "converter": "led_report_converter",
+    }
+    block_warnings: List[dict] = []
+    if not_for_merge:
+        meta[META_NOT_FOR_MERGE] = True
+        meta[META_NOT_FOR_MERGE_REASON] = not_for_merge
+        block_warnings.append({
+            "type": WARNING_NOT_FOR_MERGE,
+            "message": f"이 리포트는 병합 금지입니다: {not_for_merge}",
+            "severity": "error",
+        })
     left_touches = count_by_scorer(touches, "left")
     right_touches = count_by_scorer(touches, "right")
 
@@ -433,10 +487,7 @@ def led_events_to_match_report(
             "total_touches_scored": right_touches,
             "total_touches_conceded": left_touches,
         },
-        "warnings": list(extra_warnings or []) + build_warnings(touches, clock_available),
-        "meta": preserve_existing_meta({
-            "source_type": "coach",
-            "analysis_mode": analysis_mode,
-            "converter": "led_report_converter",
-        }, existing_meta),
+        "warnings": block_warnings + list(extra_warnings or [])
+                    + build_warnings(touches, clock_available),
+        "meta": preserve_existing_meta(meta, existing_meta),
     }

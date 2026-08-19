@@ -1,7 +1,8 @@
 """Joint angles, per-joint velocity/acceleration, and handedness (pure functions)."""
 
 import math
-from typing import List, Optional, Tuple
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Tuple
 
 from analyzer.models import (
     PoseResult, FencerPose, JointAngles, JointKinematics, FrameKinematics,
@@ -255,6 +256,216 @@ def detect_handedness(
     handedness = "right" if diff > 0 else "left"
     confidence = min(ratio / 0.15, 1.0)  # 15% diff → confidence 1.0
     return (handedness, round(confidence, 2))
+
+
+# ------------------------------------------------------------------
+# Handedness v2 — which anatomical limb leads toward the opponent
+# ------------------------------------------------------------------
+
+#: The four torso joints that define a fencer's centre and vertical span.
+_HANDEDNESS_TORSO_KPS = (
+    KP_LEFT_SHOULDER, KP_RIGHT_SHOULDER, KP_LEFT_HIP, KP_RIGHT_HIP,
+)
+
+#: Limb pairs that vote, with the weight each carries. Ankles outweigh wrists
+#: because the front foot stays in frame for the whole bout while the weapon
+#: hand vanishes behind the fencer's own body, the opponent, or the guard for
+#: long stretches — a wrist vote is the same signal measured on worse data.
+_HANDEDNESS_LIMBS: Tuple[Tuple[str, int, int, float], ...] = (
+    ("ankle", KP_LEFT_ANKLE, KP_RIGHT_ANKLE, 1.0),
+    ("wrist", KP_LEFT_WRIST, KP_RIGHT_WRIST, 0.5),
+)
+
+#: Minimum horizontal gap between the two fencers' centres, in pixels. Closer
+#: than this and they overlap in x, so "toward the opponent" has no direction
+#: to point in and every limb reading from that frame is noise.
+_HANDEDNESS_MIN_CENTROID_GAP_PX = 5.0
+
+#: A limb separated by many times the floor is not more informative than one at
+#: three times it — the extra reach is a lunge, not extra certainty — so the
+#: per-frame weight stops growing here.
+_HANDEDNESS_SEPARATION_CAP = 3.0
+
+
+@dataclass
+class HandednessVerdict:
+    """Outcome of :func:`detect_handedness_v2` for one fencer."""
+    handedness: Optional[str]      # "left" | "right" | None
+    confidence: float              # 0.0-1.0
+    frames_used: int               # frames contributing >= 1 limb vote
+    left_weight: float
+    right_weight: float
+    #: limb name -> (call, confidence, frames) for that limb pair alone, so a
+    #: caller can see whether ankles and wrists agree.
+    per_limb: Dict[str, Tuple[Optional[str], float, int]] = field(default_factory=dict)
+
+
+def _handedness_torso_centroid_x(fencer: FencerPose) -> Optional[float]:
+    """Mean x of the four torso joints, or None if the pose is too short."""
+    kps = fencer.keypoints
+    if len(kps) < 17:
+        return None
+    return sum(kps[i].x for i in _HANDEDNESS_TORSO_KPS) / len(_HANDEDNESS_TORSO_KPS)
+
+
+def _handedness_body_scale(fencer: FencerPose) -> Optional[float]:
+    """Vertical span of the confident torso joints, in pixels, or None.
+
+    Separations are divided by this so the thresholds mean the same thing for a
+    fencer filmed near the camera and one at the far end of the piste. Two
+    confident joints are the minimum that can span anything; a degenerate span
+    would divide the ratio up to infinity.
+    """
+    kps = fencer.keypoints
+    ys = [kps[i].y for i in _HANDEDNESS_TORSO_KPS if kp_valid(kps[i])]
+    if len(ys) < 2:
+        return None
+    span = max(ys) - min(ys)
+    return span if span > 1.0 else None
+
+
+def detect_handedness_v2(
+    pose_sequence: List[PoseResult],
+    side: str,
+    min_frames: int = 30,
+    min_keypoint_confidence: float = 0.4,
+    min_separation_ratio: float = 0.15,
+) -> HandednessVerdict:
+    """Detect handedness from which anatomical limb leads toward the opponent.
+
+    Both fencers stand side-on with the weapon arm and the front foot pointed
+    at each other — that is what en garde *is*, and no fencer holds it any other
+    way for more than an instant. So the limb nearer the opponent names the
+    weapon side directly: if the anatomical *left* ankle is the forward one, the
+    fencer is left-handed, whichever side of the frame they occupy.
+
+    This replaces nothing. :func:`detect_handedness` infers the same thing from
+    arm-extension asymmetry, which on real footage returned confidences of
+    0.03-0.38 — a bent rear arm and an extended weapon arm differ by less than
+    pose noise once the fencer turns. Limb *position* along the piste axis is a
+    much larger quantity than limb *angle* difference, so it survives the same
+    noise.
+
+    Every frame with both fencers casts a weighted vote, and the bout-long
+    majority wins. Per frame the vote is skipped when the geometry cannot
+    support it: fencers overlapping in x (no forward direction), an unmeasurable
+    body scale, low-confidence keypoints, or feet too close together to say
+    which is in front.
+
+    Args:
+        pose_sequence: Full-bout pose frames.
+        side: "left" or "right" fencer to analyze.
+        min_frames: Frames that must contribute a vote before a call is made.
+        min_keypoint_confidence: Both keypoints of a limb pair must reach this.
+        min_separation_ratio: Limb separation, as a fraction of body scale,
+            below which the frame cannot tell the two limbs apart.
+
+    Returns:
+        A :class:`HandednessVerdict`; ``handedness`` is None with 0.0 confidence
+        when the evidence does not clear ``min_frames``.
+    """
+    opponent_side = "right" if side == "left" else "left"
+
+    # limb -> [left tally, right tally, frames voted]
+    tallies: Dict[str, List[float]] = {
+        name: [0.0, 0.0, 0] for name, _, _, _ in _HANDEDNESS_LIMBS
+    }
+    frames_used = 0
+
+    for pr in pose_sequence:
+        fencer = get_fencer_by_side(pr, side)
+        opponent = get_fencer_by_side(pr, opponent_side)
+        if fencer is None or opponent is None:
+            continue
+
+        own_cx = _handedness_torso_centroid_x(fencer)
+        opp_cx = _handedness_torso_centroid_x(opponent)
+        if own_cx is None or opp_cx is None:
+            continue
+        if abs(opp_cx - own_cx) < _HANDEDNESS_MIN_CENTROID_GAP_PX:
+            continue
+
+        # +1 when the opponent lies at greater x, so multiplying by it turns
+        # any x-difference into "how far toward the opponent".
+        sign = 1.0 if opp_cx > own_cx else -1.0
+
+        body_scale = _handedness_body_scale(fencer)
+        if body_scale is None:
+            continue
+
+        kps = fencer.keypoints
+        voted_this_frame = False
+
+        for name, left_idx, right_idx, limb_weight in _HANDEDNESS_LIMBS:
+            left_kp, right_kp = kps[left_idx], kps[right_idx]
+            if (left_kp.confidence < min_keypoint_confidence
+                    or right_kp.confidence < min_keypoint_confidence):
+                continue
+
+            d = (left_kp.x - right_kp.x) * sign
+            separation = abs(d) / body_scale
+            if separation < min_separation_ratio:
+                # Feet square or hands together: no limb is leading.
+                continue
+
+            w = (
+                min(left_kp.confidence, right_kp.confidence)
+                * min(separation / min_separation_ratio, _HANDEDNESS_SEPARATION_CAP)
+                * limb_weight
+            )
+            tally = tallies[name]
+            # d > 0 means the anatomical left limb is the nearer one.
+            tally[0 if d > 0 else 1] += w
+            tally[2] += 1
+            voted_this_frame = True
+
+        if voted_this_frame:
+            frames_used += 1
+
+    per_limb: Dict[str, Tuple[Optional[str], float, int]] = {}
+    left_total = 0.0
+    right_total = 0.0
+    for name, (limb_left, limb_right, limb_frames) in tallies.items():
+        left_total += limb_left
+        right_total += limb_right
+        per_limb[name] = _handedness_call(limb_left, limb_right) + (limb_frames,)
+
+    if frames_used < min_frames:
+        return HandednessVerdict(
+            handedness=None,
+            confidence=0.0,
+            frames_used=frames_used,
+            left_weight=round(left_total, 3),
+            right_weight=round(right_total, 3),
+            per_limb=per_limb,
+        )
+
+    handedness, confidence = _handedness_call(left_total, right_total)
+    return HandednessVerdict(
+        handedness=handedness,
+        confidence=confidence,
+        frames_used=frames_used,
+        left_weight=round(left_total, 3),
+        right_weight=round(right_total, 3),
+        per_limb=per_limb,
+    )
+
+
+def _handedness_call(
+    left_total: float,
+    right_total: float,
+) -> Tuple[Optional[str], float]:
+    """Winner and margin of a left/right vote tally.
+
+    The margin is the share of the total weight the winner holds over the
+    loser, so a unanimous bout reads 1.0 and an evenly split one reads 0.0
+    regardless of how many frames went into it.
+    """
+    total = left_total + right_total
+    if total <= 0.0:
+        return (None, 0.0)
+    confidence = round(abs(left_total - right_total) / total, 3)
+    return ("left" if left_total > right_total else "right", confidence)
 
 
 def compute_joint_kinematics(

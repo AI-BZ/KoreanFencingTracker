@@ -656,6 +656,29 @@ def annotate_estimated_badges(report_dict: dict) -> dict:
     return report_dict
 
 
+def _display_number(kind: str, touch: dict | None, exchange: dict | None) -> dict:
+    """Pick the number a coach points at when they name a timeline row.
+
+    The timeline is the coordinate system the coach is reading off the screen,
+    and a touch row that folded in its exchange *is* that exchange — so the
+    exchange number wins whenever the row has one. Only some touches carry a
+    matched exchange, so the touch-number fallback is the ordinary case rather
+    than an edge case, and both have to look deliberate on screen.
+
+    A row with neither number gets ``None``; the template drops the chip
+    entirely rather than printing ``#None``. ``display_number_kind`` names the
+    numbering space the value came from, which is what disambiguates "#12" when
+    two rows can legitimately carry the same digits.
+    """
+    number = (exchange or {}).get("exchange_number")
+    if number is not None:
+        return {"display_number": number, "display_number_kind": "exchange"}
+    number = (touch or {}).get("touch_number")
+    if number is not None:
+        return {"display_number": number, "display_number_kind": "touch"}
+    return {"display_number": None, "display_number_kind": kind}
+
+
 def build_timeline(report_dict: dict) -> list:
     """Merge touches and exchanges into one chronological event list.
 
@@ -666,7 +689,11 @@ def build_timeline(report_dict: dict) -> list:
     the scoreboard caught up.
 
     Returns a list of ``{"kind": "touch"|"exchange", "touch": ..., "exchange":
-    ..., "sort_frame": int}`` dicts sorted chronologically.
+    ..., "sort_frame": int, "display_number": int|None,
+    "display_number_kind": "touch"|"exchange"}`` dicts sorted chronologically.
+    The display number is decided here, not in the template: it is the handle a
+    coach uses to name a row ("the call on #12 is wrong"), so the rule behind it
+    belongs somewhere testable. See :func:`_display_number`.
     """
     touches = report_dict.get("touches") or []
     exchanges = report_dict.get("exchanges") or []
@@ -682,7 +709,10 @@ def build_timeline(report_dict: dict) -> list:
         sort_frame = (ex or {}).get("start_frame")
         if sort_frame is None:
             sort_frame = t.get("frame") or 0
-        events.append({"kind": "touch", "touch": t, "exchange": ex, "sort_frame": sort_frame})
+        events.append({
+            "kind": "touch", "touch": t, "exchange": ex, "sort_frame": sort_frame,
+            **_display_number("touch", t, ex),
+        })
 
     for e in exchanges:
         if e.get("exchange_number") in matched_numbers:
@@ -690,6 +720,7 @@ def build_timeline(report_dict: dict) -> list:
         events.append({
             "kind": "exchange", "touch": None, "exchange": e,
             "sort_frame": e.get("start_frame") or 0,
+            **_display_number("exchange", None, e),
         })
 
     events.sort(key=lambda ev: ev["sort_frame"])

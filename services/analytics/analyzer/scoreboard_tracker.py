@@ -194,11 +194,20 @@ class ScoreChangeConfig:
     and the averaged mask is a clean, legible digit.
     """
 
-    #: A score digit segment is a red LED: bright, and chromatic in the red band.
-    digit_value_min: int = 200
+    #: A score digit segment is a red LED: chromatic in the red band, and bright
+    #: relative to the rest of its own ROI. ``digit_value_min`` is a *floor* on
+    #: the per-ROI Otsu cut, not the operating threshold — see :func:`digit_mask`.
+    #: It exists so an ROI showing nothing cannot have a digit invented out of
+    #: the faint glow of unlit segments; it is low enough that on both calibrated
+    #: venues Otsu, not the floor, decides.
+    digit_value_min: int = 120
     digit_saturation_min: int = 80
     digit_hue_max: int = 15
     digit_hue_min: int = 160
+
+    #: Too few red pixels to be a lit display, so the ROI reads as blank rather
+    #: than having Otsu split noise into a shape.
+    digit_min_red_pixels: int = 40
 
     #: Frames averaged into one settled mask (0.7 s at 30 fps). Long enough to
     #: cover several multiplex cycles and to dilute a blade crossing the digits,
@@ -910,12 +919,42 @@ def display_lit_fraction(
 
 
 def digit_mask(hsv_patch: np.ndarray, config: ScoreChangeConfig) -> np.ndarray:
-    """Boolean mask of lit red 7-segment pixels in a score-digit ROI."""
+    """Boolean mask of lit red 7-segment pixels in a score-digit ROI.
+
+    The brightness cut is chosen per ROI by Otsu's method rather than fixed,
+    because "how bright is a lit segment" is not a property of scoreboards — it
+    is a property of this box, this exposure and this camera distance. A fixed
+    cut calibrated on one venue produced clean legible digits there and torn
+    stroke fragments on the next, whose LEDs read dimmer (95th percentile of
+    red-pixel value 222, i.e. most lit pixels below the old 200 threshold). The
+    split between lit and unlit is bimodal and obvious *within* any one ROI, so
+    letting the ROI choose it transfers where a constant does not.
+
+    Two guards remain fixed. The hue/saturation test still runs first, so Otsu
+    only ever splits pixels that are already red — it can never promote a white
+    highlight to a digit. And the cut is floored, because Otsu on an ROI holding
+    no lit segment at all would happily split the unlit ghost glow (segments
+    that are off still emit faintly) into "bright" and "dark" halves and invent
+    a digit out of nothing.
+    """
     hue = hsv_patch[:, :, 0]
     sat = hsv_patch[:, :, 1]
     val = hsv_patch[:, :, 2]
-    red = (hue <= config.digit_hue_max) | (hue >= config.digit_hue_min)
-    return (val >= config.digit_value_min) & (sat >= config.digit_saturation_min) & red
+    red = ((hue <= config.digit_hue_max) | (hue >= config.digit_hue_min)) & (
+        sat >= config.digit_saturation_min
+    )
+    if int(red.sum()) < config.digit_min_red_pixels:
+        return np.zeros(val.shape, dtype=bool)
+
+    threshold = max(_otsu_threshold(val[red]), config.digit_value_min)
+    return red & (val >= threshold)
+
+
+def _otsu_threshold(values: np.ndarray) -> int:
+    """Otsu's between-class-variance split of a 1-D uint8 sample."""
+    sample = np.ascontiguousarray(values, dtype=np.uint8).reshape(-1, 1)
+    threshold, _ = cv2.threshold(sample, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    return int(threshold)
 
 
 def mask_similarity(a: np.ndarray, b: np.ndarray, align_radius: int) -> float:
@@ -1198,6 +1237,142 @@ def resolve_touches(
             event, scorer, VERDICT_TOUCH, before, score, event.both_valid, reliable))
 
     return resolutions
+
+
+#: Bout formats and the score that ends them.
+END_OF_BOUT_TARGET = {"pool": 5, "de": 15}
+
+#: How close to the end of the file a lamp has to fire for
+#: :func:`infer_end_of_bout_touch` to treat the recording stopping as evidence.
+#: Measured: the two bouts this rule exists for cut 3.0 s and 0.8 s after their
+#: final lamp. 10 s leaves room for a slower hand on the stop button without
+#: reaching a lamp the referee annulled mid-bout, which is followed by however
+#: much bout was left to fence — the case that must keep failing.
+END_OF_BOUT_TAIL_SEC = 10.0
+
+
+@dataclass(frozen=True)
+class EndOfBoutInference:
+    """The verdict of :func:`infer_end_of_bout_touch`, applied or refused."""
+
+    applied: bool
+    #: Machine-readable. ``"applied"``, or the first condition that failed:
+    #: ``"clock_unknown"``, ``"clock_expired"``, ``"no_events"``,
+    #: ``"last_event_resolved"``, ``"not_in_tail_window"``, ``"not_match_point"``,
+    #: ``"lamp_not_leader"``.
+    reason: str
+    #: Index into the caller's ``resolutions`` of the promoted event.
+    index: Optional[int] = None
+    scorer: Optional[str] = None
+    score_after: Optional[Tuple[int, int]] = None
+
+
+def infer_end_of_bout_touch(
+    resolutions: Sequence[TouchResolution],
+    *,
+    target_score: int,
+    frame_count: int,
+    fps: float,
+    clock_running_at_cut: Optional[bool],
+    tail_window_sec: float = END_OF_BOUT_TAIL_SEC,
+) -> EndOfBoutInference:
+    """Promote a final unconfirmed lamp to a touch when the bout can only have ended.
+
+    Why this exists
+    ---------------
+    Our own recordings sometimes stop a second or two after the last touch. The
+    lamp has fired but the scoreboard operator has not pressed the button yet, so
+    the digits never move and :func:`resolve_touches` — correctly — refuses to
+    call it a touch. It lands as ``undetermined`` (the score was not comparable
+    at all) or ``annulled`` (lamp lit, digits unchanged, which from the outside
+    is exactly what a referee waving a hit off looks like). That gate is right in
+    general and is not weakened here.
+
+    In one specific situation the missing point is certain rather than ambiguous.
+    Measured on two real bouts. In a pool bout the last event is a red lamp at
+    frame 4903 of 4992 with the score frozen at 4–2 and 1:04 still on the clock;
+    it finished 5–2. In a second, a red lamp fires at frame 6280 of 6305 with the
+    score frozen at 4–0 and 1:02 on the clock; it finished 5–0. In both, the
+    leader was on match point, time had not expired, their own coloured lamp
+    fired, and then the file simply ended. A bout in that state has exactly one
+    continuation.
+
+    The failure mode being prevented
+    --------------------------------
+    Reporting a referee's annulment as a touch. That is the same failure the
+    score cross-check exists to prevent, and it is why every condition below is
+    *required* rather than weighed: on the evidence available, the promoted event
+    is indistinguishable from a genuine annulment. Nothing in the pixels tells
+    the two apart. What separates them is the surrounding circumstance — match
+    point, a running clock, the leader's own lamp, and no footage afterwards —
+    and if any one of those is missing the ambiguity is back and the rule must
+    stay silent. The conservatism is the point: this fires on the last event of a
+    bout or not at all, and a missed inference costs one point in a report that
+    already says its score is a lower bound, while a wrong one invents a touch
+    that never happened.
+
+    Args:
+        resolutions: The bout's resolutions, in any order — the last is taken by
+            ``onset_frame``, not by position.
+        target_score: The score that ends this format — see
+            :data:`END_OF_BOUT_TARGET`.
+        frame_count: Work-file frames in the recording.
+        fps: Work-file frame rate. ``<= 0`` collapses the tail window to nothing,
+            so an unknown frame rate refuses rather than guesses.
+        clock_running_at_cut: Whether time was still on the clock when the
+            recording stopped. ``None`` means nobody read it, and unknown is not
+            permission.
+        tail_window_sec: How close to the end the lamp must be. Non-positive
+            collapses the window, same as an unusable ``fps``.
+
+    Returns:
+        :class:`EndOfBoutInference`. On success ``score_after`` is
+        ``score_before`` with the leader raised to ``target_score``.
+    """
+    # 1. The clock. An expired clock means the bout ended on time, not on a
+    #    point; an unread one means we know nothing and must not pretend to.
+    if clock_running_at_cut is not True:
+        return EndOfBoutInference(
+            False, "clock_expired" if clock_running_at_cut is False else "clock_unknown")
+
+    # 2. Something to promote. An already-resolved last event is either a touch
+    #    already counted or an off-target/inconsistent read, and neither is a
+    #    point the box failed to record.
+    if not resolutions:
+        return EndOfBoutInference(False, "no_events")
+    index = max(
+        range(len(resolutions)),
+        key=lambda i: (resolutions[i].event.onset_frame, i),
+    )
+    resolution = resolutions[index]
+    if resolution.verdict not in (VERDICT_UNDETERMINED, VERDICT_ANNULLED):
+        return EndOfBoutInference(False, "last_event_resolved")
+
+    # 3. The recording has to stop right after the lamp. This is the condition
+    #    that separates "the operator never got to press the button" from "the
+    #    referee annulled it and the bout carried on" — the latter is followed by
+    #    more footage, and often by more lamps.
+    tail_frames = tail_window_sec * fps if fps > 0 and tail_window_sec > 0 else 0.0
+    if resolution.event.onset_frame < frame_count - tail_frames:
+        return EndOfBoutInference(False, "not_in_tail_window")
+
+    # 4. Exactly one side one point from the target. 4–4 or 14–14 is two fencers
+    #    on match point and no leader, so which of them the missing point belongs
+    #    to is precisely what is unknown.
+    before = resolution.score_before
+    on_match_point = [side for side, value in zip(SIDES, before) if value == target_score - 1]
+    if len(on_match_point) != 1:
+        return EndOfBoutInference(False, "not_match_point")
+    scorer = on_match_point[0]
+
+    # 5. The leader's own chromatic lamp. A lamp belonging only to the trailing
+    #    fencer says nothing about whether the leader finished the bout.
+    event = resolution.event
+    if not (event.left_valid if scorer == LEFT else event.right_valid):
+        return EndOfBoutInference(False, "lamp_not_leader")
+
+    after = (target_score, before[1]) if scorer == LEFT else (before[0], target_score)
+    return EndOfBoutInference(True, "applied", index=index, scorer=scorer, score_after=after)
 
 
 # ----------------------------------------------------------------------

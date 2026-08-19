@@ -5,6 +5,8 @@ broken clock-OCR repair, unclear-outcome reasons, the unified event
 timeline, and the clip cache status endpoint.
 """
 
+import re
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -265,3 +267,191 @@ class TestPrepareReportView:
         first = [t["match_time"] for t in report["touches"]]
         prepare_report_view(report)
         assert [t["match_time"] for t in report["touches"]] == first
+
+
+# ------------------------------------------------------------------
+# Timeline row numbering — the handle a coach names ("the call on #12")
+# ------------------------------------------------------------------
+
+
+class TestTimelineDisplayNumber:
+    """``build_timeline`` decides the number; Jinja only prints it."""
+
+    def test_matched_touch_row_takes_the_exchange_number(self):
+        # The touch folded exchange 4 into itself, so the row *is* exchange 4 —
+        # numbering it 1 (its touch number) would point at a different row.
+        report = {
+            "touches": [{"touch_number": 1, "frame": 900, "matched_exchange_number": 4}],
+            "exchanges": [{"exchange_number": 4, "start_frame": 800, "end_frame": 890}],
+        }
+        (event,) = build_timeline(report)
+        assert event["display_number"] == 4
+        assert event["display_number_kind"] == "exchange"
+
+    def test_unmatched_touch_row_falls_back_to_its_touch_number(self):
+        report = {
+            "touches": [{"touch_number": 7, "frame": 500, "matched_exchange_number": None}],
+        }
+        (event,) = build_timeline(report)
+        assert event["display_number"] == 7
+        assert event["display_number_kind"] == "touch"
+
+    def test_plain_exchange_row_uses_its_exchange_number(self):
+        report = {"exchanges": [{"exchange_number": 12, "start_frame": 300}]}
+        (event,) = build_timeline(report)
+        assert event["display_number"] == 12
+        assert event["display_number_kind"] == "exchange"
+
+    def test_row_without_any_number_reports_none(self):
+        report = {"touches": [{"frame": 120}], "exchanges": [{"start_frame": 900}]}
+        touch_ev, exchange_ev = build_timeline(report)
+        assert touch_ev["display_number"] is None
+        assert touch_ev["display_number_kind"] == "touch"
+        assert exchange_ev["display_number"] is None
+        assert exchange_ev["display_number_kind"] == "exchange"
+
+    def test_every_event_carries_both_keys(self):
+        timeline = build_timeline(_synthetic_report())
+        assert timeline
+        for event in timeline:
+            assert "display_number" in event
+            assert event["display_number_kind"] in ("touch", "exchange")
+
+
+# ------------------------------------------------------------------
+# The number chip on the page
+# ------------------------------------------------------------------
+
+#: Neutral bout stems stand in for fencer names — no real fencer here.
+_HOME_STEM = "260815_pool_home_vs_away"
+_AWAY_STEM = "260815_bout_b"
+
+_TAG = re.compile(r"<[^>]+>")
+_HANGUL = re.compile(r"[가-힣]")
+#: Any element carrying .fm-num — the face is Barlow Condensed, digits only.
+_FM_NUM = re.compile(r'<(\w+)[^>]*\bclass="[^"]*\bfm-num\b[^"]*"[^>]*>(.*?)</\1>', re.S)
+#: The chip itself: "#" sits outside the span, the digits inside it.
+_NUM_CHIP = re.compile(r'#<span class="fm-num">(\d+)</span>')
+_CLIP_LABEL = re.compile(r'data-clip-label="([^"]*)"')
+
+
+def _numbered_report() -> dict:
+    """Four timeline rows, one per numbering case, in chronological order.
+
+    Row 1 folded exchange 4 in (exchange-numbered), row 2 matched nothing
+    (touch-numbered), row 3 carries no number at all, row 4 is a plain
+    exchange.
+    """
+    return {
+        "summary": {
+            "final_score": "2-1", "total_touches": 3, "match_duration": "3:00",
+            "weapon": "foil", "bout_type": "de",
+            "analysis_time_sec": 1.0, "total_frames_analyzed": 100,
+        },
+        "touches": [
+            {"touch_number": 1, "frame": 900, "video_timestamp": "0:30",
+             "match_time": "2:46", "scorer": "right", "score_after": "0-1",
+             "attack_outcome": "unclear", "matched_exchange_number": 4},
+            {"touch_number": 7, "frame": 1800, "video_timestamp": "1:00",
+             "match_time": "2:20", "scorer": "left", "score_after": "1-1",
+             "attack_outcome": "unclear", "matched_exchange_number": None},
+            # No touch_number and no matched exchange — nothing to print.
+            {"frame": 2400, "video_timestamp": "1:20",
+             "match_time": "2:00", "scorer": "left", "score_after": "2-1",
+             "attack_outcome": "unclear", "matched_exchange_number": None},
+        ],
+        "exchanges": [
+            {"exchange_number": 4, "start_frame": 800, "end_frame": 890,
+             "start_time": "0:26", "end_time": "0:29", "event_type": "failed_attack",
+             "event_type_ko": "공격 실패", "attacker": "left", "defender": "right"},
+            {"exchange_number": 5, "start_frame": 2600, "end_frame": 2700,
+             "start_time": "1:26", "end_time": "1:30", "event_type": "mutual_retreat",
+             "event_type_ko": "상호 후퇴", "attacker": "unknown", "defender": "unknown"},
+        ],
+        "left_fencer": {"name": _HOME_STEM, "total_touches_scored": 2,
+                        "total_touches_conceded": 1, "action_distribution": []},
+        "right_fencer": {"name": _AWAY_STEM, "total_touches_scored": 1,
+                         "total_touches_conceded": 2, "action_distribution": []},
+        "insights": [],
+        "meta": {"phase": "7b", "pose_model": "yolo11n-pose", "action_model": "rule", "fps": 30},
+    }
+
+
+def _render_numbered() -> str:
+    from app.server import _jobs, app
+
+    job_id = "numbering-render-001"
+    _jobs[job_id] = {
+        "status": "completed", "progress_pct": 100.0,
+        "result": _numbered_report(), "mock_mode": False,
+    }
+    try:
+        resp = TestClient(app, raise_server_exceptions=False).get(f"/report/{job_id}")
+        assert resp.status_code == 200, resp.text[:2000]
+        return resp.text
+    finally:
+        _jobs.pop(job_id, None)
+
+
+def _timeline_block(html: str) -> str:
+    start = html.index('id="timeline-list"')
+    return html[start:html.index("</div>", html.index("득점으로 이어진 교전", start))]
+
+
+@pytest.fixture()
+def numbered_html():
+    return _render_numbered()
+
+
+class TestNumberChipRendering:
+    def test_chips_read_in_row_order(self, numbered_html):
+        # #4 from the folded exchange, #7 from the unmatched touch's own number,
+        # #5 from the plain exchange. The number-less row contributes nothing.
+        assert _NUM_CHIP.findall(_timeline_block(numbered_html)) == ["4", "7", "5"]
+
+    def test_number_less_row_omits_the_chip_entirely(self, numbered_html):
+        block = _timeline_block(numbered_html)
+        assert "#None" not in block
+        assert block.count('data-kind="touch"') == 3
+        assert len(_NUM_CHIP.findall(block)) == 2 + 1  # two touch rows + one exchange
+
+    def test_hash_sits_outside_the_barlow_span(self, numbered_html):
+        # .fm-num is a digits face; the "#" glyph belongs to the surrounding text.
+        for _tag, inner in _FM_NUM.findall(_timeline_block(numbered_html)):
+            assert "#" not in inner
+
+    def test_chip_tooltip_names_the_numbering_space(self, numbered_html):
+        block = _timeline_block(numbered_html)
+        assert "교전 번호" in block
+        assert "득점 번호" in block
+
+    def test_no_korean_inside_any_fm_num_element(self, numbered_html):
+        offenders = [
+            m.group(0) for m in _FM_NUM.finditer(numbered_html)
+            if _HANGUL.search(" ".join(_TAG.sub("", m.group(2)).split()))
+        ]
+        assert offenders == []
+
+
+class TestClipLabels:
+    def test_touch_row_leads_with_kind_and_number(self, numbered_html):
+        labels = _CLIP_LABEL.findall(_timeline_block(numbered_html))
+        # The folded row is numbered by its exchange, but it is still a score,
+        # so the word stays 득점 — "교전" means non-scoring in this timeline.
+        assert labels[0] == f"득점 #4 — {_AWAY_STEM} 0-1"
+        assert labels[1] == f"득점 #7 — {_HOME_STEM} 1-1"
+
+    def test_number_less_touch_row_drops_the_hash_not_the_label(self, numbered_html):
+        labels = _CLIP_LABEL.findall(_timeline_block(numbered_html))
+        assert labels[2] == f"득점 — {_HOME_STEM} 2-1"
+
+    def test_exchange_row_keeps_its_kind_and_number(self, numbered_html):
+        labels = _CLIP_LABEL.findall(_timeline_block(numbered_html))
+        assert labels[3] == "교전 #5 — 상호 후퇴"
+
+    def test_label_number_matches_the_chip_on_the_same_row(self, numbered_html):
+        block = _timeline_block(numbered_html)
+        # Both come from the same ``display_number``; if they ever diverge, a
+        # coach saying "#12" and the workbench chip mean different rows.
+        labelled = re.findall(r'data-clip-label="[^"#]*#(\d+)', block)
+        assert labelled == _NUM_CHIP.findall(block)
