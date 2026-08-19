@@ -3,6 +3,7 @@ Profile Router - 프로필 관리 엔드포인트
 
 /account 접두사는 server.py에서 추가됨.
 """
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
@@ -28,6 +29,21 @@ _templates = Jinja2Templates(directory=str(Path(__file__).parent.parent.parent /
 
 def get_supabase():
     return get_supabase_client()
+
+
+def _as_date(value) -> str | None:
+    """타임스탬프(ISO 문자열/ datetime)를 YYYY-MM-DD 로 변환. 실패하면 None."""
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    text = str(value)
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00")).date().isoformat()
+    except ValueError:
+        # Supabase가 예상 밖 포맷을 주더라도 앞 10자가 날짜인 경우가 대부분
+        head = text[:10]
+        return head if len(head) == 10 and head.count("-") == 2 else None
 
 
 @router.get("/me", response_class=HTMLResponse)
@@ -72,7 +88,29 @@ async def get_my_profile(request: Request):
                 org_type = org_result.data.get("org_type", "클럽")
                 anonymous_team = f"{region}({org_type})" if region else f"({org_type})"
         except Exception:
-            pass
+            logger.warning(f"조직 조회 실패 (member_id={member_id}, org_id={org_id})")
+
+    # 공개 프로필 미리보기 — 실제 회원 데이터만 사용한다(더미 값 금지).
+    # 비공개일 때 다른 사용자에게 보이는 값은 members.display_name 이며,
+    # 아직 비어 있으면 실제 마스킹 함수로 동일하게 계산해서 보여준다.
+    full_name = member.get("full_name") or ""
+    if member.get("privacy_public"):
+        preview_name = full_name or None
+        preview_team = team_name
+    else:
+        preview_name = member.get("display_name") or (
+            mask_korean_name(full_name) if full_name else None
+        )
+        preview_team = anonymous_team
+
+    # 탈퇴 예약 상태 — members.deletion_* 컬럼은 get_current_member의 select("*")로 이미 로드됨.
+    from app.config import get_account_settings
+
+    deletion_scheduled_date = _as_date(member.get("deletion_scheduled_at"))
+    deletion_requested_date = _as_date(member.get("deletion_requested_at"))
+    deletion_requested = bool(
+        member.get("deletion_requested_at") or member.get("deletion_scheduled_at")
+    )
 
     return _templates.TemplateResponse("auth/profile.html", {
         "request": request,
@@ -81,6 +119,13 @@ async def get_my_profile(request: Request):
         "has_x_connection": has_x_connection,
         "team_name": team_name,
         "anonymous_team": anonymous_team,
+        "preview_name": preview_name,
+        "preview_team": preview_team,
+        "joined_date": _as_date(member.get("created_at")),
+        "deletion_requested": deletion_requested,
+        "deletion_requested_date": deletion_requested_date,
+        "deletion_scheduled_date": deletion_scheduled_date,
+        "deletion_grace_days": get_account_settings().ACCOUNT_DELETION_GRACE_DAYS,
         **create_language_context(request),
     })
 

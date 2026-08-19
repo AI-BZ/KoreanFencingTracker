@@ -54,6 +54,141 @@ class BRNVerifyRequest(BaseModel):
 
 
 # =============================================
+# Verification Axes (인증 축 상태 계산)
+# =============================================
+#
+# 인증은 서로 독립적인 4개의 축으로 구성된다. 한 축이 완료되었다고 해서
+# 다른 축이 완료된 것이 아니므로, 화면 게이트를 members.verification_status
+# 하나로 묶으면 안 된다.
+#
+#   document     : members.verification_status  (서류/사진 심사)
+#   player       : members.player_id + player_claims  (선수 기록 연결)
+#   parent       : parent_claims                (자녀 관계)
+#   organization : organization_claims          (조직 소유권)
+#
+# 각 축의 상태는 verified | in_review | rejected | none 4가지로 정규화한다.
+
+AXIS_STATE_VERIFIED = "verified"
+AXIS_STATE_IN_REVIEW = "in_review"
+AXIS_STATE_REJECTED = "rejected"
+AXIS_STATE_NONE = "none"
+
+# 플로우별로 "먼저 보여줄" 축 순서. 여기에 없더라도 상태가 none이 아닌 축은
+# 뒤에 자동으로 덧붙여 표시한다. 예: general 회원인데 서류 심사만 통과(verified)된
+# 대표 계정의 경우 document 축이 자동으로 붙어 "무엇이 인증된 것인지" 드러난다.
+# 사진 제출 UI는 player 플로우에서만 제공하므로 document를 기본 노출하는 것도 player뿐.
+FLOW_AXES = {
+    "player": ["player", "document"],
+    "parent": ["parent"],
+    "coach": ["player"],
+    "director": ["organization"],
+    "general": ["player"],
+}
+
+AXIS_ORDER = ["player", "parent", "organization", "document"]
+
+
+def _safe_rows(supabase, table: str, member_id) -> list:
+    """member_id로 조회. 테이블이 없거나 조회 실패해도 페이지는 떠야 하므로 fail-open."""
+    try:
+        result = supabase.table(table).select("*").eq(
+            "member_id", member_id
+        ).order("created_at", desc=True).execute()
+        return result.data or []
+    except Exception as e:
+        logger.warning(f"{table} 조회 실패 (member={member_id}): {e}")
+        return []
+
+
+def _latest(rows: list):
+    return rows[0] if rows else None
+
+
+def _document_state(member: dict, verifications: list) -> str:
+    """서류/사진 심사 축 상태."""
+    status = (member.get("verification_status") or "").lower()
+    if status == "verified":
+        return AXIS_STATE_VERIFIED
+    if status in ("submitted", "processing"):
+        return AXIS_STATE_IN_REVIEW
+    if status == "rejected":
+        return AXIS_STATE_REJECTED
+
+    latest = _latest(verifications)
+    if latest:
+        row_status = (latest.get("status") or "").lower()
+        if row_status == "approved":
+            return AXIS_STATE_VERIFIED
+        if row_status in ("pending", "processing", "submitted"):
+            return AXIS_STATE_IN_REVIEW
+        if row_status == "rejected":
+            return AXIS_STATE_REJECTED
+    return AXIS_STATE_NONE
+
+
+def _claim_state(claim: dict | None, approved: tuple, in_review: tuple) -> str:
+    """claim 레코드 하나를 축 상태로 정규화."""
+    if not claim:
+        return AXIS_STATE_NONE
+    status = (claim.get("status") or "").lower()
+    if status in approved:
+        return AXIS_STATE_VERIFIED
+    if status in in_review:
+        return AXIS_STATE_IN_REVIEW
+    if status == "rejected":
+        return AXIS_STATE_REJECTED
+    return AXIS_STATE_NONE
+
+
+def _build_axes(member: dict, verifications: list, player_claims: list,
+                parent_claims: list, org_claims: list) -> dict:
+    """4개 축의 상태를 계산한다. 문구는 템플릿(i18n)에서 결정한다."""
+    latest_player = _latest(player_claims)
+    latest_parent = _latest(parent_claims)
+    latest_org = _latest(org_claims)
+
+    # 선수 축: members.player_id가 이미 연결됐으면 그 자체로 완료.
+    if member.get("player_id"):
+        player_state = AXIS_STATE_VERIFIED
+    else:
+        player_state = _claim_state(latest_player, ("approved",), ("pending", "processing", "ai_reviewed"))
+
+    return {
+        "document": {
+            "state": _document_state(member, verifications),
+            "latest": _latest(verifications),
+            "count": len(verifications),
+            "raw_status": member.get("verification_status") or "pending",
+        },
+        "player": {
+            "state": player_state,
+            "player_id": member.get("player_id"),
+            "latest": latest_player,
+            "count": len(player_claims),
+        },
+        "parent": {
+            "state": _claim_state(latest_parent, ("approved",), ("pending", "processing", "ai_reviewed")),
+            "latest": latest_parent,
+            "count": len(parent_claims),
+        },
+        "organization": {
+            "state": _claim_state(latest_org, ("approved", "auto_verified"), ("pending", "processing")),
+            "latest": latest_org,
+            "count": len(org_claims),
+        },
+    }
+
+
+def _visible_axes(flow: str, axes: dict) -> list:
+    """플로우 기본 축 + 상태가 있는 나머지 축."""
+    order = list(FLOW_AXES.get(flow, FLOW_AXES["general"]))
+    for key in AXIS_ORDER:
+        if key not in order and axes[key]["state"] != AXIS_STATE_NONE:
+            order.append(key)
+    return order
+
+
+# =============================================
 # Verification Page & Image Upload (기존)
 # =============================================
 
@@ -65,6 +200,7 @@ async def verification_page(request: Request):
         return RedirectResponse(url="/auth/login", status_code=303)
 
     supabase = get_supabase()
+    settings = get_account_settings()
 
     i18n_ctx = create_language_context(request)
     i18n_data = i18n_ctx.get("i18n", {})
@@ -84,55 +220,45 @@ async def verification_page(request: Request):
     }
     verification_flow = flow_map.get(member_type, "general")
 
-    # Base context
+    # 축별 상태를 계산하려면 플로우와 무관하게 4개 축을 모두 조회해야 한다.
+    # (예: general 회원이 과거에 서류 심사만 통과한 경우도 정확히 보여줘야 함)
+    member_id = member["id"]
+    verifications = _safe_rows(supabase, "verifications", member_id)
+    player_claims = _safe_rows(supabase, "player_claims", member_id)
+    parent_claims = _safe_rows(supabase, "parent_claims", member_id)
+    org_claims = _safe_rows(supabase, "organization_claims", member_id)
+
+    # parent_claims.ai_report가 문자열로 오는 경우 파싱 (템플릿에서 dict로 접근)
+    for pc in parent_claims:
+        if isinstance(pc.get("ai_report"), str):
+            try:
+                import json
+                pc["ai_report"] = json.loads(pc["ai_report"])
+            except Exception:
+                pc["ai_report"] = {}
+
+    axes = _build_axes(member, verifications, player_claims, parent_claims, org_claims)
+
     context = {
         "request": request,
         "member": member,
         "verification_flow": verification_flow,
-        **i18n_ctx,
-    }
-
-    # Flow-specific data
-    if verification_flow == "player":
-        verifications = supabase.table("verifications").select("*").eq(
-            "member_id", member["id"]
-        ).order("created_at", desc=True).execute()
-        context["verifications"] = verifications.data or []
-        context["verification_types"] = [
+        "axes": axes,
+        "visible_axes": _visible_axes(verification_flow, axes),
+        # Gemini 키가 없으면 사진 인증은 제출 즉시 자동 거부된다.
+        # 동작하지 않는 기능을 열어두지 않기 위해 서버에서 판단해 넘긴다.
+        "photo_verification_enabled": bool(settings.GEMINI_API_KEY),
+        "verifications": verifications,
+        "player_claims": player_claims,
+        "parent_claims": parent_claims,
+        "org_claims": org_claims,
+        "verification_types": [
             {"value": "association_card", "label": acct.get("type_association_card", "협회 등록증"), "icon": "card"},
             {"value": "mask_photo", "label": acct.get("type_mask_photo", "마스크 + 이름/날짜 종이"), "icon": "mask"},
             {"value": "uniform_photo", "label": acct.get("type_uniform_photo", "도복 + 이름/날짜 종이"), "icon": "uniform"},
-        ]
-
-    elif verification_flow == "parent":
-        # Fetch existing parent claims
-        parent_claims = supabase.table("parent_claims").select("*").eq(
-            "member_id", member["id"]
-        ).order("created_at", desc=True).execute()
-        context["parent_claims"] = parent_claims.data or []
-
-        # Parse ai_report if string
-        for pc in context["parent_claims"]:
-            if isinstance(pc.get("ai_report"), str):
-                try:
-                    import json
-                    pc["ai_report"] = json.loads(pc["ai_report"])
-                except Exception:
-                    pc["ai_report"] = {}
-
-    elif verification_flow == "coach":
-        # Fetch existing player claims
-        player_claims = supabase.table("player_claims").select("*").eq(
-            "member_id", member["id"]
-        ).order("created_at", desc=True).execute()
-        context["player_claims"] = player_claims.data or []
-
-    elif verification_flow == "director":
-        # Fetch existing org claims
-        org_claims = supabase.table("organization_claims").select("*").eq(
-            "member_id", member["id"]
-        ).order("created_at", desc=True).execute()
-        context["org_claims"] = org_claims.data or []
+        ],
+        **i18n_ctx,
+    }
 
     return _templates.TemplateResponse("auth/verification.html", context)
 

@@ -2,6 +2,40 @@
 
 {% block title %}{{ i18n.account.verification.page_title|default('본인 인증 - FencingMind') }}{% endblock %}
 
+{#
+  인증은 서로 독립적인 축으로 구성된다.
+    document     : members.verification_status (서류/사진 심사)
+    player       : members.player_id + player_claims (선수 기록 연결)
+    parent       : parent_claims (자녀 관계)
+    organization : organization_claims (조직 소유권)
+  한 축이 완료됐다고 다른 축의 신청 UI를 숨기면 안 된다.
+#}
+
+{% macro axis_mark(state) -%}
+{%- if state == 'verified' -%}
+<svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" focusable="false">
+  <circle cx="10" cy="10" r="8.25" fill="none" stroke="currentColor" stroke-width="1.5"/>
+  <path d="M6.2 10.3l2.5 2.5 5.1-5.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+{%- elif state == 'in_review' -%}
+<svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" focusable="false">
+  <circle cx="10" cy="10" r="8.25" fill="none" stroke="currentColor" stroke-width="1.5"/>
+  <path d="M10 5.4V10l3.1 1.9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+{%- elif state == 'rejected' -%}
+<svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" focusable="false">
+  <circle cx="10" cy="10" r="8.25" fill="none" stroke="currentColor" stroke-width="1.5"/>
+  <path d="M10 5.8v5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+  <circle cx="10" cy="13.7" r="1" fill="currentColor"/>
+</svg>
+{%- else -%}
+<svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" focusable="false">
+  <circle cx="10" cy="10" r="8.25" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2.4 2.6"/>
+  <path d="M6.6 10h6.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+</svg>
+{%- endif -%}
+{%- endmacro %}
+
 {% block content %}
 <div class="verification-container">
     <div class="verification-card">
@@ -34,36 +68,239 @@
             </p>
         </div>
 
-        <!-- 현재 인증 상태 -->
-        <div class="verification-status status-{{ member.verification_status }}">
-            {% if member.verification_status == 'verified' %}
-                <span class="status-icon">✅</span>
-                <span>{{ i18n.account.verification.status_verified|default('인증 완료') }}</span>
-            {% elif member.verification_status == 'submitted' %}
-                <span class="status-icon">⏳</span>
-                <span>{{ i18n.account.verification.status_submitted|default('검토 중') }}</span>
-            {% elif member.verification_status == 'rejected' %}
-                <span class="status-icon">❌</span>
-                <span>{{ i18n.account.verification.status_rejected|default('인증 거부 - 다시 시도해주세요') }}</span>
-            {% else %}
-                <span class="status-icon">📋</span>
-                <span>{{ i18n.account.verification.status_pending|default('인증 대기 중') }}</span>
-            {% endif %}
-        </div>
+        <!-- 축별 인증 현황 -->
+        <section class="axis-panel" aria-labelledby="axisPanelTitle">
+            <h2 id="axisPanelTitle">{{ i18n.account.verification.axis_panel_title|default('인증 현황') }}</h2>
+            <ul class="axis-list">
+                {% for key in visible_axes %}
+                {% set a = axes[key] %}
+                {% set token = key ~ '.' ~ a.state %}
+                <li class="axis-row is-{{ a.state }}">
+                    <span class="axis-mark">{{ axis_mark(a.state) }}</span>
+                    <div class="axis-body">
+                        <div class="axis-head">
+                            <span class="axis-name">
+                                {% if key == 'document' %}{{ i18n.account.verification.axis_document_label|default('서류·사진 심사') }}
+                                {% elif key == 'player' %}{{ i18n.account.verification.axis_player_label|default('선수 기록 연결') }}
+                                {% elif key == 'parent' %}{{ i18n.account.verification.axis_parent_label|default('자녀(선수) 관계') }}
+                                {% elif key == 'organization' %}{{ i18n.account.verification.axis_org_label|default('조직 소유권') }}
+                                {% endif %}
+                            </span>
+                            <span class="axis-state">
+                                {% if a.state == 'verified' %}{{ i18n.account.verification.axis_state_verified|default('인증됨') }}
+                                {% elif a.state == 'in_review' %}{{ i18n.account.verification.axis_state_review|default('심사 중') }}
+                                {% elif a.state == 'rejected' %}{{ i18n.account.verification.axis_state_rejected|default('반려됨') }}
+                                {% else %}{{ i18n.account.verification.axis_state_none|default('미인증') }}
+                                {% endif %}
+                            </span>
+                        </div>
 
-        <!-- Flow-specific content -->
-        {% if member.verification_status != 'verified' %}
-            {% if verification_flow == 'player' %}
+                        <p class="axis-detail">
+                            {% if token == 'document.verified' %}
+                                {{ i18n.account.verification.axis_document_verified|default('제출한 서류·사진이 심사를 통과했습니다. 선수 기록 연결과는 별개의 절차입니다.') }}
+                            {% elif token == 'document.in_review' %}
+                                {{ i18n.account.verification.axis_document_review|default('제출한 서류·사진을 검토하고 있습니다.') }}
+                            {% elif token == 'document.rejected' %}
+                                {{ i18n.account.verification.axis_document_rejected|default('제출한 서류·사진이 반려되었습니다.') }}
+                                {% if a.latest and a.latest.rejection_reason %}<br><span class="axis-reason">{{ a.latest.rejection_reason }}</span>{% endif %}
+                            {% elif token == 'document.none' %}
+                                {{ i18n.account.verification.axis_document_none|default('아직 제출한 서류·사진이 없습니다.') }}
+
+                            {% elif token == 'player.verified' %}
+                                {{ i18n.account.verification.axis_player_verified|default('대회 기록(선수 프로필)이 계정에 연결되어 있습니다.') }}
+                                {% if a.player_id %}<br><span class="axis-reason">{{ i18n.account.verification.axis_player_id_label|default('연결된 선수 ID') }}: {{ a.player_id }}</span>{% endif %}
+                            {% elif token == 'player.in_review' %}
+                                {{ i18n.account.verification.axis_player_review|default('선수 기록 연결 요청을 관리자가 확인하고 있습니다.') }}
+                            {% elif token == 'player.rejected' %}
+                                {{ i18n.account.verification.axis_player_rejected|default('선수 기록 연결 요청이 반려되었습니다.') }}
+                            {% elif token == 'player.none' %}
+                                {{ i18n.account.verification.axis_player_none|default('대회 기록(선수 프로필)이 아직 계정에 연결되지 않았습니다.') }}
+
+                            {% elif token == 'parent.verified' %}
+                                {{ i18n.account.verification.axis_parent_verified|default('자녀(선수)와의 관계가 확인되었습니다.') }}
+                            {% elif token == 'parent.in_review' %}
+                                {{ i18n.account.verification.axis_parent_review|default('자녀 관계 확인 요청을 검토하고 있습니다. 미성년자 보호를 위해 관리자가 직접 확인합니다.') }}
+                            {% elif token == 'parent.rejected' %}
+                                {{ i18n.account.verification.axis_parent_rejected|default('자녀 관계 확인 요청이 반려되었습니다.') }}
+                            {% elif token == 'parent.none' %}
+                                {{ i18n.account.verification.axis_parent_none|default('아직 연결된 자녀(선수)가 없습니다.') }}
+
+                            {% elif token == 'organization.verified' %}
+                                {{ i18n.account.verification.axis_org_verified|default('조직 소유권이 확인되었습니다.') }}
+                            {% elif token == 'organization.in_review' %}
+                                {{ i18n.account.verification.axis_org_review|default('조직 소유권 확인 요청을 검토하고 있습니다.') }}
+                            {% elif token == 'organization.rejected' %}
+                                {{ i18n.account.verification.axis_org_rejected|default('조직 소유권 확인 요청이 반려되었습니다.') }}
+                            {% elif token == 'organization.none' %}
+                                {{ i18n.account.verification.axis_org_none|default('아직 연결된 클럽·학교가 없습니다.') }}
+                            {% endif %}
+                        </p>
+
+                        {# 다음 단계 안내 — 완료된 축에는 표시하지 않는다 #}
+                        {% if a.state != 'verified' %}
+                        <p class="axis-next">
+                            <span class="axis-next-label">{{ i18n.account.verification.next_step_label|default('다음 단계') }}</span>
+                            {% if key == 'document' %}
+                                {% if a.state == 'in_review' %}
+                                    {{ i18n.account.verification.next_document_review|default('심사 결과를 기다려주세요. 결과는 계정 이메일로 안내됩니다.') }}
+                                {% elif not photo_verification_enabled %}
+                                    {{ i18n.account.verification.next_document_disabled|default('사진 인증 기능은 현재 준비 중입니다. 준비되면 이 화면에서 바로 제출할 수 있습니다.') }}
+                                {% elif verification_flow == 'player' %}
+                                    {{ i18n.account.verification.next_document_submit|default('아래에서 인증 방법을 고르고 사진을 제출하세요.') }}
+                                {% else %}
+                                    {{ i18n.account.verification.next_document_player_only|default('사진 인증은 회원 유형이 선수일 때 제출할 수 있습니다.') }}
+                                    <a class="axis-link" href="/account/me">{{ i18n.account.verification.link_profile|default('프로필에서 변경하기') }}</a>
+                                {% endif %}
+                            {% elif key == 'player' %}
+                                {% if a.state == 'in_review' %}
+                                    {{ i18n.account.verification.next_player_review|default('검토가 끝나면 대회 기록이 자동으로 연결됩니다. 추가로 하실 일은 없습니다.') }}
+                                {% elif verification_flow in ('player', 'coach') %}
+                                    {{ i18n.account.verification.next_player_claim|default('아래에서 본인 이름으로 대회 기록을 검색해 연결을 신청하세요.') }}
+                                {% else %}
+                                    {{ i18n.account.verification.next_player_change_type|default('회원 유형을 선수 또는 코치로 변경하면 대회 기록을 연결할 수 있습니다.') }}
+                                    <a class="axis-link" href="/account/me">{{ i18n.account.verification.link_profile|default('프로필에서 변경하기') }}</a>
+                                {% endif %}
+                            {% elif key == 'parent' %}
+                                {% if a.state == 'in_review' %}
+                                    {{ i18n.account.verification.next_parent_review|default('관리자 확인을 기다려주세요. 결과는 계정 이메일로 안내됩니다.') }}
+                                {% elif verification_flow == 'parent' %}
+                                    {{ i18n.account.verification.next_parent_claim|default('아래에서 자녀 이름으로 선수를 검색해 관계 확인을 신청하세요.') }}
+                                {% else %}
+                                    {{ i18n.account.verification.next_parent_change_type|default('회원 유형을 학부모로 변경하면 자녀 관계를 인증할 수 있습니다.') }}
+                                    <a class="axis-link" href="/account/me">{{ i18n.account.verification.link_profile|default('프로필에서 변경하기') }}</a>
+                                {% endif %}
+                            {% elif key == 'organization' %}
+                                {% if a.state == 'in_review' %}
+                                    {{ i18n.account.verification.next_org_review|default('관리자 확인을 기다려주세요. 결과는 계정 이메일로 안내됩니다.') }}
+                                {% elif verification_flow == 'director' %}
+                                    {{ i18n.account.verification.next_org_claim|default('아래에서 클럽·학교를 검색하고 사업자등록증을 제출하세요.') }}
+                                {% else %}
+                                    {{ i18n.account.verification.next_org_change_type|default('회원 유형을 감독·관장으로 변경하면 조직 소유권을 인증할 수 있습니다.') }}
+                                    <a class="axis-link" href="/account/me">{{ i18n.account.verification.link_profile|default('프로필에서 변경하기') }}</a>
+                                {% endif %}
+                            {% endif %}
+                        </p>
+                        {% endif %}
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+        </section>
+
+        <!-- Flow-specific content: 각 축의 상태로만 게이트한다 -->
+        {% if verification_flow == 'player' %}
+
+            {# 선수 기록 연결 (player 축) #}
+            {% if axes.player.state in ('none', 'rejected') %}
+            <section class="flow-section">
+                <h2>{{ i18n.account.verification.player_claim_title|default('대회 기록 연결') }}</h2>
+                <p class="flow-desc">{{ i18n.account.verification.player_claim_desc|default('본인 이름으로 대회 기록을 검색해 계정에 연결합니다. 연결 요청은 관리자가 확인한 뒤 승인됩니다.') }}</p>
+                <div class="form-group">
+                    <label for="pcName">{{ i18n.account.verification.field_player_name|default('선수 이름') }}</label>
+                    <input type="text" id="pcName" value="{{ member.full_name or '' }}" placeholder="{{ i18n.account.verification.ph_player_name|default('본인 이름 입력') }}">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="pcBirth">{{ i18n.account.verification.field_birth_year|default('출생연도') }}</label>
+                        <input type="number" id="pcBirth" placeholder="2005">
+                    </div>
+                    <div class="form-group">
+                        <label for="pcTeam">{{ i18n.account.verification.field_team|default('소속팀') }}</label>
+                        <input type="text" id="pcTeam" placeholder="{{ i18n.account.verification.ph_team|default('클럽/학교명') }}">
+                    </div>
+                </div>
+                <button type="button" class="primary-btn" id="pcSearchBtn">{{ i18n.account.verification.btn_search_player|default('대회 기록 검색') }}</button>
+                <div id="pcResults" class="claim-results" style="display:none;"></div>
+                <div class="upload-result" id="pcResult" style="display:none;"></div>
+            </section>
+            {% endif %}
+
+            {# 서류·사진 심사 (document 축) #}
+            {% if not photo_verification_enabled %}
+            <section class="flow-section">
+                <h2>{{ i18n.account.verification.photo_section_title|default('사진 인증') }}</h2>
+                <div class="notice-block">
+                    <p class="notice-title">{{ i18n.account.verification.photo_disabled_title|default('현재 준비 중입니다') }}</p>
+                    <p>{{ i18n.account.verification.photo_disabled_body|default('사진 자동 심사 기능이 아직 연결되지 않아 지금 제출하면 처리되지 않습니다. 불필요한 제출을 막기 위해 업로드를 잠시 닫아두었습니다. 대회 기록 연결만으로도 선수 인증이 진행됩니다.') }}</p>
+                    {% if axes.document.count %}
+                    <p class="notice-meta">{{ i18n.account.verification.photo_past_count|default('지난 제출 기록') }}: {{ axes.document.count }}</p>
+                    {% endif %}
+                </div>
+            </section>
+            {% elif axes.document.state != 'verified' %}
                 {% include "verification/_player_flow.html" %}
-            {% elif verification_flow == 'parent' %}
+            {% endif %}
+
+        {% elif verification_flow == 'parent' %}
+            {% if axes.parent.state in ('none', 'rejected') %}
                 {% include "verification/_parent_flow.html" %}
-            {% elif verification_flow == 'coach' %}
+            {% else %}
+                <section class="flow-section">
+                    <div class="notice-block">
+                        <p class="notice-title">
+                            {% if axes.parent.state == 'verified' %}{{ i18n.account.verification.parent_done_title|default('자녀 관계 인증이 완료되었습니다') }}
+                            {% else %}{{ i18n.account.verification.parent_wait_title|default('자녀 관계 확인을 기다리는 중입니다') }}{% endif %}
+                        </p>
+                        {% if axes.parent.latest and axes.parent.latest.created_at %}
+                        <p class="notice-meta">{{ i18n.account.verification.requested_at|default('신청일') }}: {{ axes.parent.latest.created_at[:10] }}</p>
+                        {% endif %}
+                    </div>
+                </section>
+            {% endif %}
+
+        {% elif verification_flow == 'coach' %}
+            {% if axes.player.state in ('none', 'rejected') %}
                 {% include "verification/_coach_flow.html" %}
-            {% elif verification_flow == 'director' %}
+            {% else %}
+                <section class="flow-section">
+                    <div class="notice-block">
+                        <p class="notice-title">
+                            {% if axes.player.state == 'verified' %}{{ i18n.account.verification.player_done_title|default('선수 기록 연결이 완료되었습니다') }}
+                            {% else %}{{ i18n.account.verification.player_wait_title|default('선수 기록 연결 확인을 기다리는 중입니다') }}{% endif %}
+                        </p>
+                        {% if axes.player.latest and axes.player.latest.created_at %}
+                        <p class="notice-meta">{{ i18n.account.verification.requested_at|default('신청일') }}: {{ axes.player.latest.created_at[:10] }}</p>
+                        {% endif %}
+                    </div>
+                </section>
+            {% endif %}
+
+        {% elif verification_flow == 'director' %}
+            {% if axes.organization.state in ('none', 'rejected') %}
                 {% include "verification/_director_flow.html" %}
             {% else %}
-                {% include "verification/_general_flow.html" %}
+                <section class="flow-section">
+                    <div class="notice-block">
+                        <p class="notice-title">
+                            {% if axes.organization.state == 'verified' %}{{ i18n.account.verification.org_done_title|default('조직 소유권 인증이 완료되었습니다') }}
+                            {% else %}{{ i18n.account.verification.org_wait_title|default('조직 소유권 확인을 기다리는 중입니다') }}{% endif %}
+                        </p>
+                        {% if axes.organization.latest and axes.organization.latest.created_at %}
+                        <p class="notice-meta">{{ i18n.account.verification.requested_at|default('신청일') }}: {{ axes.organization.latest.created_at[:10] }}</p>
+                        {% endif %}
+                    </div>
+                </section>
             {% endif %}
+
+        {% else %}
+            {# general: 회원 유형이 정해지지 않아 신청할 수 있는 인증이 없다 #}
+            <section class="flow-section">
+                <h2>{{ i18n.account.verification.general_title|default('어떤 인증을 하시겠습니까?') }}</h2>
+                <p class="flow-desc">
+                    {{ i18n.account.verification.general_desc|default('현재 회원 유형은 일반 회원입니다. 일반 회원은 신청할 수 있는 인증이 없습니다. 프로필에서 회원 유형을 아래 중 하나로 바꾸면 해당 인증을 이 화면에서 진행할 수 있습니다.') }}
+                </p>
+                <dl class="type-list">
+                    <dt>{{ i18n.account.verification.type_player|default('선수') }}</dt>
+                    <dd>{{ i18n.account.verification.type_player_desc|default('본인의 대회 기록(선수 프로필)을 계정에 연결합니다.') }}</dd>
+                    <dt>{{ i18n.account.verification.type_parent|default('학부모') }}</dt>
+                    <dd>{{ i18n.account.verification.type_parent_desc|default('자녀(선수)와의 관계를 확인해 자녀의 기록을 봅니다.') }}</dd>
+                    <dt>{{ i18n.account.verification.type_coach|default('코치') }}</dt>
+                    <dd>{{ i18n.account.verification.type_coach_desc|default('본인의 선수 데이터를 연결합니다.') }}</dd>
+                    <dt>{{ i18n.account.verification.type_director|default('감독·관장') }}</dt>
+                    <dd>{{ i18n.account.verification.type_director_desc|default('사업자등록증으로 클럽·학교 소유권을 확인합니다.') }}</dd>
+                </dl>
+                <a class="primary-btn as-link" href="/account/me">{{ i18n.account.verification.btn_edit_profile|default('프로필에서 회원 유형 변경') }}</a>
+            </section>
         {% endif %}
     </div>
 </div>
@@ -78,7 +315,7 @@
 .verification-card {
     background: var(--bg-card);
     border-radius: 16px;
-    box-shadow: 0 4px 24px rgba(0,0,0,0.1);
+    box-shadow: var(--shadow-md);
     padding: 2rem;
 }
 
@@ -96,46 +333,90 @@
     color: var(--text-secondary);
 }
 
-.verification-status {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    padding: 1rem;
-    border-radius: 8px;
-    margin-bottom: 2rem;
-    font-weight: 500;
+/* ── 축별 인증 현황 ───────────────────────────── */
+.axis-panel { margin-bottom: 2rem; }
+.axis-panel h2 {
+    font-size: 0.8rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 0.75rem;
 }
+.axis-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border-color); border-radius: 12px; overflow: hidden; }
+.axis-row { display: flex; gap: 0.75rem; padding: 1rem; background: var(--bg-tertiary); }
+.axis-row + .axis-row { border-top: 1px solid var(--border-color); }
+.axis-mark { flex: 0 0 auto; line-height: 0; padding-top: 0.15rem; color: var(--text-muted); }
+.axis-row.is-verified .axis-mark { color: var(--success-color); }
+.axis-row.is-in_review .axis-mark { color: var(--warning-color); }
+.axis-row.is-rejected .axis-mark { color: var(--danger-color); }
+.axis-body { flex: 1 1 auto; min-width: 0; }
+.axis-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.25rem; }
+.axis-name { font-weight: 600; font-size: 0.95rem; }
+.axis-state { flex: 0 0 auto; font-size: 0.75rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 999px; background: rgba(255,255,255,0.06); color: var(--text-secondary); }
+.axis-row.is-verified .axis-state { background: rgba(16, 185, 129, 0.15); color: var(--success-color); }
+.axis-row.is-in_review .axis-state { background: rgba(245, 158, 11, 0.15); color: var(--warning-color); }
+.axis-row.is-rejected .axis-state { background: rgba(239, 68, 68, 0.15); color: var(--danger-color); }
+.axis-detail { font-size: 0.875rem; color: var(--text-secondary); line-height: 1.5; margin: 0; }
+.axis-reason { color: var(--text-muted); font-size: 0.8rem; }
+.axis-next { margin: 0.5rem 0 0; font-size: 0.85rem; color: var(--text-primary); line-height: 1.5; }
+.axis-next-label {
+    display: inline-block;
+    margin-right: 0.4rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--accent-primary);
+}
+/* 링크는 태극 블루. 다크 배경에서는 #1e3a8a 대비가 부족해 같은 계열의 밝은 톤을 쓴다. */
+.axis-link { color: #93b4ff; text-decoration: underline; text-underline-offset: 2px; }
+[data-theme="light"] .axis-link { color: var(--accent-secondary); }
 
-.verification-status.status-verified { background: rgba(16, 185, 129, 0.15); color: var(--success-color); }
-.verification-status.status-submitted { background: rgba(245, 158, 11, 0.15); color: var(--warning-color); }
-.verification-status.status-rejected { background: rgba(239, 68, 68, 0.15); color: var(--danger-color); }
-.verification-status.status-pending { background: rgba(255, 255, 255, 0.08); color: var(--text-secondary); }
-.status-icon { font-size: 1.25rem; }
+/* ── 플로우 섹션 ─────────────────────────────── */
+.flow-section { margin-top: 2rem; padding-top: 2rem; border-top: 1px solid var(--border-color); }
+.flow-section h2 { font-size: 1.1rem; margin-bottom: 0.5rem; }
+.flow-desc { color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1.25rem; line-height: 1.6; }
+.notice-block { background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.25rem; }
+.notice-title { font-weight: 600; margin: 0 0 0.5rem; }
+.notice-block p { color: var(--text-secondary); font-size: 0.9rem; line-height: 1.6; margin: 0; }
+.notice-meta { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.5rem; }
 
+.primary-btn { width: 100%; padding: 0.9rem; background: var(--accent-primary); color: #fff; border: none; border-radius: 8px; font-size: 0.95rem; font-weight: 600; cursor: pointer; }
+.primary-btn:hover { background: #a02320; }
+.primary-btn:disabled { background: rgba(127,127,127,0.25); color: var(--text-muted); cursor: not-allowed; }
+
+.claim-results { margin-top: 1rem; }
+
+.primary-btn.as-link { display: block; text-align: center; text-decoration: none; }
+.type-list { margin: 0 0 1.5rem; }
+.type-list dt { font-weight: 600; font-size: 0.9rem; margin-top: 0.75rem; }
+.type-list dt:first-child { margin-top: 0; }
+.type-list dd { margin: 0.15rem 0 0; font-size: 0.875rem; color: var(--text-secondary); line-height: 1.5; }
+
+/* 공통 (partial에서도 사용) */
 .verification-methods h2 { font-size: 1.1rem; margin-bottom: 1rem; }
 .method-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
-.method-card { background: var(--bg-tertiary); border: 2px solid transparent; border-radius: 12px; padding: 1.5rem; text-align: center; transition: all 0.2s; cursor: pointer; }
+.method-card { background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.5rem; text-align: center; transition: border-color 0.2s; cursor: pointer; }
 .method-card:hover { border-color: var(--accent-primary); }
 .method-card.selected { border-color: var(--accent-primary); background: rgba(201, 48, 44, 0.08); }
-.method-icon { font-size: 2.5rem; margin-bottom: 0.75rem; }
+.method-icon { font-size: 2rem; margin-bottom: 0.75rem; }
 .method-card h3 { font-size: 1rem; margin-bottom: 0.5rem; }
 .method-desc { font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 1rem; line-height: 1.4; }
 .select-btn { padding: 0.5rem 1.5rem; background: var(--accent-primary); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9rem; }
-.select-btn:hover { box-shadow: 0 4px 12px var(--glow-primary); }
+.select-btn:hover { background: #a02320; }
 
 .upload-section { margin-top: 2rem; padding-top: 2rem; border-top: 1px solid var(--border-color); }
 .upload-section h3 { margin-bottom: 1rem; }
-.upload-guide { background: rgba(245, 158, 11, 0.08); border-left: 4px solid var(--warning-color); padding: 1rem; margin-bottom: 1rem; border-radius: 0 8px 8px 0; font-size: 0.9rem; line-height: 1.6; }
-.upload-area { border: 2px dashed var(--border-light); border-radius: 12px; padding: 2rem; text-align: center; cursor: pointer; transition: all 0.2s; margin-bottom: 1rem; }
-.upload-area:hover { border-color: var(--accent-primary); background: rgba(255,255,255,0.03); }
-.upload-area.dragover { border-color: var(--accent-primary); background: rgba(59,130,246,0.05); }
+.upload-guide { background: rgba(245, 158, 11, 0.08); border-left: 2px solid var(--warning-color); padding: 1rem; margin-bottom: 1rem; border-radius: 0 8px 8px 0; font-size: 0.9rem; line-height: 1.6; }
+.upload-area { border: 1px dashed var(--border-light); border-radius: 12px; padding: 2rem; text-align: center; cursor: pointer; transition: border-color 0.2s; margin-bottom: 1rem; }
+.upload-area:hover { border-color: var(--accent-primary); }
+.upload-area.dragover { border-color: var(--accent-primary); background: rgba(201, 48, 44, 0.05); }
 .upload-placeholder { color: var(--text-secondary); }
-.upload-icon { font-size: 3rem; display: block; margin-bottom: 0.5rem; }
+.upload-icon { font-size: 2rem; display: block; margin-bottom: 0.5rem; }
 .upload-hint { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.5rem; }
-.upload-btn { width: 100%; padding: 1rem; background: linear-gradient(135deg, var(--accent-primary), #a02320); color: white; border: none; border-radius: 8px; font-size: 1rem; font-weight: 600; cursor: pointer; }
-.upload-btn:disabled { background: rgba(255,255,255,0.1); color: var(--text-muted); cursor: not-allowed; }
-.upload-result { margin-top: 1rem; padding: 1rem; border-radius: 8px; }
+.upload-btn { width: 100%; padding: 1rem; background: var(--accent-primary); color: white; border: none; border-radius: 8px; font-size: 1rem; font-weight: 600; cursor: pointer; }
+.upload-btn:hover { background: #a02320; }
+.upload-btn:disabled { background: rgba(127,127,127,0.25); color: var(--text-muted); cursor: not-allowed; }
+.upload-result { margin-top: 1rem; padding: 1rem; border-radius: 8px; font-size: 0.9rem; }
 .upload-result.success { background: rgba(16, 185, 129, 0.15); color: var(--success-color); }
 .upload-result.error { background: rgba(239, 68, 68, 0.15); color: var(--danger-color); }
 
@@ -153,5 +434,123 @@
 
 .rejection-reason { background: rgba(239, 68, 68, 0.05); }
 .rejection-reason td { font-size: 0.85rem; color: var(--danger-color); padding-left: 1.5rem; }
+
+.form-group { margin-bottom: 1rem; }
+.form-group label { display: block; font-weight: 600; margin-bottom: 0.25rem; font-size: 0.9rem; }
+.form-group input { width: 100%; padding: 0.75rem; border: 1px solid var(--border-light); border-radius: 8px; font-size: 0.95rem; background: var(--bg-tertiary); color: var(--text-primary); }
+.form-group input:focus { outline: none; border-color: var(--accent-primary); box-shadow: 0 0 0 3px var(--glow-primary); }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.player-card { border: 1px solid var(--border-color); border-radius: 8px; padding: 0.75rem; margin-bottom: 0.5rem; display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; }
+.player-card .info { font-size: 0.9rem; min-width: 0; }
+.player-card .info .name { font-weight: 600; }
+.player-card .info .meta { color: var(--text-muted); font-size: 0.8rem; }
+.claim-btn { flex: 0 0 auto; padding: 0.4rem 1rem; background: var(--accent-primary); color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85rem; }
+.claim-btn:hover { background: #a02320; }
+
+@media (max-width: 560px) {
+    .verification-container { padding: 1rem; }
+    .verification-card { padding: 1.25rem; }
+    .form-row { grid-template-columns: 1fr; }
+    .axis-head { flex-direction: column; align-items: flex-start; gap: 0.25rem; }
+}
 </style>
+
+{% if verification_flow == 'player' and axes.player.state in ('none', 'rejected') %}
+<script>
+(function () {
+    const searchBtn = document.getElementById('pcSearchBtn');
+    if (!searchBtn) return;
+
+    const resultsBox = document.getElementById('pcResults');
+    const statusBox = document.getElementById('pcResult');
+
+    const TXT = {
+        searching: '{{ i18n.account.verification.msg_searching|default("검색 중입니다...") }}',
+        empty: '{{ i18n.account.verification.msg_no_result|default("검색 결과가 없습니다. 이름 표기나 출생연도를 다시 확인해주세요.") }}',
+        error: '{{ i18n.account.verification.error_network|default("네트워크 오류가 발생했습니다") }}',
+        generic: '{{ i18n.account.verification.error_generic|default("오류가 발생했습니다") }}',
+        nameTooShort: '{{ i18n.account.verification.msg_name_too_short|default("이름을 2자 이상 입력해주세요") }}',
+        claim: '{{ i18n.account.verification.btn_claim|default("연결 신청") }}',
+        searchBtn: '{{ i18n.account.verification.btn_search_player|default("대회 기록 검색") }}'
+    };
+
+    function esc(value) {
+        return String(value == null ? '' : value).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    function show(box, cls, text) {
+        box.style.display = 'block';
+        box.className = 'upload-result ' + cls;
+        box.textContent = text;
+    }
+
+    searchBtn.addEventListener('click', async function () {
+        const name = document.getElementById('pcName').value.trim();
+        if (name.length < 2) { show(statusBox, 'error', TXT.nameTooShort); return; }
+
+        const birth = document.getElementById('pcBirth').value;
+        const team = document.getElementById('pcTeam').value.trim();
+
+        let url = '/account/verification/player-search?name=' + encodeURIComponent(name);
+        if (birth) url += '&birth_year=' + encodeURIComponent(birth);
+        if (team) url += '&team=' + encodeURIComponent(team);
+
+        statusBox.style.display = 'none';
+        resultsBox.style.display = 'block';
+        resultsBox.textContent = TXT.searching;
+        searchBtn.disabled = true;
+
+        try {
+            const resp = await fetch(url);
+            const data = await resp.json();
+            if (!resp.ok) { resultsBox.style.display = 'none'; show(statusBox, 'error', data.detail || TXT.generic); return; }
+            const candidates = data.candidates || [];
+            if (!candidates.length) { resultsBox.textContent = TXT.empty; return; }
+
+            resultsBox.innerHTML = candidates.map(function (c) {
+                return '<div class="player-card">' +
+                    '<div class="info">' +
+                        '<div class="name">' + esc(c.name) + '</div>' +
+                        '<div class="meta">' + esc(c.team_name || '-') + ' · ' + esc(c.birth_year || '-') + '</div>' +
+                    '</div>' +
+                    '<button type="button" class="claim-btn" data-player-id="' + esc(c.player_id) + '">' + TXT.claim + '</button>' +
+                '</div>';
+            }).join('');
+        } catch (e) {
+            resultsBox.style.display = 'none';
+            show(statusBox, 'error', TXT.error);
+        } finally {
+            searchBtn.disabled = false;
+            searchBtn.textContent = TXT.searchBtn;
+        }
+    });
+
+    resultsBox.addEventListener('click', async function (event) {
+        const btn = event.target.closest('.claim-btn');
+        if (!btn) return;
+        btn.disabled = true;
+        try {
+            const resp = await fetch('/account/verification/player-claim', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ player_id: Number(btn.dataset.playerId) })
+            });
+            const data = await resp.json();
+            if (resp.ok) {
+                show(statusBox, 'success', data.message || '');
+                setTimeout(function () { location.reload(); }, 1500);
+            } else {
+                show(statusBox, 'error', data.detail || TXT.generic);
+                btn.disabled = false;
+            }
+        } catch (e) {
+            show(statusBox, 'error', TXT.error);
+            btn.disabled = false;
+        }
+    });
+})();
+</script>
+{% endif %}
 {% endblock %}

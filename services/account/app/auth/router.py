@@ -608,9 +608,16 @@ async def get_oauth_providers(request: Request):
 
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request, redirect: Optional[str] = None):
-    """로그인 페이지 표시 (서비스 소개 + 인증 선택)"""
+    """로그인 페이지 표시 (인증 수단 선택)"""
     i18n_ctx = create_language_context(request)
-    available_services = _get_available_services(i18n_ctx["lang"])
+    # 로그인 화면은 '로그인' 을 위한 화면이라 미출시 서비스는 노출하지 않는다.
+    # 하단 안내문("하나의 계정으로 …")에 쓸 운영 중 서비스만 추린다.
+    # 링크가 없는 서비스(url 미등록)는 안내문에서 클릭 대상이 될 수 없으므로 제외.
+    active_services = [
+        svc
+        for svc in _get_available_services(i18n_ctx["lang"])
+        if svc.get("is_active") and svc.get("url")
+    ]
     # 오픈 리다이렉트 방지: 템플릿의 redirect_url 은 OAuth 링크(?redirect=)와
     # 이메일 인증 성공 후 JS 이동에 그대로 쓰이므로, /login/{provider} 와 동일하게
     # 허용 도메인 검사를 통과한 값만 넘긴다. 검사에 걸리면 기본 목적지로 떨어진다.
@@ -618,7 +625,7 @@ async def login_page(request: Request, redirect: Optional[str] = None):
     return _templates.TemplateResponse("auth/login.html", {
         "request": request,
         "redirect_url": safe_redirect,
-        "available_services": available_services,
+        "active_services": active_services,
         **i18n_ctx,
     })
 
@@ -776,7 +783,9 @@ def _get_available_services(lang: str = "ko") -> list[dict]:
             return [
                 {
                     "service_key": s["id"],
-                    "icon": SERVICE_DESCRIPTIONS.get(s["id"], {}).get("icon", ""),
+                    # services 테이블에는 서브도메인 URL 컬럼이 없어 SERVICE_DESCRIPTIONS
+                    # 에서 가져온다. 미출시 서비스는 url 자체가 없다.
+                    "url": SERVICE_DESCRIPTIONS.get(s["id"], {}).get("url", ""),
                     "display_name": _pick_localized(s, "name", content_lang) or s["id"],
                     "description": _pick_localized(s, "description", content_lang)
                     or s.get("description")
@@ -792,7 +801,7 @@ def _get_available_services(lang: str = "ko") -> list[dict]:
     return [
         {
             "service_key": key,
-            "icon": svc["icon"],
+            "url": svc.get("url", ""),
             "display_name": get_svc_name(svc, content_lang),
             "description": ", ".join(get_svc_features(svc, content_lang)[:2]),
             "is_active": not svc.get("coming_soon", False),

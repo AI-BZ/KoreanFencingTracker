@@ -2,16 +2,88 @@
 
 {% block title %}{{ i18n.account.profile.page_title|default('내 프로필 - FencingMind') }}{% endblock %}
 
+{#
+  인증 표기는 templates/auth/verification.html 의 축(axis) 체계를 따른다.
+    document : members.verification_status  -> "서류·사진 심사"
+    player   : members.player_id            -> "선수 기록 연결"
+  두 축은 서로 독립이므로, 한쪽 상태를 "인증 완료" 처럼 뭉뚱그려 쓰지 않는다.
+
+  색상 규칙: 액센트는 태극 레드(--accent-primary #c9302c) / 태극 블루(--accent-secondary #1e3a8a) 만.
+  레드는 파괴적 동작(회원 탈퇴) 전용. 기본 동작(저장)은 블루.
+#}
+
+{% macro status_mark(state) -%}
+{%- if state == 'verified' -%}
+<svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true" focusable="false">
+  <circle cx="10" cy="10" r="8.25" fill="none" stroke="currentColor" stroke-width="1.5"/>
+  <path d="M6.2 10.3l2.5 2.5 5.1-5.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+{%- elif state == 'submitted' -%}
+<svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true" focusable="false">
+  <circle cx="10" cy="10" r="8.25" fill="none" stroke="currentColor" stroke-width="1.5"/>
+  <path d="M10 5.4V10l3.1 1.9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+{%- elif state == 'rejected' -%}
+<svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true" focusable="false">
+  <circle cx="10" cy="10" r="8.25" fill="none" stroke="currentColor" stroke-width="1.5"/>
+  <path d="M10 5.8v5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+  <circle cx="10" cy="13.7" r="1" fill="currentColor"/>
+</svg>
+{%- else -%}
+<svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true" focusable="false">
+  <circle cx="10" cy="10" r="8.25" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2.4 2.6"/>
+  <path d="M6.6 10h6.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+</svg>
+{%- endif -%}
+{%- endmacro %}
+
+{% macro provider_mark(provider) -%}
+{%- if provider == 'kakao' -%}
+<span class="oauth-mark mark-kakao" aria-hidden="true">
+  <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" focusable="false">
+    <path d="M12 3c-5.5 0-10 3.58-10 8 0 2.81 1.87 5.28 4.7 6.7-.15.58-.52 2.1-.6 2.43-.1.4.14.4.31.29.13-.08 2.05-1.4 2.88-1.97.84.13 1.73.2 2.64.2 5.5 0 10-3.58 10-8s-4.5-8-10-8z"/>
+  </svg>
+</span>
+{%- elif provider == 'google' -%}
+<span class="oauth-mark mark-google" aria-hidden="true">
+  <svg viewBox="0 0 24 24" width="16" height="16" focusable="false">
+    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+  </svg>
+</span>
+{%- elif provider == 'x' -%}
+<span class="oauth-mark mark-x" aria-hidden="true">
+  <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" focusable="false">
+    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231 5.451-6.231zm-1.161 17.52h1.833L7.084 4.126H5.117l11.966 15.644z"/>
+  </svg>
+</span>
+{%- else -%}
+<span class="oauth-mark mark-generic" aria-hidden="true">
+  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" focusable="false">
+    <path d="M10.5 13.5a4 4 0 005.66 0l2.6-2.6a4 4 0 00-5.66-5.66l-1.1 1.1"/>
+    <path d="M13.5 10.5a4 4 0 00-5.66 0l-2.6 2.6a4 4 0 005.66 5.66l1.1-1.1"/>
+  </svg>
+</span>
+{%- endif -%}
+{%- endmacro %}
+
 {% block content %}
+{% set doc_state = member.verification_status if member.verification_status in ['verified', 'submitted', 'rejected'] else 'none' %}
+{% set player_linked = true if member.player_id else false %}
+{# |default() 는 undefined 만 잡고 None 은 통과시키므로 둘 다 명시적으로 처리. 0일 설정은 0으로 유지한다. #}
+{% set grace_days = 30 if deletion_grace_days is not defined or deletion_grace_days is none else deletion_grace_days %}
+
 <div class="profile-container">
     <div class="profile-card">
-        <div class="profile-header">
-            <div class="profile-avatar">
-                {{ member.full_name[0] if member.full_name else 'U' }}
-            </div>
-            <div class="profile-info">
-                <h1>{{ member.full_name }}</h1>
-                <p class="member-type">
+
+        <!-- 헤더 -->
+        <header class="profile-header">
+            <div class="profile-avatar" aria-hidden="true">{{ (member.full_name or member.email or '?')[0]|upper }}</div>
+            <div class="profile-identity">
+                <h1 class="profile-name">{{ member.full_name or i18n.account.profile.no_name|default('이름 미등록') }}</h1>
+                <p class="profile-role">
                     {% if member.member_type == 'player' %}{{ i18n.account.profile.member_type_player|default('선수회원') }}
                     {% elif member.member_type == 'player_parent' %}{{ i18n.account.profile.member_type_player_parent|default('선수 부모회원') }}
                     {% elif member.member_type == 'club_coach' %}{{ i18n.account.profile.member_type_club_coach|default('클럽 코치') }}
@@ -19,458 +91,965 @@
                     {% else %}{{ i18n.account.profile.member_type_general|default('일반 회원') }}
                     {% endif %}
                 </p>
-                <div class="verification-badge badge-{{ member.verification_status }}">
-                    {% if member.verification_status == 'verified' %}
-                    ✅ {{ i18n.account.profile.status_verified|default('인증 완료') }}
-                    {% elif member.verification_status == 'submitted' %}
-                    ⏳ {{ i18n.account.profile.status_submitted|default('인증 검토중') }}
-                    {% elif member.verification_status == 'rejected' %}
-                    ❌ {{ i18n.account.profile.status_rejected|default('인증 거부됨') }}
-                    {% else %}
-                    📋 {{ i18n.account.profile.status_pending|default('인증 대기') }}
-                    {% endif %}
-                </div>
             </div>
-        </div>
+        </header>
+
+        <!-- 인증 현황 (축별 표기 — verification.html과 동일 체계) -->
+        <section class="profile-section">
+            <div class="section-head">
+                <h2>{{ i18n.account.profile.verification_title|default('인증 현황') }}</h2>
+                <a class="section-link" href="/account/verification">{{ i18n.account.profile.verification_manage|default('인증 관리') }}</a>
+            </div>
+
+            <ul class="axis-list">
+                <li class="axis-row axis-{{ doc_state }}">
+                    <span class="axis-mark">{{ status_mark(doc_state) }}</span>
+                    <div class="axis-body">
+                        <span class="axis-name">{{ i18n.account.profile.axis_document_label|default('서류·사진 심사') }}</span>
+                        <span class="axis-detail">
+                            {% if doc_state == 'verified' %}{{ i18n.account.profile.axis_document_verified|default('제출한 서류·사진이 심사를 통과했습니다.') }}
+                            {% elif doc_state == 'submitted' %}{{ i18n.account.profile.axis_document_submitted|default('제출한 서류·사진을 검토하고 있습니다.') }}
+                            {% elif doc_state == 'rejected' %}{{ i18n.account.profile.axis_document_rejected|default('제출한 서류·사진이 반려되었습니다.') }}
+                            {% else %}{{ i18n.account.profile.axis_document_none|default('아직 제출한 서류·사진이 없습니다.') }}
+                            {% endif %}
+                        </span>
+                    </div>
+                    <span class="axis-state">
+                        {% if doc_state == 'verified' %}{{ i18n.account.profile.state_verified|default('인증됨') }}
+                        {% elif doc_state == 'submitted' %}{{ i18n.account.profile.state_review|default('심사 중') }}
+                        {% elif doc_state == 'rejected' %}{{ i18n.account.profile.state_rejected|default('반려됨') }}
+                        {% else %}{{ i18n.account.profile.state_none|default('미인증') }}
+                        {% endif %}
+                    </span>
+                </li>
+
+                <li class="axis-row axis-{{ 'verified' if player_linked else 'none' }}">
+                    <span class="axis-mark">{{ status_mark('verified' if player_linked else 'none') }}</span>
+                    <div class="axis-body">
+                        <span class="axis-name">{{ i18n.account.profile.axis_player_label|default('선수 기록 연결') }}</span>
+                        <span class="axis-detail">
+                            {% if player_linked %}{{ i18n.account.profile.axis_player_verified|default('대회 기록(선수 프로필)이 계정에 연결되어 있습니다.') }}
+                            {% else %}{{ i18n.account.profile.axis_player_none|default('대회 기록(선수 프로필)이 아직 계정에 연결되지 않았습니다.') }}
+                            {% endif %}
+                        </span>
+                        {% if player_linked %}
+                        <span class="axis-meta">{{ i18n.account.profile.axis_player_id_label|default('연결된 선수 ID') }} <span class="mono">{{ member.player_id }}</span></span>
+                        {% endif %}
+                    </div>
+                    <span class="axis-state">
+                        {% if player_linked %}{{ i18n.account.profile.state_linked|default('연결됨') }}
+                        {% else %}{{ i18n.account.profile.state_unlinked|default('미연결') }}
+                        {% endif %}
+                    </span>
+                </li>
+            </ul>
+        </section>
 
         <!-- 기본 정보 -->
-        <div class="profile-section">
+        <section class="profile-section">
             <h2>{{ i18n.account.profile.basic_info|default('기본 정보') }}</h2>
-            <div class="info-grid">
+            <dl class="info-grid">
                 <div class="info-item">
-                    <label>{{ i18n.account.profile.email_label|default('이메일') }}</label>
-                    <span>{{ member.email }}</span>
+                    <dt>{{ i18n.account.profile.email_label|default('이메일') }}</dt>
+                    <dd>{{ member.email or i18n.account.profile.not_registered|default('미등록') }}</dd>
                 </div>
                 <div class="info-item">
-                    <label>{{ i18n.account.profile.phone_label|default('연락처') }}</label>
-                    <span>{{ member.phone or '-' }}</span>
+                    <dt>{{ i18n.account.profile.phone_label|default('연락처') }}</dt>
+                    <dd>{{ member.phone or i18n.account.profile.not_registered|default('미등록') }}</dd>
                 </div>
                 <div class="info-item">
-                    <label>{{ i18n.account.profile.joined_label|default('가입일') }}</label>
-                    <span>{{ member.created_at[:10] if member.created_at else '-' }}</span>
+                    <dt>{{ i18n.account.profile.joined_label|default('가입일') }}</dt>
+                    <dd class="tabular">{{ joined_date or i18n.account.profile.not_registered|default('미등록') }}</dd>
                 </div>
-            </div>
-        </div>
+            </dl>
+        </section>
 
         <!-- 개인정보 설정 -->
-        <div class="profile-section">
+        <section class="profile-section">
             <h2>{{ i18n.account.profile.privacy_settings|default('개인정보 설정') }}</h2>
             <form id="privacyForm" class="privacy-form">
                 <label class="toggle-item">
                     <span class="toggle-label">
                         <strong>{{ i18n.account.profile.privacy_public_title|default('정보 공개') }}</strong>
-                        <p>{{ i18n.account.profile.privacy_public_desc|default('다른 사용자에게 실명과 소속을 공개합니다') }}</p>
+                        <span>{{ i18n.account.profile.privacy_public_desc|default('다른 사용자에게 실명과 소속을 공개합니다.') }}</span>
                     </span>
-                    <input type="checkbox" name="privacy_public"
-                        {{ 'checked' if member.privacy_public else '' }}>
+                    <input type="checkbox" name="privacy_public" {{ 'checked' if member.privacy_public else '' }}>
                     <span class="toggle-switch"></span>
                 </label>
 
                 <label class="toggle-item">
                     <span class="toggle-label">
                         <strong>{{ i18n.account.profile.marketing_title|default('마케팅 수신') }}</strong>
-                        <p>{{ i18n.account.profile.marketing_desc|default('이벤트 및 프로모션 정보를 받습니다') }}</p>
+                        <span>{{ i18n.account.profile.marketing_desc|default('이벤트와 프로모션 소식을 이메일로 받습니다.') }}</span>
                     </span>
-                    <input type="checkbox" name="marketing_consent"
-                        {{ 'checked' if member.marketing_consent else '' }}>
+                    <input type="checkbox" name="marketing_consent" {{ 'checked' if member.marketing_consent else '' }}>
                     <span class="toggle-switch"></span>
                 </label>
 
                 <label class="toggle-item">
                     <span class="toggle-label">
                         <strong>{{ i18n.account.profile.promotional_title|default('홍보 연동') }}</strong>
-                        <p>{{ i18n.account.profile.promotional_desc|default('SNS 홍보 콘텐츠에 정보를 사용합니다') }}</p>
+                        <span>{{ i18n.account.profile.promotional_desc|default('SNS 홍보 콘텐츠에 회원 정보를 사용합니다.') }}</span>
                     </span>
-                    <input type="checkbox" name="promotional_consent"
-                        {{ 'checked' if member.promotional_consent else '' }}>
+                    <input type="checkbox" name="promotional_consent" {{ 'checked' if member.promotional_consent else '' }}>
                     <span class="toggle-switch"></span>
                 </label>
 
-                <button type="submit" class="save-btn">{{ i18n.account.profile.save_btn|default('저장') }}</button>
+                <div class="form-footer">
+                    <button type="submit" class="btn btn-primary">{{ i18n.account.profile.save_btn|default('저장') }}</button>
+                    <p class="form-status" id="privacyStatus" role="status" aria-live="polite"></p>
+                </div>
             </form>
-        </div>
+        </section>
 
-        <!-- 공개 프로필 미리보기 -->
-        <div class="profile-section">
+        <!-- 공개 프로필 미리보기 (실제 회원 데이터만 사용) -->
+        <section class="profile-section">
             <h2>{{ i18n.account.profile.preview_title|default('공개 프로필 미리보기') }}</h2>
+            {% if preview_name %}
             <div class="preview-card">
-                <div class="preview-name">
-                    {% if member.privacy_public %}
-                    {{ member.full_name }}
-                    {% else %}
-                    {{ member.display_name or 'H.G.D.' }}
-                    {% endif %}
-                </div>
-                <div class="preview-team">
-                    {% if member.privacy_public %}
-                    {{ team_name or i18n.account.profile.preview_no_team|default('소속 미등록') }}
-                    {% else %}
-                    {{ anonymous_team or '서울(클럽)' }}
-                    {% endif %}
-                </div>
+                <span class="preview-name">{{ preview_name }}</span>
+                <span class="preview-team">{{ preview_team or i18n.account.profile.preview_no_team|default('소속 미등록') }}</span>
             </div>
-            <p class="preview-note">
+            <p class="section-note">
                 {% if member.privacy_public %}
-                {{ i18n.account.profile.preview_public_note|default('현재 공개 설정: 다른 사용자가 실명과 소속을 볼 수 있습니다') }}
+                {{ i18n.account.profile.preview_public_note|default('공개 설정: 다른 사용자가 실명과 소속을 볼 수 있습니다.') }}
                 {% else %}
-                {{ i18n.account.profile.preview_private_note|default('현재 비공개 설정: 다른 사용자에게 이니셜과 지역만 표시됩니다') }}
+                {{ i18n.account.profile.preview_private_note|default('비공개 설정: 다른 사용자에게는 이니셜과 지역만 표시됩니다.') }}
                 {% endif %}
             </p>
-        </div>
+            {% else %}
+            <p class="section-note">{{ i18n.account.profile.preview_empty|default('이름을 등록하면 다른 사용자에게 어떻게 보이는지 여기에서 확인할 수 있습니다.') }}</p>
+            {% endif %}
+        </section>
 
         <!-- 연결된 계정 -->
-        <div class="profile-section">
+        <section class="profile-section">
             <h2>{{ i18n.account.profile.connected_accounts|default('연결된 계정') }}</h2>
-            <div class="oauth-list">
+            <ul class="oauth-list">
                 {% for oauth in oauth_connections %}
-                <div class="oauth-item">
-                    <span class="oauth-icon">
-                        {% if oauth.provider == 'kakao' %}💬
-                        {% elif oauth.provider == 'google' %}🔍
-                        {% else %}✖️
-                        {% endif %}
-                    </span>
+                <li class="oauth-item">
+                    {{ provider_mark(oauth.provider) }}
                     <div class="oauth-info">
                         <strong>{{ oauth.provider|title }}</strong>
                         <span>{{ oauth.provider_email or oauth.provider_name or i18n.account.profile.connected|default('연결됨') }}</span>
                     </div>
                     {% if oauth.is_primary %}
-                    <span class="primary-badge">{{ i18n.account.profile.primary|default('기본') }}</span>
+                    <span class="primary-badge">{{ i18n.account.profile.primary|default('기본 로그인') }}</span>
                     {% endif %}
-                </div>
+                </li>
                 {% else %}
-                <p class="no-oauth">{{ i18n.account.profile.no_connected|default('연결된 계정이 없습니다') }}</p>
+                <li class="oauth-empty">{{ i18n.account.profile.no_connected|default('연결된 계정이 없습니다.') }}</li>
                 {% endfor %}
-            </div>
+            </ul>
 
             {% if not has_x_connection %}
-            <a href="/auth/login/x?promotional=true" class="add-oauth-btn">
-                ✖️ {{ i18n.account.profile.add_x_account|default('X(Twitter) 홍보 계정 연결하기') }}
+            <a href="/auth/login/x?promotional=true" class="btn btn-quiet btn-add">
+                {{ provider_mark('x') }}
+                <span>{{ i18n.account.profile.add_x_account|default('X(Twitter) 홍보 계정 연결') }}</span>
             </a>
             {% endif %}
-        </div>
+        </section>
 
         <!-- 로그아웃 -->
-        <div class="profile-actions">
-            <a href="/auth/logout" class="logout-btn">{{ i18n.account.profile.logout|default('로그아웃') }}</a>
-        </div>
+        <section class="profile-section profile-actions">
+            <a href="/auth/logout" class="btn btn-quiet">{{ i18n.account.profile.logout|default('로그아웃') }}</a>
+        </section>
+
+        <!-- 회원 탈퇴 (이용약관 제13조) -->
+        <section class="danger-zone" aria-labelledby="dangerZoneTitle">
+            <h2 id="dangerZoneTitle">{{ i18n.account.profile.danger_zone_title|default('회원 탈퇴') }}</h2>
+
+            {% if deletion_requested %}
+            <div class="danger-body">
+                <p class="danger-lead">{{ i18n.account.profile.deletion_scheduled_lead|default('탈퇴가 접수되었습니다. 아래 예정일에 회원 정보가 파기됩니다.') }}</p>
+
+                <dl class="deletion-dates">
+                    <div>
+                        <dt>{{ i18n.account.profile.deletion_requested_label|default('탈퇴 요청일') }}</dt>
+                        <dd class="tabular">{{ deletion_requested_date or '-' }}</dd>
+                    </div>
+                    <div>
+                        <dt>{{ i18n.account.profile.deletion_scheduled_label|default('개인정보 파기 예정일') }}</dt>
+                        <dd class="tabular">{{ deletion_scheduled_date or '-' }}</dd>
+                    </div>
+                </dl>
+
+                <p class="danger-note">{{ i18n.account.profile.deletion_cancel_note|default('파기 예정일 전까지는 탈퇴를 취소할 수 있으며, 취소하면 계정과 설정이 그대로 유지됩니다.') }}</p>
+
+                <button type="button" class="btn btn-primary" id="cancelDeletionBtn">
+                    {{ i18n.account.profile.cancel_deletion_btn|default('탈퇴 취소하고 계정 유지하기') }}
+                </button>
+                <p class="form-status" id="deletionStatus" role="status" aria-live="polite"></p>
+            </div>
+
+            {% else %}
+            <div class="danger-body">
+                <p class="danger-lead">{{ i18n.account.profile.delete_lead|default('탈퇴하면 아래와 같이 처리됩니다. 진행 전에 반드시 확인해 주세요.') }}</p>
+
+                <ul class="danger-facts">
+                    <li>{{ i18n.account.profile.delete_fact_schedule_prefix|default('탈퇴 요청은 즉시 접수되고, 요청일로부터') }}
+                        <span class="tabular">{{ grace_days }}</span>{{ i18n.account.profile.delete_fact_schedule_suffix|default('일 뒤로 회원 정보 파기가 예약됩니다.') }}</li>
+                    <li>{{ i18n.account.profile.delete_fact_grace|default('예약 기간에는 계정이 그대로 유지되며, 이 화면에서 탈퇴를 취소할 수 있습니다.') }}</li>
+                    <li>{{ i18n.account.profile.delete_fact_purge|default('예정일이 지나면 이름·이메일·연락처 등 회원 정보와 로그인 연동이 파기됩니다.') }}</li>
+                    <li>{{ i18n.account.profile.delete_fact_legal|default('관련 법령상 보존 의무가 있는 기록은 해당 기간 동안 별도로 보관됩니다.') }}</li>
+                    <li>{{ i18n.account.profile.delete_fact_records|default('대회 기록은 대한펜싱협회 공개 데이터에서 수집한 정보이므로 삭제되지 않고, 계정과의 연결만 해제됩니다.') }}</li>
+                </ul>
+
+                <p class="danger-note">
+                    {{ i18n.account.profile.delete_legal_note|default('자세한 내용은 이용약관 제13조와 개인정보처리방침을 확인해 주세요.') }}
+                    <a href="/legal/terms">{{ i18n.common.footer.terms|default('이용약관') }}</a>
+                    <a href="/legal/privacy">{{ i18n.common.footer.privacy|default('개인정보처리방침') }}</a>
+                </p>
+
+                <button type="button" class="btn btn-danger-quiet" id="deleteRevealBtn"
+                        aria-expanded="false" aria-controls="deleteConfirmBlock">
+                    {{ i18n.account.profile.delete_reveal_btn|default('회원 탈퇴 진행하기') }}
+                </button>
+
+                <div class="delete-confirm" id="deleteConfirmBlock" hidden>
+                    <label class="confirm-label" for="deleteConfirmInput">
+                        {{ i18n.account.profile.delete_confirm_prefix|default('계속하려면 아래 칸에') }}
+                        <strong class="confirm-phrase">{{ i18n.account.profile.delete_confirm_phrase|default('탈퇴합니다') }}</strong>{{ i18n.account.profile.delete_confirm_suffix|default('를 그대로 입력해 주세요.') }}
+                    </label>
+                    <input type="text" id="deleteConfirmInput" class="confirm-input"
+                           autocomplete="off" autocapitalize="off" spellcheck="false"
+                           data-phrase="{{ i18n.account.profile.delete_confirm_phrase|default('탈퇴합니다') }}"
+                           placeholder="{{ i18n.account.profile.delete_confirm_phrase|default('탈퇴합니다') }}">
+
+                    <div class="confirm-actions">
+                        <button type="button" class="btn btn-danger" id="deleteSubmitBtn" disabled>
+                            {{ i18n.account.profile.delete_submit_btn|default('탈퇴 요청') }}
+                        </button>
+                        <button type="button" class="btn btn-quiet" id="deleteAbortBtn">
+                            {{ i18n.account.profile.delete_abort_btn|default('그만두기') }}
+                        </button>
+                    </div>
+                </div>
+                <p class="form-status" id="deletionStatus" role="status" aria-live="polite"></p>
+            </div>
+            {% endif %}
+        </section>
+
     </div>
 </div>
 
 <style>
+/* =========================================================
+   Profile — 태극 레드(#c9302c) / 태극 블루(#1e3a8a) 단색 액센트만 사용.
+   그라데이션·보라 계열·이모지 아이콘 없음.
+   ========================================================= */
 .profile-container {
-    max-width: 600px;
+    max-width: 640px;
     margin: 0 auto;
-    padding: 2rem;
+    padding: 2rem 1.25rem 4rem;
 }
 
 .profile-card {
     background: var(--bg-card);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
     border: 1px solid var(--border-color);
     border-radius: 16px;
-    box-shadow: var(--shadow-lg);
+    box-shadow: var(--shadow-md);
     overflow: hidden;
+
+    /* 테마별 상태 색 — 두 테마 모두 WCAG AA(4.5:1) 이상을 만족하는 값으로 분기.
+       전역 --success-color/--warning-color 는 light 테마에서 대비가 2.2:1 수준이라 그대로 쓰지 않는다. */
+    --fm-ok: #067a55;
+    --fm-wait: #8a5a00;
+    --fm-alert: #c9302c;
+    --fm-link: #1e3a8a;
+    --fm-primary: #1e3a8a;
+    --fm-primary-hover: #17306e;
+    --fm-toggle-on: #1e3a8a;
 }
 
+[data-theme="dark"] .profile-card {
+    --fm-ok: #10b981;
+    --fm-wait: #f59e0b;
+    --fm-alert: #e8807c;
+    --fm-link: #8fa9e8;
+    --fm-primary: #3358b8;
+    --fm-primary-hover: #2a4899;
+    --fm-toggle-on: #4a6fd4;
+}
+
+/* -- 헤더 -- */
 .profile-header {
     display: flex;
     align-items: center;
-    gap: 1.5rem;
-    padding: 2rem;
-    background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
-    color: white;
+    gap: 1.25rem;
+    padding: 1.75rem 2rem;
+    background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border-color);
 }
 
 .profile-avatar {
-    width: 80px;
-    height: 80px;
+    flex: 0 0 auto;
+    width: 60px;
+    height: 60px;
     border-radius: 50%;
-    background: rgba(255,255,255,0.15);
+    background: var(--accent-primary);
+    color: #ffffff;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 2rem;
-    font-weight: 600;
-}
-
-.profile-info h1 {
     font-size: 1.5rem;
-    margin-bottom: 0.25rem;
+    font-weight: 600;
+    letter-spacing: 0;
 }
 
-.member-type {
-    opacity: 0.9;
-    font-size: 0.9rem;
-    margin-bottom: 0.5rem;
+.profile-name {
+    font-size: 1.375rem;
+    font-weight: 700;
+    line-height: 1.3;
+    letter-spacing: -0.02em;
+    color: var(--text-primary);
+    margin: 0;
 }
 
-.verification-badge {
-    display: inline-block;
-    padding: 0.25rem 0.75rem;
-    border-radius: 20px;
-    font-size: 0.8rem;
+.profile-role {
+    margin: 0.125rem 0 0;
+    font-size: 0.875rem;
     font-weight: 500;
+    color: var(--text-secondary);
 }
 
-.badge-verified { background: rgba(16, 185, 129, 0.2); color: var(--success-color); }
-.badge-submitted { background: rgba(245, 158, 11, 0.2); color: var(--warning-color); }
-.badge-rejected { background: rgba(239, 68, 68, 0.2); color: var(--danger-color); }
-.badge-pending { background: rgba(255, 255, 255, 0.1); color: var(--text-secondary); }
-
+/* -- 섹션 -- */
 .profile-section {
     padding: 1.5rem 2rem;
     border-bottom: 1px solid var(--border-color);
 }
 
 .profile-section h2 {
-    font-size: 1rem;
-    margin-bottom: 1rem;
-    color: var(--text-secondary);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--text-muted);
+    margin: 0 0 1rem;
 }
 
-.info-grid {
-    display: grid;
-    gap: 1rem;
-}
-
-.info-item {
+.section-head {
     display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
 }
 
-.info-item label {
-    font-size: 0.8rem;
+.section-head h2 { margin: 0; }
+
+.section-link {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--fm-link);
+    text-decoration: none;
+}
+.section-link:hover { text-decoration: underline; }
+
+.section-note {
+    margin: 0.75rem 0 0;
+    font-size: 0.8125rem;
+    font-weight: 400;
+    line-height: 1.6;
     color: var(--text-muted);
 }
 
-.info-item span {
-    font-size: 1rem;
+/* -- 인증 축 -- */
+.axis-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.axis-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.875rem 1rem;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+}
+
+.axis-mark {
+    flex: 0 0 auto;
+    display: flex;
+    margin-top: 0.125rem;
+    color: var(--text-muted);
+}
+.axis-row.axis-verified .axis-mark { color: var(--fm-ok); }
+.axis-row.axis-submitted .axis-mark { color: var(--fm-wait); }
+.axis-row.axis-rejected .axis-mark { color: var(--fm-alert); }
+
+.axis-body {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.1875rem;
+}
+
+.axis-name {
+    font-size: 0.9375rem;
+    font-weight: 600;
     color: var(--text-primary);
 }
 
-.privacy-form {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
+.axis-detail {
+    font-size: 0.8125rem;
+    font-weight: 400;
+    line-height: 1.55;
+    color: var(--text-secondary);
 }
+
+.axis-meta {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.axis-state {
+    flex: 0 0 auto;
+    align-self: center;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.1875rem 0.5rem;
+    border-radius: 999px;
+    border: 1px solid var(--border-light);
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+.axis-row.axis-verified .axis-state {
+    color: var(--fm-ok);
+    border-color: var(--fm-ok);
+}
+.axis-row.axis-submitted .axis-state {
+    color: var(--fm-wait);
+    border-color: var(--fm-wait);
+}
+.axis-row.axis-rejected .axis-state {
+    color: var(--fm-alert);
+    border-color: var(--fm-alert);
+}
+
+.mono {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+}
+
+/* -- 기본 정보 -- */
+.info-grid {
+    display: grid;
+    gap: 0.875rem;
+    margin: 0;
+}
+
+.info-item { display: flex; flex-direction: column; gap: 0.1875rem; }
+
+.info-item dt {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--text-muted);
+}
+
+.info-item dd {
+    margin: 0;
+    font-size: 0.9375rem;
+    font-weight: 400;
+    color: var(--text-primary);
+}
+
+.tabular { font-variant-numeric: tabular-nums; }
+
+/* -- 토글 -- */
+.privacy-form { display: flex; flex-direction: column; gap: 0.25rem; }
 
 .toggle-item {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 1rem;
     padding: 0.75rem 0;
     cursor: pointer;
 }
 
-.toggle-label {
-    flex: 1;
-}
+.toggle-label { flex: 1 1 auto; min-width: 0; }
 
 .toggle-label strong {
     display: block;
-    margin-bottom: 0.25rem;
+    font-size: 0.9375rem;
+    font-weight: 600;
     color: var(--text-primary);
+    margin-bottom: 0.125rem;
 }
 
-.toggle-label p {
-    font-size: 0.85rem;
+.toggle-label span {
+    display: block;
+    font-size: 0.8125rem;
+    font-weight: 400;
+    line-height: 1.55;
     color: var(--text-secondary);
-    margin: 0;
 }
 
-.toggle-item input {
-    display: none;
-}
+.toggle-item input { position: absolute; opacity: 0; width: 0; height: 0; }
 
 .toggle-switch {
-    width: 50px;
+    flex: 0 0 auto;
+    width: 46px;
     height: 26px;
-    background: rgba(255, 255, 255, 0.15);
+    background: var(--border-light);
     border-radius: 13px;
     position: relative;
-    transition: background 0.2s;
+    transition: background 0.2s ease;
 }
 
 .toggle-switch::after {
     content: '';
     position: absolute;
-    width: 22px;
-    height: 22px;
-    background: var(--text-secondary);
+    width: 20px;
+    height: 20px;
+    background: #ffffff;
     border-radius: 50%;
-    top: 2px;
-    left: 2px;
-    transition: all 0.2s;
+    top: 3px;
+    left: 3px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+    transition: left 0.2s ease;
 }
 
-.toggle-item input:checked + .toggle-switch {
-    background: var(--accent-primary);
+.toggle-item input:checked + .toggle-switch { background: var(--fm-toggle-on); }
+.toggle-item input:checked + .toggle-switch::after { left: 23px; }
+
+.toggle-item input:focus-visible + .toggle-switch {
+    outline: 2px solid var(--fm-primary);
+    outline-offset: 2px;
 }
 
-.toggle-item input:checked + .toggle-switch::after {
-    left: 26px;
-    background: white;
+.form-footer {
+    display: flex;
+    align-items: center;
+    gap: 0.875rem;
+    flex-wrap: wrap;
+    margin-top: 0.875rem;
 }
 
-.save-btn {
-    padding: 0.75rem 1.5rem;
-    background: linear-gradient(135deg, var(--accent-primary), #a02320);
-    color: white;
-    border: none;
+.form-status {
+    margin: 0;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+.form-status.is-error { color: var(--fm-alert); }
+.form-status.is-ok { color: var(--fm-ok); }
+
+/* -- 버튼 -- */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.625rem 1.25rem;
     border-radius: 8px;
+    border: 1px solid transparent;
+    font-family: inherit;
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1.2;
+    text-decoration: none;
     cursor: pointer;
-    font-size: 0.9rem;
-    align-self: flex-start;
-    margin-top: 0.5rem;
-    box-shadow: 0 4px 15px var(--glow-primary);
-    transition: all 0.3s;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.btn:focus-visible { outline: 2px solid var(--fm-primary); outline-offset: 2px; }
+
+/* 기본 동작 = 태극 블루 */
+.btn-primary { background: var(--fm-primary); color: #ffffff; }
+.btn-primary:hover { background: var(--fm-primary-hover); }
+
+.btn-quiet {
+    background: transparent;
+    border-color: var(--border-light);
+    color: var(--text-secondary);
+}
+.btn-quiet:hover { border-color: var(--text-muted); color: var(--text-primary); }
+
+/* 파괴적 동작 = 태극 레드 */
+.btn-danger { background: var(--accent-primary); color: #ffffff; }
+.btn-danger:hover { background: #a92622; }
+.btn-danger:disabled {
+    background: transparent;
+    border-color: var(--border-light);
+    color: var(--text-muted);
+    cursor: not-allowed;
 }
 
-.save-btn:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 6px 20px var(--glow-primary);
+.btn-danger-quiet {
+    background: transparent;
+    border-color: rgba(201, 48, 44, 0.45);
+    color: var(--fm-alert);
 }
+.btn-danger-quiet:hover { border-color: var(--accent-primary); background: rgba(201, 48, 44, 0.08); }
 
+.btn-add { margin-top: 1rem; }
+
+/* -- 미리보기 -- */
 .preview-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1875rem;
+    align-items: center;
+    text-align: center;
+    padding: 1.125rem 1rem;
     background: var(--bg-tertiary);
     border: 1px solid var(--border-color);
-    padding: 1rem;
-    border-radius: 8px;
-    text-align: center;
+    border-radius: 10px;
 }
 
 .preview-name {
-    font-size: 1.1rem;
+    font-size: 1.0625rem;
     font-weight: 600;
-    margin-bottom: 0.25rem;
     color: var(--text-primary);
 }
 
 .preview-team {
+    font-size: 0.875rem;
+    font-weight: 400;
     color: var(--text-secondary);
-    font-size: 0.9rem;
 }
 
-.preview-note {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    margin-top: 0.75rem;
-}
-
+/* -- 연결된 계정 -- */
 .oauth-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
+    gap: 0.5rem;
 }
 
 .oauth-item {
     display: flex;
     align-items: center;
-    gap: 1rem;
-    padding: 0.75rem;
+    gap: 0.875rem;
+    padding: 0.75rem 1rem;
     background: var(--bg-tertiary);
     border: 1px solid var(--border-color);
-    border-radius: 8px;
+    border-radius: 10px;
 }
 
-.oauth-icon {
-    font-size: 1.5rem;
+.oauth-mark {
+    flex: 0 0 auto;
+    width: 28px;
+    height: 28px;
+    border-radius: 7px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
+.mark-kakao { background: #fee500; color: #191600; }
+.mark-google { background: #ffffff; border: 1px solid rgba(0, 0, 0, 0.12); }
+.mark-x { background: #000000; color: #ffffff; }
+.mark-generic { background: var(--bg-secondary); color: var(--text-secondary); border: 1px solid var(--border-color); }
 
-.oauth-info {
-    flex: 1;
-}
+.oauth-info { flex: 1 1 auto; min-width: 0; }
 
 .oauth-info strong {
     display: block;
-    font-size: 0.9rem;
+    font-size: 0.875rem;
+    font-weight: 600;
     color: var(--text-primary);
 }
 
 .oauth-info span {
-    font-size: 0.8rem;
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 400;
     color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .primary-badge {
-    background: var(--accent-primary);
-    color: white;
-    padding: 0.2rem 0.5rem;
-    border-radius: 4px;
-    font-size: 0.7rem;
-}
-
-.no-oauth {
-    color: var(--text-muted);
-    font-size: 0.9rem;
-}
-
-.add-oauth-btn {
-    display: inline-block;
-    margin-top: 1rem;
-    padding: 0.5rem 1rem;
-    border: 1px dashed var(--border-light);
-    border-radius: 8px;
+    flex: 0 0 auto;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    padding: 0.1875rem 0.5rem;
+    border-radius: 999px;
+    border: 1px solid var(--border-light);
     color: var(--text-secondary);
-    text-decoration: none;
-    font-size: 0.9rem;
-    transition: all 0.2s;
+    white-space: nowrap;
 }
 
-.add-oauth-btn:hover {
-    border-color: var(--accent-gold);
-    color: var(--accent-gold);
+.oauth-empty {
+    font-size: 0.875rem;
+    font-weight: 400;
+    color: var(--text-muted);
 }
 
-.profile-actions {
-    padding: 1.5rem 2rem;
-    text-align: center;
+.profile-actions { text-align: center; }
+
+/* -- 위험 구역 -- */
+.danger-zone {
+    padding: 1.5rem 2rem 1.75rem;
+    background: rgba(201, 48, 44, 0.05);
+    border-top: 1px solid rgba(201, 48, 44, 0.28);
 }
 
-.logout-btn {
-    color: var(--danger-color);
-    text-decoration: none;
-    font-size: 0.9rem;
+.danger-zone h2 {
+    margin: 0 0 0.875rem;
+    font-size: 0.9375rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: var(--fm-alert);
 }
 
-.logout-btn:hover {
+.danger-body { display: flex; flex-direction: column; align-items: flex-start; gap: 0.875rem; }
+
+.danger-lead {
+    margin: 0;
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: 1.6;
+    color: var(--text-primary);
+}
+
+.danger-facts {
+    margin: 0;
+    padding-left: 1.125rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    font-size: 0.8125rem;
+    font-weight: 400;
+    line-height: 1.6;
+    color: var(--text-secondary);
+}
+
+.danger-note {
+    margin: 0;
+    font-size: 0.75rem;
+    font-weight: 400;
+    line-height: 1.6;
+    color: var(--text-muted);
+}
+.danger-note a {
+    color: var(--text-secondary);
     text-decoration: underline;
+    margin-left: 0.375rem;
+}
+
+.deletion-dates {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 0.75rem;
+    width: 100%;
+    margin: 0;
+    padding: 0.875rem 1rem;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+}
+.deletion-dates dt {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    margin-bottom: 0.125rem;
+}
+.deletion-dates dd {
+    margin: 0;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.delete-confirm {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 0.625rem;
+    padding: 1rem;
+    background: var(--bg-tertiary);
+    border: 1px solid rgba(201, 48, 44, 0.3);
+    border-radius: 10px;
+}
+
+.confirm-label {
+    font-size: 0.8125rem;
+    font-weight: 400;
+    line-height: 1.6;
+    color: var(--text-secondary);
+}
+.confirm-phrase {
+    font-weight: 700;
+    color: var(--text-primary);
+    padding: 0 0.125rem;
+}
+
+.confirm-input {
+    width: 100%;
+    padding: 0.625rem 0.75rem;
+    font-family: inherit;
+    font-size: 0.9375rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    background: var(--bg-card);
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+}
+.confirm-input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+.confirm-input::placeholder { color: var(--text-muted); font-weight: 400; }
+
+.confirm-actions { display: flex; gap: 0.625rem; flex-wrap: wrap; }
+
+@media (max-width: 560px) {
+    .profile-container { padding: 1.25rem 0.75rem 3rem; }
+    .profile-header,
+    .profile-section,
+    .danger-zone { padding-left: 1.25rem; padding-right: 1.25rem; }
+    .axis-row { flex-wrap: wrap; }
+    .axis-state { align-self: flex-start; }
 }
 </style>
 
+<div id="profileMessages" hidden>
+    <span data-msg="saved">{{ i18n.account.profile.settings_saved|default('설정이 저장되었습니다.') }}</span>
+    <span data-msg="save_error">{{ i18n.account.profile.save_error|default('저장하지 못했습니다. 잠시 후 다시 시도해 주세요.') }}</span>
+    <span data-msg="network_error">{{ i18n.account.profile.network_error|default('네트워크 오류가 발생했습니다.') }}</span>
+    <span data-msg="delete_error">{{ i18n.account.profile.delete_error|default('탈퇴 요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.') }}</span>
+    <span data-msg="cancel_error">{{ i18n.account.profile.cancel_error|default('탈퇴 취소를 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.') }}</span>
+</div>
+
 <script>
-document.getElementById('privacyForm').addEventListener('submit', async function(e) {
-    e.preventDefault();
+(function () {
+    'use strict';
 
-    const formData = {
-        privacy_public: this.querySelector('[name="privacy_public"]').checked,
-        marketing_consent: this.querySelector('[name="marketing_consent"]').checked,
-        promotional_consent: this.querySelector('[name="promotional_consent"]').checked
-    };
-
-    try {
-        const response = await fetch('/account/me/privacy', {
-            method: 'PATCH',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(formData)
-        });
-
-        const result = await response.json();
-
-        if (result.success) {
-            alert('{{ i18n.account.profile.settings_saved|default("설정이 저장되었습니다") }}');
-            location.reload();
-        } else {
-            alert('{{ i18n.account.profile.save_error|default("저장 중 오류가 발생했습니다") }}');
-        }
-    } catch (error) {
-        alert('{{ i18n.account.profile.network_error|default("네트워크 오류가 발생했습니다") }}');
+    function setStatus(el, message, kind) {
+        if (!el) { return; }
+        el.textContent = message || '';
+        el.classList.remove('is-error', 'is-ok');
+        if (kind) { el.classList.add(kind); }
     }
-});
+
+    function readMessage(el, key, fallback) {
+        var node = el ? el.querySelector('[data-msg="' + key + '"]') : null;
+        return node ? node.textContent : fallback;
+    }
+
+    var messages = document.getElementById('profileMessages');
+
+    // -- 개인정보 설정 저장 --
+    var privacyForm = document.getElementById('privacyForm');
+    if (privacyForm) {
+        var privacyStatus = document.getElementById('privacyStatus');
+        privacyForm.addEventListener('submit', async function (e) {
+            e.preventDefault();
+            var submitBtn = privacyForm.querySelector('button[type="submit"]');
+            if (submitBtn) { submitBtn.disabled = true; }
+            setStatus(privacyStatus, '', null);
+
+            var payload = {
+                privacy_public: privacyForm.querySelector('[name="privacy_public"]').checked,
+                marketing_consent: privacyForm.querySelector('[name="marketing_consent"]').checked,
+                promotional_consent: privacyForm.querySelector('[name="promotional_consent"]').checked
+            };
+
+            try {
+                var res = await fetch('/account/me/privacy', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                var data = await res.json().catch(function () { return {}; });
+                if (res.ok && data.success) {
+                    setStatus(privacyStatus, readMessage(messages, 'saved', 'Saved'), 'is-ok');
+                    window.setTimeout(function () { window.location.reload(); }, 600);
+                    return;
+                }
+                setStatus(privacyStatus, readMessage(messages, 'save_error', 'Save failed'), 'is-error');
+            } catch (err) {
+                setStatus(privacyStatus, readMessage(messages, 'network_error', 'Network error'), 'is-error');
+            }
+            if (submitBtn) { submitBtn.disabled = false; }
+        });
+    }
+
+    // -- 회원 탈퇴 --
+    var deletionStatus = document.getElementById('deletionStatus');
+    var revealBtn = document.getElementById('deleteRevealBtn');
+    var confirmBlock = document.getElementById('deleteConfirmBlock');
+    var confirmInput = document.getElementById('deleteConfirmInput');
+    var submitDeleteBtn = document.getElementById('deleteSubmitBtn');
+    var abortBtn = document.getElementById('deleteAbortBtn');
+    var cancelDeletionBtn = document.getElementById('cancelDeletionBtn');
+
+    function closeConfirm() {
+        if (!confirmBlock || !revealBtn) { return; }
+        confirmBlock.hidden = true;
+        revealBtn.hidden = false;
+        revealBtn.setAttribute('aria-expanded', 'false');
+        if (confirmInput) { confirmInput.value = ''; }
+        if (submitDeleteBtn) { submitDeleteBtn.disabled = true; }
+        setStatus(deletionStatus, '', null);
+        revealBtn.focus();
+    }
+
+    if (revealBtn && confirmBlock) {
+        revealBtn.addEventListener('click', function () {
+            confirmBlock.hidden = false;
+            revealBtn.hidden = true;
+            revealBtn.setAttribute('aria-expanded', 'true');
+            if (confirmInput) { confirmInput.focus(); }
+        });
+    }
+
+    if (abortBtn) {
+        abortBtn.addEventListener('click', closeConfirm);
+    }
+
+    if (confirmInput && submitDeleteBtn) {
+        var phrase = (confirmInput.getAttribute('data-phrase') || '').trim();
+        confirmInput.addEventListener('input', function () {
+            submitDeleteBtn.disabled = confirmInput.value.trim() !== phrase;
+        });
+    }
+
+    async function post(url, statusEl, button, errorKey) {
+        if (button) { button.disabled = true; }
+        setStatus(statusEl, '', null);
+        try {
+            var res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            var data = await res.json().catch(function () { return {}; });
+            if (res.ok && data.success) {
+                setStatus(statusEl, data.message || '', 'is-ok');
+                window.setTimeout(function () { window.location.reload(); }, 800);
+                return true;
+            }
+            setStatus(statusEl, data.detail || readMessage(messages, errorKey, 'Request failed'), 'is-error');
+        } catch (err) {
+            setStatus(statusEl, readMessage(messages, 'network_error', 'Network error'), 'is-error');
+        }
+        if (button) { button.disabled = false; }
+        return false;
+    }
+
+    if (submitDeleteBtn) {
+        submitDeleteBtn.addEventListener('click', function () {
+            if (submitDeleteBtn.disabled) { return; }
+            post('/account/me/delete-request', deletionStatus, submitDeleteBtn, 'delete_error');
+        });
+    }
+
+    if (cancelDeletionBtn) {
+        cancelDeletionBtn.addEventListener('click', function () {
+            post('/account/me/cancel-deletion', deletionStatus, cancelDeletionBtn, 'cancel_error');
+        });
+    }
+})();
 </script>
 {% endblock %}

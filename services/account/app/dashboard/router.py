@@ -1,7 +1,7 @@
 """
 대시보드 라우터
 
-통합 계정 대시보드 - 프로필, 인증 상태, 구독 관리, 결제 수단
+통합 계정 대시보드 - 프로필, 인증 상태, 서비스 이용 현황, 계정 연결
 """
 from pathlib import Path
 
@@ -11,7 +11,7 @@ from fastapi.templating import Jinja2Templates
 from loguru import logger
 
 from shared_core.auth.jwt import get_current_member
-from shared_core.auth.subscription import get_all_member_tiers, get_service_info
+from shared_core.auth.subscription import get_service_info
 from shared_core.db.client import get_supabase_client
 from app.messenger.service import build_messenger_context
 from app.i18n.middleware import create_language_context
@@ -34,11 +34,10 @@ async def dashboard(request: Request):
     member_id = str(member["id"])
     supabase = get_supabase_client()
 
-    # 서비스 정의 + 구독 등급 조회
+    # 서비스 정의
     services = get_service_info()
-    tiers = await get_all_member_tiers(member_id)
 
-    # 전체 구독 목록 (settings, expires_at 포함)
+    # 전체 구독 목록 (tier, status, expires_at 포함)
     subs_result = (
         supabase.table("member_services")
         .select("*")
@@ -46,20 +45,6 @@ async def dashboard(request: Request):
         .execute()
     )
     subscriptions = {s["service_id"]: s for s in (subs_result.data or [])}
-
-    # Stripe 고객 정보 (결제수단)
-    stripe_customer = None
-    try:
-        sc_result = (
-            supabase.table("stripe_customers")
-            .select("stripe_customer_id, default_payment_method_id")
-            .eq("member_id", member_id)
-            .execute()
-        )
-        if sc_result.data:
-            stripe_customer = sc_result.data[0]
-    except Exception:
-        pass
 
     # OAuth 연결 목록
     oauth_result = (
@@ -77,9 +62,7 @@ async def dashboard(request: Request):
         "request": request,
         "member": member,
         "services": services,
-        "tiers": tiers,
         "subscriptions": subscriptions,
-        "stripe_customer": stripe_customer,
         "oauth_connections": oauth_connections,
         "messenger": messenger,
         **create_language_context(request),

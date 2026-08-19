@@ -18,8 +18,6 @@ from slowapi.errors import RateLimitExceeded
 from .auth.router import router as auth_router, limiter
 from .profile.router import router as profile_router
 from .verification.router import router as verification_router
-from .subscriptions.router import router as subscriptions_router
-from .payments.router import router as payments_router
 from .dashboard.router import router as dashboard_router
 from .admin.router import router as admin_router
 from .admin.notifications import router as notifications_router
@@ -95,8 +93,6 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 app.include_router(auth_router)
 app.include_router(profile_router, prefix="/account")
 app.include_router(verification_router, prefix="/account")
-app.include_router(subscriptions_router, prefix="/account")
-app.include_router(payments_router)     # /account/checkout/*, /account/webhooks/*, /account/portal
 app.include_router(dashboard_router)    # /account/dashboard
 app.include_router(admin_router)        # /account/admin/*
 app.include_router(notifications_router)  # /account/notifications/*

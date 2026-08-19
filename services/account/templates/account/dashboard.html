@@ -108,10 +108,19 @@
         align-items: center;
         gap: 12px;
     }
-    .service-icon {
-        font-size: 1.5rem;
-        width: 40px;
-        text-align: center;
+    .service-mark {
+        width: 36px;
+        height: 36px;
+        flex-shrink: 0;
+        border-radius: 8px;
+        border: 1px solid var(--border-color);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.9rem;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        color: var(--text-secondary);
     }
     .service-name {
         font-weight: 600;
@@ -127,10 +136,6 @@
     .tier-label {
         font-size: 0.85rem;
         font-weight: 600;
-    }
-    .tier-price {
-        font-size: 0.75rem;
-        color: var(--text-secondary);
     }
 
     /* OAuth Section */
@@ -151,21 +156,6 @@
     .oauth-provider {
         font-weight: 500;
         text-transform: capitalize;
-    }
-
-    /* Summary */
-    .summary-bar {
-        background: var(--card-bg);
-        border: 1px solid var(--border-color);
-        border-radius: 8px;
-        padding: 16px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
-    .summary-total {
-        font-size: 1.1rem;
-        font-weight: 700;
     }
 
     /* Responsive */
@@ -238,6 +228,40 @@
         </div>
     </div>
 
+    <!-- Services -->
+    <div class="section">
+        <div class="section-title">{{ i18n.account.dashboard.subscriptions_section|default('내 구독') }}</div>
+        <div class="services-grid">
+            {% for svc in services %}
+            {% set sub = subscriptions.get(svc.id) %}
+            <div class="service-card {% if not svc.is_active %}inactive{% endif %}">
+                <div class="service-info">
+                    <div class="service-mark" aria-hidden="true">{{ (svc.id or '-')[:1]|upper }}</div>
+                    <div>
+                        <div class="service-name">{{ svc.name_ko }}</div>
+                        <div class="service-desc">{{ svc.description_ko }}</div>
+                    </div>
+                </div>
+                <div class="service-tier">
+                    {% if sub and sub.status == "active" %}
+                        {% set tier_labels = {"free": "Free", "basic": "Basic", "premium": "Premium", "enterprise": "Enterprise"} %}
+                        <div class="tier-label">{{ tier_labels.get(sub.tier, sub.tier) }}</div>
+                    {% elif svc.is_active %}
+                        <div class="tier-label" style="color: var(--text-secondary);">{{ i18n.account.dashboard.not_subscribed|default('미구독') }}</div>
+                    {% else %}
+                        <div class="tier-label" style="color: var(--text-secondary);">{{ i18n.account.dashboard.coming_soon|default('준비 중') }}</div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+            {% if not services %}
+            <div class="service-card" style="color: var(--text-secondary);">
+                {{ i18n.account.dashboard.no_subscriptions|default('이용 중인 서비스가 없습니다') }}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
     <!-- Connected Accounts -->
     <div class="section">
         <div class="section-title">{{ i18n.account.dashboard.connected_accounts|default('연결된 계정') }}</div>
@@ -304,81 +328,6 @@
         </div>
     </div>
     {% endif %}
-
-    <!-- Payment Method -->
-    <div class="section">
-        <div class="section-title">{{ i18n.account.dashboard.payment_section|default('결제 수단') }}</div>
-        <div class="info-cards">
-            <div class="info-card">
-                {% if stripe_customer and stripe_customer.default_payment_method_id %}
-                    <div class="label">{{ i18n.account.dashboard.payment_default|default('기본 결제수단') }}</div>
-                    <div class="value">{{ i18n.account.dashboard.payment_registered|default('등록됨') }}</div>
-                    <form action="/account/portal" method="post" style="margin-top: 8px;">
-                        <button type="submit" class="btn btn-outline btn-sm">{{ i18n.account.dashboard.payment_manage|default('결제수단 관리') }}</button>
-                    </form>
-                {% else %}
-                    <div class="label">{{ i18n.account.dashboard.payment_label|default('결제수단') }}</div>
-                    <div class="value" style="color: var(--text-secondary);">{{ i18n.account.dashboard.payment_not_registered|default('미등록') }}</div>
-                    <div style="margin-top: 4px; font-size: 0.8rem; color: var(--text-secondary);">
-                        {{ i18n.account.dashboard.payment_auto_msg|default('유료 구독 시 자동 등록됩니다') }}
-                    </div>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-
-    <!-- Services -->
-    <div class="section">
-        <div class="section-title">{{ i18n.account.dashboard.subscriptions_section|default('내 구독') }}</div>
-        <div class="services-grid">
-            {% for svc in services %}
-            {% set sub = subscriptions.get(svc.id) %}
-            {% set tier = tiers.get(svc.id, "free") %}
-            <div class="service-card {% if not svc.is_active %}inactive{% endif %}">
-                <div class="service-info">
-                    <div class="service-icon">{{ svc.icon or "📦" }}</div>
-                    <div>
-                        <div class="service-name">{{ svc.name_ko }}</div>
-                        <div class="service-desc">{{ svc.description_ko }}</div>
-                    </div>
-                </div>
-                <div class="service-tier">
-                    {% if sub and sub.status == "active" %}
-                        <div class="tier-label">
-                            {% set tier_labels = {"free": "Free", "basic": "Basic", "premium": "Premium", "enterprise": "Enterprise"} %}
-                            {{ tier_labels.get(sub.tier, sub.tier) }}
-                        </div>
-                        {% if sub.tier != "free" %}
-                            {% set pricing = svc.pricing or {} %}
-                            {% set price_key = sub.tier ~ "_monthly" %}
-                            {% if pricing.get(price_key) %}
-                                <div class="tier-price">${{ pricing[price_key] }}/월</div>
-                            {% endif %}
-                            <form action="/account/portal" method="post" style="margin-top: 4px;">
-                                <button type="submit" class="btn btn-outline btn-sm">{{ i18n.account.dashboard.manage|default('관리') }}</button>
-                            </form>
-                        {% else %}
-                            {% if svc.is_active %}
-                            <a href="#" class="btn btn-primary btn-sm"
-                               onclick="alert('{{ i18n.account.dashboard.stripe_notice|default("Stripe Price ID 설정 후 활성화됩니다") }}'); return false;">
-                                {{ i18n.account.dashboard.upgrade|default('업그레이드') }}
-                            </a>
-                            {% endif %}
-                        {% endif %}
-                    {% elif svc.is_active %}
-                        <div class="tier-label" style="color: var(--text-secondary);">{{ i18n.account.dashboard.not_subscribed|default('미구독') }}</div>
-                        <a href="#" class="btn btn-outline btn-sm"
-                           onclick="alert('{{ i18n.account.dashboard.stripe_notice|default("Stripe Price ID 설정 후 활성화됩니다") }}'); return false;">
-                            {{ i18n.account.dashboard.subscribe|default('시작하기') }}
-                        </a>
-                    {% else %}
-                        <div class="tier-label" style="color: var(--text-secondary);">{{ i18n.account.dashboard.coming_soon|default('준비 중') }}</div>
-                    {% endif %}
-                </div>
-            </div>
-            {% endfor %}
-        </div>
-    </div>
 
     <!-- Profile Management Links -->
     <div class="section">

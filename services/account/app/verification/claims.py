@@ -475,10 +475,15 @@ async def submit_org_claim(
     claim_record = result.data[0]
 
     # If auto-verified AND claim_type is director, run auto-registration
-    if claim_record["status"] == "auto_verified" and claim_type == "director":
-        await _approve_director_claim(
-            supabase, claim_record["id"], member["id"], organization_id
+    final_status = claim_record["status"]
+    auto_reg_failures = []
+    if final_status == "auto_verified" and claim_type == "director":
+        auto_reg_failures = await _approve_director_claim(
+            supabase, claim_record["id"], member["id"], organization_id,
+            claim_type=claim_type,
         )
+        if not auto_reg_failures:
+            final_status = "approved"
 
     # Notify admins for non-auto-verified claims
     if claim_record["status"] == "pending":
@@ -494,11 +499,17 @@ async def submit_org_claim(
         except Exception as ne:
             logger.warning(f"Admin notification failed: {ne}")
 
+    message = _get_org_claim_message(final_status)
+    if auto_reg_failures:
+        # 부분 실패를 조용히 성공처럼 보이게 하지 않는다.
+        message += f" (일부 단계 실패: {', '.join(auto_reg_failures)} — 관리자 확인 필요)"
+
     return {
         "claim_id": claim_record["id"],
-        "status": claim_record["status"],
+        "status": final_status,
         "brn_auto_verified": claim_data.get("brn_auto_verified", False),
-        "message": _get_org_claim_message(claim_record["status"]),
+        "failed_steps": auto_reg_failures,
+        "message": message,
     }
 
 
@@ -833,12 +844,27 @@ async def _run_brn_verification_pipeline(
 
 
 async def _link_player_to_member(supabase, member_id: str, player_id: int):
-    """선수 Claim 승인 시 members.player_id 설정 및 verification_tier 업데이트"""
+    """선수 Claim 승인 시 members.player_id 설정 및 verification_tier 업데이트
+
+    verification_tier 는 현재 값과 비교해 끌어올리기만 한다 (tier 4 강등 방지).
+    """
+    from app.admin.approvals import _raise_tier
+
+    current_tier = 0
+    try:
+        m_result = supabase.table("members").select("verification_tier").eq(
+            "id", member_id
+        ).limit(1).execute()
+        if m_result.data:
+            current_tier = m_result.data[0].get("verification_tier") or 0
+    except Exception as e:
+        logger.error(f"Failed to read member tier ({member_id}): {e}")
+
     try:
         supabase.table("members").update({
             "player_id": player_id,
             "data_linked_at": datetime.utcnow().isoformat(),
-            "verification_tier": 3,
+            "verification_tier": _raise_tier(current_tier, 3),
         }).eq("id", member_id).execute()
         logger.info(f"Player {player_id} linked to member {member_id}")
     except Exception as e:
@@ -846,25 +872,71 @@ async def _link_player_to_member(supabase, member_id: str, player_id: int):
 
 
 async def _approve_director_claim(
-    supabase, claim_id: str, member_id: str, organization_id: int
-):
+    supabase, claim_id: str, member_id: str, organization_id: int,
+    claim_type: str = "director",
+) -> list:
     """
-    감독 Claim 승인 시 자동 등록:
-    1. member_organizations (role='owner')
-    2. club_settings (자동 생성)
-    3. organizations.owner_member_id 설정
+    감독 Claim 자동 승인(BRN 3-Layer 통과) 시 등록:
+    1. member_organizations (매핑된 club_role)
+    2. club_settings (owner 부여 시에만)
+    3. organization_claims.status → approved
+    4. members.club_role / organization_id / verification_tier
+
+    각 단계는 독립된 try 로 감싼다. 이전 구현은 전체가 하나의 try 였고, 그 안에
+    실제 DB 에 존재하지 않는 organizations.owner_member_id 를 UPDATE 했다.
+    그 때문에 항상 예외가 나서 뒤따르는 4·5단계(claim 상태, tier)가 통째로
+    스킵됐다. 해당 UPDATE 는 제거했다.
+
+    실패한 단계 이름 리스트를 반환한다 (빈 리스트 = 완전 성공).
     """
+    # 승인 권한 매핑은 관리자 승인 경로와 동일 규칙을 써야 한다.
+    # (라우터 모듈 로딩 순서에 영향을 주지 않도록 함수 내부에서 import)
+    from app.admin.approvals import resolve_club_role, _higher_club_role, _raise_tier
+
+    failures = []
+    now = datetime.utcnow().isoformat()
+
+    # --- Step 0: 회원 현재 상태 조회 ---
+    member_state = {}
     try:
-        # 1. member_organizations 생성
+        m_result = supabase.table("members").select(
+            "id, member_type, club_role, organization_id, verification_tier"
+        ).eq("id", member_id).limit(1).execute()
+        member_state = (m_result.data or [{}])[0]
+    except Exception as e:
+        logger.error(f"[org_claim/auto] 회원 조회 실패 member={member_id}: {e}")
+        failures.append("회원 정보 조회")
+
+    club_role = resolve_club_role(claim_type, member_state.get("member_type"))
+    if member_state.get("organization_id") == organization_id:
+        club_role = _higher_club_role(member_state.get("club_role"), club_role)
+
+    logger.info(
+        f"[org_claim/auto] role 매핑: claim_type={claim_type}, "
+        f"member_type={member_state.get('member_type')} → club_role={club_role}"
+    )
+
+    # --- Step 1: member_organizations ---
+    try:
         supabase.table("member_organizations").upsert({
             "member_id": member_id,
             "organization_id": organization_id,
-            "role": "owner",
+            "role": club_role,
             "status": "active",
         }).execute()
-        logger.info(f"member_organizations created: member={member_id}, org={organization_id}")
+        logger.info(
+            f"member_organizations created: member={member_id}, "
+            f"org={organization_id}, role={club_role}"
+        )
+    except Exception as e:
+        logger.error(
+            f"[org_claim/auto] member_organizations upsert 실패 "
+            f"member={member_id}, org={organization_id}, role={club_role}: {e}"
+        )
+        failures.append("소속 등록(member_organizations)")
 
-        # 2. club_settings 자동 생성 (테이블 존재 여부 확인 후)
+    # --- Step 2: club_settings (조직 소유권 부여 시에만) ---
+    if club_role == "owner":
         try:
             supabase.table("club_settings").upsert(
                 {
@@ -877,29 +949,43 @@ async def _approve_director_claim(
             ).execute()
             logger.info(f"club_settings created for org={organization_id}")
         except Exception as e:
-            # club_settings 테이블이 없을 수 있음 (아직 club 서비스 미구현)
-            logger.warning(f"club_settings upsert skipped (table may not exist): {e}")
+            logger.error(f"[org_claim/auto] club_settings upsert 실패 org={organization_id}: {e}")
+            failures.append("클럽 설정 생성(club_settings)")
 
-        # 3. organizations 테이블에 owner 기록
-        supabase.table("organizations").update({
-            "owner_member_id": member_id,
-        }).eq("id", organization_id).execute()
-        logger.info(f"organizations.owner_member_id updated for org={organization_id}")
-
-        # 4. Claim 상태 업데이트 → approved
+    # --- Step 3: Claim 상태 → approved ---
+    try:
         supabase.table("organization_claims").update({
             "status": "approved",
-            "reviewed_at": datetime.utcnow().isoformat(),
+            "reviewed_at": now,
         }).eq("id", claim_id).execute()
-
-        # 5. 회원 verification_tier 업데이트
-        supabase.table("members").update({
-            "verification_tier": 3,
-            "data_linked_at": datetime.utcnow().isoformat(),
-        }).eq("id", member_id).execute()
-
     except Exception as e:
-        logger.error(f"Director claim auto-registration failed: {e}")
+        logger.error(f"[org_claim/auto] claim 상태 갱신 실패 claim={claim_id}: {e}")
+        failures.append("Claim 상태 갱신")
+
+    # --- Step 4: members 권한 부여 ---
+    # shared_core.auth.dependencies.get_current_club_member 가 보는 값.
+    # 이게 빠지면 자동 승인돼도 club.fencingmind.ai 에서 403 이 난다.
+    try:
+        supabase.table("members").update({
+            "club_role": club_role,
+            "organization_id": organization_id,
+            "verification_tier": _raise_tier(member_state.get("verification_tier"), 3),
+            "data_linked_at": now,
+        }).eq("id", member_id).execute()
+    except Exception as e:
+        logger.error(
+            f"[org_claim/auto] members 권한 갱신 실패 "
+            f"member={member_id}, club_role={club_role}: {e}"
+        )
+        failures.append("클럽 권한 부여(members.club_role)")
+
+    if failures:
+        logger.error(
+            f"Director claim auto-registration 부분 실패: "
+            f"claim={claim_id}, failed_steps={failures}"
+        )
+
+    return failures
 
 
 def _get_claim_status_message(status: str, confidence: float) -> str:

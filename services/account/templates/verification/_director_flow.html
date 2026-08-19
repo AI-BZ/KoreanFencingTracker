@@ -7,8 +7,12 @@
         <form id="orgClaimForm" enctype="multipart/form-data">
             <div class="form-group">
                 <label for="orgSearchName">조직 검색</label>
-                <input type="text" id="orgSearchName" placeholder="클럽/학교 이름 입력">
+                <input type="text" id="orgSearchName" placeholder="클럽/학교 이름 입력 (2자 이상)" autocomplete="off">
                 <div class="search-results" id="orgSearchResults" style="display:none;"></div>
+                <div class="org-selected" id="orgSelected" style="display:none;">
+                    <span class="org-selected-info" id="orgSelectedInfo"></span>
+                    <button type="button" class="org-deselect-btn" id="orgDeselectBtn">선택 해제</button>
+                </div>
                 <input type="hidden" id="orgId" name="organization_id">
             </div>
 
@@ -26,7 +30,16 @@
                 <div class="upload-area" id="orgUploadArea">
                     <input type="file" id="orgFileInput" name="file" accept="image/*" style="display: none;">
                     <div id="orgUploadPlaceholder">
-                        <span class="upload-icon">📄</span>
+                        <span class="upload-icon" aria-hidden="true">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none"
+                                 stroke="currentColor" stroke-width="1.6"
+                                 stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/>
+                                <path d="M14 3v5h5"/>
+                                <path d="M9 13h6"/>
+                                <path d="M9 17h4"/>
+                            </svg>
+                        </span>
                         <p>사업자등록증 이미지를 업로드하세요</p>
                         <p class="upload-hint">업로드 시 3단계 자동 검증 (OCR → 검증식 → 국세청)</p>
                     </div>
@@ -77,39 +90,152 @@
 .form-group label { display: block; font-weight: 600; margin-bottom: 0.25rem; font-size: 0.9rem; }
 .form-group input, .form-group select { width: 100%; padding: 0.75rem; border: 1px solid var(--border-light); border-radius: 8px; font-size: 0.95rem; background: var(--bg-tertiary); color: var(--text-primary); }
 .form-group input:focus, .form-group select:focus { outline: none; border-color: var(--accent-primary); box-shadow: 0 0 0 3px var(--glow-primary); }
-.search-results { border: 1px solid var(--border-color); border-radius: 8px; margin-top: 4px; max-height: 200px; overflow-y: auto; background: var(--bg-secondary); }
-.search-result-item { padding: 8px 12px; border-bottom: 1px solid var(--border-color); cursor: pointer; font-size: 0.85rem; }
-.search-result-item:hover { background: rgba(255,255,255,0.05); }
+.search-results { border: 1px solid var(--border-color); border-radius: 8px; margin-top: 4px; max-height: 220px; overflow-y: auto; background: var(--bg-secondary); }
+.search-result-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px; border-bottom: 1px solid var(--border-color); cursor: pointer; font-size: 0.85rem; }
+.search-result-item:last-child { border-bottom: none; }
+.search-result-item:hover { background: rgba(30, 58, 138, 0.08); }
+.search-result-name { font-weight: 600; }
+.search-result-detail { font-size: 0.78rem; color: var(--text-secondary); margin-top: 2px; }
+.search-result-select { flex-shrink: 0; padding: 4px 12px; border: 1px solid #1e3a8a; border-radius: 6px; background: transparent; color: #1e3a8a; font-size: 0.78rem; font-weight: 600; cursor: pointer; }
+.search-result-select:hover { background: #1e3a8a; color: #fff; }
+.search-empty { padding: 10px 12px; font-size: 0.85rem; color: var(--text-secondary); }
+.search-error { padding: 10px 12px; font-size: 0.85rem; color: #c9302c; }
+
+.org-selected { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 8px; padding: 10px 12px; border: 1px solid #1e3a8a; border-left-width: 3px; border-radius: 8px; background: rgba(30, 58, 138, 0.06); }
+.org-selected-info { font-size: 0.9rem; font-weight: 600; }
+.org-deselect-btn { flex-shrink: 0; padding: 4px 10px; border: 1px solid #c9302c; border-radius: 6px; background: transparent; color: #c9302c; font-size: 0.78rem; cursor: pointer; }
+.org-deselect-btn:hover { background: #c9302c; color: #fff; }
+
+.upload-icon { display: inline-flex; color: #1e3a8a; }
+.upload-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 </style>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const orgNameInput = document.getElementById('orgSearchName');
     const orgResults = document.getElementById('orgSearchResults');
+    const orgIdInput = document.getElementById('orgId');
+    const orgSelected = document.getElementById('orgSelected');
+    const orgSelectedInfo = document.getElementById('orgSelectedInfo');
+    const orgDeselectBtn = document.getElementById('orgDeselectBtn');
     const orgUploadArea = document.getElementById('orgUploadArea');
     const orgFileInput = document.getElementById('orgFileInput');
     const orgSubmitBtn = document.getElementById('orgSubmitBtn');
     let orgSearchTimeout;
+    let orgSearchSeq = 0;
 
-    // Org search
+    const ORG_TYPE_LABELS = {
+        club: '클럽',
+        middle_school: '중학교',
+        high_school: '고등학교',
+        university: '대학교',
+        business: '실업팀'
+    };
+
+    function esc(value) {
+        return String(value == null ? '' : value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function orgDetail(org) {
+        const typeLabel = ORG_TYPE_LABELS[org.org_type] || org.org_type || '';
+        const region = [org.province || '', org.city || ''].filter(Boolean).join(' ');
+        return [typeLabel, region].filter(Boolean).join(' · ');
+    }
+
+    // 조직 선택 여부만이 제출 가능 조건이다 (사업자등록증은 선택 항목).
+    function syncSubmitState() {
+        orgSubmitBtn.disabled = !orgIdInput.value;
+    }
+
+    function clearSelection() {
+        orgIdInput.value = '';
+        orgSelected.style.display = 'none';
+        orgSelectedInfo.textContent = '';
+        syncSubmitState();
+    }
+
+    function selectOrg(org) {
+        orgIdInput.value = org.id;
+        const detail = orgDetail(org);
+        orgSelectedInfo.textContent = detail ? (org.name + ' · ' + detail) : org.name;
+        orgSelected.style.display = 'flex';
+        orgResults.style.display = 'none';
+        orgResults.innerHTML = '';
+        orgNameInput.value = org.name;
+        syncSubmitState();
+    }
+
+    function renderResults(results) {
+        if (!results.length) {
+            orgResults.innerHTML = '<div class="search-empty">검색 결과가 없습니다.</div>';
+            orgResults.style.display = 'block';
+            return;
+        }
+        orgResults.innerHTML = results.map(function(org, idx) {
+            const detail = orgDetail(org);
+            return '<div class="search-result-item" data-idx="' + idx + '">' +
+                '<div>' +
+                    '<div class="search-result-name">' + esc(org.name) + '</div>' +
+                    (detail ? '<div class="search-result-detail">' + esc(detail) + '</div>' : '') +
+                '</div>' +
+                '<button type="button" class="search-result-select" data-idx="' + idx + '">선택</button>' +
+            '</div>';
+        }).join('');
+        orgResults.style.display = 'block';
+
+        orgResults.querySelectorAll('.search-result-item').forEach(function(el) {
+            el.addEventListener('click', function() {
+                selectOrg(results[parseInt(el.dataset.idx, 10)]);
+            });
+        });
+    }
+
+    // 조직 검색 — /auth/public/org-search (가입 폼과 동일한 공개 API)
+    async function searchOrgs(name) {
+        const seq = ++orgSearchSeq;
+        try {
+            const resp = await fetch('/auth/public/org-search?name=' + encodeURIComponent(name));
+            if (seq !== orgSearchSeq) return;  // 늦게 도착한 응답 무시
+            if (!resp.ok) {
+                orgResults.innerHTML = '<div class="search-error">조직 검색에 실패했습니다.</div>';
+                orgResults.style.display = 'block';
+                return;
+            }
+            const data = await resp.json();
+            if (seq !== orgSearchSeq) return;
+            renderResults(data.results || []);
+        } catch (e) {
+            if (seq !== orgSearchSeq) return;
+            orgResults.innerHTML = '<div class="search-error">네트워크 오류가 발생했습니다.</div>';
+            orgResults.style.display = 'block';
+        }
+    }
+
     orgNameInput.addEventListener('input', function() {
         clearTimeout(orgSearchTimeout);
+        // 검색어를 고치면 이전 선택은 무효
+        if (orgIdInput.value) clearSelection();
+
         const name = this.value.trim();
-        if (name.length < 2) { orgResults.style.display = 'none'; return; }
-
-        orgSearchTimeout = setTimeout(async () => {
-            try {
-                const resp = await fetch(`/account/verification/player-search?name=_&team=${encodeURIComponent(name)}`);
-                // Use organizations table directly is not exposed, so we search via a simple approach
-                // For now, enable submit if orgId is set manually or via search
-            } catch(e) {}
-        }, 300);
+        if (name.length < 2) {
+            orgResults.style.display = 'none';
+            orgResults.innerHTML = '';
+            return;
+        }
+        orgSearchTimeout = setTimeout(function() { searchOrgs(name); }, 300);
     });
 
-    // Enable submit when org is selected
-    orgNameInput.addEventListener('change', function() {
-        if (this.value.trim().length >= 2) orgSubmitBtn.disabled = false;
+    orgDeselectBtn.addEventListener('click', function() {
+        clearSelection();
+        orgNameInput.focus();
     });
+
+    syncSubmitState();
 
     // File upload
     orgUploadArea.addEventListener('click', () => orgFileInput.click());
@@ -122,15 +248,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('orgUploadPlaceholder').style.display = 'none';
             };
             reader.readAsDataURL(e.target.files[0]);
-            orgSubmitBtn.disabled = false;
+            syncSubmitState();
         }
     });
 
     // Submit
     document.getElementById('orgClaimForm').addEventListener('submit', async (e) => {
         e.preventDefault();
-        const orgId = document.getElementById('orgId').value;
-        if (!orgId) { alert('조직을 선택해주세요'); return; }
+        const orgId = orgIdInput.value;
+        if (!orgId) { alert('조직을 검색해서 선택해주세요'); return; }
 
         orgSubmitBtn.disabled = true;
         orgSubmitBtn.textContent = '처리 중...';
@@ -156,8 +282,8 @@ document.addEventListener('DOMContentLoaded', function() {
             result.textContent = '네트워크 오류가 발생했습니다';
         }
 
-        orgSubmitBtn.disabled = false;
         orgSubmitBtn.textContent = '조직 Claim 요청하기';
+        syncSubmitState();
     });
 });
 </script>
