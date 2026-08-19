@@ -118,15 +118,15 @@ async def get_current_club_member(request: Request) -> ServiceMemberContext:
 
     통합 JWT 토큰 기반 인증 + Supabase Auth 폴백.
 
-    테스트 모드:
-    - 환경변수 CLUB_TEST_MODE=1
-    - 또는 쿼리 파라미터 ?test=1
-    """
-    # 테스트 모드 체크
-    test_param = request.query_params.get("test", "0")
-    is_test_mode = TEST_MODE_ENV or test_param == "1"
+    테스트 모드는 환경변수 CLUB_TEST_MODE=1 로만 켠다. 서버를 기동한 사람만
+    설정할 수 있고 요청자가 원격으로 바꿀 수 없다.
 
-    if is_test_mode:
+    과거에는 `?test=1` 쿼리 파라미터로도 켜졌는데, 그건 인증을 요청자가
+    스스로 끌 수 있다는 뜻이었다. 실제로 운영 중인 data 서비스에서
+    `https://data.fencingmind.ai/api/club/dashboard?test=1` 이 인증 없이 200 을
+    반환해 특정 클럽의 회원 현황이 공개되고 있었다. 다시 넣지 말 것.
+    """
+    if TEST_MODE_ENV:
         return ServiceMemberContext(
             member_id=TEST_CLUB_CONFIG["member_id"],
             organization_id=TEST_CLUB_CONFIG["organization_id"],

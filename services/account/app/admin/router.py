@@ -60,10 +60,11 @@ async def _require_admin_compat(request: Request) -> dict:
     if member.get("email") in ADMIN_EMAILS:
         return member
 
-    # 하위 호환: 감독급
-    if member.get("member_type") in ("club_director", "school_director"):
-        return member
-
+    # member_type 으로는 관리자 권한을 주지 않는다.
+    # club_director / school_director 는 가입할 때 본인이 고르는 값이라, 이걸
+    # 통과 조건으로 두면 누구나 감독을 선택해 전체 회원 목록·인증 사진·승인
+    # 권한까지 갖게 된다. 클럽 안에서의 역할(club_role)과 사이트 관리자는
+    # 별개 체계다 — 관리자는 admin_role 로만 부여한다.
     raise HTTPException(status_code=403, detail="관리자 권한이 필요합니다")
 
 
