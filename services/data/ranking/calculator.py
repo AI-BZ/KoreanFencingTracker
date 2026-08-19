@@ -834,9 +834,18 @@ class RankingCalculator:
             filtered = [r for r in filtered if r.gender == gender]
         if age_group:
             if national_team_only and age_group == 'NT':
-                # NT 전체 랭킹: age_group='NT' 결과만 포함
-                # 서브랭킹 결과(age_group='MS','HS' 등)는 제외하여 이중 계산 방지
-                filtered = [r for r in filtered if r.age_group == 'NT']
+                # NT 전체 랭킹: 순수 국가대표(NATIONAL, age_group='NT')와
+                # 겸 국가대표(ELITE, 대회명에 '겸') 결과를 함께 포함한다.
+                # (national_team_only 필터로 이미 대회명에 '국가대표'가 있는 결과만 남음)
+                #
+                # 이중 계산 방지: 순수 국가대표 대회는 _extract_results에서 age_group='NT'
+                # 원본 결과를 만들고, _generate_national_sub_rankings가 같은 경기에서
+                # age_group='MS'/'HS' 등 서브랭킹 결과를 추가로 만든다. 그 서브랭킹은
+                # 원본 NT 결과의 복제이므로 여기서 제외한다(대회명에 '겸'이 없음).
+                # 겸 대회는 애초에 age_group='NT' 결과를 만들지 않아 서브랭킹도 없으므로
+                # 원본 1건(age_group='SR'/'MS' 등)뿐 → '겸' 조건으로 포함한다.
+                filtered = [r for r in filtered
+                            if r.age_group == 'NT' or '겸' in r.competition_name]
             elif not national_team_only:
                 # 일반 나이리그 랭킹: U17 특수 처리 포함
                 filtered = [r for r in filtered if matches_age_group_for_ranking(r.age_group, age_group)]
