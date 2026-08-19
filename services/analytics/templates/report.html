@@ -1051,8 +1051,15 @@
 
     // ---- Clip playback (inline left panel) ----
     const CLIP_REPORT_ID = {{ (report_id | tojson) if report_id is defined and report_id else 'null' }};
+    // Unlisted reports answer only to their share token, so every clip request
+    // has to carry the token the page itself was opened with.
+    const CLIP_TOKEN = {{ (share_token | tojson) if share_token is defined and share_token else 'null' }};
     const cachedClips = new Set();
     let clipTimer = null;
+
+    function clipUrl(path) {
+        return CLIP_TOKEN ? `${path}?token=${encodeURIComponent(CLIP_TOKEN)}` : path;
+    }
 
     function markCachedRows() {
         document.querySelectorAll('[data-clip-type]').forEach(el => {
@@ -1069,7 +1076,7 @@
 
     // Prefetch which clips are already generated → those play instantly.
     if (CLIP_REPORT_ID) {
-        fetch(`/api/analytics/clips/${CLIP_REPORT_ID}/status`)
+        fetch(clipUrl(`/api/analytics/clips/${CLIP_REPORT_ID}/status`))
             .then(r => r.ok ? r.json() : null)
             .then(data => {
                 if (!data || !data.cached) return;
@@ -1082,7 +1089,7 @@
 
     async function playClip(type, number, label) {
         if (!CLIP_REPORT_ID) return;
-        const url = `/api/analytics/clips/${CLIP_REPORT_ID}/${type}/${number}`;
+        const url = clipUrl(`/api/analytics/clips/${CLIP_REPORT_ID}/${type}/${number}`);
         const key = type + ':' + number;
         const isCached = cachedClips.has(key);
 

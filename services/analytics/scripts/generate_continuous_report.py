@@ -1352,7 +1352,12 @@ def main():
     if args.with_overlays:
         print("\nGenerating pose-overlay clips...")
         from ml.clip_overlay import ClipOverlayGenerator
-        clip_gen = ClipOverlayGenerator()
+        # for_report re-reads meta.piste_config so the clip's skeleton tracks the
+        # same two people the analysis did. A bare ClipOverlayGenerator() builds a
+        # default estimator, which on a piste crop locks onto the foreground
+        # referee — the clips then disagree with the report they illustrate.
+        # Falls back to the default generator for non-piste reports.
+        clip_gen = ClipOverlayGenerator.for_report(report_dict)
         clips_dir = Path("data/clips/overlay") / report_id
         touches_only = not args.overlays_all
         t_clips_start = time.time()

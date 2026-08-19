@@ -327,8 +327,8 @@ def test_build_config_scoreboard_rois_stay_in_crop_coords(sample_config):
 
 
 def test_build_config_work_files_use_source_stem(sample_config):
-    assert sample_config["work_files"]["piste"] == f"data/work/{STEM}_piste3.mp4"
-    assert sample_config["work_files"]["scoreboard"] == f"data/work/{STEM}_piste3_scoreboard.mp4"
+    assert sample_config["work_files"]["piste"] == f"data/raw/own/{STEM}_piste3.mp4"
+    assert sample_config["work_files"]["scoreboard"] == f"data/raw/own/{STEM}_piste3_scoreboard.mp4"
 
 
 def test_build_config_honours_work_dir():
@@ -456,7 +456,7 @@ def test_ffmpeg_command_without_scoreboard_has_no_split():
     assert "split" not in fc
     assert "[sb]" not in cmd
     assert cmd.count("-map") == 2
-    assert cmd[-1] == "data/work/a_piste1.mp4"
+    assert cmd[-1] == "data/raw/own/a_piste1.mp4"
 
 
 # ------------------------------------------------------------------

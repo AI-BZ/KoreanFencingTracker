@@ -31,9 +31,44 @@ from app.demo import generate_demo_report, generate_demo_de_report
 from app.i18n.manager import i18n
 from app.gallery import get_demo_reports, extract_youtube_id
 from app.report_renderer import prepare_report_view, build_timeline
+from app.sharing import (
+    find_report_by_token,
+    is_accessible,
+    is_unlisted,
+    iter_report_files,
+    redacted_for_client,
+    resolve_report_path,
+)
 
 _logger = logging.getLogger(__name__)
 _BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+def _reports_dir() -> Path:
+    """Root of the saved-report tree — public files plus the private subdir."""
+    return _BASE_DIR / "data" / "reports"
+
+
+def _load_report(report_id: str) -> Optional[dict]:
+    """Load a saved report by id, looking in the private directory first.
+
+    Every route that reads a report from disk goes through here, so none of them
+    can miss the private directory (and serve a 404 for a report that exists) or
+    reach it by a path the id could have escaped.
+
+    An id that is unsafe, absent or unparseable all come back as None: callers
+    turn all three into the same 404, so a corrupt file cannot be told apart
+    from a missing one by probing.
+    """
+    path = resolve_report_path(_reports_dir(), report_id)
+    if path is None:
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, OSError, UnicodeDecodeError):
+        return None
+    return data if isinstance(data, dict) else None
 
 
 @asynccontextmanager
@@ -86,6 +121,16 @@ app.mount("/static", StaticFiles(directory=str(_BASE_DIR / "static")), name="sta
 # path the template already supports, so the analysis itself still renders.
 _raw_video_dir = _BASE_DIR / "data" / "raw"
 SERVE_RAW_VIDEOS = os.getenv("SERVE_RAW_VIDEOS", "").strip().lower() in ("1", "true", "yes")
+
+# data/raw/own is by convention the footage we filmed ourselves, so there is no
+# third party whose work would be re-hosted by serving it. That is the whole of
+# the gate's rationale, so this mount carries no gate. It must be registered
+# first: Starlette matches mounts in registration order, and the bare /videos
+# mount below would otherwise swallow the /videos/own prefix.
+_own_video_dir = _raw_video_dir / "own"
+if _own_video_dir.exists():
+    app.mount("/videos/own", StaticFiles(directory=str(_own_video_dir)), name="videos_own")
+
 if SERVE_RAW_VIDEOS and _raw_video_dir.exists():
     app.mount("/videos", StaticFiles(directory=str(_raw_video_dir)), name="videos")
     _logger.warning(
@@ -226,13 +271,15 @@ async def start_analysis(
 
 
 @app.get("/api/analytics/jobs/{job_id}")
-async def get_job_status(job_id: str):
+async def get_job_status(job_id: str, token: Optional[str] = None):
     """Check analysis job status."""
     job = _jobs.get(job_id)
     if job is None:
-        # Check if report exists on disk (completed before restart)
-        report_path = _BASE_DIR / "data" / "reports" / f"{job_id}.json"
-        if report_path.exists():
+        # Check if report exists on disk (completed before restart). The bare
+        # 200/404 difference is itself a signal that an unlisted report exists,
+        # so this branch answers to the same token as the page does.
+        report_dict = _load_report(job_id)
+        if report_dict is not None and is_accessible(report_dict, token):
             return JobStatus(job_id=job_id, status="completed", progress_pct=100.0)
         raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
 
@@ -245,7 +292,7 @@ async def get_job_status(job_id: str):
 
 
 @app.get("/api/analytics/results/{job_id}")
-async def get_results(job_id: str):
+async def get_results(job_id: str, token: Optional[str] = None):
     """
     Get full analysis results as MatchReport JSON.
 
@@ -253,11 +300,13 @@ async def get_results(job_id: str):
     """
     job = _jobs.get(job_id)
     if job is None:
-        # Job not in memory — check persisted reports on disk
-        report_path = _BASE_DIR / "data" / "reports" / f"{job_id}.json"
-        if report_path.exists():
-            with open(report_path, "r", encoding="utf-8") as f:
-                return json.load(f)
+        # Job not in memory — check persisted reports on disk. This hands back
+        # the whole report, so it is the most valuable door of the lot: it has
+        # to be as gated as the page, and the payload has to lose the share
+        # token before it goes out or one guessed id yields the key to the rest.
+        report_dict = _load_report(job_id)
+        if report_dict is not None and is_accessible(report_dict, token):
+            return redacted_for_client(report_dict)
         raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
 
     if job["status"] == "processing":
@@ -279,7 +328,7 @@ async def get_results(job_id: str):
 
 
 @app.get("/api/analytics/report/{job_id}")
-async def get_report(job_id: str, format: str = "json"):
+async def get_report(job_id: str, format: str = "json", token: Optional[str] = None):
     """
     Get formatted analysis report.
 
@@ -288,12 +337,12 @@ async def get_report(job_id: str, format: str = "json"):
     """
     job = _jobs.get(job_id)
     if job is None:
-        # Job not in memory — check persisted reports on disk
-        report_path = _BASE_DIR / "data" / "reports" / f"{job_id}.json"
-        if not report_path.exists():
+        # Job not in memory — check persisted reports on disk. Same rule as the
+        # page: an unlisted report is unreachable by id, and a wrong token is
+        # indistinguishable from a report that was never there.
+        report_dict = _load_report(job_id)
+        if report_dict is None or not is_accessible(report_dict, token):
             raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
-        with open(report_path, "r", encoding="utf-8") as f:
-            report_dict = json.load(f)
     elif job["status"] != "completed" or job["result"] is None:
         return JSONResponse(
             status_code=202,
@@ -302,17 +351,21 @@ async def get_report(job_id: str, format: str = "json"):
     else:
         report_dict = job["result"]
 
+    # Every format below leaves the process, so the token comes off here rather
+    # than in each branch — an HTML or PDF export is just as readable as JSON.
+    payload = redacted_for_client(report_dict)
+
     if format == "html":
         from app.report_renderer import ReportRenderer
         renderer = ReportRenderer()
-        html = renderer.render_html(report_dict, standalone=True)
+        html = renderer.render_html(payload, standalone=True)
         return HTMLResponse(content=html)
 
     if format == "pdf":
         from app.pdf_exporter import PDFExporter
         try:
             exporter = PDFExporter()
-            pdf_bytes = exporter.export(report_dict)
+            pdf_bytes = exporter.export(payload)
         except RuntimeError as exc:
             raise HTTPException(status_code=501, detail=str(exc))
         return Response(
@@ -321,7 +374,7 @@ async def get_report(job_id: str, format: str = "json"):
             headers={"Content-Disposition": f'attachment; filename="report-{job_id}.pdf"'},
         )
 
-    return report_dict
+    return payload
 
 
 # ------------------------------------------------------------------
@@ -411,8 +464,37 @@ async def dashboard_page(request: Request):
     })
 
 
+def _own_video_filename(video_path: str) -> Optional[str]:
+    """Return ``own/<name>`` when ``video_path`` points into data/raw/own.
+
+    Both report routes need this and neither may gate it on SERVE_RAW_VIDEOS —
+    /videos/own is mounted unconditionally, so our own footage plays whether or
+    not the third-party gate is open.
+
+    The comparison is on resolved paths rather than the raw string, so a
+    ``../`` segment cannot escape the directory while still looking like it
+    starts inside it. ``resolve()`` stays non-strict because a report may name a
+    file that is not on this machine, and that should read as "not ours",
+    not raise.
+
+    The file has to actually be there, for the same reason the gated branch
+    below checks: data/raw is gitignored, so a report can outlive its video, and
+    naming one anyway renders a dead player instead of falling through.
+    """
+    if not video_path:
+        return None
+    try:
+        resolved = Path(video_path).resolve()
+        own_dir = _own_video_dir.resolve()
+    except OSError:
+        return None
+    if resolved.parent != own_dir or not resolved.is_file():
+        return None
+    return f"own/{resolved.name}"
+
+
 @app.get("/report/{job_id}")
-async def report_page(request: Request, job_id: str):
+async def report_page(request: Request, job_id: str, token: Optional[str] = None):
     """
     Analysis report page with charts and insights.
 
@@ -432,11 +514,12 @@ async def report_page(request: Request, job_id: str):
         mock_mode = job.get("mock_mode", False)
     else:
         # Job not in memory — check persisted reports on disk
-        report_path = _BASE_DIR / "data" / "reports" / f"{job_id}.json"
-        if not report_path.exists():
+        report_dict = _load_report(job_id)
+        # An unlisted report has to be as unreachable by id here as it is on
+        # /report/saved — same detail string, so a bad token is indistinguishable
+        # from a report that was never there.
+        if report_dict is None or not is_accessible(report_dict, token):
             raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
-        with open(report_path, "r", encoding="utf-8") as f:
-            report_dict = json.load(f)
         mock_mode = False
 
     # Enrich with aggregated stats if needed
@@ -446,9 +529,9 @@ async def report_page(request: Request, job_id: str):
     # Resolve video for playback. The file being on disk is not enough: unless
     # SERVE_RAW_VIDEOS is on there is no /videos mount to play it from, and
     # pointing at it anyway renders a dead player instead of the YouTube link.
-    video_filename = None
     video_path = report_dict.get("meta", {}).get("video_path") or ""
-    if SERVE_RAW_VIDEOS and video_path:
+    video_filename = _own_video_filename(video_path)
+    if not video_filename and SERVE_RAW_VIDEOS and video_path:
         vf = Path(video_path).name
         if (_raw_video_dir / vf).exists():
             video_filename = vf
@@ -462,13 +545,16 @@ async def report_page(request: Request, job_id: str):
     return templates.TemplateResponse(request, "report.html", {
         **_i18n_context(request),
         "report": report_dict,
-        "report_json": json.dumps(report_dict, ensure_ascii=False),
+        # Embedded verbatim in the page source, so it is a serialisation like any
+        # other — the page gets its token from share_token, never from here.
+        "report_json": json.dumps(redacted_for_client(report_dict), ensure_ascii=False),
         "timeline": build_timeline(report_dict),
         "job_id": job_id,
         "report_id": job_id,
         "mock_mode": mock_mode,
         "video_filename": video_filename,
         "youtube_url": youtube_url,
+        "share_token": None,
     })
 
 
@@ -663,34 +749,34 @@ def _enrich_report_stats(report_dict: dict) -> dict:
     return report_dict
 
 
-@app.get("/report/saved/{video_id}")
-async def saved_report_page(request: Request, video_id: str):
-    """Load a saved report JSON from data/reports/ and render it."""
-    reports_dir = _BASE_DIR / "data" / "reports"
-    report_path = reports_dir / f"{video_id}.json"
+def _render_saved_report(
+    request: Request,
+    report_id: str,
+    report_dict: dict,
+    share_token: Optional[str] = None,
+):
+    """Render a report loaded from data/reports/ — by id or by share token.
 
-    if not report_path.exists():
-        raise HTTPException(status_code=404, detail=f"Report not found: {video_id}")
-
-    with open(report_path, "r", encoding="utf-8") as f:
-        report_dict = json.load(f)
-
+    /report/saved/{id} and /r/{token} differ only in how they find the report,
+    so everything downstream of the lookup lives here and the two cannot drift.
+    """
     # Enrich fencer_profile with aggregated distance/footwork stats
     _enrich_report_stats(report_dict)
     prepare_report_view(report_dict)
 
     # Resolve video filename for in-report playback. Gated on SERVE_RAW_VIDEOS
-    # for the same reason as the saved-report view above.
-    video_filename = None
+    # for the same reason as the report view above — except for our own footage,
+    # which /videos/own serves regardless.
     video_path = report_dict.get("meta", {}).get("video_path") or ""
-    if SERVE_RAW_VIDEOS:
+    video_filename = _own_video_filename(video_path)
+    if not video_filename and SERVE_RAW_VIDEOS:
         if video_path:
             vf = Path(video_path).name
             if (_raw_video_dir / vf).exists():
                 video_filename = vf
         if not video_filename:
             # Convention: {stem}_continuous_report → {stem}.mp4
-            stem = video_id.replace("_continuous_report", "").replace("_report", "")
+            stem = report_id.replace("_continuous_report", "").replace("_report", "")
             for ext in (".mp4", ".mkv", ".webm"):
                 if (_raw_video_dir / f"{stem}{ext}").exists():
                     video_filename = f"{stem}{ext}"
@@ -699,34 +785,71 @@ async def saved_report_page(request: Request, video_id: str):
     # Extract YouTube URL for TV broadcast reports with no local video
     youtube_url = None
     if not video_filename:
-        yt_id = extract_youtube_id(video_id)
+        yt_id = extract_youtube_id(report_id)
         if yt_id:
             youtube_url = f"https://www.youtube.com/watch?v={yt_id}"
 
     return templates.TemplateResponse(request, "report.html", {
         **_i18n_context(request),
         "report": report_dict,
-        "report_json": json.dumps(report_dict, ensure_ascii=False),
+        # Redacted at serialisation time, not before: _enrich_report_stats and
+        # prepare_report_view mutate report_dict in place, and the page still
+        # needs the token — it gets it from share_token below, not from here.
+        "report_json": json.dumps(redacted_for_client(report_dict), ensure_ascii=False),
         "timeline": build_timeline(report_dict),
-        "job_id": f"saved-{video_id}",
-        "report_id": video_id,
+        "job_id": f"saved-{report_id}",
+        "report_id": report_id,
         "video_filename": video_filename,
         "youtube_url": youtube_url,
+        "share_token": share_token,
     })
+
+
+@app.get("/report/saved/{video_id}")
+async def saved_report_page(request: Request, video_id: str, token: Optional[str] = None):
+    """Load a saved report JSON from data/reports/ and render it."""
+    report_dict = _load_report(video_id)
+
+    # An unlisted report is reachable only through its token. The detail string
+    # is the same one a missing report gets, so probing ids leaks nothing.
+    if report_dict is None or not is_accessible(report_dict, token):
+        raise HTTPException(status_code=404, detail=f"Report not found: {video_id}")
+
+    return _render_saved_report(request, video_id, report_dict, share_token=token)
+
+
+@app.get("/r/{token}")
+async def shared_report_page(request: Request, token: str):
+    """Open an unlisted report by its share token."""
+    found = find_report_by_token(_reports_dir(), token)
+    if found is None:
+        # Deliberately says nothing about whether the token was wrong or the
+        # report is gone — either way the caller learns nothing it can probe.
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    report_id, report_dict = found
+    return _render_saved_report(request, report_id, report_dict, share_token=token)
 
 
 @app.get("/reports")
 async def list_saved_reports(request: Request):
     """List all saved report JSON files."""
-    reports_dir = _BASE_DIR / "data" / "reports"
+    reports_dir = _reports_dir()
     if not reports_dir.exists():
         return JSONResponse({"reports": []})
 
     reports = []
-    for f in sorted(reports_dir.glob("*.json")):
+    # include_private=False keeps the private directory out of the walk entirely:
+    # its whole purpose is to hide ids, and enumerating them here would undo that
+    # even though each one is filtered again below.
+    for f in iter_report_files(reports_dir, include_private=False):
         try:
             with open(f, "r", encoding="utf-8") as fh:
                 data = json.load(fh)
+            # Listing an unlisted report would hand out the very id its token
+            # exists to hide, so it is omitted entirely rather than redacted.
+            if is_unlisted(data):
+                continue
             summary = data.get("summary", {})
             reports.append({
                 "video_id": f.stem,
@@ -770,13 +893,22 @@ def _compute_touch_clip_bounds(
 
 
 @app.get("/api/analytics/clips/{report_id}/status")
-async def get_clips_status(report_id: str):
+async def get_clips_status(report_id: str, token: Optional[str] = None):
     """List which overlay clips are already cached for a report.
 
     Lets the report page distinguish instant playback (cached) from first-time
     generation (~1 min of YOLO pose overlay) before the user clicks play.
     """
     import re as _re
+
+    # This route never needed the report itself, but a cached-clip listing still
+    # confirms an unlisted report exists, so visibility has to be checked here
+    # too. A report file that is simply absent keeps its old answer — an empty
+    # listing — because 404-ing on it would break every caller that polls before
+    # the report is written.
+    report_dict = _load_report(report_id)
+    if report_dict is not None and not is_accessible(report_dict, token):
+        raise HTTPException(status_code=404, detail=f"Report not found: {report_id}")
 
     clips_dir = _BASE_DIR / "data" / "clips" / "overlay" / report_id
     cached: Dict[str, list] = {"touch": [], "exchange": []}
@@ -791,7 +923,12 @@ async def get_clips_status(report_id: str):
 
 
 @app.get("/api/analytics/clips/{report_id}/{event_type}/{event_number}")
-async def get_event_clip(report_id: str, event_type: str, event_number: int):
+async def get_event_clip(
+    report_id: str,
+    event_type: str,
+    event_number: int,
+    token: Optional[str] = None,
+):
     """
     On-demand clip generation with caching.
 
@@ -805,13 +942,12 @@ async def get_event_clip(report_id: str, event_type: str, event_number: int):
         raise HTTPException(status_code=400, detail=f"Invalid event_type: {event_type}")
 
     # Load report
-    reports_dir = _BASE_DIR / "data" / "reports"
-    report_path = reports_dir / f"{report_id}.json"
-    if not report_path.exists():
-        raise HTTPException(status_code=404, detail=f"Report not found: {report_id}")
+    report_dict = _load_report(report_id)
 
-    with open(report_path, "r", encoding="utf-8") as f:
-        report_dict = json.load(f)
+    # Clips are the analysis in video form, so they answer to the same rule as
+    # the page — and to the same detail string.
+    if report_dict is None or not is_accessible(report_dict, token):
+        raise HTTPException(status_code=404, detail=f"Report not found: {report_id}")
 
     # Check cache
     clips_dir = _BASE_DIR / "data" / "clips" / "overlay" / report_id
@@ -871,13 +1007,21 @@ async def get_event_clip(report_id: str, event_type: str, event_number: int):
     try:
         from ml.clip_overlay import ClipOverlayGenerator
 
+        # for_report reproduces the pose settings the report was analysed with:
+        # a piste-gated report re-rendered with the stock estimator draws the
+        # foreground referee instead of the fencers (the user caught this on a
+        # real clip). Plain TV reports get the default estimator unchanged.
         if event_type == "touch":
             # Touch: smart bounds already computed, use small padding for margin
-            gen = ClipOverlayGenerator(pad_before=0.5, pad_after=0.0)
+            gen = ClipOverlayGenerator.for_report(
+                report_dict, pad_before=0.5, pad_after=0.0,
+            )
             event_info = gen._extract_touch_info(event)
         else:
             # Exchange: start/end are already exchange boundaries, small padding
-            gen = ClipOverlayGenerator(pad_before=0.5, pad_after=0.3)
+            gen = ClipOverlayGenerator.for_report(
+                report_dict, pad_before=0.5, pad_after=0.3,
+            )
             event_info = gen._extract_exchange_info(event)
 
         gen.generate_clip(
@@ -899,15 +1043,15 @@ async def generate_all_clips(
     report_id: str,
     background_tasks: BackgroundTasks,
     touches_only: bool = True,
+    token: Optional[str] = None,
 ):
     """Generate all overlay clips for a report (background task)."""
-    reports_dir = _BASE_DIR / "data" / "reports"
-    report_path = reports_dir / f"{report_id}.json"
-    if not report_path.exists():
-        raise HTTPException(status_code=404, detail=f"Report not found: {report_id}")
+    report_dict = _load_report(report_id)
 
-    with open(report_path, "r", encoding="utf-8") as f:
-        report_dict = json.load(f)
+    # Same gate as the read endpoints: this one reads the report and writes the
+    # clips the read endpoints then serve, so leaving it open reopens both.
+    if report_dict is None or not is_accessible(report_dict, token):
+        raise HTTPException(status_code=404, detail=f"Report not found: {report_id}")
 
     video_path = report_dict.get("meta", {}).get("video_path")
     if not video_path:
@@ -944,7 +1088,9 @@ async def generate_all_clips(
                     fps=meta_fps,
                 )
 
-            gen = ClipOverlayGenerator(pad_before=0.5, pad_after=0.0)
+            gen = ClipOverlayGenerator.for_report(
+                report_dict, pad_before=0.5, pad_after=0.0,
+            )
             gen.generate_clips_for_report(
                 video_path, report_dict, str(clips_dir),
                 touches_only=touches_only, touch_bounds=touch_bounds,
@@ -1179,9 +1325,15 @@ async def start_broadcast_analysis(
 
 def _persist_report(job_id: str, report_dict: dict) -> None:
     """Save a completed report to data/reports/ for persistence across restarts."""
-    reports_dir = _BASE_DIR / "data" / "reports"
-    reports_dir.mkdir(parents=True, exist_ok=True)
-    report_path = reports_dir / f"{job_id}.json"
+    reports_dir = _reports_dir()
+    # Re-analysing a bout that has already been shared must overwrite the file
+    # where it actually lives. Always writing to the public directory would
+    # resurrect a private report into the committed tree and leave the private
+    # copy behind as a stale second answer for the same id.
+    report_path = resolve_report_path(reports_dir, job_id)
+    if report_path is None:
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        report_path = reports_dir / f"{job_id}.json"
     try:
         with open(report_path, "w", encoding="utf-8") as f:
             json.dump(report_dict, f, ensure_ascii=False, indent=2)

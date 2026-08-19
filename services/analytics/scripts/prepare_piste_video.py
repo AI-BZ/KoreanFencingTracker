@@ -75,7 +75,13 @@ SCOREBOARD_CRF = 18
 X264_PRESET = "fast"
 AUDIO_BITRATE = "96k"
 
-DEFAULT_WORK_DIR = Path("data/work")
+# Outputs of this script are *not* scratch: reports point at the piste crop via
+# ``meta.video_path`` and clip generation re-reads it long after the cut. They are
+# also derived from footage we filmed ourselves, and ``data/raw/own/`` is both the
+# directory reserved for our own footage and the only part of ``data/raw`` the web
+# server serves without the SERVE_RAW_VIDEOS gate — so a report made here is
+# playable out of the box. ``--work-dir`` still overrides this.
+DEFAULT_WORK_DIR = Path("data/raw/own")
 DEFAULT_CONFIG_DIR = Path("data/piste_configs")
 PREVIEW_SUBDIR = "previews"
 
