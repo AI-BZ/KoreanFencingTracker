@@ -15,6 +15,7 @@ import json
 import resource
 import sys
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 try:
@@ -23,8 +24,9 @@ except ImportError:
     print("ERROR: opencv-python required.")
     sys.exit(1)
 
-from analyzer.config import PRIORITY_WINDOW_LEAD_SEC
+from analyzer.config import POSE_KEYPOINT_CONFIDENCE, PRIORITY_WINDOW_LEAD_SEC
 from analyzer.touch_matching import (
+    annotate_touch_lamp,
     annotate_touch_outcomes,
     classify_exchange_sides,
     summarize_attack_outcomes,
@@ -183,6 +185,459 @@ def _distance_zone(bh: float) -> str:
         return "infighting"
 
 
+# ---------------------------------------------------------------------------
+# Lamp fields supplied by the OCR report itself (physical LED scoreboard)
+#
+# Two OCR sources reach this merge and they deliver lamps differently:
+#
+# * TV broadcast — the OCR report has no lamp fields at all. Lamps are read off
+#   the broadcast overlay afterwards by ``scripts/detect_touch_lamps.py``, which
+#   calls ``annotate_touch_lamp`` on the finished report.
+# * Physical LED box (``app/led_report_converter.py``) — the lamps come from the
+#   scoring box itself and are already on every touch when it arrives here.
+#   ``detect_touch_lamps.py`` cannot serve this path: it reads the lamp bar out
+#   of the *analysed* video, which in piste mode is the piste crop — the
+#   scoreboard is not in that frame.
+#
+# So for the LED path nothing ever ran the ``unclear`` → ``no_priority_call``
+# promotion that lives in ``annotate_touch_lamp``: the lamp fields landed in the
+# report, but ``attack_outcome_detail``/``_ko`` stayed unset and
+# ``no_priority_call_touches`` counted 0 no matter how many single-lamp touches
+# there were. The promotion is applied here instead, by handing the touch's own
+# lamp fields back to the same function, so both paths produce the same verdicts.
+# ---------------------------------------------------------------------------
+
+#: Marks a lamp reading that came from a physical scoring box rather than from
+#: pixel measurements of a broadcast overlay.
+LED_LAMP_SOURCE = "led_scoreboard"
+
+
+@dataclass
+class _SuppliedLampReading:
+    """Minimal stand-in for ``analyzer.tv_overlay_ocr.LampReading``.
+
+    ``annotate_touch_lamp`` only ever touches ``pattern``, ``confidence``,
+    ``start_frame`` and ``to_dict()``, so reusing it needs no more than this.
+    A real ``LampReading`` is deliberately *not* constructed: its per-side
+    fields (peak fill, on-frames, sampled frames) are measurements of a
+    broadcast overlay that nobody made here, and defaulting them to zeros would
+    write invented numbers into ``lamp_detail``.
+
+    ``start_frame`` stays ``None`` for the same reason — the LED path records
+    one frame per event, so there is no separately observed lamp-onset frame and
+    therefore no honest ``lead_frames``.
+    """
+
+    pattern: "str | None"
+    confidence: float = 0.0
+    start_frame: "int | None" = None
+
+    def to_dict(self) -> dict:
+        return {
+            "pattern": self.pattern,
+            "confidence": self.confidence,
+            "source": LED_LAMP_SOURCE,
+        }
+
+
+def report_carries_lamp_fields(touches) -> bool:
+    """True when the OCR report arrived with its own per-touch lamp readings.
+
+    The discriminator between the two OCR sources. A TV-broadcast report has no
+    ``lamp_pattern`` key on any touch at merge time, so this is False and the
+    merge behaves exactly as it always has.
+    """
+    return any("lamp_pattern" in t for t in touches or ())
+
+
+def promote_supplied_lamp_outcomes(touches) -> int:
+    """Apply ``annotate_touch_lamp`` using each touch's own lamp fields.
+
+    Must run *after* ``annotate_touch_outcomes`` (it refines a decided outcome)
+    and *before* ``summarize_attack_outcomes`` (which counts the promoted
+    outcome). Returns how many touches changed ``attack_outcome``.
+
+    Touches with no lamp pattern are annotated with ``None`` rather than skipped,
+    so every touch in the report ends up with the same set of keys — the same
+    shape the TV path produces once ``detect_touch_lamps.py`` has run.
+
+    All the judgement — single lamp promotes, double lamp does not, a lamp that
+    contradicts the scorer is ignored, a decided verdict is never downgraded —
+    stays in ``analyzer.touch_matching``; duplicating it here would let the two
+    paths drift.
+    """
+    promoted = 0
+    for touch in touches or ():
+        pattern = touch.get("lamp_pattern")
+        if pattern is None:
+            annotate_touch_lamp(touch, None)
+            continue
+        try:
+            confidence = float(touch.get("lamp_confidence") or 0.0)
+        except (TypeError, ValueError):
+            confidence = 0.0
+        before = touch.get("attack_outcome")
+        annotate_touch_lamp(
+            touch, _SuppliedLampReading(pattern=pattern, confidence=confidence),
+        )
+        if touch.get("attack_outcome") != before:
+            promoted += 1
+    return promoted
+
+
+# ---------------------------------------------------------------------------
+# Piste mode (multi-piste venue recordings)
+#
+# A tripod-side recording of a venue shows several pistes at once, plus
+# referees and scorekeepers in the foreground. ``scripts/prepare_piste_video.py``
+# crops one piste into a "work file" and writes a config JSON describing it; the
+# flags below feed that config into the pose estimator so only the two fencers
+# on the target piste are analysed.
+#
+# EVERY pixel value read from the config's ``piste`` block is in WORK-FILE
+# coordinates — the cropped, downscaled video this script is pointed at — never
+# 4K-source and never scoreboard-crop coordinates. The conversion happens once,
+# in the preparation script.
+# ---------------------------------------------------------------------------
+
+# Defaults for the optional pose knobs, from the design doc (§1.2). They only
+# ever apply in piste mode: without --piste-config the estimator is constructed
+# with no arguments at all, so TV-broadcast output is unaffected.
+PISTE_DEFAULT_POSE_CONF = 0.35
+PISTE_DEFAULT_POSE_IMGSZ = 1280
+PISTE_DEFAULT_POSE_MAX_DET = 8
+
+GATE_AUDIT_DIR = Path("data/work/audit")
+
+# COCO limb pairs, for drawing a readable skeleton on the gate-audit images.
+_GATE_SKELETON_EDGES = (
+    (5, 6), (5, 7), (7, 9), (6, 8), (8, 10),
+    (5, 11), (6, 12), (11, 12),
+    (11, 13), (13, 15), (12, 14), (14, 16),
+)
+_GATE_SIDE_COLORS = {
+    "left": (0, 255, 0),        # BGR green
+    "right": (0, 165, 255),     # BGR orange
+    None: (200, 200, 200),
+}
+_GATE_BAND_COLOR = (0, 255, 255)  # BGR yellow
+
+
+class PisteConfigError(ValueError):
+    """A --piste-config file is missing, unreadable, or missing required fields.
+
+    Raised rather than returning None so a typo in the config path can never be
+    mistaken for "run in normal mode": piste mode changes which people are
+    analysed at all, and silently falling back would produce a plausible-looking
+    report built from referees.
+    """
+
+
+def load_piste_config(path) -> dict:
+    """Load and minimally validate a piste config JSON.
+
+    Only the structure this script depends on is checked here — the ``piste``
+    block. The ``scoreboard`` block is consumed by the LED/OCR path and may be
+    absent for a pose-only run.
+    """
+    config_path = Path(path)
+    if not config_path.exists():
+        raise PisteConfigError(f"piste config not found: {config_path}")
+
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = json.load(f)
+    except json.JSONDecodeError as exc:
+        raise PisteConfigError(
+            f"piste config is not valid JSON: {config_path} ({exc})",
+        ) from exc
+    except OSError as exc:
+        raise PisteConfigError(
+            f"piste config could not be read: {config_path} ({exc})",
+        ) from exc
+
+    if not isinstance(config, dict):
+        raise PisteConfigError(
+            f"piste config must be a JSON object, got {type(config).__name__}: "
+            f"{config_path}",
+        )
+    piste = config.get("piste")
+    if piste is None:
+        raise PisteConfigError(
+            f"piste config has no 'piste' block: {config_path}",
+        )
+    if not isinstance(piste, dict):
+        raise PisteConfigError(
+            f"piste config 'piste' must be an object, got "
+            f"{type(piste).__name__}: {config_path}",
+        )
+    return config
+
+
+def _positive_number(piste: dict, key: str, default, *, kind):
+    value = piste.get(key, default)
+    if isinstance(value, bool) or not isinstance(value, kind):
+        raise PisteConfigError(
+            f"piste.{key} must be a number, got {value!r}",
+        )
+    if value <= 0:
+        raise PisteConfigError(f"piste.{key} must be > 0, got {value!r}")
+    return value
+
+
+def piste_estimator_kwargs(config: dict) -> dict:
+    """Translate a piste config into PoseEstimator constructor arguments.
+
+    Returns a dict with ``confidence``, ``imgsz``, ``max_det`` and
+    ``foot_band_work`` (a ``(min, max)`` tuple of WORK-FILE pixel rows, which the
+    caller wraps in a ``PisteGate``). Kept free of any ``ml`` import so it can be
+    tested without loading YOLO.
+    """
+    piste = config["piste"]
+
+    band = piste.get("foot_band_work")
+    if band is None:
+        raise PisteConfigError(
+            "piste.foot_band_work is required — it is the work-file foot band "
+            "that selects the target piste's fencers",
+        )
+    if isinstance(band, (str, bytes)) or not isinstance(band, (list, tuple)):
+        raise PisteConfigError(
+            f"piste.foot_band_work must be a [y_min, y_max] list, got {band!r}",
+        )
+    if len(band) != 2:
+        raise PisteConfigError(
+            f"piste.foot_band_work must have exactly 2 values, got {len(band)}: "
+            f"{band!r}",
+        )
+    for v in band:
+        if isinstance(v, bool) or not isinstance(v, (int, float)):
+            raise PisteConfigError(
+                f"piste.foot_band_work values must be numbers, got {band!r}",
+            )
+    y_min, y_max = float(band[0]), float(band[1])
+    if y_min >= y_max:
+        raise PisteConfigError(
+            f"piste.foot_band_work must be [y_min, y_max] with y_min < y_max, "
+            f"got {band!r}",
+        )
+
+    confidence = _positive_number(
+        piste, "pose_conf", PISTE_DEFAULT_POSE_CONF, kind=(int, float),
+    )
+    if confidence > 1:
+        raise PisteConfigError(
+            f"piste.pose_conf must be in (0, 1], got {confidence!r}",
+        )
+    imgsz = _positive_number(
+        piste, "pose_imgsz", PISTE_DEFAULT_POSE_IMGSZ, kind=int,
+    )
+    max_det = _positive_number(
+        piste, "pose_max_det", PISTE_DEFAULT_POSE_MAX_DET, kind=int,
+    )
+
+    return {
+        "confidence": float(confidence),
+        "imgsz": int(imgsz),
+        "max_det": int(max_det),
+        "foot_band_work": (y_min, y_max),
+    }
+
+
+def report_source_type(piste_config) -> str:
+    """Which ``meta.source_type`` this run produces.
+
+    A piste work file comes from a tripod at the side of the strip — the "coach"
+    source type. Everything else keeps the historical ``tv_broadcast`` value, so
+    existing reports and the dashboard branches that read this field do not
+    shift.
+    """
+    return "coach" if piste_config else "tv_broadcast"
+
+
+def format_piste_banner(config_path, kwargs: dict) -> str:
+    """Operator-visible confirmation that the piste gate is actually on.
+
+    Silently running with the gate off looks identical in the logs but analyses
+    whoever YOLO ranked highest — often a foreground referee — so the settings
+    are printed where they cannot be missed.
+    """
+    y_min, y_max = kwargs["foot_band_work"]
+    return "\n".join([
+        "-" * 60,
+        "  PISTE MODE ACTIVE (target-piste gate on)",
+        f"    config:       {config_path}",
+        f"    foot band:    y {y_min:g}–{y_max:g}  (work-file pixels)",
+        f"    pose imgsz:   {kwargs['imgsz']}",
+        f"    pose max_det: {kwargs['max_det']}",
+        f"    pose conf:    {kwargs['confidence']}",
+        "-" * 60,
+    ])
+
+
+def resolve_gate_audit(gate_audit, piste_config) -> "tuple[int, str | None]":
+    """Decide how many gate-audit frames to write, and why not if zero.
+
+    ``--gate-audit`` draws the gate's decisions, so it means nothing without a
+    gate. Rather than failing a multi-minute run over a flag combination, the
+    request is dropped and the reason returned for printing.
+    """
+    count = int(gate_audit or 0)
+    if count <= 0:
+        return 0, None
+    if not piste_config:
+        return 0, (
+            "--gate-audit ignored: it visualises the piste gate, which is only "
+            "active with --piste-config."
+        )
+    return count, None
+
+
+def audit_frame_indices(total_frames: int, count: int, sample_every: int = 1) -> list:
+    """Pick ``count`` frame indices spread across the video.
+
+    Indices land on multiples of ``sample_every`` so every audited frame is one
+    the pipeline actually posed, and are taken at bin centres so the first and
+    last frames (often black or truncated) are not the sample.
+    """
+    if count <= 0 or total_frames <= 0:
+        return []
+    stride = max(1, int(sample_every))
+    picked = set()
+    for i in range(count):
+        pos = int((i + 0.5) * total_frames / count)
+        pos = min(max(pos, 0), total_frames - 1)
+        picked.add(pos - (pos % stride))
+    return sorted(picked)
+
+
+def _display_foot_y(fencer, keypoint_conf: float = POSE_KEYPOINT_CONFIDENCE):
+    """Foot line used for the audit label only.
+
+    Mirrors the estimator's rule (lowest confident ankle, else bbox bottom) so
+    the drawn number can be read against the band, but it is a display aid — the
+    selection itself already happened inside the estimator.
+    """
+    ankles = [
+        fencer.keypoints[i].y
+        for i in (15, 16)
+        if len(fencer.keypoints) > i
+        and fencer.keypoints[i].confidence > keypoint_conf
+    ]
+    if ankles:
+        return max(ankles)
+    if fencer.bbox and len(fencer.bbox) >= 4:
+        return float(fencer.bbox[3])
+    return None
+
+
+def annotate_gate_frame(frame, fencers, foot_band, keypoint_conf: float = POSE_KEYPOINT_CONFIDENCE):
+    """Draw the gate's verdict on a copy of ``frame`` for human inspection.
+
+    Only fencers that survived the gate are passed in (the estimator drops the
+    rest), so the check the operator performs is: are the two labelled skeletons
+    the intended pair, and do their feet sit inside the drawn band?
+    """
+    canvas = frame.copy()
+    height, width = canvas.shape[:2]
+
+    y_min, y_max = foot_band
+    for y in (y_min, y_max):
+        row = int(round(y))
+        if 0 <= row < height:
+            cv2.line(canvas, (0, row), (width - 1, row), _GATE_BAND_COLOR, 2)
+    cv2.putText(
+        canvas, f"foot band {y_min:g}-{y_max:g}", (8, 22),
+        cv2.FONT_HERSHEY_SIMPLEX, 0.6, _GATE_BAND_COLOR, 2,
+    )
+
+    for fencer in fencers:
+        color = _GATE_SIDE_COLORS.get(fencer.side, _GATE_SIDE_COLORS[None])
+        if fencer.bbox and len(fencer.bbox) >= 4:
+            x1, y1, x2, y2 = (int(round(v)) for v in fencer.bbox[:4])
+            cv2.rectangle(canvas, (x1, y1), (x2, y2), color, 2)
+            foot_y = _display_foot_y(fencer, keypoint_conf)
+            label = f"{fencer.side or '?'} conf={fencer.person_confidence:.2f}"
+            if foot_y is not None:
+                label += f" foot_y={foot_y:.0f}"
+            cv2.putText(
+                canvas, label, (x1, max(y1 - 6, 12)),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2,
+            )
+
+        kps = fencer.keypoints or []
+        for a, b in _GATE_SKELETON_EDGES:
+            if len(kps) <= max(a, b):
+                continue
+            ka, kb = kps[a], kps[b]
+            if ka.confidence <= keypoint_conf or kb.confidence <= keypoint_conf:
+                continue
+            cv2.line(
+                canvas,
+                (int(round(ka.x)), int(round(ka.y))),
+                (int(round(kb.x)), int(round(kb.y))),
+                color, 2,
+            )
+        for kp in kps:
+            if kp.confidence > keypoint_conf:
+                cv2.circle(canvas, (int(round(kp.x)), int(round(kp.y))), 3, color, -1)
+
+    return canvas
+
+
+def gate_audit_path(audit_dir, video_stem: str, frame_idx: int) -> Path:
+    """``<audit_dir>/<stem>_gate_<frameidx>.jpg`` — frame index is WORK-FILE."""
+    return Path(audit_dir) / f"{video_stem}_gate_{frame_idx:06d}.jpg"
+
+
+def write_gate_audit_frames(
+    video_path, estimator, frame_indices, foot_band, audit_dir, video_stem: str,
+) -> list:
+    """Re-read the chosen frames and write annotated JPEGs.
+
+    Deliberately a second pass with its own ``VideoCapture``: buffering these
+    frames during the main loop is what the chunked streaming loop exists to
+    avoid (see ``_flush_chunk``). Here exactly one decoded frame is alive at a
+    time, so the cost is a seek per audit image and nothing added to the peak.
+    """
+    if not frame_indices:
+        return []
+
+    audit_dir = Path(audit_dir)
+    audit_dir.mkdir(parents=True, exist_ok=True)
+
+    cap = cv2.VideoCapture(str(video_path))
+    if not cap.isOpened():
+        print(f"  WARNING: gate audit skipped, cannot reopen video: {video_path}")
+        return []
+
+    written = []
+    try:
+        for idx in frame_indices:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+            ret, frame = cap.read()
+            if not ret:
+                print(f"  WARNING: gate audit could not read frame {idx}")
+                continue
+            # Seeking a long-GOP file can land on a nearby frame; name the image
+            # after the frame actually decoded so the operator can scrub to it.
+            pos = int(cap.get(cv2.CAP_PROP_POS_FRAMES)) - 1
+            actual_idx = pos if pos >= 0 else idx
+            result = estimator.estimate_pose(frame, frame_idx=actual_idx)
+            annotated = annotate_gate_frame(frame, result.fencers, foot_band)
+            out_path = gate_audit_path(audit_dir, video_stem, actual_idx)
+            if cv2.imwrite(str(out_path), annotated):
+                written.append(out_path)
+            else:
+                print(f"  WARNING: gate audit could not write {out_path}")
+            frame = None
+            annotated = None
+    finally:
+        cap.release()
+
+    return written
+
+
 def main():
     parser = argparse.ArgumentParser(description="Generate continuous analysis report")
     parser.add_argument("video", type=str, help="Path to video file")
@@ -212,6 +667,24 @@ def main():
         ),
     )
     parser.add_argument(
+        "--piste-config", type=str, default=None,
+        help=(
+            "Path to a piste config JSON from prepare_piste_video.py. Analyses a "
+            "cropped single-piste work file: restricts pose detection to the "
+            "fencers whose feet fall in the config's work-file foot band, and "
+            "records the report as a coach-side recording. Without it the "
+            "estimator runs exactly as before."
+        ),
+    )
+    parser.add_argument(
+        "--gate-audit", type=int, default=0, metavar="N",
+        help=(
+            "Write N annotated frames spread across the video to "
+            "data/work/audit/ so the piste gate's fencer selection can be "
+            "checked by eye. Requires --piste-config; ignored without it."
+        ),
+    )
+    parser.add_argument(
         "--with-overlays", action="store_true",
         help="Generate pose-overlay mp4 clips for each event after report generation",
     )
@@ -223,6 +696,23 @@ def main():
 
     if args.overlays_all:
         args.with_overlays = True
+
+    # Resolve piste mode before anything expensive: a typo in the config path
+    # must fail now, not after several minutes of pose estimation.
+    piste_kwargs = None
+    if args.piste_config:
+        try:
+            piste_config = load_piste_config(args.piste_config)
+            piste_kwargs = piste_estimator_kwargs(piste_config)
+        except PisteConfigError as exc:
+            print(f"ERROR: {exc}")
+            sys.exit(1)
+
+    gate_audit_count, gate_audit_note = resolve_gate_audit(
+        args.gate_audit, args.piste_config,
+    )
+    if gate_audit_note:
+        print(f"  WARNING: {gate_audit_note}")
 
     video_path = Path(args.video)
     if not video_path.exists():
@@ -255,12 +745,22 @@ def main():
     print(f"{'='*60}\n")
 
     # Import ML modules
-    from ml.pose_estimator import PoseEstimator
+    from ml.pose_estimator import PisteGate, PoseEstimator
     from ml.pose_analyzer import PoseAnalyzer
     from ml.fencer_profile import FencerProfileBuilder
 
     print("Loading YOLO11-Pose model...")
-    estimator = PoseEstimator()
+    if piste_kwargs is not None:
+        print(format_piste_banner(args.piste_config, piste_kwargs))
+        estimator = PoseEstimator(
+            confidence=piste_kwargs["confidence"],
+            imgsz=piste_kwargs["imgsz"],
+            max_det=piste_kwargs["max_det"],
+            piste_gate=PisteGate(*piste_kwargs["foot_band_work"]),
+        )
+    else:
+        # Unchanged default path — TV-broadcast output must stay byte-identical.
+        estimator = PoseEstimator()
     analyzer = PoseAnalyzer()
     analyzer.fps = fps
 
@@ -547,11 +1047,14 @@ def main():
             "pose_enabled": True,
             "action_enabled": False,
             "confidence_threshold": 0.0,
-            "source_type": "tv_broadcast",
+            "source_type": report_source_type(args.piste_config),
             "analysis_mode": "continuous_only",
             "fps": fps,
         },
     }
+
+    if args.piste_config:
+        report_dict["meta"]["piste_config"] = str(args.piste_config)
 
     # Add my_fencer_summary if available
     if continuous_result.my_fencer_summary is not None:
@@ -659,6 +1162,18 @@ def main():
             if judge is not None:
                 print(f"  Priority estimation active (weapon={weapon})")
             annotate_touch_outcomes(ocr_touches, exchanges_list, fps, judge=judge)
+
+            # LED-scoreboard reports arrive with their lamps already read, so
+            # the lamp-informed refinement that detect_touch_lamps.py performs
+            # for the TV path has to happen here — before the summary counts it.
+            # No-op for TV reports, which carry no lamp fields at this point.
+            if report_carries_lamp_fields(ocr_touches):
+                promoted = promote_supplied_lamp_outcomes(ocr_touches)
+                print(
+                    f"  Lamp readings supplied by OCR report: "
+                    f"{promoted} touch(es) promoted to no_priority_call"
+                )
+
             attack_outcomes = summarize_attack_outcomes(ocr_touches)
             report_dict["continuous_summary"]["attack_outcomes"] = attack_outcomes
             for side in ("left", "right"):
@@ -721,11 +1236,6 @@ def main():
         for w in ocr_report.get("warnings", []):
             report_dict["warnings"].append(w)
 
-        # An explicit --weapon outranks the OCR report's guess, which is itself
-        # only a filename parse.
-        if args.weapon:
-            report_dict["summary"]["weapon"] = args.weapon
-
         # Store clock events (Allez/Halt proxy) from OCR if available
         clock_events = ocr_report.get("clock_events", [])
         if clock_events:
@@ -737,6 +1247,16 @@ def main():
     else:
         if args.merge_ocr and not ocr_report:
             print(f"\n  WARNING: OCR report not found: {args.merge_ocr}")
+
+    # An explicit --weapon outranks both the OCR report's guess and the
+    # filename parse, and must apply whether or not an OCR report was merged.
+    # This override used to sit inside the merge branch, so a pose-only run —
+    # the normal case for a piste crop, which has no OCR report — silently kept
+    # the filename's guess. Foil priority estimation is gated on the weapon, so
+    # the flag appeared accepted while the analysis it exists to enable stayed
+    # off.
+    if args.weapon:
+        report_dict["summary"]["weapon"] = args.weapon
 
     # Auto-generate insights from continuous analysis
     insights = []
@@ -812,6 +1332,21 @@ def main():
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(report_dict, f, indent=2, ensure_ascii=False)
 
+    # Gate audit (optional): a second, one-frame-at-a-time pass over the video
+    # so the operator can see which people the piste gate kept. It runs after
+    # the report is on disk — a failed audit must not cost the analysis.
+    audit_paths = []
+    if gate_audit_count and piste_kwargs is not None:
+        indices = audit_frame_indices(
+            total_frames, gate_audit_count, args.sample_every,
+        )
+        print(f"\nWriting {len(indices)} gate-audit frames...")
+        audit_paths = write_gate_audit_frames(
+            video_path, estimator, indices,
+            piste_kwargs["foot_band_work"], GATE_AUDIT_DIR, video_stem,
+        )
+        print(f"  {len(audit_paths)} images written to: {GATE_AUDIT_DIR.resolve()}")
+
     # Generate overlay clips (optional)
     clip_results = []
     if args.with_overlays:
@@ -851,6 +1386,8 @@ def main():
     print(f"  Peak memory: {peak_memory_gb():.2f}GB")
     if clip_results:
         print(f"  Clips:       {len(clip_results)} generated")
+    if audit_paths:
+        print(f"  Gate audit:  {len(audit_paths)} images in {GATE_AUDIT_DIR.resolve()}")
     print(f"{'='*60}")
     print(f"\n  View at: http://localhost:76/report/saved/{report_id}")
 

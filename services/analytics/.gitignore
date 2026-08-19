@@ -8,6 +8,25 @@ data/labeled/
 data/facts/
 data/uploads/
 
+# Scratch output only — piste work files live in data/raw/own/ because reports
+# reference them via meta.video_path and clip generation re-reads them.
+# Anything here (gate-audit frames) is regenerable.
+data/work/
+
+# 🔴 THIS REPOSITORY IS PUBLIC. Everything below identifies real people.
+#
+# Reports we filmed ourselves. Their filenames carry fencers' names — minors,
+# in these bouts — and their meta carries the share_token that is the only
+# thing guarding the report. Committing one publishes both the identity and
+# the key. scripts/share_report.py moves a report here when it is shared.
+data/reports/private/
+
+# Per-piste configs and their previews. The config filenames carry fencers'
+# names, and previews/ holds extracted frames — that is, photographs of their
+# faces. Nothing here is needed to build or run the service: the server reads
+# these from disk at runtime, and prepare_piste_video.py regenerates them.
+data/piste_configs/
+
 # Model files (large binaries)
 *.pkl
 *.pt
