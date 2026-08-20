@@ -367,7 +367,7 @@ PAGE_HTML = """<!doctype html>
   <span class="muted" id="winfo">-</span>
   <span class="muted" id="stats">-</span>
   <span class="keys">
-    <kbd>click</kbd> point &nbsp; <kbd>u</kbd> undo &nbsp; <kbd>s</kbd> skip &nbsp;
+    <kbd>click</kbd> point &nbsp; <kbd>u</kbd> undo &nbsp; <kbd>s</kbd> skip &nbsp; <kbd>r</kbd> repeat prev &nbsp;
     <kbd>1</kbd>/<kbd>2</kbd> blade hidden L/R &nbsp; <kbd>c</kbd> contact frame &nbsp;
     <kbd>&larr;</kbd>/<kbd>&rarr;</kbd> prev/next &nbsp; <kbd>n</kbd> next unlabeled
   </span>
@@ -566,6 +566,26 @@ document.addEventListener("keydown", async (e) => {
     draw();
   } else if (k === "s") {
     await save({skipped: true}); go(idx + 1);
+  } else if (k === "r") {
+    // Static stretches: copy the previous frame's labels verbatim — a copied
+    // label is a free correct sample, where a skip would just discard the frame.
+    if (idx <= 0) { toast("no previous frame"); return; }
+    const prev = await (await fetch(`/api/frame/${idx - 1}`)).json();
+    if (prev.window_id !== info.window_id) {
+      // Each window has its own crop box, so pixel coordinates do not carry
+      // across the boundary — copying would place the points wrongly.
+      toast("previous frame is in another window"); return;
+    }
+    const pl = prev.label;
+    if (!pl || pl.skipped || !pl.points || Object.keys(pl.points).length === 0) {
+      toast("previous frame has no labels"); return;
+    }
+    pts = {...pl.points};
+    hidden = {l: !!(pl.not_visible||{}).l, r: !!(pl.not_visible||{}).r};
+    draw();
+    await save();
+    toast("copied prev → saved");
+    go(idx + 1);
   } else if (k === "1" || k === "2") {
     const side = k === "1" ? "l" : "r";
     hidden[side] = !hidden[side];

@@ -429,12 +429,18 @@ def build_ffmpeg_command(
     # room sound that roadmap 8-8 wants. The trailing ``?`` still matters: it
     # keeps a source with no audio at all from failing.
     if want_piste:
+        # The piste file is what browsers play. 10-bit sources (iPhone HDR
+        # HEVC) would otherwise yield H.264 High 10 / 4:2:2 output, which no
+        # phone hardware decoder plays — force 8-bit 4:2:0 and front-load the
+        # moov atom so playback can start before the download finishes.
         cmd += [
             "-map", "[piste]",
             "-map", "0:a:0?",
             "-c:v", "libx264",
+            "-pix_fmt", "yuv420p",
             "-crf", str(PISTE_CRF),
             "-preset", X264_PRESET,
+            "-movflags", "+faststart",
             "-c:a", "aac",
             "-b:a", AUDIO_BITRATE,
             str(piste_out),

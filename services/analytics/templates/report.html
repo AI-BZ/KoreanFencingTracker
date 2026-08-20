@@ -277,7 +277,7 @@
     {% if show_workbench %}
     <section id="workbench" class="workbench glass-card p-3 mb-6"
              data-has-video="{{ '1' if has_main_video else '0' }}"
-             {% if has_main_video %}data-main-src="/videos/{{ video_filename }}"{% endif %}>
+             {% if has_main_video %}data-main-src="/videos/{{ video_filename }}?v=2"{% endif %}>
 
         <div id="wb-viewport" class="wb-viewport">
             <div id="wb-stage" class="wb-stage{% if not has_main_video %} hidden{% endif %}">
