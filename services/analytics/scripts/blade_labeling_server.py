@@ -391,6 +391,7 @@ const KEYS = ["lg","lt","rg","rt"];
 const COLORS = {lg:"#5ab0ff", lt:"#5ab0ff", rg:"#ff7a5a", rt:"#ff7a5a"};
 const MAG_ZOOM = 5;
 let idx = 0, info = null, img = new Image(), pts = {}, hidden = {l:false,r:false};
+let busy = false;  // one async key action at a time — key auto-repeat plus network latency otherwise double-fires handlers
 let fit = 1, mouse = null;
 
 const cv = document.getElementById("main"), ctx = cv.getContext("2d");
@@ -510,7 +511,7 @@ cv.addEventListener("click", (e) => {
   pts[slot] = [(e.clientX - r.left) / (r.width / img.naturalWidth),
                (e.clientY - r.top) / (r.height / img.naturalHeight)];
   draw();
-  if (!nextSlot()) save().then(() => go(idx + 1));
+  if (!nextSlot()) save().then((out) => { if (out) go(idx + 1); });
 });
 
 async function save(extra = {}) {
@@ -519,11 +520,18 @@ async function save(extra = {}) {
     points: {lg: pts.lg||null, lt: pts.lt||null, rg: pts.rg||null, rt: pts.rt||null},
     not_visible: hidden, skipped: false,
   }, extra);
-  const r = await fetch("/api/label", {
-    method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body),
-  });
-  if (!r.ok) toast("save failed");
-  return r.json();
+  try {
+    const r = await fetch("/api/label", {
+      method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body),
+    });
+    if (!r.ok) { toast(`저장 실패 (${r.status}) — 다시 시도하세요`); return null; }
+    return await r.json();
+  } catch (err) {
+    // Server briefly down (restart, network blip): stay on this frame so the
+    // labeller retries instead of silently losing the row and advancing.
+    toast("저장 실패 — 서버 연결 안 됨, 다시 시도하세요");
+    return null;
+  }
 }
 
 async function judge(label) {
@@ -550,7 +558,7 @@ async function markContactFrame() {
   else toast(out.error || "failed");
 }
 
-function go(i) { if (i >= 0 && i < info.total) load(i); }
+function go(i) { if (i >= 0 && i < info.total) return load(i); }
 
 async function refreshStats() {
   const s = await (await fetch("/api/stats")).json();
@@ -561,37 +569,47 @@ async function refreshStats() {
 document.addEventListener("keydown", async (e) => {
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   const k = e.key.toLowerCase();
+  // Holding a key must not queue concurrent async handlers: over a
+  // high-latency link the interleaved saves double-write one frame and
+  // stride past the next. Arrows are safe (no writes) and want repeat.
+  if (busy && k !== "arrowleft" && k !== "arrowright") return;
+  if (e.repeat && (k === "r" || k === "s" || k === "n" || k === "c")) return;
   if (k === "u") {
     for (let i = KEYS.length - 1; i >= 0; i--) if (pts[KEYS[i]]) { delete pts[KEYS[i]]; break; }
     draw();
   } else if (k === "s") {
-    await save({skipped: true}); go(idx + 1);
+    busy = true;
+    try { if (await save({skipped: true})) await go(idx + 1); } finally { busy = false; }
   } else if (k === "r") {
-    // Static stretches: copy the previous frame's labels verbatim — a copied
-    // label is a free correct sample, where a skip would just discard the frame.
-    if (idx <= 0) { toast("no previous frame"); return; }
-    const prev = await (await fetch(`/api/frame/${idx - 1}`)).json();
-    if (prev.window_id !== info.window_id) {
-      // Each window has its own crop box, so pixel coordinates do not carry
-      // across the boundary — copying would place the points wrongly.
-      toast("previous frame is in another window"); return;
-    }
-    const pl = prev.label;
-    if (!pl || pl.skipped || !pl.points || Object.keys(pl.points).length === 0) {
-      toast("previous frame has no labels"); return;
-    }
-    pts = {...pl.points};
-    hidden = {l: !!(pl.not_visible||{}).l, r: !!(pl.not_visible||{}).r};
-    draw();
-    await save();
-    toast("copied prev → saved");
-    go(idx + 1);
+    // Static stretches: copy labels from the nearest labelled frame earlier
+    // in the same window — a copied label is a free correct sample, where a
+    // skip would just discard the frame. Searching backwards (not only idx-1)
+    // rides over frames a race or a skip left unlabelled. Same-window only:
+    // each window has its own crop box, so pixel coordinates do not carry
+    // across the boundary.
+    busy = true;
+    try {
+      let pl = null;
+      for (let j = idx - 1; j >= 0; j--) {
+        const prev = await (await fetch(`/api/frame/${j}`)).json();
+        if (prev.window_id !== info.window_id) break;
+        const cand = prev.label;
+        if (cand && !cand.skipped && cand.points && Object.values(cand.points).some(Boolean)) { pl = cand; break; }
+      }
+      if (!pl) { toast("no labeled frame earlier in this window"); return; }
+      pts = {...pl.points};
+      hidden = {l: !!(pl.not_visible||{}).l, r: !!(pl.not_visible||{}).r};
+      draw();
+      if (!(await save())) return;
+      toast(`copied frame ${pl.frame} → saved`);
+      await go(idx + 1);
+    } finally { busy = false; }
   } else if (k === "1" || k === "2") {
     const side = k === "1" ? "l" : "r";
     hidden[side] = !hidden[side];
     if (hidden[side]) { delete pts[side + "g"]; delete pts[side + "t"]; }
     draw();
-    if (!nextSlot() && (hidden.l || hidden.r)) { await save(); go(idx + 1); }
+    if (!nextSlot() && (hidden.l || hidden.r)) { if (await save()) go(idx + 1); }
   } else if (k === "c") {
     await markContactFrame();
   } else if (k === "arrowright") { go(idx + 1); }
@@ -608,7 +626,7 @@ document.getElementById("b-unclear").onclick = () => judge("unclear");
 window.addEventListener("resize", () => { if (img.complete) draw(); });
 
 (async () => {
-  const r = await (await fetch("/api/next-unlabeled/0")).json();
+  const r = await (await fetch("/api/resume")).json();
   load(r.index);
 })();
 </script>
@@ -643,6 +661,18 @@ def create_app(state: BladeLabelingState, token: Optional[str] = None) -> FastAP
     @app.get("/", response_class=HTMLResponse)
     async def index() -> HTMLResponse:
         return HTMLResponse(PAGE_HTML)
+
+    @app.get("/api/resume")
+    async def resume() -> dict:
+        # Where a refreshed page should land: the first frame still needing
+        # work at or after the most recently *saved* frame — not the first gap
+        # in the whole set, which yanks the labeller back to wherever a skip
+        # or race left a hole.
+        start = 0
+        if state.labels:
+            latest = max(state.labels.values(), key=lambda row: row.get("ts") or 0)
+            start = state.index_by_frame.get(latest.get("frame"), 0)
+        return {"index": next_unlabeled_index(state.frames, state.labels, start)}
 
     @app.get("/api/stats")
     async def stats() -> dict:
