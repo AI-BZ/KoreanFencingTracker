@@ -495,6 +495,22 @@ async def dashboard_page(request: Request):
     })
 
 
+def _video_version(video_filename: Optional[str]) -> int:
+    """Cache-busting version for a served video: the file's mtime.
+
+    The CDN caches /videos/* aggressively, and a re-encode replaces the file
+    under the same name — a 10-bit copy cached before one such swap kept
+    breaking phone playback. Keying the URL on mtime makes every replacement
+    a fresh cache entry without anyone remembering to bump a constant.
+    """
+    if not video_filename:
+        return 0
+    try:
+        return int((_raw_video_dir / video_filename).stat().st_mtime)
+    except OSError:
+        return 0
+
+
 def _own_video_filename(video_path: str) -> Optional[str]:
     """Return ``own/<name>`` when ``video_path`` points into data/raw/own.
 
@@ -584,6 +600,7 @@ async def report_page(request: Request, job_id: str, token: Optional[str] = None
         "report_id": job_id,
         "mock_mode": mock_mode,
         "video_filename": video_filename,
+        "video_version": _video_version(video_filename),
         "youtube_url": youtube_url,
         "share_token": None,
         "has_keypoints": _has_keypoints(job_id),
@@ -832,6 +849,7 @@ def _render_saved_report(
         "job_id": f"saved-{report_id}",
         "report_id": report_id,
         "video_filename": video_filename,
+        "video_version": _video_version(video_filename),
         "youtube_url": youtube_url,
         "share_token": share_token,
         "has_keypoints": _has_keypoints(report_id),
