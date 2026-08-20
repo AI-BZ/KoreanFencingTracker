@@ -4,7 +4,7 @@
 
 {% block nav_dashboard %}active{% endblock %}
 
-{% block credits %}<span class="fm-num">{{ credits | default(0) }}</span> {{ t('common.credits') if t else '크레딧' }}{% endblock %}
+{% block credits %}<span class="fm-num">{{ credits | default(0) }}</span> <span class="nav-credits-label">{{ t('common.credits') if t else '크레딧' }}</span>{% endblock %}
 
 {% block content %}
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

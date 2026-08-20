@@ -560,7 +560,7 @@
                           title="{% if touch.match_time_estimated %}경기 잔여 시간 — 시계 OCR이 초를 부분 인식해 앞뒤 터치로 보정한 추정값{% else %}경기 잔여 시간{% endif %}">{% if touch.match_time_estimated %}~{% endif %}{{ touch.match_time }}</span>
                     <span class="block text-[10px] font-mono text-gray-600" title="영상 재생 위치">▶ {{ touch.video_timestamp }}</span>
                 </div>
-                <div class="flex-1 min-w-0 text-sm leading-snug">
+                <div class="timeline-row__desc flex-1 min-w-0 text-sm leading-snug">
                     {% if touch.attack_outcome is defined and touch.attack_outcome == 'attack_success' %}
                         <span class="font-semibold {% if touch.scorer == 'left' %}text-blue-400{% else %}text-red-400{% endif %}">{{ scorer_name }}</span>
                         {% if touch.estimated_badge %}<span class="align-middle px-1.5 py-0.5 rounded border border-gray-600 text-gray-400 text-[10px] font-medium" title="{{ touch.estimated_badge_title }}">{{ touch.estimated_badge }}</span>{% endif %}
@@ -650,7 +650,7 @@
                 <div class="px-2 py-0.5 rounded-full {{ badge.bg }} {{ badge.border }} border flex-shrink-0">
                     <span class="text-xs font-semibold {{ badge.text }}">{{ ex.event_type_ko | default(badge.label) }}</span>
                 </div>
-                <div class="flex-1 min-w-0 text-sm text-gray-400 leading-snug">
+                <div class="timeline-row__desc flex-1 min-w-0 text-sm text-gray-400 leading-snug">
                     {% if ex.attacker is defined and ex.attacker == 'left' %}
                         <span class="text-blue-400 font-medium">{{ left_name }}</span> 공격
                         <span class="text-gray-500 mx-1">→</span>
@@ -820,8 +820,8 @@
         <div class="px-6 py-4 border-b border-white/10">
             <h2 class="text-lg font-bold text-white">터치별 상세</h2>
         </div>
-        <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-white/10">
+        <div class="touch-table-scroll overflow-x-auto">
+            <table class="touch-table min-w-full divide-y divide-white/10">
                 <thead class="bg-white/5">
                     <tr>
                         <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">#</th>
@@ -859,14 +859,14 @@
                     {% for touch in report.touches %}
                     <tr class="{% if touch.scorer == 'left' %}bg-blue-500/10{% elif touch.scorer == 'right' %}bg-red-500/10{% endif %}
                                hover:bg-white/[0.02] transition-colors">
-                        <td class="px-4 py-3 text-sm font-medium text-white fm-num">{{ touch.touch_number }}</td>
-                        <td class="px-4 py-3">
+                        <td class="px-4 py-3 text-sm font-medium text-white fm-num" data-label="#">{{ touch.touch_number }}</td>
+                        <td class="px-4 py-3" data-label="잔여 시간">
                             <span class="block text-sm font-mono text-gray-300">{% if touch.match_time_estimated is defined and touch.match_time_estimated %}~{% endif %}{{ touch.match_time }}</span>
                             {% if touch.video_timestamp is defined and touch.video_timestamp and touch.video_timestamp != touch.match_time %}
                             <span class="block text-[10px] font-mono text-gray-600" title="영상 재생 위치">▶ {{ touch.video_timestamp }}</span>
                             {% endif %}
                         </td>
-                        <td class="px-4 py-3">
+                        <td class="px-4 py-3" data-label="득점자">
                             {% if touch.scorer == 'left' %}
                             <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-500/15 text-blue-400">{{ left_name }}</span>
                             {% elif touch.scorer == 'right' %}
@@ -875,8 +875,8 @@
                             <span class="text-sm text-gray-500">-</span>
                             {% endif %}
                         </td>
-                        <td class="px-4 py-3 text-sm font-semibold text-white fm-num">{{ touch.score_after }}</td>
-                        <td class="px-4 py-3">
+                        <td class="px-4 py-3 text-sm font-semibold text-white fm-num" data-label="스코어">{{ touch.score_after }}</td>
+                        <td class="px-4 py-3" data-label="공격/방어 판정">
                             {% set t_scorer_name = left_name if touch.scorer == 'left' else right_name %}
                             {% set t_attacker_name = left_name if touch.attacker_side == 'left' else right_name %}
                             {% if touch.attack_outcome == 'attack_success' %}
@@ -915,7 +915,7 @@
                             </span>
                             {% endif %}
                         </td>
-                        <td class="px-4 py-3 text-sm text-gray-300">
+                        <td class="px-4 py-3 text-sm text-gray-300" data-label="동작 (추정)">
                             {% if touch.action_scorer and touch.action_scorer != 'unknown' %}
                                 {{ action_ko.get(touch.action_scorer, touch.action_scorer) }}
                                 <span class="text-[10px] text-gray-600">(추정)</span>
@@ -925,7 +925,7 @@
                                 <span class="text-gray-600">-</span>
                             {% endif %}
                         </td>
-                        <td class="px-4 py-3 text-sm">
+                        <td class="px-4 py-3 text-sm" data-label="거리 (BH)">
                             {% if touch.pose_analysis is defined and touch.pose_analysis %}
                                 {% set pa = touch.pose_analysis %}
                                 <span class="font-mono text-xs text-gray-400">{{ "%.2f" | format(pa.distance_bh) }}BH</span>
@@ -944,14 +944,14 @@
                                 <span class="text-gray-600">-</span>
                             {% endif %}
                         </td>
-                        <td class="px-4 py-3 text-sm text-gray-400">
+                        <td class="px-4 py-3 text-sm text-gray-400" data-label="풋워크">
                             {% if touch.pose_analysis is defined and touch.pose_analysis and touch.pose_analysis.footwork_scorer %}
                                 {{ touch.pose_analysis.footwork_scorer }}
                             {% else %}
                                 <span class="text-gray-600">-</span>
                             {% endif %}
                         </td>
-                        <td class="px-4 py-3">
+                        <td class="px-4 py-3" data-label="신뢰도">
                             {% if touch.action_confidence %}
                             <div class="flex items-center gap-2">
                                 <div class="w-16 bg-white/15 rounded-full h-1.5">
@@ -967,7 +967,7 @@
                             <span class="text-sm text-gray-500">-</span>
                             {% endif %}
                         </td>
-                        <td class="px-4 py-3 text-sm text-gray-400 max-w-xs truncate">{{ touch.description | default('-') }}</td>
+                        <td class="touch-table__desc px-4 py-3 text-sm text-gray-400 max-w-xs truncate" data-label="설명">{{ touch.description | default('-') }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>

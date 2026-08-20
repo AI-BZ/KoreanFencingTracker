@@ -115,6 +115,229 @@ canvas {
 }
 
 /* ==================================================================
+   Phone layout
+   Everything below is mobile-only. Tailwind's CDN build injects its
+   rules at runtime, so a bare .foo override can lose the ordering tie
+   against a utility class — every rule that has to beat a utility is
+   written with two classes (or an element + class) to win on
+   specificity instead of on order.
+   ================================================================== */
+
+/* ---- navbar --------------------------------------------------------
+   Three labelled links + language switcher + credit pill need 490px of
+   row. At 390px the labels used to wrap one character per line and the
+   pill hung off the right edge, which is what made every page scroll
+   sideways. On phones the links become their icons (the accessible name
+   stays on the anchor's aria-label) and the pill drops the word
+   "크레딧", keeping the balance. */
+@media (max-width: 639px) {
+    .dark-navbar .nav-logo {
+        height: 1.75rem;
+        width: auto;
+        flex-shrink: 0;
+    }
+
+    .dark-navbar .nav-brand-suffix,
+    .dark-navbar .nav-link-label,
+    .dark-navbar .nav-credits-label {
+        display: none;
+    }
+
+    .dark-navbar .nav-actions {
+        gap: 0.125rem;
+    }
+
+    .dark-nav-link.nav-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 2.5rem;
+        min-height: 2.5rem;
+        padding: 0 0.5rem;
+    }
+
+    .dark-navbar .lang-switcher {
+        margin-left: 0.25rem;
+    }
+
+    .dark-navbar .lang-btn {
+        display: inline-flex;
+        align-items: center;
+        min-height: 2.5rem;
+        padding: 0 0.5rem;
+    }
+
+    .dark-navbar .nav-brand {
+        min-height: 2.5rem;
+    }
+
+    .dark-navbar .nav-credits {
+        margin-left: 0.25rem;
+        padding-left: 0.375rem;
+    }
+}
+
+/* Small phones have no room for the divider and the wide tap boxes as
+   well; the targets stay 40px tall, which is the axis a thumb needs. */
+@media (max-width: 420px) {
+    .dark-nav-link.nav-link {
+        min-width: 2.25rem;
+        padding: 0 0.25rem;
+    }
+
+    .dark-navbar .lang-btn {
+        padding: 0 0.375rem;
+    }
+
+    .dark-navbar .nav-credits {
+        margin-left: 0.125rem;
+        padding-left: 0;
+        border-left: 0;
+    }
+
+    .dark-navbar .nav-credits > span {
+        padding-left: 0.5rem;
+        padding-right: 0.5rem;
+    }
+}
+
+/* ---- cards ----
+   80px of horizontal chrome (page gutter + card padding) is a quarter
+   of a 320px screen. */
+@media (max-width: 639px) {
+    .glass-card.p-6 {
+        padding: 1.25rem;
+    }
+}
+
+/* ---- timeline rows ----
+   A row is one flex line of avatar / index / time / verdict text /
+   badges / clip button. Below 768px the verdict text was left with
+   ~40px and wrapped one character per line, growing single rows past
+   400px tall. It now takes a line of its own underneath, so the row
+   reads as two bands instead of a column of characters. */
+@media (max-width: 767px) {
+    .timeline-row {
+        flex-wrap: wrap;
+        row-gap: 0.5rem;
+    }
+
+    .timeline-row .timeline-row__desc {
+        flex: 1 0 100%;
+        order: 9;
+        min-width: 0;
+    }
+
+    .timeline-row .clip-play-btn {
+        order: 8;
+        margin-left: auto;
+        min-height: 2.5rem;
+    }
+
+    /* The 10px metadata lines are legible on a desktop card but not in
+       the hand; one step up each, still clearly secondary. */
+    .timeline-row__desc .text-\[10px\] {
+        font-size: 0.6875rem;
+    }
+
+    .timeline-row__desc .text-xs {
+        font-size: 0.8125rem;
+    }
+}
+
+/* ---- filter tabs ---- */
+@media (max-width: 767px) {
+    #event-tabs {
+        overflow-x: auto;
+        scrollbar-width: none;
+    }
+
+    #event-tabs::-webkit-scrollbar {
+        display: none;
+    }
+
+    #event-tabs .event-tab {
+        flex-shrink: 0;
+        min-height: 2.75rem;
+    }
+}
+
+/* ---- touch-by-touch table ----
+   Ten columns will not fit a phone, and letting the table keep its own
+   scrollbar only moved the problem: auto layout squeezed 득점자 and
+   스코어 down to one character per line to buy room for the Korean
+   verdict text. Below 768px each row becomes a labelled card, so the
+   whole table reads top-to-bottom with no sideways scroll at all. */
+@media (max-width: 767px) {
+    .touch-table-scroll {
+        overflow-x: visible;
+    }
+
+    .touch-table-scroll .touch-table {
+        display: block;
+        min-width: 0;
+    }
+
+    .touch-table thead {
+        display: none;
+    }
+
+    .touch-table tbody,
+    .touch-table tbody tr {
+        display: block;
+    }
+
+    .touch-table tbody tr {
+        padding: 0.5rem 0;
+    }
+
+    /* The cell stays a block so its children keep the stacking the
+       desktop table gives them — the verdict cell holds a badge above
+       two explanatory lines, and a flex/grid cell would strand those
+       side by side. The header rides along in the left gutter. */
+    .touch-table tbody td {
+        display: block;
+        position: relative;
+        min-height: 1.5rem;
+        padding: 0.25rem 1rem 0.25rem 5.75rem;
+    }
+
+    .touch-table tbody td::before {
+        content: attr(data-label);
+        position: absolute;
+        left: 1rem;
+        top: 0.3125rem;
+        width: 4.5rem;
+        color: var(--text-muted, #9a9aad);
+        font-size: 0.6875rem;
+        line-height: 1.4;
+    }
+
+    /* Desktop truncates this cell to one line; on a card it can wrap. */
+    .touch-table .touch-table__desc {
+        max-width: none;
+        overflow: visible;
+        white-space: normal;
+        text-overflow: clip;
+    }
+}
+
+/* ---- workbench controls ----
+   A 30px control is under the tap target minimum; the bar already
+   wraps, so growing them costs one row of height at most. */
+@media (max-width: 767px) {
+    .wb-controls .wb-btn,
+    .wb-controls .wb-select {
+        min-height: 2.5rem;
+        height: auto;
+    }
+
+    .wb-controls .wb-seek {
+        height: 2.5rem;
+    }
+}
+
+/* ==================================================================
    Video workbench
    The stage is sized in JS to exactly the painted video box, so the
    canvas overlay can sit at inset:0 and share the video's pixel grid.
