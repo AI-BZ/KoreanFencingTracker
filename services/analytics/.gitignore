@@ -39,6 +39,14 @@ data/reports/private/
 # these from disk at runtime, and prepare_piste_video.py regenerates them.
 data/piste_configs/
 
+# Blade-labelling frames cut from our own 4K footage by
+# scripts/extract_blade_windows.py. Hundreds of MB per bout of uncompressed-
+# quality JPEGs, and every one is a photograph of a minor's face at full 4K.
+# The directory name carries their names too. All of it is regenerable from the
+# source recording; labels.jsonl / windows.csv are the only irreplaceable part
+# and belong wherever the training data goes, not in a public repo.
+data/blade_labels/
+
 # Model files (large binaries)
 *.pkl
 *.pt
