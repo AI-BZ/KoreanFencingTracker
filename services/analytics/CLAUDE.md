@@ -184,6 +184,28 @@ curl -s -o /dev/null -w "%{http_code}\n" https://analytics.fencingmind.ai/galler
   `Clip generation failed: [Errno 2] No such file or directory: 'ffmpeg'`로 실패한다
   (2026-08-06 실제 발생). 기동 스크립트는 저장소 밖(`~/opt/...`)에 있으니 재설치 시 주의.
 
+### 블레이드 라벨링 도구 (label.fencingmind.ai)
+
+`scripts/blade_labeling_server.py`도 **launchd가 관리한다** (`com.fencingmind.bladelabeling`,
+포트 7777). analytics와 같은 이유다 — 셸에서 띄우면 그 세션이 끝날 때 같이 죽고,
+라벨링 도중에 서버가 사라진다 (2026-08-20 실제 발생).
+
+```bash
+launchctl kickstart -k gui/$(id -u)/com.fencingmind.bladelabeling   # 코드 변경 반영
+launchctl list | grep bladelabeling                                  # 상태
+```
+
+- launchd 정의: `~/Library/LaunchAgents/com.fencingmind.bladelabeling.plist`
+  → `~/opt/fencingmind/scripts/start-blade-labeling.sh`
+- 로그: `~/Library/Logs/FencingMind/blade-labeling.{log,error.log}`
+- 경로: Cloudflare 터널 → nginx(9090, `label.fencingmind.ai`) → 7777
+- 🔴 **토큰 필수**: 이 서버가 내보내는 프레임은 미성년 선수의 4K 얼굴 사진이다.
+  `--token`(또는 `$BLADE_LABEL_TOKEN`) 없이 0.0.0.0에 바인딩하면 인증 없이 공개된다.
+  토큰은 `~/opt/fencingmind/blade-label-token`(chmod 600)에서 읽는다.
+- 라벨 산출물은 `data/blade_labels/<video_id>/labels.jsonl`(append-only) +
+  `windows.csv`. 서버를 재시작해도 이어서 라벨링된다. `data/blade_labels/`는
+  gitignore 대상 — 프레임은 재생성 가능하지만 라벨은 아니니 별도 백업할 것.
+
 ---
 
 ## 모듈 설명
