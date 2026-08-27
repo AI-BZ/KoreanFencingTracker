@@ -77,8 +77,8 @@ class FrameLabel(BaseModel):
     frame: int
     points: Dict[str, Optional[List[float]]] = {}
     not_visible: Dict[str, bool] = {}
-    skipped: bool = False
-    # Both default to "unchanged", not to "off". A client that predates one of
+    skipped: Optional[bool] = None
+    # These default to "unchanged", not to "off". A client that predates one of
     # these fields — a tab left open across a deploy — otherwise silently
     # clears it on the next save of the same frame, which is how two recorded
     # parry attempts were lost.
@@ -321,6 +321,7 @@ class BladeLabelingState:
 
         sent = req.model_fields_set
         previous = self.labels.get(req.frame) or {}
+
         contact = bool(req.contact) if "contact" in sent else bool(previous.get("contact"))
         attempt = (req.parry_attempt if "parry_attempt" in sent
                    else previous.get("parry_attempt"))
@@ -331,22 +332,26 @@ class BladeLabelingState:
             # that missed. Holding both would make the frame its own counterexample.
             raise ValueError("a frame cannot be both a contact and a missed parry attempt")
 
-        points: Dict[str, Optional[List[float]]] = {}
-        for key in POINT_KEYS:
-            value = req.points.get(key)
-            if value is None:
-                points[key] = None
-                continue
-            if len(value) != 2:
-                raise ValueError(f"point {key} must be [x, y], got {value!r}")
-            points[key] = [round(float(value[0]), 1), round(float(value[1]), 1)]
+        if "points" in sent:
+            points: Dict[str, Optional[List[float]]] = {}
+            for key in POINT_KEYS:
+                value = req.points.get(key)
+                if value is None:
+                    points[key] = None
+                    continue
+                if len(value) != 2:
+                    raise ValueError(f"point {key} must be [x, y], got {value!r}")
+                points[key] = [round(float(value[0]), 1), round(float(value[1]), 1)]
+        else:
+            points = dict(previous.get("points") or {})
 
         row = {
             "frame": int(req.frame),
             "window_id": req.window_id,
             "points": points,
-            "not_visible": {"l": bool(req.not_visible.get("l")), "r": bool(req.not_visible.get("r"))},
-            "skipped": bool(req.skipped),
+            "not_visible": ({"l": bool(req.not_visible.get("l")), "r": bool(req.not_visible.get("r"))}
+                            if "not_visible" in sent else dict(previous.get("not_visible") or {})),
+            "skipped": bool(req.skipped) if "skipped" in sent else bool(previous.get("skipped")),
             "contact": contact,
             "parry_attempt": attempt,
             "ts": time.time(),
