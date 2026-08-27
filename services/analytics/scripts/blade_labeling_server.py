@@ -453,6 +453,7 @@ PAGE_HTML = """<!doctype html>
   .mark { margin-left:6px; background:#3a2130; border:1px solid #7d3350; color:#ffb3c8;
           border-radius:3px; padding:2px 8px; cursor:pointer; font:inherit; font-size:12px; }
   .mark.here { background:#7d3350; color:#fff; }
+  #savedmark { color:#7fd18c; font-size:12px; min-width:56px; }
   #fcontact { padding:2px 8px; border-radius:3px; border:1px solid #39424e; color:#8b95a3; }
   #fcontact.on { background:#7d3350; border-color:#a3455f; color:#fff; }
   .keys kbd { background:#232a33; border:1px solid #39424e; border-radius:3px; padding:0 5px; }
@@ -470,6 +471,7 @@ PAGE_HTML = """<!doctype html>
   <span class="keys">
     <kbd>click</kbd> point &nbsp; <kbd>u</kbd> undo &nbsp; <kbd>s</kbd> skip &nbsp; <kbd>r</kbd> repeat prev &nbsp;
     <kbd>1</kbd>/<kbd>2</kbd> blade hidden L/R &nbsp; <kbd>c</kbd> 이 프레임 접촉 표시/해제 &nbsp;
+    <kbd>r</kbd> 앞 프레임 복사+다음 &nbsp;
     <kbd>&larr;</kbd>/<kbd>&rarr;</kbd> &plusmn;1 &nbsp; <kbd>,</kbd>/<kbd>.</kbd> &plusmn;10 &nbsp;
     <kbd>&lt;</kbd>/<kbd>&gt;</kbd> &plusmn;20 &nbsp; <kbd>g</kbd> 프레임 이동 &nbsp; <kbd>n</kbd> next unlabeled
   </span>
@@ -485,6 +487,7 @@ PAGE_HTML = """<!doctype html>
   <span class="muted">|</span>
   <input id="jump" type="text" placeholder="frame 4478 · 순번 #476" autocomplete="off">
   <span class="muted">|</span>
+  <span id="savedmark"></span>
   <span id="fcontact">이 프레임: -</span>
   <span class="muted">|</span>
   <span>창 판정:</span>
@@ -499,7 +502,7 @@ PAGE_HTML = """<!doctype html>
 const KEYS = ["lg","lt","rg","rt"];
 const COLORS = {lg:"#5ab0ff", lt:"#5ab0ff", rg:"#ff7a5a", rt:"#ff7a5a"};
 const MAG_ZOOM = 5;
-let idx = 0, info = null, img = new Image(), pts = {}, hidden = {l:false,r:false}, contact = false;
+let idx = 0, info = null, img = new Image(), pts = {}, hidden = {l:false,r:false}, contact = false, saved = false;
 let busy = false;  // one async key action at a time — key auto-repeat plus network latency otherwise double-fires handlers
 let fit = 1, mouse = null;
 
@@ -525,8 +528,9 @@ async function load(i) {
   if (!r.ok) return;
   info = await r.json();
   idx = info.index;
-  pts = {}; hidden = {l:false, r:false}; contact = false;
+  pts = {}; hidden = {l:false, r:false}; contact = false; saved = false;
   if (info.label) {
+    saved = true;
     contact = !!info.label.contact;
     for (const k of KEYS) if (info.label.points && info.label.points[k]) pts[k] = info.label.points[k];
     hidden = {l: !!(info.label.not_visible||{}).l, r: !!(info.label.not_visible||{}).r};
@@ -613,6 +617,10 @@ function paintSlots() {
     const el = document.getElementById("slot-" + k);
     el.className = "slot" + (hidden[k[0]] ? " hidden" : pts[k] ? " filled" : k === nxt ? " next" : "");
   }
+  // Completing the four points no longer jumps to the next frame, so the
+  // labeller needs to see that the work landed.
+  const s = document.getElementById("savedmark");
+  if (s) { s.textContent = saved ? "저장됨 ✓" : ""; s.className = saved ? "on" : ""; }
 }
 
 cv.addEventListener("mousemove", (e) => {
@@ -643,7 +651,7 @@ cv.addEventListener("click", (e) => {
   pts[slot] = [(e.clientX - r.left) / (r.width / img.naturalWidth),
                (e.clientY - r.top) / (r.height / img.naturalHeight)];
   draw();
-  if (!nextSlot()) save().then((out) => { if (out) go(idx + 1); });
+  if (!nextSlot()) save().then((out) => { if (out) { saved = true; paintSlots(); toast("저장됨 — → 로 다음, c 로 접촉 표시"); } });
 });
 
 async function save(extra = {}) {
@@ -779,7 +787,7 @@ document.addEventListener("keydown", async (e) => {
     hidden[side] = !hidden[side];
     if (hidden[side]) { delete pts[side + "g"]; delete pts[side + "t"]; }
     draw();
-    if (!nextSlot() && (hidden.l || hidden.r)) { if (await save()) go(idx + 1); }
+    if (!nextSlot() && (hidden.l || hidden.r)) { if (await save()) { saved = true; paintSlots(); } }
   } else if (k === "c") {
     await markContactFrame();
   } else if (k === "arrowright") { step(1); }
