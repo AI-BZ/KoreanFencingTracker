@@ -437,6 +437,11 @@ PAGE_HTML = """<!doctype html>
   #jump { width:170px; background:#151a21; color:#e6ecf3; border:1px solid #39424e;
           border-radius:3px; padding:3px 7px; font:inherit; font-size:12px; }
   #jump::placeholder { color:#6b7684; }
+  .mark { margin-left:6px; background:#3a2130; border:1px solid #7d3350; color:#ffb3c8;
+          border-radius:3px; padding:2px 8px; cursor:pointer; font:inherit; font-size:12px; }
+  .mark.here { background:#7d3350; color:#fff; }
+  #fcontact { padding:2px 8px; border-radius:3px; border:1px solid #39424e; color:#8b95a3; }
+  #fcontact.on { background:#7d3350; border-color:#a3455f; color:#fff; }
   .keys kbd { background:#232a33; border:1px solid #39424e; border-radius:3px; padding:0 5px; }
   button { background:#232a33; color:#e6e9ee; border:1px solid #39424e; border-radius:4px; padding:4px 10px; cursor:pointer; }
   button.on { background:#2f6b46; border-color:#3f8b5c; }
@@ -466,11 +471,14 @@ PAGE_HTML = """<!doctype html>
   <span class="muted">|</span>
   <input id="jump" type="text" placeholder="frame 4478 · 순번 #476" autocomplete="off">
   <span class="muted">|</span>
-  <span>window contact:</span>
+  <span id="fcontact">이 프레임: -</span>
+  <span class="muted">|</span>
+  <span>창 판정:</span>
   <button id="b-contact">contact</button>
   <button id="b-no">no_contact</button>
   <button id="b-unclear">unclear</button>
   <span class="muted" id="wlabel">-</span>
+  <span id="marks"></span>
 </div>
 <div id="toast"></div>
 <script>
@@ -527,11 +535,29 @@ async function load(i) {
 function paintWindowLabel() {
   const l = info.window.label;
   const marks = (l && l.contact_frames) || [];
-  document.getElementById("wlabel").textContent =
-    l ? `${l.contact_label}${marks.length ? " @ " + marks.join(", ") : ""}` : "unjudged";
+  document.getElementById("wlabel").textContent = l ? l.contact_label : "unjudged";
   for (const [id, val] of [["b-contact","contact"],["b-no","no_contact"],["b-unclear","unclear"]]) {
     document.getElementById(id).classList.toggle("on", !!l && l.contact_label === val);
   }
+  // The verdict belongs to the whole phrase, so it shows on every frame of it
+  // and reads as a claim about the frame on screen. Say which frame carries
+  // the mark, make it one click away, and state this frame's own answer.
+  const box = document.getElementById("marks");
+  box.textContent = "";
+  for (const f of marks) {
+    const b = document.createElement("button");
+    b.className = "mark" + (f === info.frame ? " here" : "");
+    b.textContent = "접촉 " + f;
+    b.title = "이 프레임으로 이동 (c 로 해제)";
+    b.onclick = async () => {
+      const r = await fetch(`/api/locate/${f}`);
+      if (r.ok) go((await r.json()).index);
+    };
+    box.appendChild(b);
+  }
+  const fc = document.getElementById("fcontact");
+  fc.textContent = contact ? "이 프레임: 접촉 ✓" : "이 프레임: 접촉 아님";
+  fc.classList.toggle("on", contact);
 }
 
 function draw() {
