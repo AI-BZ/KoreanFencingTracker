@@ -660,11 +660,17 @@ function drawMarks(c, scale, ox = 0, oy = 0) {
   }
 }
 
+const SLOT_LABEL = {lg: "1 L guard", lt: "2 L tip", rg: "3 R guard", rt: "4 R tip"};
+
 function paintSlots() {
   const nxt = nextSlot();
   for (const k of KEYS) {
     const el = document.getElementById("slot-" + k);
     el.className = "slot" + (hidden[k[0]] ? " hidden" : pts[k] ? " filled" : k === nxt ? " next" : "");
+    // A struck-out slot looks broken rather than switched off, and nothing said
+    // which key switches it back — so a hidden side read as "this frame cannot
+    // be edited".
+    el.textContent = SLOT_LABEL[k] + (hidden[k[0]] ? ` 숨김 · ${k[0] === "l" ? "1" : "2"}로 해제` : "");
   }
   // Completing the four points no longer jumps to the next frame, so the
   // labeller needs to see that the work landed.
@@ -700,6 +706,12 @@ cv.addEventListener("click", (e) => {
   const at = [(e.clientX - r.left) / (r.width / img.naturalWidth),
               (e.clientY - r.top) / (r.height / img.naturalHeight)];
   const slot = nextSlot();
+  if (!slot && (hidden.l || hidden.r)) {
+    const side = hidden.l ? "왼쪽" : "오른쪽";
+    const key = hidden.l ? "1" : "2";
+    toast(`${side} 칼이 숨김 상태입니다 — ${key} 로 해제하고 찍으세요`);
+    return;
+  }
   if (!slot) {
     // Every slot is filled, and the labeller is looking at a point that landed
     // wrong. Clicking is how they say where it belongs: move the nearest one
