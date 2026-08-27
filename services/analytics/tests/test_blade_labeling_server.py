@@ -431,3 +431,32 @@ def test_an_unknown_parry_side_is_refused(data_dir):
         state.save_frame_label(
             FrameLabel(window_id="window_001", frame=562, points=FULL_POINTS, parry_attempt="middle")
         )
+
+
+def test_a_save_that_omits_contact_keeps_it(data_dir):
+    """A tab open across a deploy must not clear what it does not know about.
+
+    Two recorded parry attempts were lost exactly this way: the client sent a
+    frame's points without the newer field, and the frame came back cleared.
+    """
+    state = BladeLabelingState(data_dir)
+    state.save_frame_label(FrameLabel(window_id="window_001", frame=562, contact=True))
+    row = state.save_frame_label(FrameLabel(window_id="window_001", frame=562, points=FULL_POINTS))
+    assert row["contact"] is True
+    assert state.window_contact_frames("window_001") == [562]
+
+
+def test_a_save_that_omits_the_parry_attempt_keeps_it(data_dir):
+    state = BladeLabelingState(data_dir)
+    state.save_frame_label(FrameLabel(window_id="window_001", frame=562, parry_attempt="right"))
+    row = state.save_frame_label(FrameLabel(window_id="window_001", frame=562, points=FULL_POINTS))
+    assert row["parry_attempt"] == "right"
+
+
+def test_sending_the_field_explicitly_still_clears_it(data_dir):
+    state = BladeLabelingState(data_dir)
+    state.save_frame_label(FrameLabel(window_id="window_001", frame=562, contact=True))
+    row = state.save_frame_label(
+        FrameLabel(window_id="window_001", frame=562, points=FULL_POINTS, contact=False)
+    )
+    assert row["contact"] is False

@@ -78,7 +78,11 @@ class FrameLabel(BaseModel):
     points: Dict[str, Optional[List[float]]] = {}
     not_visible: Dict[str, bool] = {}
     skipped: bool = False
-    contact: bool = False
+    # Both default to "unchanged", not to "off". A client that predates one of
+    # these fields — a tab left open across a deploy — otherwise silently
+    # clears it on the next save of the same frame, which is how two recorded
+    # parry attempts were lost.
+    contact: Optional[bool] = None
     parry_attempt: Optional[str] = None   # None | "left" | "right"
 
 
@@ -314,7 +318,15 @@ class BladeLabelingState:
         if req.parry_attempt is not None and req.parry_attempt not in PARRY_SIDES:
             raise ValueError(f"parry_attempt must be one of {PARRY_SIDES} or null, "
                              f"got {req.parry_attempt!r}")
-        if req.contact and req.parry_attempt:
+
+        sent = req.model_fields_set
+        previous = self.labels.get(req.frame) or {}
+        contact = bool(req.contact) if "contact" in sent else bool(previous.get("contact"))
+        attempt = (req.parry_attempt if "parry_attempt" in sent
+                   else previous.get("parry_attempt"))
+        if attempt not in PARRY_SIDES:
+            attempt = None
+        if contact and attempt:
             # A parry that landed is a contact; the attempt label is for the one
             # that missed. Holding both would make the frame its own counterexample.
             raise ValueError("a frame cannot be both a contact and a missed parry attempt")
@@ -335,8 +347,8 @@ class BladeLabelingState:
             "points": points,
             "not_visible": {"l": bool(req.not_visible.get("l")), "r": bool(req.not_visible.get("r"))},
             "skipped": bool(req.skipped),
-            "contact": bool(req.contact),
-            "parry_attempt": req.parry_attempt if req.parry_attempt in PARRY_SIDES else None,
+            "contact": contact,
+            "parry_attempt": attempt,
             "ts": time.time(),
         }
         self.labels_path.parent.mkdir(parents=True, exist_ok=True)
