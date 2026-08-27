@@ -460,3 +460,24 @@ def test_sending_the_field_explicitly_still_clears_it(data_dir):
         FrameLabel(window_id="window_001", frame=562, points=FULL_POINTS, contact=False)
     )
     assert row["contact"] is False
+
+
+# ----------------------------------------------------------------------
+# Blade bend
+# ----------------------------------------------------------------------
+
+
+def test_mid_blade_points_are_stored(data_dir):
+    state = BladeLabelingState(data_dir)
+    points = dict(FULL_POINTS, lm=[7.0, 25.0], rm=[95.0, 27.0])
+    row = state.save_frame_label(FrameLabel(window_id="window_001", frame=562, points=points))
+    assert row["points"]["lm"] == [7.0, 25.0]
+    assert row["points"]["rm"] == [95.0, 27.0]
+
+
+def test_a_frame_is_complete_without_the_mid_points(data_dir):
+    """They cost extra clicks and only earn them near a contact."""
+    state = BladeLabelingState(data_dir)
+    row = state.save_frame_label(FrameLabel(window_id="window_001", frame=562, points=FULL_POINTS))
+    assert is_frame_done(row)
+    assert row["points"]["lm"] is None

@@ -59,6 +59,13 @@ LABELS_NAME = "labels.jsonl"
 WINDOWS_NAME = "windows.csv"
 
 POINT_KEYS = ("lg", "lt", "rg", "rt")
+#: Optional mid-blade points. A struck blade bends more than an evading one —
+#: but only the bend *in the image plane* survives projection, which is the
+#: up/down one from this camera angle. The guard-to-tip chord cannot express it,
+#: so it needs its own point. Optional because it is worth the extra clicks only
+#: around a contact, and a frame is complete without it.
+MID_POINT_KEYS = ("lm", "rm")
+ALL_POINT_KEYS = POINT_KEYS + MID_POINT_KEYS
 #: Who swung at the other blade and missed. A parry that connects is a contact
 #: and is recorded as one; this is the attempt that never touched — the motion
 #: without the deflection.
@@ -341,7 +348,7 @@ class BladeLabelingState:
 
         if "points" in sent:
             points: Dict[str, Optional[List[float]]] = {}
-            for key in POINT_KEYS:
+            for key in ALL_POINT_KEYS:
                 value = req.points.get(key)
                 if value is None:
                     points[key] = None
@@ -527,9 +534,12 @@ PAGE_HTML = """<!doctype html>
   <span class="slot" id="slot-lt">2 L tip</span>
   <span class="slot" id="slot-rg">3 R guard</span>
   <span class="slot" id="slot-rt">4 R tip</span>
+  <span class="slot" id="slot-lm">5 L 중간(휨)</span>
+  <span class="slot" id="slot-rm">6 R 중간(휨)</span>
   <span class="muted">|</span>
   <input id="jump" type="text" placeholder="frame 4478 · 순번 #476" autocomplete="off">
   <span class="muted">|</span>
+  <span id="bend" class="muted"></span>
   <span id="savedmark"></span>
   <span id="fcontact">이 프레임: -</span>
   <span class="muted">|</span>
@@ -543,6 +553,8 @@ PAGE_HTML = """<!doctype html>
 <div id="toast"></div>
 <script>
 const KEYS = ["lg","lt","rg","rt"];
+const MIDS = ["lm","rm"];
+const ALLK = KEYS.concat(MIDS);
 const COLORS = {lg:"#5ab0ff", lt:"#5ab0ff", rg:"#ff7a5a", rt:"#ff7a5a"};
 const MAG_ZOOM = 5;
 let idx = 0, info = null, img = new Image(), pts = {}, hidden = {l:false,r:false}, contact = false, saved = false, parryAttempt = null, parrySide = null;
@@ -559,11 +571,16 @@ function toast(msg) {
 }
 
 function nextSlot() {
-  for (const k of KEYS) {
+  for (const k of ALLK) {
     if (hidden[k[0]]) continue;
     if (!pts[k]) return k;
   }
   return null;
+}
+
+/** The four that make a frame complete; the mid points are a bonus. */
+function coreDone() {
+  return KEYS.every((k) => hidden[k[0]] || pts[k]);
 }
 
 async function load(i) {
@@ -577,7 +594,7 @@ async function load(i) {
     parryAttempt = info.label.parry_attempt || null;
     parrySide = info.label.parry_side || null;
     contact = !!info.label.contact;
-    for (const k of KEYS) if (info.label.points && info.label.points[k]) pts[k] = info.label.points[k];
+    for (const k of ALLK) if (info.label.points && info.label.points[k]) pts[k] = info.label.points[k];
     hidden = {l: !!(info.label.not_visible||{}).l, r: !!(info.label.not_visible||{}).r};
   }
   img = new Image();
@@ -637,15 +654,32 @@ function draw() {
   paintSlots();
 }
 
+function sagitta(g, m, t) {
+  // Perpendicular distance from the mid point to the guard-tip chord: how far
+  // the blade bows out of the straight line, in source pixels.
+  const dx = t[0]-g[0], dy = t[1]-g[1], L = Math.hypot(dx, dy);
+  if (L < 1) return 0;
+  return ((m[0]-g[0])*dy - (m[1]-g[1])*dx) / L;   // signed: + is one way, - the other
+}
+
 function drawMarks(c, scale, ox = 0, oy = 0) {
-  for (const side of [["lg","lt"],["rg","rt"]]) {
-    const g = pts[side[0]], t = pts[side[1]];
+  for (const side of [["lg","lt","lm"],["rg","rt","rm"]]) {
+    const g = pts[side[0]], t = pts[side[1]], m = pts[side[2]];
     if (g && t) {
       c.strokeStyle = COLORS[side[0]]; c.lineWidth = 2;
       c.beginPath();
       c.moveTo(g[0]*scale-ox, g[1]*scale-oy);
-      c.lineTo(t[0]*scale-ox, t[1]*scale-oy);
+      if (m) c.quadraticCurveTo(  // the control point that makes the curve pass through m
+        (2*m[0]-(g[0]+t[0])/2)*scale-ox, (2*m[1]-(g[1]+t[1])/2)*scale-oy,
+        t[0]*scale-ox, t[1]*scale-oy);
+      else c.lineTo(t[0]*scale-ox, t[1]*scale-oy);
       c.stroke();
+      if (m) {  // the chord it bows away from, dashed
+        c.save(); c.setLineDash([4,4]); c.lineWidth = 1; c.globalAlpha = 0.6;
+        c.beginPath();
+        c.moveTo(g[0]*scale-ox, g[1]*scale-oy); c.lineTo(t[0]*scale-ox, t[1]*scale-oy);
+        c.stroke(); c.restore();
+      }
     }
   }
   for (const k of KEYS) {
@@ -660,11 +694,12 @@ function drawMarks(c, scale, ox = 0, oy = 0) {
   }
 }
 
-const SLOT_LABEL = {lg: "1 L guard", lt: "2 L tip", rg: "3 R guard", rt: "4 R tip"};
+const SLOT_LABEL = {lg: "1 L guard", lt: "2 L tip", rg: "3 R guard", rt: "4 R tip",
+                    lm: "5 L 중간(휨)", rm: "6 R 중간(휨)"};
 
 function paintSlots() {
   const nxt = nextSlot();
-  for (const k of KEYS) {
+  for (const k of ALLK) {
     const el = document.getElementById("slot-" + k);
     el.className = "slot" + (hidden[k[0]] ? " hidden" : pts[k] ? " filled" : k === nxt ? " next" : "");
     // A struck-out slot looks broken rather than switched off, and nothing said
@@ -674,6 +709,14 @@ function paintSlots() {
   }
   // Completing the four points no longer jumps to the next frame, so the
   // labeller needs to see that the work landed.
+  const bendEl = document.getElementById("bend");
+  if (bendEl) {
+    const parts = [];
+    for (const [g,t,m,ko] of [["lg","lt","lm","L"],["rg","rt","rm","R"]]) {
+      if (pts[g] && pts[t] && pts[m]) parts.push(`${ko} ${sagitta(pts[g],pts[m],pts[t]).toFixed(1)}px`);
+    }
+    bendEl.textContent = parts.length ? "휨 " + parts.join(" · ") : "";
+  }
   const s = document.getElementById("savedmark");
   if (s) { s.textContent = saved ? "저장됨 ✓" : ""; s.className = saved ? "on" : ""; }
 }
@@ -699,7 +742,8 @@ cv.addEventListener("mousemove", (e) => {
 });
 cv.addEventListener("mouseleave", () => { mag.style.display = "none"; mouse = null; });
 
-const SLOT_KO = {lg: "왼쪽 가드", lt: "왼쪽 칼끝", rg: "오른쪽 가드", rt: "오른쪽 칼끝"};
+const SLOT_KO = {lg: "왼쪽 가드", lt: "왼쪽 칼끝", rg: "오른쪽 가드", rt: "오른쪽 칼끝",
+                 lm: "왼쪽 중간", rm: "오른쪽 중간"};
 
 cv.addEventListener("click", (e) => {
   const r = cv.getBoundingClientRect();
@@ -732,13 +776,17 @@ cv.addEventListener("click", (e) => {
   }
   pts[slot] = at;
   draw();
-  if (!nextSlot()) save().then((out) => { if (out) { saved = true; paintSlots(); toast("저장됨 — → 로 다음, c 로 접촉 표시"); } });
+  if (coreDone()) save().then((out) => {
+    if (out) { saved = true; paintSlots();
+      toast(pts.lm && pts.rm ? "휨 포함 저장됨" : "저장됨 — 휨을 재려면 칼 중간을 더 찍으세요"); }
+  });
 });
 
 async function save(extra = {}) {
   const body = Object.assign({
     window_id: info.window_id, frame: info.frame,
-    points: {lg: pts.lg||null, lt: pts.lt||null, rg: pts.rg||null, rt: pts.rt||null},
+    points: {lg: pts.lg||null, lt: pts.lt||null, rg: pts.rg||null, rt: pts.rt||null,
+             lm: pts.lm||null, rm: pts.rm||null},
     not_visible: hidden, skipped: false, contact: contact, parry_attempt: parryAttempt, parry_side: parrySide,
   }, extra);
   try {
@@ -837,7 +885,7 @@ document.addEventListener("keydown", async (e) => {
   if (busy && !NAV.includes(k)) return;
   if (e.repeat && (k === "r" || k === "s" || k === "n" || k === "c")) return;
   if (k === "u") {
-    for (let i = KEYS.length - 1; i >= 0; i--) if (pts[KEYS[i]]) { delete pts[KEYS[i]]; break; }
+    for (let i = ALLK.length - 1; i >= 0; i--) if (pts[ALLK[i]]) { delete pts[ALLK[i]]; break; }
     draw();
   } else if (k === "s") {
     busy = true;
@@ -870,9 +918,9 @@ document.addEventListener("keydown", async (e) => {
   } else if (k === "1" || k === "2") {
     const side = k === "1" ? "l" : "r";
     hidden[side] = !hidden[side];
-    if (hidden[side]) { delete pts[side + "g"]; delete pts[side + "t"]; }
+    if (hidden[side]) { delete pts[side + "g"]; delete pts[side + "t"]; delete pts[side + "m"]; }
     draw();
-    if (!nextSlot() && (hidden.l || hidden.r)) { if (await save()) { saved = true; paintSlots(); } }
+    if (coreDone() && (hidden.l || hidden.r)) { if (await save()) { saved = true; paintSlots(); } }
   } else if (k === "c") {
     await markContactFrame();
   } else if (k === "arrowright") { step(1); }
