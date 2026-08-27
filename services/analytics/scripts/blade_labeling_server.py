@@ -508,7 +508,10 @@ async function load(i) {
   img.src = info.image_url;
   const w = info.window;
   document.getElementById("pos").textContent =
-    `${idx+1}/${info.total}  frame ${info.frame}  t=${info.time_sec}s`;
+    // Two numbers, and they get confused for each other: the queue position
+    // is what a labeller reads off the screen, the source frame is what every
+    // saved label and every downstream tool refers to. Name both.
+    `순번 ${idx+1}/${info.total} · 원본 frame ${info.frame} · t=${info.time_sec}s`;
   document.getElementById("winfo").textContent =
     `${w.window_id} (${w.position}/${w.frame_count})  ${w.reasons.join(",")}  ${w.start_sec}-${w.end_sec}s`;
   paintWindowLabel();
