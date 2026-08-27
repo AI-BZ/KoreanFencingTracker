@@ -244,6 +244,31 @@ def test_an_invalid_contact_label_is_refused(data_dir):
         state.save_window_label(WindowLabel(window_id="window_001", contact_label="maybe"))
 
 
+@pytest.mark.parametrize("label", ["no_contact", "unclear"])
+def test_a_contact_frame_without_a_contact_verdict_is_refused(data_dir, label):
+    """The two halves of the row would contradict each other.
+
+    This shipped as a real contradiction: pressing the mark-contact-frame key
+    on an already-judged window kept the old verdict and stored the frame
+    beside it, leaving 'they never touched, and here is where they touched'.
+    """
+    state = BladeLabelingState(data_dir)
+    frame = state.windows["window_001"]["frames"][0]["source_frame"]
+    with pytest.raises(ValueError, match="only meaningful with"):
+        state.save_window_label(
+            WindowLabel(window_id="window_001", contact_label=label, contact_frame=frame)
+        )
+
+
+def test_a_contact_verdict_still_accepts_its_frame(data_dir):
+    state = BladeLabelingState(data_dir)
+    frame = state.windows["window_001"]["frames"][0]["source_frame"]
+    row = state.save_window_label(
+        WindowLabel(window_id="window_001", contact_label="contact", contact_frame=frame)
+    )
+    assert row["contact_frame"] == frame
+
+
 # ----------------------------------------------------------------------
 # HTTP surface
 # ----------------------------------------------------------------------

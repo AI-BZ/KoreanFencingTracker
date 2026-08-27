@@ -295,6 +295,14 @@ class BladeLabelingState:
         frames = {f["source_frame"] for f in self.windows[req.window_id].get("frames", [])}
         if req.contact_frame is not None and req.contact_frame not in frames:
             raise ValueError(f"frame {req.contact_frame} is not in {req.window_id}")
+        if req.contact_frame is not None and req.contact_label != "contact":
+            # "the blades never touched, and here is the frame they touched on"
+            # is not a judgement anyone means to record. Refuse it rather than
+            # store a row whose two halves disagree.
+            raise ValueError(
+                f"contact_frame is only meaningful with contact_label='contact', "
+                f"got {req.contact_label!r}"
+            )
 
         row = {
             "window_id": req.window_id,
@@ -546,11 +554,13 @@ async function judge(label) {
 }
 
 async function markContactFrame() {
-  const cur = info.window.label;
+  // Pointing at the frame the blades met only reads one way: this window is a
+  // contact. Carrying a previous no_contact/unclear over would file the frame
+  // under a verdict that denies it happened.
   const r = await fetch("/api/window", {
     method: "POST", headers: {"Content-Type": "application/json"},
     body: JSON.stringify({window_id: info.window_id,
-                          contact_label: cur ? cur.contact_label : "contact",
+                          contact_label: "contact",
                           contact_frame: info.frame}),
   });
   const out = await r.json();
