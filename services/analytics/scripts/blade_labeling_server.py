@@ -504,7 +504,7 @@ PAGE_HTML = """<!doctype html>
   <span class="muted" id="stats">-</span>
   <span class="muted" title="이 페이지 버전">build __BUILD__</span>
   <span class="keys">
-    <kbd>click</kbd> point &nbsp; <kbd>u</kbd> undo &nbsp; <kbd>s</kbd> skip &nbsp; <kbd>r</kbd> repeat prev &nbsp;
+    <kbd>click</kbd> 점 찍기 / 다 찍힌 뒤엔 가까운 점 이동 &nbsp; <kbd>u</kbd> 되돌리기 &nbsp; <kbd>s</kbd> skip &nbsp; <kbd>r</kbd> repeat prev &nbsp;
     <kbd>1</kbd>/<kbd>2</kbd> blade hidden L/R &nbsp; <kbd>c</kbd> 이 프레임 접촉 표시/해제 &nbsp;
     <kbd>r</kbd> 앞 프레임 복사+다음 &nbsp;
     <kbd>&larr;</kbd>/<kbd>&rarr;</kbd> &plusmn;1 &nbsp; <kbd>,</kbd>/<kbd>.</kbd> &plusmn;10 &nbsp;
@@ -682,12 +682,32 @@ cv.addEventListener("mousemove", (e) => {
 });
 cv.addEventListener("mouseleave", () => { mag.style.display = "none"; mouse = null; });
 
+const SLOT_KO = {lg: "왼쪽 가드", lt: "왼쪽 칼끝", rg: "오른쪽 가드", rt: "오른쪽 칼끝"};
+
 cv.addEventListener("click", (e) => {
-  const slot = nextSlot();
-  if (!slot) { toast("all points set — press u to undo"); return; }
   const r = cv.getBoundingClientRect();
-  pts[slot] = [(e.clientX - r.left) / (r.width / img.naturalWidth),
-               (e.clientY - r.top) / (r.height / img.naturalHeight)];
+  const at = [(e.clientX - r.left) / (r.width / img.naturalWidth),
+              (e.clientY - r.top) / (r.height / img.naturalHeight)];
+  const slot = nextSlot();
+  if (!slot) {
+    // Every slot is filled, and the labeller is looking at a point that landed
+    // wrong. Clicking is how they say where it belongs: move the nearest one
+    // rather than making them undo the other three to reach it.
+    let best = null;
+    for (const k of KEYS) {
+      if (!pts[k]) continue;
+      const d = Math.hypot(pts[k][0] - at[0], pts[k][1] - at[1]);
+      if (!best || d < best.d) best = {k, d};
+    }
+    if (!best) return;
+    pts[best.k] = at;
+    draw();
+    save().then((out) => {
+      if (out) { saved = true; paintSlots(); toast(`${SLOT_KO[best.k]} 이동 — 저장됨`); }
+    });
+    return;
+  }
+  pts[slot] = at;
   draw();
   if (!nextSlot()) save().then((out) => { if (out) { saved = true; paintSlots(); toast("저장됨 — → 로 다음, c 로 접촉 표시"); } });
 });
