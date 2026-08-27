@@ -6,13 +6,20 @@ labelled, at two different granularities:
 
   * per frame  - four points, in order: left guard, left tip, right guard,
                  right tip. A blade hidden behind a body or out of frame is
-                 marked not-visible for that side instead of guessed at.
-  * per window - did the blades touch during this phrase? contact / no_contact
-                 / unclear, plus the frame the contact is on when there is one.
+                 marked not-visible for that side instead of guessed at. The
+                 frame also carries whether the blades met on it.
+  * per window - did the blades touch during this phrase? no_contact / unclear
+                 explicitly; contact is derived from the frames marked above,
+                 since a phrase can hold several blade meetings.
 
-The frame labels are geometry for a detector; the window label is the answer a
-priority judge actually needs. Both come from the same pass so a labeller only
-watches each phrase once.
+The frame labels are geometry for a detector; the window verdict is the answer
+a priority judge actually needs. Both come from the same pass so a labeller
+only watches each phrase once.
+
+Contact means the blades *changed each other*: a real one shows as the blade
+leaving on a different path in the following frame. Two blades crossing in the
+image are not touching — the projection hides depth — and a hit too soft to
+deflect anything cannot carry a parry, so neither is marked.
 
 Zoom is not optional here. A blade at 4K is around 200px long and a few px
 wide, and the tip — the whole point of the exercise — is a handful of pixels.
@@ -53,7 +60,7 @@ WINDOWS_NAME = "windows.csv"
 
 POINT_KEYS = ("lg", "lt", "rg", "rt")
 CONTACT_LABELS = ("contact", "no_contact", "unclear")
-WINDOWS_CSV_HEADER = ["window_id", "contact_label", "contact_frame"]
+WINDOWS_CSV_HEADER = ["window_id", "contact_label", "contact_frames"]
 
 
 # ----------------------------------------------------------------------
@@ -67,12 +74,12 @@ class FrameLabel(BaseModel):
     points: Dict[str, Optional[List[float]]] = {}
     not_visible: Dict[str, bool] = {}
     skipped: bool = False
+    contact: bool = False
 
 
 class WindowLabel(BaseModel):
     window_id: str
     contact_label: str
-    contact_frame: Optional[int] = None
 
 
 # ----------------------------------------------------------------------
@@ -127,7 +134,12 @@ def load_frame_labels(path: Path) -> Dict[int, dict]:
 
 
 def load_window_labels(path: Path) -> Dict[str, dict]:
-    """Read ``windows.csv`` back into memory. Missing file means nothing judged."""
+    """Read ``windows.csv`` back into memory. Missing file means nothing judged.
+
+    Only the explicit verdict is read back. Which frames the blades met on
+    lives on the frame labels, so it is derived rather than trusted from here;
+    the ``contact_frames`` column exists for whoever reads the CSV downstream.
+    """
     windows: Dict[str, dict] = {}
     if not path.exists():
         return windows
@@ -136,13 +148,16 @@ def load_window_labels(path: Path) -> Dict[str, dict]:
             window_id = row.get("window_id")
             if not window_id:
                 continue
-            raw_frame = (row.get("contact_frame") or "").strip()
             windows[window_id] = {
                 "window_id": window_id,
                 "contact_label": row.get("contact_label") or "",
-                "contact_frame": int(raw_frame) if raw_frame.isdigit() else None,
             }
     return windows
+
+
+def frame_has_contact(label: Optional[dict]) -> bool:
+    """Did the labeller mark the blades as meeting on this frame?"""
+    return bool(label and label.get("contact"))
 
 
 def is_frame_done(label: Optional[dict]) -> bool:
@@ -178,25 +193,38 @@ def next_unlabeled_index(frames: Sequence[dict], labels: Dict[int, dict], start:
     return max(0, min(start, total - 1))
 
 
-def write_windows_csv(path: Path, manifest: dict, window_labels: Dict[str, dict]) -> None:
+def write_windows_csv(
+    path: Path,
+    manifest: dict,
+    window_labels: Dict[str, dict],
+    contact_frames: Optional[Dict[str, List[int]]] = None,
+) -> None:
     """Rewrite ``windows.csv`` in manifest order, judged windows only.
 
     Unlike the frame log this is rewritten rather than appended: there are tens
     of windows, one row each, and a reader that has to de-duplicate a log of
     them for no benefit is a reader that will get it wrong.
+
+    A window with any frame marked as contact is written as a contact whatever
+    the explicit verdict says — the marked frames are the more specific claim,
+    and they are what a downstream reader wants anyway.
     """
+    contact_frames = contact_frames or {}
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.writer(handle)
         writer.writerow(WINDOWS_CSV_HEADER)
         for window in manifest.get("windows", []):
-            label = window_labels.get(window["window_id"])
-            if not label:
+            window_id = window["window_id"]
+            label = window_labels.get(window_id)
+            frames = contact_frames.get(window_id) or []
+            if not label and not frames:
                 continue
+            verdict = "contact" if frames else (label or {}).get("contact_label", "")
             writer.writerow([
-                label["window_id"],
-                label["contact_label"],
-                "" if label.get("contact_frame") is None else label["contact_frame"],
+                window_id,
+                verdict,
+                ";".join(str(f) for f in frames),
             ])
 
 
@@ -224,6 +252,11 @@ class BladeLabelingState:
         self.windows = {w["window_id"]: w for w in self.manifest.get("windows", [])}
         self.labels = load_frame_labels(self.labels_path)
         self.window_labels = load_window_labels(self.windows_path)
+        if self.window_labels or any(frame_has_contact(l) for l in self.labels.values()):
+            # The CSV is derived state. Rewriting it once at startup migrates
+            # an older schema and repairs any hand edit, so the file on disk
+            # always agrees with the labels it is supposed to summarise.
+            self._flush_windows_csv()
 
     # -- frames --------------------------------------------------------
 
@@ -250,7 +283,7 @@ class BladeLabelingState:
                 "position": next(
                     (i + 1 for i, f in enumerate(window_frames) if f["source_frame"] == row["frame"]), None
                 ),
-                "label": self.window_labels.get(row["window_id"]),
+                "label": self.window_verdict(row["window_id"]),
             },
         })
         return row
@@ -277,41 +310,70 @@ class BladeLabelingState:
             "points": points,
             "not_visible": {"l": bool(req.not_visible.get("l")), "r": bool(req.not_visible.get("r"))},
             "skipped": bool(req.skipped),
+            "contact": bool(req.contact),
             "ts": time.time(),
         }
         self.labels_path.parent.mkdir(parents=True, exist_ok=True)
         with self.labels_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(row, ensure_ascii=False) + "\n")
         self.labels[row["frame"]] = row
+        # The window verdict is derived from these flags, so the CSV has to
+        # follow every frame that gains or loses one.
+        self._flush_windows_csv()
         return row
 
     # -- windows -------------------------------------------------------
+
+    def window_contact_frames(self, window_id: str) -> List[int]:
+        """Frames in this window the labeller marked as blade contact, in order."""
+        window = self.windows.get(window_id) or {}
+        return [
+            f["source_frame"]
+            for f in window.get("frames", [])
+            if frame_has_contact(self.labels.get(f["source_frame"]))
+        ]
+
+    def window_verdict(self, window_id: str) -> Optional[dict]:
+        """The window's judgement, with marked contact frames folded in.
+
+        Marked frames win over the stored verdict. A verdict is per window but
+        the labeller works frame by frame, so a no_contact pressed later in the
+        same phrase used to silently erase a contact marked earlier in it.
+        """
+        frames = self.window_contact_frames(window_id)
+        stored = self.window_labels.get(window_id)
+        if frames:
+            return {"window_id": window_id, "contact_label": "contact", "contact_frames": frames}
+        if stored:
+            return {**stored, "contact_frames": []}
+        return None
 
     def save_window_label(self, req: WindowLabel) -> dict:
         if req.window_id not in self.windows:
             raise ValueError(f"unknown window: {req.window_id}")
         if req.contact_label not in CONTACT_LABELS:
             raise ValueError(f"contact_label must be one of {CONTACT_LABELS}, got {req.contact_label!r}")
-        frames = {f["source_frame"] for f in self.windows[req.window_id].get("frames", [])}
-        if req.contact_frame is not None and req.contact_frame not in frames:
-            raise ValueError(f"frame {req.contact_frame} is not in {req.window_id}")
-        if req.contact_frame is not None and req.contact_label != "contact":
-            # "the blades never touched, and here is the frame they touched on"
-            # is not a judgement anyone means to record. Refuse it rather than
-            # store a row whose two halves disagree.
+        marked = self.window_contact_frames(req.window_id)
+        if marked and req.contact_label != "contact":
+            # Refusing beats overwriting: the marked frames are a specific
+            # claim about specific images, and a sweeping verdict pressed
+            # afterwards should not be able to delete them by accident.
             raise ValueError(
-                f"contact_frame is only meaningful with contact_label='contact', "
-                f"got {req.contact_label!r}"
+                f"{req.window_id} has contact marked on frame(s) "
+                f"{', '.join(str(f) for f in marked)} — clear those first (c) "
+                f"to judge it {req.contact_label}"
             )
 
-        row = {
-            "window_id": req.window_id,
-            "contact_label": req.contact_label,
-            "contact_frame": req.contact_frame,
-        }
+        row = {"window_id": req.window_id, "contact_label": req.contact_label}
         self.window_labels[req.window_id] = row
-        write_windows_csv(self.windows_path, self.manifest, self.window_labels)
-        return row
+        self._flush_windows_csv()
+        return {**row, "contact_frames": marked}
+
+    def _flush_windows_csv(self) -> None:
+        contact_frames = {
+            window_id: self.window_contact_frames(window_id) for window_id in self.windows
+        }
+        write_windows_csv(self.windows_path, self.manifest, self.window_labels, contact_frames)
 
     # -- progress ------------------------------------------------------
 
@@ -322,8 +384,13 @@ class BladeLabelingState:
             if (self.labels.get(row["frame"]) or {}).get("skipped")
         )
         contact_counts: Dict[str, int] = {}
-        for label in self.window_labels.values():
-            key = label["contact_label"]
+        judged = 0
+        for window_id in self.windows:
+            verdict = self.window_verdict(window_id)
+            if not verdict:
+                continue
+            judged += 1
+            key = verdict["contact_label"]
             contact_counts[key] = contact_counts.get(key, 0) + 1
         total = len(self.frames)
         return {
@@ -334,8 +401,11 @@ class BladeLabelingState:
             "frames_remaining": total - done,
             "progress_pct": round(done / total * 100, 1) if total else 0.0,
             "windows_total": len(self.windows),
-            "windows_judged": len(self.window_labels),
+            "windows_judged": judged,
             "contact_distribution": contact_counts,
+            "contact_frames_total": sum(
+                1 for row in self.frames if frame_has_contact(self.labels.get(row["frame"]))
+            ),
         }
 
 
@@ -363,6 +433,7 @@ PAGE_HTML = """<!doctype html>
   .slot.filled { border-color:#4d9f5f; color:#79d18c; }
   .slot.hidden { border-color:#3a3f47; color:#6a7480; text-decoration:line-through; }
   .keys { color:#8b95a3; }
+  .rule { display:block; width:100%; margin-top:4px; color:#b9c4d4; font-size:12px; line-height:1.5; }
   .keys kbd { background:#232a33; border:1px solid #39424e; border-radius:3px; padding:0 5px; }
   button { background:#232a33; color:#e6e9ee; border:1px solid #39424e; border-radius:4px; padding:4px 10px; cursor:pointer; }
   button.on { background:#2f6b46; border-color:#3f8b5c; }
@@ -376,9 +447,11 @@ PAGE_HTML = """<!doctype html>
   <span class="muted" id="stats">-</span>
   <span class="keys">
     <kbd>click</kbd> point &nbsp; <kbd>u</kbd> undo &nbsp; <kbd>s</kbd> skip &nbsp; <kbd>r</kbd> repeat prev &nbsp;
-    <kbd>1</kbd>/<kbd>2</kbd> blade hidden L/R &nbsp; <kbd>c</kbd> contact frame &nbsp;
+    <kbd>1</kbd>/<kbd>2</kbd> blade hidden L/R &nbsp; <kbd>c</kbd> 이 프레임 접촉 표시/해제 &nbsp;
     <kbd>&larr;</kbd>/<kbd>&rarr;</kbd> prev/next &nbsp; <kbd>n</kbd> next unlabeled
   </span>
+  <span class="rule">접촉 = 다음 프레임에서 블레이드 경로가 바뀐 것. 화면상 교차만으로는 접촉이 아니고,
+    튕김이 안 보일 만큼 약한 접촉은 빠라드가 못 되므로 no_contact.</span>
 </header>
 <div id="stage"><canvas id="main"></canvas><canvas id="mag" width="240" height="240"></canvas></div>
 <div id="panel">
@@ -398,7 +471,7 @@ PAGE_HTML = """<!doctype html>
 const KEYS = ["lg","lt","rg","rt"];
 const COLORS = {lg:"#5ab0ff", lt:"#5ab0ff", rg:"#ff7a5a", rt:"#ff7a5a"};
 const MAG_ZOOM = 5;
-let idx = 0, info = null, img = new Image(), pts = {}, hidden = {l:false,r:false};
+let idx = 0, info = null, img = new Image(), pts = {}, hidden = {l:false,r:false}, contact = false;
 let busy = false;  // one async key action at a time — key auto-repeat plus network latency otherwise double-fires handlers
 let fit = 1, mouse = null;
 
@@ -424,8 +497,9 @@ async function load(i) {
   if (!r.ok) return;
   info = await r.json();
   idx = info.index;
-  pts = {}; hidden = {l:false, r:false};
+  pts = {}; hidden = {l:false, r:false}; contact = false;
   if (info.label) {
+    contact = !!info.label.contact;
     for (const k of KEYS) if (info.label.points && info.label.points[k]) pts[k] = info.label.points[k];
     hidden = {l: !!(info.label.not_visible||{}).l, r: !!(info.label.not_visible||{}).r};
   }
@@ -443,8 +517,9 @@ async function load(i) {
 
 function paintWindowLabel() {
   const l = info.window.label;
+  const marks = (l && l.contact_frames) || [];
   document.getElementById("wlabel").textContent =
-    l ? `${l.contact_label}${l.contact_frame != null ? " @ " + l.contact_frame : ""}` : "unjudged";
+    l ? `${l.contact_label}${marks.length ? " @ " + marks.join(", ") : ""}` : "unjudged";
   for (const [id, val] of [["b-contact","contact"],["b-no","no_contact"],["b-unclear","unclear"]]) {
     document.getElementById(id).classList.toggle("on", !!l && l.contact_label === val);
   }
@@ -526,7 +601,7 @@ async function save(extra = {}) {
   const body = Object.assign({
     window_id: info.window_id, frame: info.frame,
     points: {lg: pts.lg||null, lt: pts.lt||null, rg: pts.rg||null, rt: pts.rt||null},
-    not_visible: hidden, skipped: false,
+    not_visible: hidden, skipped: false, contact: contact,
   }, extra);
   try {
     const r = await fetch("/api/label", {
@@ -554,18 +629,16 @@ async function judge(label) {
 }
 
 async function markContactFrame() {
-  // Pointing at the frame the blades met only reads one way: this window is a
-  // contact. Carrying a previous no_contact/unclear over would file the frame
-  // under a verdict that denies it happened.
-  const r = await fetch("/api/window", {
-    method: "POST", headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({window_id: info.window_id,
-                          contact_label: "contact",
-                          contact_frame: info.frame}),
-  });
-  const out = await r.json();
-  if (out.ok) { info.window.label = out.label; paintWindowLabel(); toast("contact @ " + info.frame); }
-  else toast(out.error || "failed");
+  // Contact belongs to the frame, not to the phrase: a phrase can hold several
+  // blade meetings, and the window verdict is derived from these marks so a
+  // later keystroke elsewhere in the phrase cannot erase one.
+  contact = !contact;
+  const out = await save();
+  if (!out) { contact = !contact; return; }
+  const fresh = await (await fetch(`/api/frame/${idx}`)).json();
+  info.window = fresh.window;
+  paintWindowLabel(); draw();
+  toast(contact ? `접촉 표시 @ ${info.frame}` : `접촉 해제 @ ${info.frame}`);
 }
 
 function go(i) { if (i >= 0 && i < info.total) return load(i); }
@@ -609,6 +682,7 @@ document.addEventListener("keydown", async (e) => {
       if (!pl) { toast("no labeled frame earlier in this window"); return; }
       pts = {...pl.points};
       hidden = {l: !!(pl.not_visible||{}).l, r: !!(pl.not_visible||{}).r};
+      contact = false;  // contact is a claim about this frame, never copied
       draw();
       if (!(await save())) return;
       toast(`copied frame ${pl.frame} → saved`);

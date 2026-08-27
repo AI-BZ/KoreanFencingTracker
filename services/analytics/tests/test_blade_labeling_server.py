@@ -168,24 +168,39 @@ def test_load_frame_labels_on_a_missing_file_is_empty(tmp_path):
 
 def test_window_labels_round_trip_through_csv(tmp_path):
     path = tmp_path / "windows.csv"
-    write_windows_csv(path, MANIFEST, {
-        "window_001": {"window_id": "window_001", "contact_label": "contact", "contact_frame": 564},
-        "window_002": {"window_id": "window_002", "contact_label": "unclear", "contact_frame": None},
-    })
+    write_windows_csv(
+        path, MANIFEST,
+        {
+            "window_001": {"window_id": "window_001", "contact_label": "contact"},
+            "window_002": {"window_id": "window_002", "contact_label": "unclear"},
+        },
+        {"window_001": [564]},
+    )
+    assert "window_001,contact,564" in path.read_text(encoding="utf-8")
     loaded = load_window_labels(path)
-    assert loaded["window_001"]["contact_frame"] == 564
+    assert loaded["window_001"]["contact_label"] == "contact"
     assert loaded["window_002"]["contact_label"] == "unclear"
-    assert loaded["window_002"]["contact_frame"] is None
+
+
+def test_marked_frames_make_a_window_a_contact_in_the_csv(tmp_path):
+    """The frames are the specific claim, so they set the written verdict."""
+    path = tmp_path / "windows.csv"
+    write_windows_csv(
+        path, MANIFEST,
+        {"window_001": {"window_id": "window_001", "contact_label": "no_contact"}},
+        {"window_001": [562, 564]},
+    )
+    assert "window_001,contact,562;564" in path.read_text(encoding="utf-8")
 
 
 def test_windows_csv_is_written_in_manifest_order(tmp_path):
     path = tmp_path / "windows.csv"
     write_windows_csv(path, MANIFEST, {
-        "window_002": {"window_id": "window_002", "contact_label": "contact", "contact_frame": None},
-        "window_001": {"window_id": "window_001", "contact_label": "no_contact", "contact_frame": None},
+        "window_002": {"window_id": "window_002", "contact_label": "contact"},
+        "window_001": {"window_id": "window_001", "contact_label": "no_contact"},
     })
     rows = path.read_text(encoding="utf-8").strip().splitlines()
-    assert rows[0] == "window_id,contact_label,contact_frame"
+    assert rows[0] == "window_id,contact_label,contact_frames"
     assert rows[1].startswith("window_001")
     assert rows[2].startswith("window_002")
 
@@ -193,15 +208,16 @@ def test_windows_csv_is_written_in_manifest_order(tmp_path):
 def test_state_resumes_from_disk_after_a_restart(data_dir):
     first = BladeLabelingState(data_dir)
     first.save_frame_label(FrameLabel(window_id="window_001", frame=562, points=FULL_POINTS))
-    first.save_window_label(WindowLabel(window_id="window_001", contact_label="contact", contact_frame=564))
+    first.save_frame_label(FrameLabel(window_id="window_001", frame=564, points=FULL_POINTS, contact=True))
 
     second = BladeLabelingState(data_dir)
-    assert second.stats()["frames_done"] == 1
+    assert second.stats()["frames_done"] == 2
     assert second.stats()["windows_judged"] == 1
     assert second.frame_info(0)["done"] is True
-    assert second.frame_info(0)["window"]["label"]["contact_frame"] == 564
+    assert second.frame_info(0)["window"]["label"]["contact_frames"] == [564]
+    assert second.frame_info(0)["window"]["label"]["contact_label"] == "contact"
     # Resuming picks up at the first frame that is still unlabelled.
-    assert next_unlabeled_index(second.frames, second.labels, 0) == 1
+    assert next_unlabeled_index(second.frames, second.labels, 0) == 2
 
 
 def test_saving_appends_rather_than_rewrites(data_dir):
@@ -230,12 +246,14 @@ def test_saving_an_unknown_frame_is_refused(data_dir):
         state.save_frame_label(FrameLabel(window_id="window_001", frame=99999))
 
 
-def test_a_contact_frame_from_another_window_is_refused(data_dir):
+def test_marking_contact_on_a_frame_makes_the_window_a_contact(data_dir):
     state = BladeLabelingState(data_dir)
-    with pytest.raises(ValueError, match="not in window_001"):
-        state.save_window_label(
-            WindowLabel(window_id="window_001", contact_label="contact", contact_frame=2110)
-        )
+    state.save_frame_label(
+        FrameLabel(window_id="window_001", frame=564, points=FULL_POINTS, contact=True)
+    )
+    verdict = state.window_verdict("window_001")
+    assert verdict["contact_label"] == "contact"
+    assert verdict["contact_frames"] == [564]
 
 
 def test_an_invalid_contact_label_is_refused(data_dir):
@@ -245,28 +263,33 @@ def test_an_invalid_contact_label_is_refused(data_dir):
 
 
 @pytest.mark.parametrize("label", ["no_contact", "unclear"])
-def test_a_contact_frame_without_a_contact_verdict_is_refused(data_dir, label):
-    """The two halves of the row would contradict each other.
+def test_a_sweeping_verdict_cannot_erase_marked_contact_frames(data_dir, label):
+    """The bug this guards: one verdict per window, last press wins.
 
-    This shipped as a real contradiction: pressing the mark-contact-frame key
-    on an already-judged window kept the old verdict and stored the frame
-    beside it, leaving 'they never touched, and here is where they touched'.
+    The labeller marks contact on the frame the blades meet, then keeps
+    walking the same phrase and judges a later frame no_contact — which used
+    to overwrite the whole window and silently drop the contact.
     """
     state = BladeLabelingState(data_dir)
-    frame = state.windows["window_001"]["frames"][0]["source_frame"]
-    with pytest.raises(ValueError, match="only meaningful with"):
-        state.save_window_label(
-            WindowLabel(window_id="window_001", contact_label=label, contact_frame=frame)
-        )
-
-
-def test_a_contact_verdict_still_accepts_its_frame(data_dir):
-    state = BladeLabelingState(data_dir)
-    frame = state.windows["window_001"]["frames"][0]["source_frame"]
-    row = state.save_window_label(
-        WindowLabel(window_id="window_001", contact_label="contact", contact_frame=frame)
+    state.save_frame_label(
+        FrameLabel(window_id="window_001", frame=564, points=FULL_POINTS, contact=True)
     )
-    assert row["contact_frame"] == frame
+    with pytest.raises(ValueError, match="clear those first"):
+        state.save_window_label(WindowLabel(window_id="window_001", contact_label=label))
+    assert state.window_verdict("window_001")["contact_frames"] == [564]
+
+
+def test_clearing_the_frame_releases_the_window_for_a_new_verdict(data_dir):
+    state = BladeLabelingState(data_dir)
+    state.save_frame_label(
+        FrameLabel(window_id="window_001", frame=564, points=FULL_POINTS, contact=True)
+    )
+    state.save_frame_label(
+        FrameLabel(window_id="window_001", frame=564, points=FULL_POINTS, contact=False)
+    )
+    row = state.save_window_label(WindowLabel(window_id="window_001", contact_label="no_contact"))
+    assert row["contact_label"] == "no_contact"
+    assert state.window_verdict("window_001")["contact_frames"] == []
 
 
 # ----------------------------------------------------------------------
@@ -330,11 +353,34 @@ def test_a_malformed_point_is_refused(client):
 
 def test_posting_a_window_judgement_updates_the_csv(client, data_dir):
     response = client.post("/api/window", json={
-        "window_id": "window_001", "contact_label": "contact", "contact_frame": 564,
+        "window_id": "window_001", "contact_label": "no_contact",
+    })
+    assert response.json()["ok"] is True
+    assert "window_001,no_contact," in (data_dir / "windows.csv").read_text(encoding="utf-8")
+    assert client.get("/api/stats").json()["contact_distribution"] == {"no_contact": 1}
+
+
+def test_marking_a_frame_contact_updates_the_csv(client, data_dir):
+    response = client.post("/api/label", json={
+        "window_id": "window_001", "frame": 564, "points": FULL_POINTS, "contact": True,
     })
     assert response.json()["ok"] is True
     assert "window_001,contact,564" in (data_dir / "windows.csv").read_text(encoding="utf-8")
-    assert client.get("/api/stats").json()["contact_distribution"] == {"contact": 1}
+    stats = client.get("/api/stats").json()
+    assert stats["contact_distribution"] == {"contact": 1}
+    assert stats["contact_frames_total"] == 1
+
+
+def test_a_later_no_contact_cannot_wipe_a_marked_frame_over_http(client):
+    client.post("/api/label", json={
+        "window_id": "window_001", "frame": 564, "points": FULL_POINTS, "contact": True,
+    })
+    response = client.post("/api/window", json={
+        "window_id": "window_001", "contact_label": "no_contact",
+    })
+    assert response.status_code == 400
+    assert "clear those first" in response.json()["error"]
+    assert client.get("/api/frame/0").json()["window"]["label"]["contact_frames"] == [564]
 
 
 def test_frames_endpoint_reports_progress_per_frame(client):
