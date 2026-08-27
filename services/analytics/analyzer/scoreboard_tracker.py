@@ -46,11 +46,26 @@ reported as ``annulled`` rather than silently kept or silently dropped.
 
 Score values are *derived*, not read
 ------------------------------------
-:func:`resolve_touches` numbers the score by counting confirmed touches from
-0–0. It does not OCR the digits, so the values are only correct for a clip that
-starts at the beginning of the bout. Callers say so explicitly by passing
-``start_score``; the honest reading of absolute values is a follow-up that can
-reuse :mod:`analyzer.score_reader` on the same tracked ROIs.
+:func:`resolve_touches` numbers the score by counting confirmed touches from a
+baseline. Everything after the baseline is a lamp-confirmed count; the baseline
+itself is the score the panel already showed when the clip opened, and getting
+it wrong shifts every number in the report by the same amount with nothing else
+to show for it. That is not a corner case: a DE period 2 or 3 opens on the
+previous period's score, and a camera started late opens on whatever had been
+scored already. Measured on ``260716_de64_s1_piste3``, the panel is at 0–1
+before the first lamp and the report came out 6–5 against a true 7–6.
+
+:class:`StartScoreReader` reads that baseline off the digits, and
+:func:`track_scoreboard_video` uses it whenever the caller does not name one.
+**On all nine calibrated venues it currently declines**, and the read is built to
+decline rather than guess — see :class:`DigitReadConfig`. What defeats it is
+resolution, not logic: a glyph spans 10–20 px, blooming closes the hole in a
+``0``, and per-glyph identification measures 29 % top-1 with the match score of
+a right answer and a wrong one drawn from the same distribution. So in practice
+``--start-score`` is still how a mid-bout clip gets its baseline; what changed is
+that a clip which needs one and did not get one now says so
+(:attr:`ScoreboardAnalysis.start_score_assumed`) instead of quietly reporting a
+score that is uniformly too low.
 
 Coordinates
 -----------
@@ -269,6 +284,95 @@ class ScoreChangeConfig:
 
 
 @dataclass(frozen=True)
+class DigitReadConfig:
+    """Thresholds for reading a score field's *value* (:class:`StartScoreReader`).
+
+    Separate from :class:`ScoreChangeConfig` because the two want opposite
+    pixels. Change detection wants the glyph's whole red envelope — a fat, stable
+    blob that survives jitter. Reading the value wants only the blown-out core of
+    the lit segments, because a ``0`` and an ``8`` differ *only* by the hole in
+    the middle, and the red glow fills that hole in. Measured on the 07-16 venue,
+    where a glyph is ~20x33 px: the lit strokes sit at value 234-253 and the
+    glow inside a ``0`` at 156-233, so the two populations do separate — but only
+    well above the cut :func:`digit_mask` uses.
+    """
+
+    #: Where to put the brightness cut inside the red pixels' own range, as a
+    #: fraction from the Otsu split (0.0) to the brightest red pixel (1.0).
+    #: Relative rather than absolute because "how bright is a lit segment" varies
+    #: by venue, exposure and distance — the same reason :func:`digit_mask` uses
+    #: Otsu at all. See :func:`digit_core_mask`.
+    #:
+    #: Several of them, and a field only counts as read when they *all* decode
+    #: to the same number. No single cut works everywhere: too low and a ``0``
+    #: fills in and reads as an ``8``, too high and the same ``0`` breaks into
+    #: its two side strokes and reads as ``11``. Both failures are confident and
+    #: stable over time, so agreeing with itself frame after frame does not
+    #: catch them — but they land on different values at different cuts, and
+    #: requiring the cuts to agree does. Measured on the 07-15 venue, whose
+    #: glyphs are 10 px wide featureless pills, this is the difference between
+    #: reporting 1-1 for a 0-0 panel at 0.92 agreement and declining to read.
+    core_fractions: Tuple[float, ...] = (0.35, 0.45, 0.55)
+
+    #: Least spread, in value levels, between the dimmest and brightest red
+    #: pixel before a field counts as showing anything. Without it a *flat*
+    #: patch — every pixel red and equally bright, which is what a fully
+    #: occluded or out-of-frame ROI looks like — has Otsu split it into halves
+    #: of nothing and the whole rectangle comes back as one lit glyph. Measured
+    #: on calibrated venues the real spread is 90-110 levels, so 25 rejects the
+    #: degenerate case without coming near a genuine reading.
+    min_contrast: int = 25
+
+    #: Too few core pixels to be a lit glyph at all: the field reads as blank.
+    #: A blank field is a legitimate reading (an unlit tens digit) but it is not
+    #: a digit, so it must not be handed to the segment decoder.
+    min_core_pixels: int = 10
+
+    #: A digit's bounding box must span at least this fraction of the ROI's
+    #: height. Discards specks, the period-counter dots and the top edge of the
+    #: housing, all of which are short.
+    min_digit_height_fraction: float = 0.40
+
+    #: Columns this far apart or closer belong to the same digit. A 7-segment
+    #: glyph can break into unconnected strokes, so components are grouped by
+    #: horizontal span rather than by connectivity.
+    digit_gap_px: int = 2
+
+    #: A field wider than this many digits is not a score — the ROI has drifted
+    #: onto the period counter or the neighbouring side, and any number read out
+    #: of it would be fiction.
+    max_digits: int = 2
+
+    #: Below this width-to-height ratio the glyph is a ``1``. Checked before any
+    #: template match because a ``1`` is a bare vertical stroke, and cropping it
+    #: to its own ink makes it a solid rectangle that resembles nothing.
+    one_aspect_max: float = 0.42
+
+    #: Least correlation with a font glyph that counts as recognising it. Both
+    #: sides of the product are unit-normalised, so this is a cosine: 1.0 is a
+    #: perfect shape match and 0.0 is no relationship at all.
+    match_min: float = 0.55
+
+    #: How far the best match must beat the runner-up. Two glyphs scoring alike
+    #: means the mask is too damaged to tell them apart, which is the exact
+    #: situation a confident answer would be wrong in.
+    match_margin: float = 0.08
+
+    #: Settled reads needed on each side before a value is offered at all.
+    min_samples: int = 4
+
+    #: Largest italic slant, in pixels of drift per row, that will be corrected.
+    #: A field whose apparent slant exceeds this is not an italic display, it is
+    #: a mask full of something else, and shearing by it would only spread the
+    #: mess further.
+    max_slant: float = 0.5
+
+    #: Least fraction of a side's reads that must agree on the modal value.
+    #: See :meth:`StartScoreReader.read`.
+    min_agreement: float = 0.70
+
+
+@dataclass(frozen=True)
 class MachineProfile:
     """Panel-relative geometry for one model of scoring machine at one zoom.
 
@@ -303,6 +407,9 @@ class MachineProfile:
     #: glyph spans and how often a fencer crosses in front of it, both of which
     #: are properties of this camera on this box. ``None`` keeps the caller's.
     score_config: Optional["ScoreChangeConfig"] = None
+    #: Same idea again for reading the digits' *values*. ``None`` keeps the
+    #: caller's :class:`DigitReadConfig`.
+    read_config: Optional["DigitReadConfig"] = None
 
     def __post_init__(self) -> None:
         for label, rois in (("lamp_rois", self.lamp_rois), ("digit_rois", self.digit_rois)):
@@ -1273,6 +1380,444 @@ def event_intervals(
 
 
 # ----------------------------------------------------------------------
+# Reading the score's absolute value
+# ----------------------------------------------------------------------
+
+
+#: The digit shapes these panels draw, as a 5x7 dot-matrix font.
+#:
+#: Not 7-segment, which is what :mod:`analyzer.score_reader` assumes and what
+#: this module's first attempt assumed too. Look at a ``7`` on any of the
+#: reference footage: it is a top bar and a stroke slanting down to the *left*,
+#: ending as a vertical under the middle of the bar. A 7-segment ``7`` is a top
+#: bar and a vertical down the right-hand edge. The panels are dot-matrix
+#: modules running the usual 5x7 character generator, so segment-region tests
+#: score a ``7`` as a ``1`` or as nothing, whatever the threshold.
+#:
+#: ``0`` is a plain ring here rather than the ring-with-diagonal the classic
+#: character generator draws: measured on 07-16 piste 3, the inside of a ``0``
+#: is uniformly dark at every threshold, with no diagonal.
+DOT_MATRIX_DIGITS: Mapping[int, Tuple[str, ...]] = {
+    0: ("01110", "10001", "10001", "10001", "10001", "10001", "01110"),
+    1: ("00100", "01100", "00100", "00100", "00100", "00100", "01110"),
+    2: ("01110", "10001", "00001", "00010", "00100", "01000", "11111"),
+    3: ("11111", "00010", "00100", "00010", "00001", "10001", "01110"),
+    4: ("00010", "00110", "01010", "10010", "11111", "00010", "00010"),
+    5: ("11111", "10000", "11110", "00001", "00001", "10001", "01110"),
+    6: ("00110", "01000", "10000", "11110", "10001", "10001", "01110"),
+    7: ("11111", "10001", "00001", "00010", "00100", "00100", "00100"),
+    8: ("01110", "10001", "10001", "01110", "10001", "10001", "01110"),
+    9: ("01110", "10001", "10001", "01111", "00001", "00010", "01100"),
+}
+
+#: Grid a glyph and a template are both resampled onto before they are compared.
+#: Coarse on purpose: the observed strokes are broken and a pixel or two wide,
+#: so a fine grid measures stroke damage rather than shape.
+DIGIT_GRID = (7, 5)
+
+
+def _digit_grid_templates() -> Dict[int, np.ndarray]:
+    """Each font glyph, cropped to its own ink and resampled onto the grid."""
+    templates: Dict[int, np.ndarray] = {}
+    for digit, rows in DOT_MATRIX_DIGITS.items():
+        bitmap = np.array([[c == "1" for c in row] for row in rows], dtype=np.float32)
+        columns = np.flatnonzero(bitmap.any(axis=0))
+        lines = np.flatnonzero(bitmap.any(axis=1))
+        cropped = bitmap[lines[0]:lines[-1] + 1, columns[0]:columns[-1] + 1]
+        templates[digit] = _resample_glyph(cropped)
+    return templates
+
+
+def _resample_glyph(glyph: np.ndarray) -> np.ndarray:
+    """Area-average a bbox-cropped glyph onto :data:`DIGIT_GRID`, mean-centred."""
+    grid = cv2.resize(
+        np.ascontiguousarray(glyph, dtype=np.float32),
+        (DIGIT_GRID[1], DIGIT_GRID[0]),
+        interpolation=cv2.INTER_AREA,
+    )
+    centred = grid - float(grid.mean())
+    norm = float(np.linalg.norm(centred))
+    return centred / norm if norm > 0 else centred
+
+
+def digit_core_mask(
+    hsv_patch: np.ndarray,
+    config: ScoreChangeConfig,
+    read_config: DigitReadConfig = DigitReadConfig(),
+    core_fraction: Optional[float] = None,
+) -> np.ndarray:
+    """Boolean mask of the *lit cores* of a score field's segments.
+
+    :func:`digit_mask` answers "which pixels belong to this display", which is
+    what comparing two numbers needs. This answers the harder question "which
+    pixels are a lit stroke", which is what reading a number needs, and it needs
+    a much higher cut: inside a ``0`` the plastic glows red brightly enough to
+    pass :func:`digit_mask` and fill the hole, at which point the glyph is
+    indistinguishable from an ``8``.
+
+    The cut is placed a fixed fraction of the way from :func:`digit_mask`'s Otsu
+    split to the brightest red pixel in the same ROI, so it rides the exposure
+    instead of being calibrated per venue. Measured on the 07-16 venue's left
+    field showing ``0``: Otsu lands at 160, the brightest red pixel at 253, the
+    lit strokes occupy 234-253 and the glow inside the hole 156-233. Any
+    fraction from roughly 0.4 to 0.75 puts the cut inside that empty band; 0.5
+    (207) is the middle of the usable range on the venues measured.
+    """
+    return settled_core_mask(
+        red_pixels(hsv_patch, config),
+        hsv_patch[:, :, 2].astype(np.float32),
+        config,
+        read_config,
+        core_fraction,
+    )
+
+
+def red_pixels(hsv_patch: np.ndarray, config: ScoreChangeConfig) -> np.ndarray:
+    """Mask of pixels whose hue and saturation say "lit red LED"."""
+    hue = hsv_patch[:, :, 0]
+    sat = hsv_patch[:, :, 1]
+    return ((hue <= config.digit_hue_max) | (hue >= config.digit_hue_min)) & (
+        sat >= config.digit_saturation_min
+    )
+
+
+def settled_core_mask(
+    red: np.ndarray,
+    val: np.ndarray,
+    config: ScoreChangeConfig,
+    read_config: DigitReadConfig = DigitReadConfig(),
+    core_fraction: Optional[float] = None,
+) -> np.ndarray:
+    """:func:`digit_core_mask` on an already time-averaged patch.
+
+    Split out because *when* the threshold is chosen decides whether the glyph
+    survives. Thresholding each frame and averaging the results keeps only the
+    pixels that clear the cut in most frames, and the digits are multiplexed, so
+    on the 07-16 venue that leaves a ``7`` as a few disconnected edge fragments
+    that match no template at all (best correlation 0.15). Averaging the pixels
+    first and thresholding once leaves the same ``7`` whole.
+    """
+    if int(red.sum()) < config.digit_min_red_pixels:
+        return np.zeros(val.shape, dtype=bool)
+    values = val[red]
+    high = float(values.max())
+    if high - float(values.min()) < read_config.min_contrast:
+        return np.zeros(val.shape, dtype=bool)
+    low = max(_otsu_threshold(values.astype(np.uint8)), config.digit_value_min)
+    if high <= low:
+        return np.zeros(val.shape, dtype=bool)
+    fraction = (
+        core_fraction if core_fraction is not None
+        else read_config.core_fractions[len(read_config.core_fractions) // 2]
+    )
+    core = red & (val >= low + fraction * (high - low))
+    if int(core.sum()) < read_config.min_core_pixels:
+        return np.zeros(val.shape, dtype=bool)
+    return core
+
+
+def field_slant(mask: np.ndarray, read_config: DigitReadConfig = DigitReadConfig()) -> float:
+    """Pixels of horizontal drift per row of the glyphs in a score field.
+
+    These panels draw italic digits — measured on the 07-15 venue, a ``0``'s
+    centre of mass moves 4 px left over its 24 rows. Matched against upright
+    templates that costs more correlation than the difference between one digit
+    and another, so the field is straightened before anything is read from it.
+
+    Estimated over the whole field rather than per glyph: it is one property of
+    one display, and every extra lit pixel steadies the fit.
+    """
+    rows = np.flatnonzero(mask.any(axis=1))
+    if rows.size < 4:
+        return 0.0
+    weights = mask[rows].sum(axis=1).astype(np.float64)
+    centroids = (mask[rows] * np.arange(mask.shape[1])).sum(axis=1) / weights
+    ys = rows.astype(np.float64)
+    ys = ys - ys.mean()
+    spread = float((ys * ys).sum())
+    if spread <= 0:
+        return 0.0
+    slope = float((ys * (centroids - centroids.mean())).sum() / spread)
+    return float(np.clip(slope, -read_config.max_slant, read_config.max_slant))
+
+
+def deskew_mask(mask: np.ndarray, slope: float) -> np.ndarray:
+    """Shear a field mask upright, widening the canvas so nothing is cut off."""
+    if abs(slope) < 1e-3 or mask.size == 0:
+        return mask
+    height, width = mask.shape
+    pad = int(np.ceil(abs(slope) * height)) + 1
+    matrix = np.array([[1.0, -slope, slope * (height / 2.0) + pad], [0.0, 1.0, 0.0]])
+    warped = cv2.warpAffine(
+        mask.astype(np.uint8), matrix, (width + 2 * pad, height),
+        flags=cv2.INTER_NEAREST, borderValue=0,
+    )
+    return warped.astype(bool)
+
+
+def split_digit_boxes(
+    mask: np.ndarray, read_config: DigitReadConfig = DigitReadConfig()
+) -> List[Rect]:
+    """Bounding boxes of the digits in a score-field mask, left to right.
+
+    Grouping is by horizontal span, not by connectivity: a 7-segment glyph is
+    physically several separated bars, and at this scale some of them merge and
+    some do not, so "one connected blob" is not "one digit". Two strokes that
+    overlap in x are the same digit; a gap wider than
+    :attr:`DigitReadConfig.digit_gap_px` starts a new one.
+    """
+    if mask.size == 0 or not mask.any():
+        return []
+    height = mask.shape[0]
+    min_height = max(2, int(round(height * read_config.min_digit_height_fraction)))
+
+    columns = mask.any(axis=0)
+    boxes: List[Rect] = []
+    start: Optional[int] = None
+    gap = 0
+    for x in range(len(columns) + 1):
+        lit = x < len(columns) and bool(columns[x])
+        if lit:
+            if start is None:
+                start = x
+            gap = 0
+            continue
+        if start is None:
+            continue
+        gap += 1
+        if gap <= read_config.digit_gap_px and x < len(columns):
+            continue
+        end = x - gap + 1
+        block = mask[:, start:end]
+        rows = np.flatnonzero(block.any(axis=1))
+        if rows.size and int(rows[-1] - rows[0] + 1) >= min_height:
+            boxes.append((start, int(rows[0]), end - start, int(rows[-1] - rows[0] + 1)))
+        start = None
+        gap = 0
+    return boxes
+
+
+DIGIT_TEMPLATES: Dict[int, np.ndarray] = _digit_grid_templates()
+
+
+def decode_digit(
+    glyph: np.ndarray, read_config: DigitReadConfig = DigitReadConfig()
+) -> Optional[int]:
+    """Read one digit from a mask cropped to its own bounding box.
+
+    A narrow box is a ``1`` and is decided on shape alone, before any matching.
+    A ``1`` is a bare vertical stroke on these panels, so cropping it to its own
+    ink and stretching that onto the comparison grid turns it into a solid
+    rectangle that matches nothing in particular.
+
+    Everything else is matched against :data:`DIGIT_TEMPLATES` by correlation on
+    a coarse grid. ``None`` when the best match is weak, or when it barely beats
+    the runner-up: two digits that score alike is exactly the situation where a
+    confident answer is a wrong one.
+    """
+    if glyph.ndim != 2 or glyph.size == 0 or not glyph.any():
+        return None
+    height, width = glyph.shape
+    if height < 4 or width < 1:
+        return None
+
+    if width / height < read_config.one_aspect_max:
+        return 1
+
+    sample = _resample_glyph(glyph.astype(np.float32))
+    scores = {
+        digit: float((sample * template).sum())
+        for digit, template in DIGIT_TEMPLATES.items()
+    }
+    ranked = sorted(scores.items(), key=lambda item: item[1], reverse=True)
+    best, best_score = ranked[0]
+    runner_up = ranked[1][1]
+    if best_score < read_config.match_min:
+        return None
+    if best_score - runner_up < read_config.match_margin:
+        return None
+    return best
+
+
+def read_digit_field(
+    mask: np.ndarray, read_config: DigitReadConfig = DigitReadConfig()
+) -> Optional[int]:
+    """Read a whole side's score — one or two digits — from one settled mask.
+
+    Returns ``None`` rather than a guess whenever the field does not look like a
+    score: nothing lit, more digits than a score can have, or a glyph the
+    segment decoder will not name. An unlit tens digit simply produces one box,
+    which is why a blank field is not special-cased.
+    """
+    upright = deskew_mask(mask, field_slant(mask, read_config))
+    boxes = split_digit_boxes(upright, read_config)
+    if not boxes or len(boxes) > read_config.max_digits:
+        return None
+    value = 0
+    for x, y, w, h in boxes:
+        digit = decode_digit(upright[y:y + h, x:x + w], read_config)
+        if digit is None:
+            return None
+        value = value * 10 + digit
+    return value
+
+
+@dataclass(frozen=True)
+class StartScoreReading:
+    """What :class:`StartScoreReader` made of the opening of a clip."""
+
+    #: The score read, or ``None`` when the read was declined.
+    score: Optional[Tuple[int, int]]
+    #: Fraction of each side's reads that agreed with the value returned, taken
+    #: over the side that agreed least. 0.0 when nothing was read.
+    agreement: float
+    #: Settled reads per side that produced any value at all.
+    samples: Mapping[str, int]
+    #: Frames offered to the reader, i.e. before gating.
+    frames_examined: int
+    #: ``"read"`` on success; otherwise why not — ``"no_samples"``,
+    #: ``"too_few_samples"`` or ``"low_agreement"``.
+    reason: str
+
+    @property
+    def confident(self) -> bool:
+        return self.score is not None
+
+
+class StartScoreReader:
+    """Read the absolute score the panel shows before the first touch.
+
+    :func:`resolve_touches` counts touches from a baseline it is told; this
+    finds that baseline by reading the digits, so a clip that opens mid-bout —
+    a DE second or third period, or a camera started late — reports the score
+    the panel actually shows instead of one that restarts at 0-0.
+
+    Reading is per settled mask, not per frame. The digits are multiplexed, so a
+    single frame's mask is a torn fragment; averaging
+    :attr:`ScoreChangeConfig.window_frames` of them gives the clean glyph that
+    :class:`ScoreChangeDetector` already relies on. Several settled masks then
+    vote, which is what makes the answer survive a fencer walking across the box
+    or a lamp's glare washing one window out.
+    """
+
+    def __init__(
+        self,
+        profile: MachineProfile,
+        score_config: ScoreChangeConfig = ScoreChangeConfig(),
+        read_config: DigitReadConfig = DigitReadConfig(),
+        tracker_config: TrackerConfig = TrackerConfig(),
+    ) -> None:
+        self.profile = profile
+        self.score_config = score_config
+        self.read_config = read_config
+        self.tracker_config = tracker_config
+        self._red: Dict[str, List[np.ndarray]] = {s: [] for s in SIDES}
+        self._val: Dict[str, List[np.ndarray]] = {s: [] for s in SIDES}
+        self._reads: Dict[str, List[Tuple[int, int]]] = {s: [] for s in SIDES}
+        self._frames = 0
+
+    def feed(self, hsv: np.ndarray, track: PanelTrack) -> None:
+        """Offer one frame. Gated exactly like :meth:`ScoreChangeDetector.feed`."""
+        self._frames += 1
+        if track.corr < self.tracker_config.lock_corr or not track.locked:
+            return
+        lit = display_lit_fraction(hsv, track, self.profile, self.score_config)
+        if lit is not None and lit < self.score_config.display_min_fraction:
+            return
+        for side in SIDES:
+            patch = crop_roi(
+                hsv, absolute_roi(track.origin, self.profile.digit_rois[side])
+            )
+            if patch is None or patch.size == 0:
+                continue
+            self._feed_side(side, track.frame, patch)
+
+    def _feed_side(self, side: str, frame: int, patch: np.ndarray) -> None:
+        reds, vals = self._red[side], self._val[side]
+        red = red_pixels(patch, self.score_config).astype(np.float32)
+        if reds and reds[-1].shape != red.shape:
+            reds.clear()
+            vals.clear()
+        reds.append(red)
+        vals.append(patch[:, :, 2].astype(np.float32))
+        window = self.score_config.window_frames
+        if len(reds) > window:
+            reds.pop(0)
+            vals.pop(0)
+        if len(reds) < window or frame % self.score_config.sample_stride:
+            return
+
+        settled_red = np.mean(reds, axis=0, dtype=np.float32) >= 0.5
+        settled_val = np.mean(vals, axis=0, dtype=np.float32)
+        values = {
+            read_digit_field(
+                settled_core_mask(
+                    settled_red, settled_val, self.score_config,
+                    self.read_config, fraction,
+                ),
+                self.read_config,
+            )
+            for fraction in self.read_config.core_fractions
+        }
+        if len(values) == 1:
+            value = values.pop()
+            if value is not None:
+                self._reads[side].append((frame, value))
+
+    def read(self, before_frame: Optional[int] = None) -> StartScoreReading:
+        """Modal value per side over the reads taken before ``before_frame``.
+
+        ``before_frame`` is normally the first lamp event's onset, because that
+        is the moment the tally starts counting: a read taken after it would
+        already include the touch the tally is about to add, and the score would
+        come out one too high. Passing ``None`` uses everything fed.
+
+        The answer is declined — ``score is None`` — when either side produced
+        fewer than :attr:`DigitReadConfig.min_samples` reads or when the modal
+        value carries less than :attr:`DigitReadConfig.min_agreement` of them.
+        A wrong baseline is worse than no baseline: it shifts every score in the
+        report and, unlike a missing one, nothing downstream can tell.
+        """
+        modes: Dict[str, Optional[int]] = {}
+        counts: Dict[str, int] = {}
+        agreements: List[float] = []
+        for side in SIDES:
+            reads = [
+                value for frame, value in self._reads[side]
+                if before_frame is None or frame < before_frame
+            ]
+            counts[side] = len(reads)
+            if not reads:
+                modes[side] = None
+                continue
+            values, tallies = np.unique(np.asarray(reads), return_counts=True)
+            best = int(np.argmax(tallies))
+            modes[side] = int(values[best])
+            agreements.append(float(tallies[best]) / len(reads))
+
+        agreement = min(agreements) if len(agreements) == len(SIDES) else 0.0
+        if any(counts[s] == 0 for s in SIDES):
+            reason = "no_samples"
+        elif any(counts[s] < self.read_config.min_samples for s in SIDES):
+            reason = "too_few_samples"
+        elif agreement < self.read_config.min_agreement:
+            reason = "low_agreement"
+        else:
+            reason = "read"
+
+        score = (
+            (int(modes[LEFT]), int(modes[RIGHT])) if reason == "read" else None
+        )
+        return StartScoreReading(
+            score=score,
+            agreement=agreement,
+            samples=dict(counts),
+            frames_examined=self._frames,
+            reason=reason,
+        )
+
+
+# ----------------------------------------------------------------------
 # Cross-validation: lamp event + score change → touch
 # ----------------------------------------------------------------------
 
@@ -1541,6 +2086,30 @@ class ScoreboardAnalysis:
     frame_count: int
     fps: float
     template_frame: int
+    #: The baseline the touch tally counted from.
+    start_score: Tuple[int, int] = (0, 0)
+    #: ``"caller"`` when :func:`track_scoreboard_video` was given a start score,
+    #: ``"read"`` when it used :class:`StartScoreReader` — including the case
+    #: where the reader declined and 0-0 was assumed. ``start_score_reading``
+    #: separates those two.
+    start_score_source: str = "caller"
+    #: What the digit reader made of the opening frames, whether or not its
+    #: answer was used. ``None`` only for analyses built by hand in tests.
+    start_score_reading: Optional[StartScoreReading] = None
+
+    @property
+    def start_score_assumed(self) -> bool:
+        """True when the tally starts at 0-0 because nothing could be read.
+
+        The dangerous case, and the one a report has to surface: a clip that
+        opens mid-bout reads as if it opened at 0-0, and every score in it is
+        then low by the same amount with nothing else to show for it.
+        """
+        return (
+            self.start_score_source == "read"
+            and self.start_score_reading is not None
+            and self.start_score_reading.score is None
+        )
 
     @property
     def lock_rate(self) -> float:
@@ -1602,6 +2171,110 @@ def _read_frames(capture, count: int) -> List[np.ndarray]:
     return frames
 
 
+def _bootstrap_tracker(
+    video_path: str,
+    housing_bbox: Rect,
+    placard_bbox: Optional[Rect],
+    profile: MachineProfile,
+    anchor_frame: int,
+    tracker_config: TrackerConfig,
+    lamp_config: LampConfig,
+) -> Tuple[PanelTracker, int, float]:
+    """Cut the templates and report ``(tracker, template_frame, fps)``.
+
+    Shared so that :func:`read_start_score` reproduces
+    :func:`track_scoreboard_video`'s track exactly rather than approximating it;
+    a start score read off a differently-anchored track is a start score for a
+    different set of pixels.
+    """
+    capture = cv2.VideoCapture(str(video_path))
+    if not capture.isOpened():
+        raise FileNotFoundError(f"cannot open scoreboard video: {video_path}")
+    try:
+        fps = capture.get(cv2.CAP_PROP_FPS) or 30.0
+        if anchor_frame:
+            capture.set(cv2.CAP_PROP_POS_FRAMES, int(anchor_frame))
+            head = _read_frames(capture, 1)
+        else:
+            head = _read_frames(capture, max(1, tracker_config.init_scan_frames))
+    finally:
+        capture.release()
+    if not head:
+        raise ValueError(f"scoreboard video has no frame {anchor_frame}: {video_path}")
+
+    if anchor_frame:
+        offset = int(anchor_frame)
+        template = head[0]
+    else:
+        offset = select_template_frame(
+            [_head_lamp_activity(f, housing_bbox, profile, lamp_config) for f in head]
+        )
+        template = head[offset]
+    tracker = PanelTracker.from_frame(
+        template, housing_bbox, placard_bbox, tracker_config
+    )
+    return tracker, offset, float(fps)
+
+
+#: How far into a clip :func:`read_start_score` will look for the opening score
+#: when the caller names no other limit. 30 s at 30 fps: long enough that a
+#: panel briefly occluded or out of frame at the start still gets read, short
+#: enough that the reader never wanders into the middle of a bout when there is
+#: no lamp event to stop it.
+START_SCORE_SCAN_FRAMES = 900
+
+
+def read_start_score(
+    video_path: str,
+    *,
+    housing_bbox: Rect,
+    placard_bbox: Optional[Rect] = None,
+    profile: MachineProfile = KOR_DOMESTIC_V1,
+    anchor_frame: int = 0,
+    tracker_config: TrackerConfig = TrackerConfig(),
+    lamp_config: LampConfig = LampConfig(),
+    score_config: ScoreChangeConfig = ScoreChangeConfig(),
+    read_config: DigitReadConfig = DigitReadConfig(),
+    scan_frames: int = START_SCORE_SCAN_FRAMES,
+) -> Optional[Tuple[int, int]]:
+    """Read the score already on the panel when a clip starts, or ``None``.
+
+    A standalone pass over the opening of the file, for callers that want the
+    number without running a whole analysis. :func:`track_scoreboard_video` does
+    not use this — it feeds the same :class:`StartScoreReader` from its own loop
+    and can stop the read at the first lamp event, which this cannot.
+
+    ``None`` means the panel could not be read with confidence, not that the
+    score is 0-0, and on every venue calibrated so far ``None`` is what comes
+    back — see the module docstring. Use :meth:`StartScoreReader.read` directly
+    for the reason it declined.
+    """
+    if profile.lamp_config is not None:
+        lamp_config = profile.lamp_config
+    if profile.score_config is not None:
+        score_config = profile.score_config
+    if profile.read_config is not None:
+        read_config = profile.read_config
+
+    tracker, _, _ = _bootstrap_tracker(
+        video_path, housing_bbox, placard_bbox, profile,
+        anchor_frame, tracker_config, lamp_config,
+    )
+    reader = StartScoreReader(profile, score_config, read_config, tracker_config)
+
+    capture = cv2.VideoCapture(str(video_path))
+    try:
+        for _ in range(max(0, int(scan_frames))):
+            ok, frame = capture.read()
+            if not ok:
+                break
+            track = tracker.update(frame)
+            reader.feed(cv2.cvtColor(frame, cv2.COLOR_BGR2HSV), track)
+    finally:
+        capture.release()
+    return reader.read().score
+
+
 def track_scoreboard_video(
     video_path: str,
     *,
@@ -1612,7 +2285,9 @@ def track_scoreboard_video(
     tracker_config: TrackerConfig = TrackerConfig(),
     lamp_config: LampConfig = LampConfig(),
     score_config: ScoreChangeConfig = ScoreChangeConfig(),
-    start_score: Tuple[int, int] = (0, 0),
+    read_config: DigitReadConfig = DigitReadConfig(),
+    start_score: Optional[Tuple[int, int]] = None,
+    start_score_scan_frames: int = START_SCORE_SCAN_FRAMES,
     progress=None,
 ) -> ScoreboardAnalysis:
     """Track, read and cross-validate a whole scoreboard work file.
@@ -1620,6 +2295,14 @@ def track_scoreboard_video(
     ``housing_bbox`` / ``placard_bbox`` are rectangles in this video's own crop
     coordinates, measured on frame ``anchor_frame``; they say where to cut the
     templates, and everything else follows the panel wherever it goes.
+
+    ``start_score`` is the score already on the panel when the clip opens. Left
+    at ``None`` it is read off the digits (see :class:`StartScoreReader`), which
+    matters because a DE period 2 or 3 opens on the previous period's score and
+    a tally from 0-0 would be wrong for the whole clip. An explicit value always
+    wins: a caller who has looked at the panel outranks the reader. Whichever
+    way it was decided, :attr:`ScoreboardAnalysis.start_score_reading` records
+    it, so a report can say which happened.
 
     ``anchor_frame`` defaults to 0 because a clip normally opens on the panel.
     It exists because one does not: on ``260816_venue2_bout`` the panel is
@@ -1643,37 +2326,18 @@ def track_scoreboard_video(
         lamp_config = profile.lamp_config
     if profile.score_config is not None:
         score_config = profile.score_config
+    if profile.read_config is not None:
+        read_config = profile.read_config
 
-    capture = cv2.VideoCapture(str(video_path))
-    if not capture.isOpened():
-        raise FileNotFoundError(f"cannot open scoreboard video: {video_path}")
-    try:
-        fps = capture.get(cv2.CAP_PROP_FPS) or 30.0
-        if anchor_frame:
-            capture.set(cv2.CAP_PROP_POS_FRAMES, int(anchor_frame))
-            head = _read_frames(capture, 1)
-        else:
-            head = _read_frames(capture, max(1, tracker_config.init_scan_frames))
-    finally:
-        capture.release()
-    if not head:
-        raise ValueError(
-            f"scoreboard video has no frame {anchor_frame}: {video_path}"
-        )
-
-    if anchor_frame:
-        offset = int(anchor_frame)
-    else:
-        offset = select_template_frame(
-            [_head_lamp_activity(f, housing_bbox, profile, lamp_config) for f in head]
-        )
-    template_frame = offset
-    tracker = PanelTracker.from_frame(
-        head[0 if anchor_frame else offset], housing_bbox, placard_bbox, tracker_config
+    tracker, template_frame, fps = _bootstrap_tracker(
+        video_path, housing_bbox, placard_bbox, profile,
+        anchor_frame, tracker_config, lamp_config,
     )
 
     scanner = LampEventScanner(profile, lamp_config, tracker_config, score_config)
     score_detector = ScoreChangeDetector(profile, score_config, tracker_config)
+    start_reader = StartScoreReader(profile, score_config, read_config, tracker_config)
+    scan_limit = max(0, int(start_score_scan_frames))
     tracks: List[PanelTrack] = []
 
     capture = cv2.VideoCapture(str(video_path))
@@ -1686,6 +2350,8 @@ def track_scoreboard_video(
             hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
             scanner.feed(hsv, track)
             score_detector.feed(hsv, track)
+            if track.frame < scan_limit:
+                start_reader.feed(hsv, track)
             tracks.append(track)
             if progress is not None and track.frame % 500 == 0:
                 progress(track.frame)
@@ -1693,6 +2359,11 @@ def track_scoreboard_video(
         capture.release()
 
     events, gaps = scanner.finish()
+    # Stop the start-score read at the first lamp, because that is where the
+    # tally starts: a read taken after it already includes the touch the tally
+    # is about to add, and the baseline would come out one too high.
+    reading = start_reader.read(events[0].onset_frame if events else None)
+    baseline = start_score if start_score is not None else reading.score or (0, 0)
     intervals = event_intervals(
         [e.onset_frame for e in events], len(tracks), score_config
     )
@@ -1701,7 +2372,9 @@ def track_scoreboard_video(
         for i in range(len(events))
     ]
     return ScoreboardAnalysis(
-        resolutions=resolve_touches(events, comparisons, start_score=start_score),
+        resolutions=resolve_touches(
+            events, comparisons, start_score=(int(baseline[0]), int(baseline[1]))
+        ),
         events=events,
         coverage_gaps=gaps,
         comparisons=comparisons,
@@ -1709,6 +2382,9 @@ def track_scoreboard_video(
         frame_count=len(tracks),
         fps=float(fps),
         template_frame=template_frame,
+        start_score=(int(baseline[0]), int(baseline[1])),
+        start_score_source="caller" if start_score is not None else "read",
+        start_score_reading=reading,
     )
 
 

@@ -99,6 +99,8 @@ WARNING_LAMP_INCONSISTENT = "lamp_scorer_inconsistent"
 WARNING_NOT_FOR_MERGE = "not_for_merge"
 WARNING_SCORE_LOWER_BOUND = "score_is_lower_bound"
 WARNING_END_OF_BOUT_INFERRED = "end_of_bout_inferred"
+WARNING_START_SCORE_ASSUMED = "start_score_assumed"
+WARNING_START_SCORE_READ = "start_score_read"
 
 #: ``meta`` key marking a report that must not be merged into a continuous
 #: report. Set when the read is known to be wrong in a way the numbers alone do

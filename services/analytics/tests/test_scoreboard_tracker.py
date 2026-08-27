@@ -45,7 +45,9 @@ from analyzer.scoreboard_tracker import (
     VERDICT_OFF_TARGET,
     VERDICT_TOUCH,
     VERDICT_UNDETERMINED,
+    DOT_MATRIX_DIGITS,
     CoverageGap,
+    DigitReadConfig,
     LampConfig,
     LampEvent,
     LampEventScanner,
@@ -60,14 +62,25 @@ from analyzer.scoreboard_tracker import (
     TrackerConfig,
     absolute_roi,
     classify_colour,
+    decode_digit,
+    deskew_mask,
     display_lit_fraction,
     event_intervals,
+    field_slant,
+    read_digit_field,
+    settled_core_mask,
+    split_digit_boxes,
     infer_end_of_bout_touch,
     mask_similarity,
     merge_runs,
     read_lamp,
     resolutions_to_match_events,
     resolve_touches,
+)
+from analyzer.scoreboard_tracker import (
+    ScoreboardAnalysis,
+    StartScoreReader,
+    StartScoreReading,
 )
 
 PROFILE = KOR_DOMESTIC_V1
@@ -1605,3 +1618,387 @@ class TestEndOfBoutInferenceDegenerateInputs:
     def test_the_target_score_comes_from_the_bout_format_table(self):
         assert END_OF_BOUT_TARGET["pool"] == 5
         assert END_OF_BOUT_TARGET["de"] == 15
+
+
+# ----------------------------------------------------------------------
+# Reading the score's absolute value
+# ----------------------------------------------------------------------
+
+
+READ_CONFIG = DigitReadConfig()
+
+
+def _render_digit(digit, width=15, height=21):
+    """One font glyph as a boolean mask at ``height x width``.
+
+    Rendered from :data:`DOT_MATRIX_DIGITS` rather than hand-drawn so a decoder
+    test cannot pass by agreeing with a fixture that drifted away from the font
+    the decoder actually matches against.
+    """
+    bitmap = np.array(
+        [[c == "1" for c in row] for row in DOT_MATRIX_DIGITS[digit]], dtype=np.uint8
+    )
+    scaled = cv2.resize(bitmap, (width, height), interpolation=cv2.INTER_NEAREST)
+    return scaled.astype(bool)
+
+
+def _field_mask(text, roi_shape=(30, 40), gap=4, left=3, top=4):
+    """A score field mask showing ``text``, e.g. ``"0"`` or ``"12"``."""
+    mask = np.zeros(roi_shape, dtype=bool)
+    x = left
+    for character in text:
+        glyph = _render_digit(int(character))
+        height, width = glyph.shape
+        mask[top:top + height, x:x + width] |= glyph
+        x += width + gap
+    return mask
+
+
+def _shear(mask, slope):
+    """Shear a mask by ``slope`` pixels of x per row, on the same canvas."""
+    height, width = mask.shape
+    matrix = np.array([[1.0, slope, -slope * (height / 2.0)], [0.0, 1.0, 0.0]])
+    return cv2.warpAffine(
+        mask.astype(np.uint8), matrix, (width, height), flags=cv2.INTER_NEAREST
+    ).astype(bool)
+
+
+class TestSplitDigitBoxes:
+    def test_one_glyph_is_one_box(self):
+        boxes = split_digit_boxes(_field_mask("7"), READ_CONFIG)
+
+        assert len(boxes) == 1
+
+    def test_two_glyphs_are_two_boxes_in_reading_order(self):
+        boxes = split_digit_boxes(_field_mask("13"), READ_CONFIG)
+
+        assert len(boxes) == 2
+        assert boxes[0][0] < boxes[1][0]
+
+    def test_strokes_closer_than_the_gap_stay_one_digit(self):
+        """A glyph is several separated bars; splitting on any gap would make a
+        ``4`` into three digits."""
+        mask = np.zeros((20, 20), dtype=bool)
+        mask[2:18, 4:6] = True
+        mask[2:18, 8:10] = True   # 2 px gap: same digit
+
+        assert len(split_digit_boxes(mask, READ_CONFIG)) == 1
+
+    def test_a_short_speck_is_not_a_digit(self):
+        mask = np.zeros((30, 40), dtype=bool)
+        mask[14:17, 5:9] = True   # 3 px of a 30 px ROI
+
+        assert split_digit_boxes(mask, READ_CONFIG) == []
+
+    def test_an_empty_mask_has_no_boxes(self):
+        assert split_digit_boxes(np.zeros((30, 40), dtype=bool), READ_CONFIG) == []
+
+
+class TestFieldSlant:
+    def test_an_upright_field_has_no_slant(self):
+        assert abs(field_slant(_field_mask("0"), READ_CONFIG)) < 0.05
+
+    def test_a_sheared_field_reports_the_shear(self):
+        slant = field_slant(_shear(_field_mask("0"), 0.25), READ_CONFIG)
+
+        assert slant == pytest.approx(0.25, abs=0.06)
+
+    def test_the_slant_is_clamped_to_what_an_italic_display_can_be(self):
+        slant = field_slant(_shear(_field_mask("0"), 1.5), READ_CONFIG)
+
+        assert abs(slant) <= READ_CONFIG.max_slant
+
+    def test_too_few_rows_to_fit_a_line_reports_no_slant(self):
+        mask = np.zeros((30, 40), dtype=bool)
+        mask[10:12, 5:9] = True
+
+        assert field_slant(mask, READ_CONFIG) == 0.0
+
+
+class TestDeskewMask:
+    def test_shearing_back_recovers_the_upright_glyph(self):
+        upright = _field_mask("0")
+        skewed = _shear(upright, 0.25)
+
+        recovered = deskew_mask(skewed, field_slant(skewed, READ_CONFIG))
+
+        assert read_digit_field(recovered, READ_CONFIG) == 0
+
+    def test_a_negligible_slant_leaves_the_mask_untouched(self):
+        mask = _field_mask("0")
+
+        assert deskew_mask(mask, 0.0) is mask
+
+
+class TestDecodeDigit:
+    @pytest.mark.parametrize("digit", sorted(DOT_MATRIX_DIGITS))
+    def test_each_font_glyph_decodes_to_itself(self, digit):
+        glyph = _render_digit(digit)
+        rows = np.flatnonzero(glyph.any(axis=1))
+        cols = np.flatnonzero(glyph.any(axis=0))
+
+        cropped = glyph[rows[0]:rows[-1] + 1, cols[0]:cols[-1] + 1]
+
+        assert decode_digit(cropped, READ_CONFIG) == digit
+
+    def test_a_narrow_stroke_is_a_one_without_being_matched(self):
+        """A ``1`` is decided on shape: cropped to its own ink it is a solid
+        rectangle, which correlates with nothing in particular."""
+        bar = np.ones((25, 5), dtype=bool)
+
+        assert decode_digit(bar, READ_CONFIG) == 1
+
+    def test_an_empty_glyph_is_not_a_digit(self):
+        assert decode_digit(np.zeros((20, 12), dtype=bool), READ_CONFIG) is None
+
+    def test_a_glyph_shorter_than_a_digit_is_not_a_digit(self):
+        assert decode_digit(np.ones((3, 12), dtype=bool), READ_CONFIG) is None
+
+    def test_a_shape_that_matches_nothing_is_declined(self):
+        blob = np.zeros((20, 14), dtype=bool)
+        blob[::3, ::2] = True
+
+        assert decode_digit(blob, READ_CONFIG) is None
+
+    def test_two_digits_scoring_alike_are_declined_rather_than_guessed(self):
+        """The margin rule, exercised by disabling it: the same glyph that has
+        no confident answer does have a best answer."""
+        blob = np.zeros((20, 14), dtype=bool)
+        blob[::3, ::2] = True
+        permissive = DigitReadConfig(match_min=0.0, match_margin=0.0)
+
+        assert decode_digit(blob, READ_CONFIG) is None
+        assert decode_digit(blob, permissive) is not None
+
+
+class TestReadDigitField:
+    def test_a_single_digit_field_reads_its_value(self):
+        assert read_digit_field(_field_mask("7"), READ_CONFIG) == 7
+
+    def test_a_two_digit_field_reads_tens_and_units(self):
+        assert read_digit_field(_field_mask("13"), READ_CONFIG) == 13
+
+    def test_a_leading_zero_is_still_the_units_value(self):
+        assert read_digit_field(_field_mask("05"), READ_CONFIG) == 5
+
+    def test_more_digits_than_a_score_can_have_is_not_a_score(self):
+        """Three glyphs means the ROI has drifted onto the period counter."""
+        assert read_digit_field(_field_mask("123", roi_shape=(30, 64)), READ_CONFIG) is None
+
+    def test_a_blank_field_reads_as_nothing(self):
+        assert read_digit_field(np.zeros((30, 40), dtype=bool), READ_CONFIG) is None
+
+    def test_one_unreadable_glyph_loses_the_whole_field(self):
+        """Half a number is not a number: ``1?`` must not come back as 1."""
+        mask = _field_mask("1")
+        mask[6:26, 24:38] = np.array(
+            [[(r + c) % 3 == 0 for c in range(14)] for r in range(20)]
+        )
+
+        assert read_digit_field(mask, READ_CONFIG) is None
+
+
+
+class TestSettledCoreMask:
+    def _patch(self, glyph, dim=140, bright=250):
+        red = np.ones(glyph.shape, dtype=bool)
+        val = np.full(glyph.shape, dim, dtype=np.float32)
+        val[glyph] = bright
+        return red, val
+
+    def test_the_bright_core_survives_and_the_glow_does_not(self):
+        glyph = _field_mask("0")
+        red, val = self._patch(glyph)
+
+        mask = settled_core_mask(red, val, SCORE_CONFIG, READ_CONFIG, 0.45)
+
+        assert np.array_equal(mask, glyph)
+
+    def test_a_patch_with_no_red_pixels_is_blank(self):
+        glyph = _field_mask("0")
+        red = np.zeros(glyph.shape, dtype=bool)
+        val = np.full(glyph.shape, 250, dtype=np.float32)
+
+        assert not settled_core_mask(red, val, SCORE_CONFIG, READ_CONFIG).any()
+
+    def test_a_flat_patch_cannot_have_a_digit_carved_out_of_it(self):
+        """No brightness spread means nothing is lit — Otsu would otherwise
+        split the noise and invent a glyph."""
+        shape = (30, 40)
+        red = np.ones(shape, dtype=bool)
+        val = np.full(shape, 200, dtype=np.float32)
+
+        assert not settled_core_mask(red, val, SCORE_CONFIG, READ_CONFIG).any()
+
+    def test_too_few_core_pixels_reads_as_blank_rather_than_as_a_digit(self):
+        shape = (30, 40)
+        red = np.ones(shape, dtype=bool)
+        val = np.full(shape, 140, dtype=np.float32)
+        val[10:12, 10:13] = 250
+
+        assert not settled_core_mask(red, val, SCORE_CONFIG, READ_CONFIG).any()
+
+
+def _score_hsv_frame(left_text, right_text, origin=ORIGIN):
+    """An HSV frame whose two digit ROIs show ``left_text`` and ``right_text``.
+
+    Each ROI is filled with dim red and the glyph strokes lit bright, which is
+    what a real field looks like: an unlit segment still glows, and the split
+    between the two is what :func:`settled_core_mask` finds.
+    """
+    frame = np.zeros((FRAME_H, FRAME_W, 3), dtype=np.uint8)
+    for side, text in ((LEFT, left_text), (RIGHT, right_text)):
+        x, y, w, h = absolute_roi(origin, PROFILE.digit_rois[side])
+        frame[y:y + h, x:x + w] = (RED_HUE, 255, 140)
+        if text is None:
+            continue
+        glyph = _field_mask(text, roi_shape=(h, w), gap=3, left=3, top=2)
+        patch = frame[y:y + h, x:x + w]
+        patch[glyph] = (RED_HUE, 255, 250)
+    return frame
+
+
+def _feed_score(reader, frames, left_text, right_text, change_at=None, start=0):
+    """Feed ``frames`` locked frames, switching to the second text at ``change_at``."""
+    for index in range(start, start + frames):
+        if change_at is not None and index >= change_at:
+            texts = left_text[1], right_text[1]
+        elif change_at is not None:
+            texts = left_text[0], right_text[0]
+        else:
+            texts = left_text, right_text
+        reader.feed(_score_hsv_frame(*texts), _track(index))
+
+
+def _reader():
+    return StartScoreReader(PROFILE, SCORE_CONFIG, READ_CONFIG, TRACKER_CONFIG)
+
+
+class TestStartScoreReaderReadsTheOpeningScore:
+    def test_a_panel_showing_zero_zero_reads_zero_zero(self):
+        reader = _reader()
+
+        _feed_score(reader, 200, "0", "0")
+
+        assert reader.read().score == (0, 0)
+
+    def test_a_panel_carrying_a_previous_period_reads_that_score(self):
+        """The case the whole feature exists for: a DE period that opens on the
+        score the last one ended at."""
+        reader = _reader()
+
+        _feed_score(reader, 200, "7", "6")
+
+        assert reader.read().score == (7, 6)
+
+    def test_a_two_digit_score_reads_both_digits(self):
+        reader = _reader()
+
+        _feed_score(reader, 200, "12", "13")
+
+        assert reader.read().score == (12, 13)
+
+    def test_a_confident_read_reports_its_agreement(self):
+        reader = _reader()
+
+        _feed_score(reader, 200, "0", "0")
+        reading = reader.read()
+
+        assert reading.reason == "read"
+        assert reading.agreement == pytest.approx(1.0)
+        assert reading.confident is True
+
+
+class TestStartScoreReaderDeclines:
+    def test_a_dark_panel_produces_no_reads_at_all(self):
+        reader = _reader()
+
+        _feed_score(reader, 200, None, None)
+        reading = reader.read()
+
+        assert reading.score is None
+        assert reading.reason == "no_samples"
+
+    def test_a_clip_too_short_to_settle_is_not_read(self):
+        reader = _reader()
+
+        _feed_score(reader, 40, "3", "2")
+        reading = reader.read()
+
+        assert reading.score is None
+        assert reading.reason == "too_few_samples"
+
+    def test_an_unlocked_track_is_never_read(self):
+        reader = _reader()
+
+        for index in range(200):
+            reader.feed(
+                _score_hsv_frame("0", "0"),
+                _track(index, corr=TRACKER_CONFIG.lock_corr - 0.01),
+            )
+
+        assert reader.read().reason == "no_samples"
+
+    def test_a_score_that_moves_during_the_window_fails_the_agreement_gate(self):
+        """A number changing under the reader is the one thing a mode over time
+        cannot resolve, so it has to be refused rather than averaged."""
+        reader = _reader()
+
+        _feed_score(reader, 300, ("0", "5"), ("0", "5"), change_at=150)
+        reading = reader.read()
+
+        assert reading.score is None
+        assert reading.reason == "low_agreement"
+
+
+class TestStartScoreReaderStopsAtTheFirstLamp:
+    def test_reads_after_the_boundary_are_ignored(self):
+        """The tally starts at the first lamp, so a read from after it already
+        counts the touch the tally is about to add."""
+        reader = _reader()
+
+        _feed_score(reader, 400, ("2", "8"), ("1", "9"), change_at=200)
+
+        assert reader.read(before_frame=200).score == (2, 1)
+        assert reader.read().score != (2, 1)
+
+    def test_a_boundary_before_anything_settled_leaves_nothing_to_read(self):
+        reader = _reader()
+
+        _feed_score(reader, 300, "4", "4")
+
+        assert reader.read(before_frame=20).reason == "no_samples"
+
+
+class TestScoreboardAnalysisStartScore:
+    def _analysis(self, source, reading):
+        return ScoreboardAnalysis(
+            resolutions=[], events=[], coverage_gaps=[], comparisons=[],
+            tracks=[], frame_count=0, fps=30.0, template_frame=0,
+            start_score=(0, 0), start_score_source=source,
+            start_score_reading=reading,
+        )
+
+    def _reading(self, score):
+        return StartScoreReading(
+            score=score, agreement=1.0 if score else 0.0,
+            samples={LEFT: 5, RIGHT: 5}, frames_examined=200,
+            reason="read" if score else "no_samples",
+        )
+
+    def test_a_declined_read_marks_the_baseline_as_assumed(self):
+        analysis = self._analysis("read", self._reading(None))
+
+        assert analysis.start_score_assumed is True
+
+    def test_a_successful_read_is_not_an_assumption(self):
+        analysis = self._analysis("read", self._reading((0, 0)))
+
+        assert analysis.start_score_assumed is False
+
+    def test_a_caller_supplied_baseline_is_never_an_assumption(self):
+        """The caller looked at the panel; that outranks anything read, and a
+        report must not tell them their own number was guessed."""
+        analysis = self._analysis("caller", self._reading(None))
+
+        assert analysis.start_score_assumed is False

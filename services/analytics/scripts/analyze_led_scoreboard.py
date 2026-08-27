@@ -452,10 +452,36 @@ def tracked_warnings(analysis, fps: float = 30.0, inference=None) -> List[dict]:
         WARNING_LAMP_INCONSISTENT,
         WARNING_LAMP_UNDETERMINED,
         WARNING_SCORE_LOWER_BOUND,
+        WARNING_START_SCORE_ASSUMED,
+        WARNING_START_SCORE_READ,
     )
 
     promoted = _promoted_resolution(analysis, inference)
     warnings: List[dict] = []
+
+    reading = getattr(analysis, "start_score_reading", None)
+    start = getattr(analysis, "start_score", (0, 0))
+    if getattr(analysis, "start_score_source", "caller") == "read" and reading is not None:
+        if reading.score is not None:
+            warnings.append({
+                "type": WARNING_START_SCORE_READ,
+                "message": (
+                    f"경기 시작 점수 {start[0]}-{start[1]}을 점수판에서 직접 읽었습니다 "
+                    f"(판독 일치율 {reading.agreement:.0%}). 이후 점수는 여기서부터 누적됩니다."
+                ),
+                "severity": "info",
+            })
+        else:
+            warnings.append({
+                "type": WARNING_START_SCORE_ASSUMED,
+                "message": (
+                    "영상 시작 시점의 점수판 숫자를 읽지 못해 0-0에서 시작한 것으로 "
+                    f"가정했습니다 (사유: {reading.reason}). DE 2·3세트처럼 이전 점수를 "
+                    "승계한 영상이라면 모든 점수가 그만큼 낮게 나옵니다 — "
+                    "--start-score 로 직접 지정하세요."
+                ),
+                "severity": "warning",
+            })
 
     for gap in analysis.coverage_gaps:
         detail = _GAP_REASON_KO.get(gap.reason, gap.reason)
@@ -623,12 +649,13 @@ def build_parser() -> argparse.ArgumentParser:
              "Default 'unknown' — the rule can never fire.",
     )
     parser.add_argument(
-        "--start-score", nargs=2, type=int, default=(0, 0), metavar=("LEFT", "RIGHT"),
+        "--start-score", nargs=2, type=int, default=None, metavar=("LEFT", "RIGHT"),
         help="Score already on the panel when the recording starts (--tracked "
              "only). The tracked reader tallies score *changes*, so a clip that "
              "opens mid-bout — a DE period 2 or 3, say — would otherwise report "
-             "1-0 for what the panel actually shows as 8-6. Read the opening "
-             "frame and pass what it says. Default 0 0.",
+             "1-0 for what the panel actually shows as 8-6. Omit it and the "
+             "digits are read off the panel; pass it and your value wins. When "
+             "the read is declined the run says so and assumes 0-0.",
     )
     parser.add_argument(
         "--not-for-merge", default=None, metavar="REASON",
@@ -644,7 +671,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def track_from_config(video, tracker, start_score=(0, 0)):
+def track_from_config(video, tracker, start_score=None):
     """Run the tracked detector for a validated ``tracker`` block.
 
     Split out of :func:`run_tracked` so a second tool can reproduce this exact
@@ -662,13 +689,16 @@ def track_from_config(video, tracker, start_score=(0, 0)):
         placard_bbox=tracker["placard_bbox"],
         profile=profile,
         anchor_frame=tracker["anchor_frame"],
-        start_score=(int(start_score[0]), int(start_score[1])),
+        start_score=(
+            (int(start_score[0]), int(start_score[1]))
+            if start_score is not None else None
+        ),
     )
     return analysis, time.time() - started
 
 
 def run_tracked(video, tracker, fps, clock_at_cut="unknown", bout_type="pool",
-                start_score=(0, 0)):
+                start_score=None):
     """``--tracked`` detection: returns ``(events, extra_warnings, elapsed)``."""
     from analyzer.scoreboard_tracker import (
         END_OF_BOUT_TARGET,
@@ -684,9 +714,28 @@ def run_tracked(video, tracker, fps, clock_at_cut="unknown", bout_type="pool",
         f"housing={tracker['housing_bbox']} placard={tracker['placard_bbox']}"
     )
 
-    if tuple(start_score) != (0, 0):
-        print(f"  Start:      panel already at {start_score[0]}-{start_score[1]}")
+    if start_score is not None:
+        print(
+            f"  Start:      {start_score[0]}-{start_score[1]} (given; the digit "
+            f"reader is not consulted)"
+        )
     analysis, elapsed = track_from_config(video, tracker, start_score=start_score)
+
+    reading = analysis.start_score_reading
+    if reading is not None and start_score is None:
+        got = analysis.start_score
+        if reading.score is not None:
+            print(
+                f"  Start:      {got[0]}-{got[1]} read off the panel "
+                f"(agreement {reading.agreement:.0%}, "
+                f"{reading.samples['left']}/{reading.samples['right']} reads L/R)"
+            )
+        else:
+            print(
+                f"  Start:      NOT READ ({reading.reason}, "
+                f"{reading.samples['left']}/{reading.samples['right']} reads L/R) "
+                f"— assuming 0-0. Pass --start-score if the clip opens mid-bout."
+            )
 
     gap_frames = sum(g.frame_count for g in analysis.coverage_gaps)
     print(

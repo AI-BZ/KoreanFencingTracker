@@ -65,6 +65,10 @@ from scripts.analyze_led_scoreboard import (
     summary_lines,
     tracked_warnings,
 )
+from app.led_report_converter import (
+    WARNING_START_SCORE_ASSUMED,
+    WARNING_START_SCORE_READ,
+)
 
 
 # ------------------------------------------------------------------
@@ -1068,14 +1072,25 @@ def fake_resolution(onset_frame):
     return SimpleNamespace(event=SimpleNamespace(onset_frame=onset_frame))
 
 
-def fake_analysis(gaps=(), undetermined=(), annulled=(), score_reliable=True):
-    """Stand-in for ``ScoreboardAnalysis`` — the four attributes read here."""
+def fake_analysis(gaps=(), undetermined=(), annulled=(), score_reliable=True,
+                  start_score=(0, 0), start_score_source="caller",
+                  start_score_reading=None):
+    """Stand-in for ``ScoreboardAnalysis`` — the attributes read here."""
     return SimpleNamespace(
         coverage_gaps=list(gaps),
         undetermined=[fake_resolution(f) for f in undetermined],
         annulled=[fake_resolution(f) for f in annulled],
         score_reliable=score_reliable,
+        start_score=start_score,
+        start_score_source=start_score_source,
+        start_score_reading=start_score_reading,
     )
+
+
+def fake_reading(score, agreement=1.0, reason="read"):
+    """Stand-in for ``StartScoreReading``."""
+    return SimpleNamespace(score=score, agreement=agreement, reason=reason,
+                           samples={"left": 8, "right": 8})
 
 
 class TestTrackedWarnings:
@@ -1656,3 +1671,42 @@ class TestNotForMergeFlag:
         )
 
         assert META_NOT_FOR_MERGE not in report["meta"]
+
+
+class TestStartScoreWarnings:
+    def test_a_baseline_read_off_the_panel_is_reported_with_its_value(self):
+        warnings = tracked_warnings(fake_analysis(
+            start_score=(7, 6), start_score_source="read",
+            start_score_reading=fake_reading((7, 6), agreement=0.9),
+        ))
+
+        assert [w["type"] for w in warnings] == [WARNING_START_SCORE_READ]
+        assert "7-6" in warnings[0]["message"]
+        assert warnings[0]["severity"] == "info"
+
+    def test_a_declined_read_warns_that_zero_zero_was_assumed(self):
+        """The dangerous case: a clip that opens mid-bout reads as if it opened
+        at 0-0 and every score in it is low by the same amount."""
+        warnings = tracked_warnings(fake_analysis(
+            start_score=(0, 0), start_score_source="read",
+            start_score_reading=fake_reading(None, agreement=0.0,
+                                             reason="low_agreement"),
+        ))
+
+        assert [w["type"] for w in warnings] == [WARNING_START_SCORE_ASSUMED]
+        assert warnings[0]["severity"] == "warning"
+        assert "low_agreement" in warnings[0]["message"]
+        assert "--start-score" in warnings[0]["message"]
+
+    def test_a_caller_supplied_baseline_produces_no_warning_either_way(self):
+        assert tracked_warnings(fake_analysis(
+            start_score=(3, 1), start_score_source="caller",
+            start_score_reading=fake_reading(None, reason="no_samples"),
+        )) == []
+
+    def test_an_analysis_without_the_field_at_all_still_works(self):
+        """Older ``ScoreboardAnalysis`` stand-ins and hand-built objects have no
+        reading; they must not start warning about one."""
+        assert tracked_warnings(SimpleNamespace(
+            coverage_gaps=[], undetermined=[], annulled=[], score_reliable=True,
+        )) == []
