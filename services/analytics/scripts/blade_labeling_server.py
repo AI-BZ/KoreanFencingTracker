@@ -59,6 +59,10 @@ LABELS_NAME = "labels.jsonl"
 WINDOWS_NAME = "windows.csv"
 
 POINT_KEYS = ("lg", "lt", "rg", "rt")
+#: Who swung at the other blade and missed. A parry that connects is a contact
+#: and is recorded as one; this is the attempt that never touched — the motion
+#: without the deflection.
+PARRY_SIDES = ("left", "right")
 CONTACT_LABELS = ("contact", "no_contact", "unclear")
 WINDOWS_CSV_HEADER = ["window_id", "contact_label", "contact_frames"]
 
@@ -75,6 +79,7 @@ class FrameLabel(BaseModel):
     not_visible: Dict[str, bool] = {}
     skipped: bool = False
     contact: bool = False
+    parry_attempt: Optional[str] = None   # None | "left" | "right"
 
 
 class WindowLabel(BaseModel):
@@ -306,6 +311,13 @@ class BladeLabelingState:
             raise ValueError(f"unknown window: {req.window_id}")
         if req.frame not in self.index_by_frame:
             raise ValueError(f"unknown frame: {req.frame}")
+        if req.parry_attempt is not None and req.parry_attempt not in PARRY_SIDES:
+            raise ValueError(f"parry_attempt must be one of {PARRY_SIDES} or null, "
+                             f"got {req.parry_attempt!r}")
+        if req.contact and req.parry_attempt:
+            # A parry that landed is a contact; the attempt label is for the one
+            # that missed. Holding both would make the frame its own counterexample.
+            raise ValueError("a frame cannot be both a contact and a missed parry attempt")
 
         points: Dict[str, Optional[List[float]]] = {}
         for key in POINT_KEYS:
@@ -324,6 +336,7 @@ class BladeLabelingState:
             "not_visible": {"l": bool(req.not_visible.get("l")), "r": bool(req.not_visible.get("r"))},
             "skipped": bool(req.skipped),
             "contact": bool(req.contact),
+            "parry_attempt": req.parry_attempt if req.parry_attempt in PARRY_SIDES else None,
             "ts": time.time(),
         }
         self.labels_path.parent.mkdir(parents=True, exist_ok=True)
@@ -419,6 +432,10 @@ class BladeLabelingState:
             "contact_frames_total": sum(
                 1 for row in self.frames if frame_has_contact(self.labels.get(row["frame"]))
             ),
+            "parry_attempt_frames_total": sum(
+                1 for row in self.frames
+                if (self.labels.get(row["frame"]) or {}).get("parry_attempt")
+            ),
         }
 
 
@@ -456,6 +473,7 @@ PAGE_HTML = """<!doctype html>
   #savedmark { color:#7fd18c; font-size:12px; min-width:56px; }
   #fcontact { padding:2px 8px; border-radius:3px; border:1px solid #39424e; color:#8b95a3; }
   #fcontact.on { background:#7d3350; border-color:#a3455f; color:#fff; }
+  #fcontact.attempt { background:#3d3520; border-color:#7a6a2e; color:#ffd98a; }
   .keys kbd { background:#232a33; border:1px solid #39424e; border-radius:3px; padding:0 5px; }
   button { background:#232a33; color:#e6e9ee; border:1px solid #39424e; border-radius:4px; padding:4px 10px; cursor:pointer; }
   button.on { background:#2f6b46; border-color:#3f8b5c; }
@@ -502,7 +520,7 @@ PAGE_HTML = """<!doctype html>
 const KEYS = ["lg","lt","rg","rt"];
 const COLORS = {lg:"#5ab0ff", lt:"#5ab0ff", rg:"#ff7a5a", rt:"#ff7a5a"};
 const MAG_ZOOM = 5;
-let idx = 0, info = null, img = new Image(), pts = {}, hidden = {l:false,r:false}, contact = false, saved = false;
+let idx = 0, info = null, img = new Image(), pts = {}, hidden = {l:false,r:false}, contact = false, saved = false, parryAttempt = null;
 let busy = false;  // one async key action at a time — key auto-repeat plus network latency otherwise double-fires handlers
 let fit = 1, mouse = null;
 
@@ -528,9 +546,10 @@ async function load(i) {
   if (!r.ok) return;
   info = await r.json();
   idx = info.index;
-  pts = {}; hidden = {l:false, r:false}; contact = false; saved = false;
+  pts = {}; hidden = {l:false, r:false}; contact = false; saved = false; parryAttempt = null;
   if (info.label) {
     saved = true;
+    parryAttempt = info.label.parry_attempt || null;
     contact = !!info.label.contact;
     for (const k of KEYS) if (info.label.points && info.label.points[k]) pts[k] = info.label.points[k];
     hidden = {l: !!(info.label.not_visible||{}).l, r: !!(info.label.not_visible||{}).r};
@@ -574,8 +593,10 @@ function paintWindowLabel() {
     box.appendChild(b);
   }
   const fc = document.getElementById("fcontact");
-  fc.textContent = contact ? "이 프레임: 접촉 ✓" : "이 프레임: 접촉 아님";
-  fc.classList.toggle("on", contact);
+  const attempt = parryAttempt === "left" ? "왼쪽 빠라드 시도(실패)"
+                : parryAttempt === "right" ? "오른쪽 빠라드 시도(실패)" : null;
+  fc.textContent = contact ? "이 프레임: 접촉 ✓" : attempt ? "이 프레임: " + attempt : "이 프레임: 접촉 아님";
+  fc.className = contact ? "on" : attempt ? "attempt" : "";
 }
 
 function draw() {
@@ -658,7 +679,7 @@ async function save(extra = {}) {
   const body = Object.assign({
     window_id: info.window_id, frame: info.frame,
     points: {lg: pts.lg||null, lt: pts.lt||null, rg: pts.rg||null, rt: pts.rt||null},
-    not_visible: hidden, skipped: false, contact: contact,
+    not_visible: hidden, skipped: false, contact: contact, parry_attempt: parryAttempt,
   }, extra);
   try {
     const r = await fetch("/api/label", {
@@ -690,6 +711,7 @@ async function markContactFrame() {
   // blade meetings, and the window verdict is derived from these marks so a
   // later keystroke elsewhere in the phrase cannot erase one.
   contact = !contact;
+  if (contact) parryAttempt = null;
   const out = await save();
   if (!out) { contact = !contact; return; }
   const fresh = await (await fetch(`/api/frame/${idx}`)).json();
@@ -776,7 +798,7 @@ document.addEventListener("keydown", async (e) => {
       if (!pl) { toast("no labeled frame earlier in this window"); return; }
       pts = {...pl.points};
       hidden = {l: !!(pl.not_visible||{}).l, r: !!(pl.not_visible||{}).r};
-      contact = false;  // contact is a claim about this frame, never copied
+      contact = false; parryAttempt = null;  // claims about this frame, never copied
       draw();
       if (!(await save())) return;
       toast(`copied frame ${pl.frame} → saved`);
@@ -797,6 +819,20 @@ document.addEventListener("keydown", async (e) => {
   else if (k === ">") { step(20); }
   else if (k === "<") { step(-20); }
   else if (k === "g") { e.preventDefault(); document.getElementById("jump").focus(); }
+  else if (k === "p") {
+    // A parry that missed: the motion is there, the deflection is not. These
+    // are the negatives a detector needs most — they look exactly like the
+    // real thing to anything that only watches the wrist.
+    busy = true;
+    try {
+      parryAttempt = parryAttempt === null ? "left" : parryAttempt === "left" ? "right" : null;
+      if (parryAttempt) contact = false;
+      if (!(await save())) { return; }
+      saved = true; paintSlots(); paintWindowLabel(); draw();
+      toast(parryAttempt ? `빠라드 시도(실패) ${parryAttempt === "left" ? "왼쪽" : "오른쪽"} @ ${info.frame}`
+                         : `빠라드 시도 해제 @ ${info.frame}`);
+    } finally { busy = false; }
+  }
   else if (k === "n") {
     const r = await (await fetch(`/api/next-unlabeled/${idx + 1}`)).json();
     go(r.index);

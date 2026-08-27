@@ -389,3 +389,45 @@ def test_frames_endpoint_reports_progress_per_frame(client):
     assert frames["total"] == 3
     assert frames["frames"][0]["done"] is True
     assert frames["frames"][1]["done"] is False
+
+
+# ----------------------------------------------------------------------
+# Missed parries
+# ----------------------------------------------------------------------
+
+
+def test_a_missed_parry_attempt_is_recorded_with_its_side(data_dir):
+    state = BladeLabelingState(data_dir)
+    row = state.save_frame_label(
+        FrameLabel(window_id="window_001", frame=562, points=FULL_POINTS, parry_attempt="right")
+    )
+    assert row["parry_attempt"] == "right"
+    assert state.stats()["parry_attempt_frames_total"] == 1
+
+
+def test_a_missed_parry_does_not_make_the_window_a_contact(data_dir):
+    """The blades never met, so there is nothing for a contact verdict to point at."""
+    state = BladeLabelingState(data_dir)
+    state.save_frame_label(
+        FrameLabel(window_id="window_001", frame=562, points=FULL_POINTS, parry_attempt="left")
+    )
+    assert state.window_contact_frames("window_001") == []
+    row = state.save_window_label(WindowLabel(window_id="window_001", contact_label="no_contact"))
+    assert row["contact_label"] == "no_contact"
+
+
+def test_a_frame_cannot_be_both_a_contact_and_a_missed_parry(data_dir):
+    state = BladeLabelingState(data_dir)
+    with pytest.raises(ValueError, match="both a contact and a missed parry"):
+        state.save_frame_label(
+            FrameLabel(window_id="window_001", frame=562, points=FULL_POINTS,
+                       contact=True, parry_attempt="left")
+        )
+
+
+def test_an_unknown_parry_side_is_refused(data_dir):
+    state = BladeLabelingState(data_dir)
+    with pytest.raises(ValueError, match="parry_attempt must be"):
+        state.save_frame_label(
+            FrameLabel(window_id="window_001", frame=562, points=FULL_POINTS, parry_attempt="middle")
+        )
