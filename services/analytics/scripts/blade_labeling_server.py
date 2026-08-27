@@ -434,6 +434,9 @@ PAGE_HTML = """<!doctype html>
   .slot.hidden { border-color:#3a3f47; color:#6a7480; text-decoration:line-through; }
   .keys { color:#8b95a3; }
   .rule { display:block; width:100%; margin-top:4px; color:#b9c4d4; font-size:12px; line-height:1.5; }
+  #jump { width:170px; background:#151a21; color:#e6ecf3; border:1px solid #39424e;
+          border-radius:3px; padding:3px 7px; font:inherit; font-size:12px; }
+  #jump::placeholder { color:#6b7684; }
   .keys kbd { background:#232a33; border:1px solid #39424e; border-radius:3px; padding:0 5px; }
   button { background:#232a33; color:#e6e9ee; border:1px solid #39424e; border-radius:4px; padding:4px 10px; cursor:pointer; }
   button.on { background:#2f6b46; border-color:#3f8b5c; }
@@ -448,7 +451,8 @@ PAGE_HTML = """<!doctype html>
   <span class="keys">
     <kbd>click</kbd> point &nbsp; <kbd>u</kbd> undo &nbsp; <kbd>s</kbd> skip &nbsp; <kbd>r</kbd> repeat prev &nbsp;
     <kbd>1</kbd>/<kbd>2</kbd> blade hidden L/R &nbsp; <kbd>c</kbd> 이 프레임 접촉 표시/해제 &nbsp;
-    <kbd>&larr;</kbd>/<kbd>&rarr;</kbd> prev/next &nbsp; <kbd>n</kbd> next unlabeled
+    <kbd>&larr;</kbd>/<kbd>&rarr;</kbd> &plusmn;1 &nbsp; <kbd>,</kbd>/<kbd>.</kbd> &plusmn;10 &nbsp;
+    <kbd>&lt;</kbd>/<kbd>&gt;</kbd> &plusmn;20 &nbsp; <kbd>g</kbd> 프레임 이동 &nbsp; <kbd>n</kbd> next unlabeled
   </span>
   <span class="rule">접촉 = 다음 프레임에서 블레이드 경로가 바뀐 것. 화면상 교차만으로는 접촉이 아니고,
     튕김이 안 보일 만큼 약한 접촉은 빠라드가 못 되므로 no_contact.</span>
@@ -459,6 +463,8 @@ PAGE_HTML = """<!doctype html>
   <span class="slot" id="slot-lt">2 L tip</span>
   <span class="slot" id="slot-rg">3 R guard</span>
   <span class="slot" id="slot-rt">4 R tip</span>
+  <span class="muted">|</span>
+  <input id="jump" type="text" placeholder="frame 4478 · 순번 #476" autocomplete="off">
   <span class="muted">|</span>
   <span>window contact:</span>
   <button id="b-contact">contact</button>
@@ -646,6 +652,41 @@ async function markContactFrame() {
 
 function go(i) { if (i >= 0 && i < info.total) return load(i); }
 
+/** Step by n frames, clamped to the ends rather than refusing near them. */
+function step(n) {
+  const target = Math.max(0, Math.min(info.total - 1, idx + n));
+  if (target !== idx) return load(target);
+}
+
+/** "4478" is a source frame, "#476" a queue position; a bare number that is
+ *  no frame falls back to the position rather than just failing. */
+async function jumpTo(raw) {
+  const text = (raw || "").trim();
+  if (!text) return;
+  const m = text.match(/^#?\s*(\d+)$/);
+  if (!m) { toast("숫자를 입력하세요 (예: 4478 또는 #476)"); return; }
+  const n = parseInt(m[1], 10);
+  if (text.startsWith("#")) {
+    if (n < 1 || n > info.total) { toast(`순번은 1-${info.total} 범위입니다`); return; }
+    await go(n - 1);
+    toast(`순번 ${n}`);
+    return;
+  }
+  const r = await fetch(`/api/locate/${n}`);
+  if (r.ok) {
+    const out = await r.json();
+    await go(out.index);
+    toast(`원본 frame ${n}`);
+    return;
+  }
+  if (n >= 1 && n <= info.total) {
+    await go(n - 1);
+    toast(`frame ${n} 없음 → 순번 ${n}로 이동`);
+    return;
+  }
+  toast(`frame ${n}을 찾을 수 없습니다`);
+}
+
 async function refreshStats() {
   const s = await (await fetch("/api/stats")).json();
   document.getElementById("stats").textContent =
@@ -654,11 +695,13 @@ async function refreshStats() {
 
 document.addEventListener("keydown", async (e) => {
   if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.target && e.target.id === "jump") return;
   const k = e.key.toLowerCase();
   // Holding a key must not queue concurrent async handlers: over a
   // high-latency link the interleaved saves double-write one frame and
   // stride past the next. Arrows are safe (no writes) and want repeat.
-  if (busy && k !== "arrowleft" && k !== "arrowright") return;
+  const NAV = ["arrowleft", "arrowright", ",", ".", "<", ">"];
+  if (busy && !NAV.includes(k)) return;
   if (e.repeat && (k === "r" || k === "s" || k === "n" || k === "c")) return;
   if (k === "u") {
     for (let i = KEYS.length - 1; i >= 0; i--) if (pts[KEYS[i]]) { delete pts[KEYS[i]]; break; }
@@ -699,12 +742,22 @@ document.addEventListener("keydown", async (e) => {
     if (!nextSlot() && (hidden.l || hidden.r)) { if (await save()) go(idx + 1); }
   } else if (k === "c") {
     await markContactFrame();
-  } else if (k === "arrowright") { go(idx + 1); }
-  else if (k === "arrowleft") { go(idx - 1); }
+  } else if (k === "arrowright") { step(1); }
+  else if (k === "arrowleft") { step(-1); }
+  else if (k === ".") { step(10); }
+  else if (k === ",") { step(-10); }
+  else if (k === ">") { step(20); }
+  else if (k === "<") { step(-20); }
+  else if (k === "g") { e.preventDefault(); document.getElementById("jump").focus(); }
   else if (k === "n") {
     const r = await (await fetch(`/api/next-unlabeled/${idx + 1}`)).json();
     go(r.index);
   }
+});
+
+document.getElementById("jump").addEventListener("keydown", async (e) => {
+  if (e.key === "Enter") { const v = e.target.value; e.target.value = ""; e.target.blur(); await jumpTo(v); }
+  else if (e.key === "Escape") { e.target.value = ""; e.target.blur(); }
 });
 
 document.getElementById("b-contact").onclick = () => judge("contact");
@@ -781,6 +834,18 @@ def create_app(state: BladeLabelingState, token: Optional[str] = None) -> FastAP
         if info is None:
             return JSONResponse({"error": "index out of range"}, status_code=404)
         return info
+
+    @app.get("/api/locate/{frame}")
+    async def locate(frame: int):
+        """Queue position of a source frame, for jump-to-frame.
+
+        Only source frames resolve here. A queue position is a property of the
+        page, not of the data, so the client handles that half itself.
+        """
+        index = state.index_by_frame.get(frame)
+        if index is None:
+            return JSONResponse({"error": f"frame {frame} is not in this set"}, status_code=404)
+        return {"index": index, "frame": frame}
 
     @app.get("/api/next-unlabeled/{start}")
     async def next_unlabeled(start: int) -> dict:
