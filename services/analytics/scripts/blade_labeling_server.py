@@ -491,7 +491,7 @@ PAGE_HTML = """<!doctype html>
   <span id="fcontact">이 프레임: -</span>
   <span class="muted">|</span>
   <span>창 판정:</span>
-  <button id="b-contact">contact</button>
+  <span class="muted">(접촉은 <kbd>c</kbd> 로 프레임에 표시)</span>
   <button id="b-no">no_contact</button>
   <button id="b-unclear">unclear</button>
   <span class="muted" id="wlabel">-</span>
@@ -554,7 +554,7 @@ function paintWindowLabel() {
   const l = info.window.label;
   const marks = (l && l.contact_frames) || [];
   document.getElementById("wlabel").textContent = l ? l.contact_label : "unjudged";
-  for (const [id, val] of [["b-contact","contact"],["b-no","no_contact"],["b-unclear","unclear"]]) {
+  for (const [id, val] of [["b-no","no_contact"],["b-unclear","unclear"]]) {
     document.getElementById(id).classList.toggle("on", !!l && l.contact_label === val);
   }
   // The verdict belongs to the whole phrase, so it shows on every frame of it
@@ -808,7 +808,6 @@ document.getElementById("jump").addEventListener("keydown", async (e) => {
   else if (e.key === "Escape") { e.target.value = ""; e.target.blur(); }
 });
 
-document.getElementById("b-contact").onclick = () => judge("contact");
 document.getElementById("b-no").onclick = () => judge("no_contact");
 document.getElementById("b-unclear").onclick = () => judge("unclear");
 window.addEventListener("resize", () => { if (img.complete) draw(); });
