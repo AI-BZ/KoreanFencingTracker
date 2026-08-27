@@ -84,6 +84,10 @@ class FrameLabel(BaseModel):
     # parry attempts were lost.
     contact: Optional[bool] = None
     parry_attempt: Optional[str] = None   # None | "left" | "right"
+    #: On a contact, who did the parrying. The other blade is the one that got
+    #: deflected, and it is that blade's disturbance that says whether the parry
+    #: took — so without this the measurement has no defined subject.
+    parry_side: Optional[str] = None      # None | "left" | "right"
 
 
 class WindowLabel(BaseModel):
@@ -323,6 +327,9 @@ class BladeLabelingState:
         previous = self.labels.get(req.frame) or {}
 
         contact = bool(req.contact) if "contact" in sent else bool(previous.get("contact"))
+        parry_side = req.parry_side if "parry_side" in sent else previous.get("parry_side")
+        if parry_side not in PARRY_SIDES:
+            parry_side = None
         attempt = (req.parry_attempt if "parry_attempt" in sent
                    else previous.get("parry_attempt"))
         if attempt not in PARRY_SIDES:
@@ -353,6 +360,7 @@ class BladeLabelingState:
                             if "not_visible" in sent else dict(previous.get("not_visible") or {})),
             "skipped": bool(req.skipped) if "skipped" in sent else bool(previous.get("skipped")),
             "contact": contact,
+            "parry_side": parry_side if contact else None,
             "parry_attempt": attempt,
             "ts": time.time(),
         }
@@ -537,7 +545,7 @@ PAGE_HTML = """<!doctype html>
 const KEYS = ["lg","lt","rg","rt"];
 const COLORS = {lg:"#5ab0ff", lt:"#5ab0ff", rg:"#ff7a5a", rt:"#ff7a5a"};
 const MAG_ZOOM = 5;
-let idx = 0, info = null, img = new Image(), pts = {}, hidden = {l:false,r:false}, contact = false, saved = false, parryAttempt = null;
+let idx = 0, info = null, img = new Image(), pts = {}, hidden = {l:false,r:false}, contact = false, saved = false, parryAttempt = null, parrySide = null;
 let busy = false;  // one async key action at a time — key auto-repeat plus network latency otherwise double-fires handlers
 let fit = 1, mouse = null;
 
@@ -567,6 +575,7 @@ async function load(i) {
   if (info.label) {
     saved = true;
     parryAttempt = info.label.parry_attempt || null;
+    parrySide = info.label.parry_side || null;
     contact = !!info.label.contact;
     for (const k of KEYS) if (info.label.points && info.label.points[k]) pts[k] = info.label.points[k];
     hidden = {l: !!(info.label.not_visible||{}).l, r: !!(info.label.not_visible||{}).r};
@@ -612,7 +621,9 @@ function paintWindowLabel() {
   const fc = document.getElementById("fcontact");
   const attempt = parryAttempt === "left" ? "왼쪽 빠라드 시도(실패)"
                 : parryAttempt === "right" ? "오른쪽 빠라드 시도(실패)" : null;
-  fc.textContent = contact ? "이 프레임: 접촉 ✓" : attempt ? "이 프레임: " + attempt : "이 프레임: 접촉 아님";
+  fc.textContent = contact
+      ? `이 프레임: 접촉 ✓ (${parrySide === "left" ? "왼쪽" : "오른쪽"}이 빠라드)`
+      : attempt ? "이 프레임: " + attempt : "이 프레임: 접촉 아님";
   fc.className = contact ? "on" : attempt ? "attempt" : "";
 }
 
@@ -716,7 +727,7 @@ async function save(extra = {}) {
   const body = Object.assign({
     window_id: info.window_id, frame: info.frame,
     points: {lg: pts.lg||null, lt: pts.lt||null, rg: pts.rg||null, rt: pts.rt||null},
-    not_visible: hidden, skipped: false, contact: contact, parry_attempt: parryAttempt,
+    not_visible: hidden, skipped: false, contact: contact, parry_attempt: parryAttempt, parry_side: parrySide,
   }, extra);
   try {
     const r = await fetch("/api/label", {
@@ -747,14 +758,17 @@ async function markContactFrame() {
   // Contact belongs to the frame, not to the phrase: a phrase can hold several
   // blade meetings, and the window verdict is derived from these marks so a
   // later keystroke elsewhere in the phrase cannot erase one.
-  contact = !contact;
+  // none -> 왼쪽이 빠라드 -> 오른쪽이 빠라드 -> none
+  parrySide = parrySide === null ? "left" : parrySide === "left" ? "right" : null;
+  contact = parrySide !== null;
   if (contact) parryAttempt = null;
   const out = await save();
   if (!out) { contact = !contact; return; }
   const fresh = await (await fetch(`/api/frame/${idx}`)).json();
   info.window = fresh.window;
   paintWindowLabel(); draw();
-  toast(contact ? `접촉 표시 @ ${info.frame}` : `접촉 해제 @ ${info.frame}`);
+  toast(contact ? `접촉: ${parrySide === "left" ? "왼쪽" : "오른쪽"}이 빠라드 @ ${info.frame}`
+                : `접촉 해제 @ ${info.frame}`);
 }
 
 function go(i) { if (i >= 0 && i < info.total) return load(i); }
@@ -835,7 +849,7 @@ document.addEventListener("keydown", async (e) => {
       if (!pl) { toast("no labeled frame earlier in this window"); return; }
       pts = {...pl.points};
       hidden = {l: !!(pl.not_visible||{}).l, r: !!(pl.not_visible||{}).r};
-      contact = false; parryAttempt = null;  // claims about this frame, never copied
+      contact = false; parryAttempt = null; parrySide = null;  // claims about this frame, never copied
       draw();
       if (!(await save())) return;
       toast(`copied frame ${pl.frame} → saved`);
