@@ -155,6 +155,19 @@ def load_window_labels(path: Path) -> Dict[str, dict]:
     return windows
 
 
+def build_stamp() -> str:
+    """A visible marker of which build of this page is on screen.
+
+    Stale-cache confusion costs more than the stamp does: with it, "the fix is
+    not working" and "you are looking at the old page" can be told apart in one
+    glance instead of an hour.
+    """
+    try:
+        return time.strftime("%m-%d %H:%M", time.localtime(Path(__file__).stat().st_mtime))
+    except OSError:
+        return "unknown"
+
+
 def frame_has_contact(label: Optional[dict]) -> bool:
     """Did the labeller mark the blades as meeting on this frame?"""
     return bool(label and label.get("contact"))
@@ -453,6 +466,7 @@ PAGE_HTML = """<!doctype html>
   <b id="pos">-</b>
   <span class="muted" id="winfo">-</span>
   <span class="muted" id="stats">-</span>
+  <span class="muted" title="이 페이지 버전">build __BUILD__</span>
   <span class="keys">
     <kbd>click</kbd> point &nbsp; <kbd>u</kbd> undo &nbsp; <kbd>s</kbd> skip &nbsp; <kbd>r</kbd> repeat prev &nbsp;
     <kbd>1</kbd>/<kbd>2</kbd> blade hidden L/R &nbsp; <kbd>c</kbd> 이 프레임 접촉 표시/해제 &nbsp;
@@ -826,7 +840,14 @@ def create_app(state: BladeLabelingState, token: Optional[str] = None) -> FastAP
 
     @app.get("/", response_class=HTMLResponse)
     async def index() -> HTMLResponse:
-        return HTMLResponse(PAGE_HTML)
+        # The page is one inline document that changes whenever this file does,
+        # and a browser holding yesterday's copy keeps yesterday's bugs — which
+        # is indistinguishable, from the labeller's side, from the fix never
+        # having been made. Never let it be cached.
+        return HTMLResponse(
+            PAGE_HTML.replace("__BUILD__", build_stamp()),
+            headers={"Cache-Control": "no-store, must-revalidate", "Pragma": "no-cache"},
+        )
 
     @app.get("/api/resume")
     async def resume() -> dict:
