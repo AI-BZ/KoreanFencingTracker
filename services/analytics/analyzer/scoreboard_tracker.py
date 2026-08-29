@@ -572,6 +572,60 @@ KOR_DOMESTIC_260716_P9 = MachineProfile(
     ),
 )
 
+#: The 2026-08-28 venue (김창환배), piste 6. A free-standing post like
+#: :data:`KOR_DOMESTIC_V2`, but a different machine and a much wider shot: the
+#: whole panel spans 166x106 px and one score glyph ~27x32.
+#:
+#: ``housing_size`` spans the black panel plus a slice of the green U-frame arms
+#: on either side. The arms are the rigid part; the lamps and digits inside them
+#: change constantly, and including them is the same trade :data:`KOR_DOMESTIC_V2`
+#: documents — a template of only the rigid frame is a plain dark bar, and a plain
+#: dark bar also matches the piste's painted boundary lines, which run right
+#: across this crop.
+#:
+#: The lamp ROIs stop short of the always-lit white indicator that sits between
+#: the two pairs (crop x 373-382, y >= 349): they end at y-offset 48, i.e. above
+#: it, the same guard :data:`KOR_DOMESTIC_V3` uses.
+#:
+#: Measured over the whole bout (2,998 sampled frames) at these ROIs:
+#:
+#: * Saturated fraction: unlit 0.12-0.16 (p5-p75 both sides), lit 0.49-0.70. The
+#:   default ``on_fraction`` of 0.3 sits in the middle of that gap, so it stands.
+#: * ``colour_fraction`` is the one threshold that had to move, and it moves
+#:   **up**. Each side's ROI covers that fencer's valid lamp *and* its off-target
+#:   lamp, and this box blooms enough that a lit off-target lamp floods the whole
+#:   ROI. Its halo then picks up a variable amount of red from the score digits
+#:   glowing right below: the five off-target activations measure 0.00, 0.22,
+#:   0.27, 0.30 and 0.54 red. Genuine chromatic activations measure 0.96-1.00 red
+#:   (six left events) and 1.00 green (two right events), so 0.75 sits in an empty
+#:   band twice as wide as it needs to be, while the default 0.3 would file three
+#:   off-target lamps as red hits. The default is low for the opposite venue —
+#:   ``kor_domestic_v3``, where the panel is far away and an unlit neighbour lamp
+#:   dilutes the hue — and that dilution does not happen at this distance.
+#: * ``merge_gap_frames`` drops to 6, because this box does not hold a lamp on:
+#:   it drives every activation for exactly 69-70 frames and re-fires while the
+#:   referee has not reset, so a held lamp arrives as a chain of 69-frame
+#:   activations **1 frame** apart. Every gap measured over the bout is either
+#:   that 1 frame or >= 11, with nothing in between, so 6 splits genuinely
+#:   separate lamps while still stitching the chains. The default 12 does not:
+#:   the bout's last red activation (frames 5769-5837) is followed 11 frames
+#:   later by an off-target white one (5849-5917), and merging them averages a
+#:   1.00 red halo with a 0.00 one into a single "white" event — which silently
+#:   deletes the winning touch. Their saturated fractions differ too (0.555 vs
+#:   0.659), i.e. they are two different lenses, not one lamp with a dropout.
+#:
+#: Known limit: ``digit_rois`` frame the **one-digit** score fields this pool bout
+#: uses. The period digit sits between them (crop x 368-395) and a two-digit score
+#: would grow toward it, so a DE at this venue needs the ROIs re-measured on
+#: footage that actually shows a two-digit score rather than widened by guess.
+KOR_DOMESTIC_260828_P6 = MachineProfile(
+    name="kor_domestic_260828_p6",
+    housing_size=(166, 106),
+    lamp_rois={LEFT: (18, 28, 52, 20), RIGHT: (81, 28, 50, 20)},
+    digit_rois={LEFT: (11, 66, 34, 35), RIGHT: (105, 66, 33, 35)},
+    lamp_config=LampConfig(colour_fraction=0.75, merge_gap_frames=6),
+)
+
 MACHINE_PROFILES: Dict[str, MachineProfile] = {
     KOR_DOMESTIC_V1.name: KOR_DOMESTIC_V1,
     KOR_DOMESTIC_V2.name: KOR_DOMESTIC_V2,
@@ -579,6 +633,7 @@ MACHINE_PROFILES: Dict[str, MachineProfile] = {
     KOR_DOMESTIC_260715_P2A.name: KOR_DOMESTIC_260715_P2A,
     KOR_DOMESTIC_260715_P2B.name: KOR_DOMESTIC_260715_P2B,
     KOR_DOMESTIC_260716_P9.name: KOR_DOMESTIC_260716_P9,
+    KOR_DOMESTIC_260828_P6.name: KOR_DOMESTIC_260828_P6,
 }
 
 #: Housing/placard template rectangles on frame 0 of each reference video, in
