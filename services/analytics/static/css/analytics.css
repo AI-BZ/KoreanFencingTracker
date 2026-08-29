@@ -541,6 +541,18 @@ canvas {
     min-width: 2.75rem;
 }
 
+/* The multi-frame steps sit either side of the single-frame ones, so they read
+   as the coarse end of the same control rather than as separate buttons. */
+.wb-btn--step {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+    opacity: 0.85;
+}
+
+.wb-btn--step:hover {
+    opacity: 1;
+}
+
 .wb-btn--on {
     background: rgba(201, 48, 44, 0.22);
     border-color: rgba(201, 48, 44, 0.45);

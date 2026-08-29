@@ -1711,6 +1711,14 @@
         var fwd = document.getElementById('wb-frame-fwd');
         if (back) back.addEventListener('click', function () { stepFrame(-1); });
         if (fwd) fwd.addEventListener('click', function () { stepFrame(1); });
+        // Bigger steps: a parry occupies three or four frames, so finding one
+        // means crossing the dead time between phrases without watching it, and
+        // then walking the exchange itself one frame at a time.
+        [['wb-frame-back20', -20], ['wb-frame-back10', -10],
+         ['wb-frame-fwd10', 10], ['wb-frame-fwd20', 20]].forEach(function (pair) {
+            var el = document.getElementById(pair[0]);
+            if (el) el.addEventListener('click', function () { stepFrame(pair[1]); });
+        });
 
         root.querySelectorAll('[data-speed]').forEach(function (b) {
             b.addEventListener('click', function () { setSpeed(Number(b.dataset.speed)); });
@@ -1927,6 +1935,14 @@
                 case 'ArrowRight':
                     if (!hasSource()) return;
                     e.preventDefault(); if (e.shiftKey) { jump(1); } else { stepFrame(1); } break;
+                case ',':
+                    e.preventDefault(); stepFrame(-10); break;
+                case '<':
+                    e.preventDefault(); stepFrame(-20); break;
+                case '.':
+                    e.preventDefault(); stepFrame(10); break;
+                case '>':
+                    e.preventDefault(); stepFrame(20); break;
                 case '1': setSpeed(SPEEDS[0]); break;
                 case '2': setSpeed(SPEEDS[1]); break;
                 case '3': setSpeed(SPEEDS[2]); break;
