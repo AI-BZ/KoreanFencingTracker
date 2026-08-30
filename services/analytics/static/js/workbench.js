@@ -130,6 +130,8 @@
     var loopLabel = document.getElementById('wb-loop-label');
     var sourceChip = document.getElementById('wb-source-chip');
     var collapseBtn = document.getElementById('wb-collapse');
+    var controlsBar = document.getElementById('wb-controls');
+    var fsBtn = document.getElementById('wb-fullscreen');
     var skeletonBtn = document.getElementById('wb-skeleton-toggle');
     var muteBtn = document.getElementById('wb-mute');
     var toast = document.getElementById('wb-toast');
@@ -152,7 +154,7 @@
     var clipTimer = null;
 
     var zoom = 1, panX = 0, panY = 0;
-    var stageW = 0, stageH = 0, centerX = 0;
+    var stageW = 0, stageH = 0, centerX = 0, centerY = 0;
     var tool = 'navigate';            // navigate | line | measure
     var drawColor = '#c9302c';
     var shapes = [];
@@ -177,6 +179,11 @@
     var captionKey = null;            // last string written, so DOM writes are rare
 
     var cachedClips = new Set();
+
+    var fullscreen = false;           // the mobile CSS fullscreen mode
+    var fsIdleTimer = null;
+    var fsScrollY = 0;
+    var FS_IDLE_MS = 3000;
 
     // ------------------------------------------------------------------
     // helpers
@@ -223,25 +230,33 @@
             viewport.style.height = '';
             return;
         }
+        // Fullscreen sizes to the box the CSS gives it (inset:0 over the
+        // viewport) instead of to a fraction of the window, and centres the
+        // frame in it — a 4.85:1 piste crop leaves black above and below.
+        if (fullscreen) viewport.style.height = '';
         var vpW = viewport.clientWidth;
         if (!vpW) return;
         var vw = video.videoWidth || 16;
         var vh = video.videoHeight || 9;
         var ratio = vw / vh;
-        var maxH = window.innerHeight * (isDesktop() ? 0.45 : 0.32);
+        var maxH = fullscreen
+            ? viewport.clientHeight
+            : window.innerHeight * (isDesktop() ? 0.45 : 0.32);
 
         var w = vpW;
         var h = w / ratio;
-        if (h > maxH) { h = maxH; w = h * ratio; }
+        if (maxH > 0 && h > maxH) { h = maxH; w = h * ratio; }
 
         stageW = w;
         stageH = h;
         centerX = Math.max(0, (vpW - w) / 2);
+        centerY = fullscreen ? fsCenterY(h, viewport.clientHeight) : 0;
 
         stage.style.width = w + 'px';
         stage.style.height = h + 'px';
         stage.style.left = centerX + 'px';
-        viewport.style.height = h + 'px';
+        stage.style.top = centerY + 'px';
+        if (!fullscreen) viewport.style.height = h + 'px';
 
         if (canvas) {
             if (canvas.width !== vw || canvas.height !== vh) {
@@ -262,6 +277,27 @@
         drawSkeleton();
     }
 
+    /**
+     * Where the frame sits inside the fullscreen box.
+     *
+     * The control bar floats over the picture, and on a landscape phone a
+     * centred 4.85:1 crop puts the fencers' feet directly under it — the half
+     * of the frame a footwork review is about. So the frame is centred in the
+     * band above the bar whenever it fits there, and only falls back to the
+     * middle of the screen when the picture is too tall for that, which is the
+     * case the translucent background is for.
+     */
+    function fsCenterY(h, boxH) {
+        var stack = 0;
+        for (var i = 0; i < root.children.length; i++) {
+            var el = root.children[i];
+            if (el === viewport) continue;          // the picture layer itself
+            stack += el.offsetHeight || 0;
+        }
+        if (h + stack <= boxH) return Math.max(0, (boxH - stack - h) / 2);
+        return Math.max(0, (boxH - h) / 2);
+    }
+
     function applyTransform() {
         var vpW = viewport ? viewport.clientWidth : 0;
         var vpH = stageH;
@@ -278,7 +314,7 @@
     function toIntrinsic(clientX, clientY) {
         var r = viewport.getBoundingClientRect();
         var left = r.left + centerX + panX;
-        var top = r.top + panY;
+        var top = r.top + centerY + panY;
         var scale = (stageW / (video.videoWidth || stageW)) * zoom;
         if (!scale) return { x: 0, y: 0 };
         return { x: (clientX - left) / scale, y: (clientY - top) / scale };
@@ -1234,6 +1270,111 @@
     }
 
     // ------------------------------------------------------------------
+    // mobile fullscreen
+    //
+    // A CSS mode: .workbench--fs pins the section over the viewport and floats
+    // the existing control bar on top of the frame, so every button keeps the
+    // handler it already had. It is not the Fullscreen API, because iOS Safari
+    // on iPhone exposes no requestFullscreen for ordinary elements — the only
+    // thing it offers is video.webkitEnterFullscreen(), which replaces our
+    // frame with Apple's player and takes the frame-step buttons, the seek bar
+    // and the pose overlay with it. Native fullscreen is asked for as an extra
+    // where it exists (Android Chrome), purely to drop the browser chrome, and
+    // its refusal changes nothing.
+    // ------------------------------------------------------------------
+
+    function requestNativeFullscreen() {
+        var el = document.documentElement;
+        var fn = el.requestFullscreen || el.webkitRequestFullscreen;
+        if (!fn) return;
+        try {
+            var p = fn.call(el);
+            if (p && p.catch) p.catch(function () { /* refused; CSS mode stands */ });
+        } catch (_) { /* refused; CSS mode stands */ }
+    }
+
+    function exitNativeFullscreen() {
+        if (!document.fullscreenElement && !document.webkitFullscreenElement) return;
+        var fn = document.exitFullscreen || document.webkitExitFullscreen;
+        if (!fn) return;
+        try {
+            var p = fn.call(document);
+            if (p && p.catch) p.catch(function () { /* nothing to undo */ });
+        } catch (_) { /* nothing to undo */ }
+    }
+
+    /**
+     * Reveal the controls and re-arm the idle timer. The timer is only armed
+     * during playback: walking a parry one frame at a time is done paused, and
+     * the buttons must not fade out from under the finger doing the walking.
+     */
+    function fsShowControls() {
+        if (!fullscreen) return;
+        root.classList.remove('workbench--fs-idle');
+        if (fsIdleTimer) { clearTimeout(fsIdleTimer); fsIdleTimer = null; }
+        if (!video.paused) {
+            fsIdleTimer = setTimeout(function () {
+                if (fullscreen && !video.paused) root.classList.add('workbench--fs-idle');
+            }, FS_IDLE_MS);
+        }
+    }
+
+    function setFullscreen(on) {
+        on = !!on;
+        if (on === fullscreen) return;
+        // A collapsed viewport would give a black screen with a control bar.
+        if (on && collapseBtn && root.classList.contains('workbench--collapsed')) {
+            collapseBtn.click();
+        }
+        fullscreen = on;
+        root.classList.toggle('workbench--fs', on);
+        if (on) {
+            // The section is sticky, so pinning it removes its box from the
+            // flow and the page under it jumps. Put the reader back on exit.
+            fsScrollY = window.pageYOffset || 0;
+            document.body.classList.add('wb-fs-lock');
+            requestNativeFullscreen();
+        } else {
+            root.classList.remove('workbench--fs-idle');
+            if (fsIdleTimer) { clearTimeout(fsIdleTimer); fsIdleTimer = null; }
+            document.body.classList.remove('wb-fs-lock');
+            exitNativeFullscreen();
+        }
+        if (fsBtn) {
+            fsBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+            fsBtn.textContent = on ? '✕ 나가기' : '⛶ 전체화면';
+            fsBtn.title = on ? '전체화면 나가기 (Esc)' : '전체화면으로 보기';
+        }
+        updateLayout();
+        if (!on) window.scrollTo(0, fsScrollY);
+        fsShowControls();
+    }
+
+    /**
+     * The fullscreen box is not its final size at the moment the class lands —
+     * the browser is still collapsing its own chrome (measured: 386px settling
+     * to 390 in landscape, 786 to 844 in portrait), and on iOS Safari the URL
+     * bar comes and goes again later without a resize event. Watching the box
+     * itself is the only reading that stays true; a plain measurement taken on
+     * entry leaves the frame off-centre for the rest of the session.
+     */
+    function watchFullscreenBox() {
+        if (typeof ResizeObserver !== 'function' || !viewport) return;
+        var lastW = 0, lastH = 0;
+        new ResizeObserver(function () {
+            var w = viewport.clientWidth;
+            var h = viewport.clientHeight;
+            // Outside fullscreen the height is ours — updateLayout writes it —
+            // so reacting to it would be an echo of our own change. The width
+            // is the page's, and it is what changes on the way back out.
+            if (w === lastW && !(fullscreen && h !== lastH)) return;
+            lastW = w;
+            lastH = h;
+            updateLayout();
+        }).observe(viewport);
+    }
+
+    // ------------------------------------------------------------------
     // clip playback (AI pose-overlay clips, generated on demand)
     // ------------------------------------------------------------------
 
@@ -1833,6 +1974,40 @@
             });
             seekBar.addEventListener('change', function () { delete seekBar.dataset.dragging; });
         }
+
+        if (fsBtn) {
+            fsBtn.addEventListener('click', function () { setFullscreen(!fullscreen); });
+        }
+        // Every touch of the bar counts as "still working" and restarts the
+        // idle countdown, so the controls only fade while the coach is watching
+        // rather than driving.
+        if (controlsBar) {
+            ['pointerdown', 'click', 'input', 'change'].forEach(function (ev) {
+                controlsBar.addEventListener(ev, fsShowControls);
+            });
+        }
+        // Pausing must bring the buttons straight back — that is the moment the
+        // frame-stepping starts.
+        video.addEventListener('play', fsShowControls);
+        video.addEventListener('pause', fsShowControls);
+
+        // Leaving native fullscreen through the browser's own UI (the system
+        // gesture, or Esc on desktop Chrome) must take the CSS mode with it,
+        // otherwise the page is left pinned with no way out but the button.
+        ['fullscreenchange', 'webkitfullscreenchange'].forEach(function (ev) {
+            document.addEventListener(ev, function () {
+                if (!fullscreen) return;
+                if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+                    setFullscreen(false);
+                }
+            });
+        });
+
+        // Rotating the phone changes both the box and the video's fitted size.
+        // Safari reports the new metrics a beat after the event fires.
+        window.addEventListener('orientationchange', function () {
+            setTimeout(updateLayout, 200);
+        });
     }
 
     function setZoom(next) {
@@ -1843,6 +2018,54 @@
 
     function wireStageInteraction() {
         if (!viewport) return;
+
+        // Touch pinch-zoom and drag-pan. The bout video is a piste crop about
+        // five times wider than it is tall, so on a phone it fits as a thin
+        // strip whatever the orientation — "fullscreen" only becomes useful if
+        // the coach can push the part they are watching out to fill the screen.
+        var touchPinch = null;
+        function touchDist(t) {
+            return Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+        }
+        function touchMid(t) {
+            return {x: (t[0].clientX + t[1].clientX) / 2, y: (t[0].clientY + t[1].clientY) / 2};
+        }
+        viewport.addEventListener('touchstart', function (e) {
+            if (!hasSource()) return;
+            if (e.touches.length === 2) {
+                var t = [e.touches[0], e.touches[1]];
+                touchPinch = {dist: touchDist(t), zoom: zoom, mid: touchMid(t), panX: panX, panY: panY};
+            } else if (e.touches.length === 1 && zoom > 1) {
+                touchPinch = {drag: {x: e.touches[0].clientX, y: e.touches[0].clientY},
+                              panX: panX, panY: panY};
+            }
+        }, {passive: true});
+        viewport.addEventListener('touchmove', function (e) {
+            if (!touchPinch || !hasSource()) return;
+            if (touchPinch.drag && e.touches.length === 1) {
+                e.preventDefault();
+                panX = touchPinch.panX + (e.touches[0].clientX - touchPinch.drag.x);
+                panY = touchPinch.panY + (e.touches[0].clientY - touchPinch.drag.y);
+                applyTransform();
+                return;
+            }
+            if (e.touches.length !== 2 || !touchPinch.dist) return;
+            e.preventDefault();
+            var t = [e.touches[0], e.touches[1]];
+            var next = clamp(touchPinch.zoom * (touchDist(t) / touchPinch.dist), ZOOM_MIN, ZOOM_MAX);
+            var r = viewport.getBoundingClientRect();
+            var localX = (touchPinch.mid.x - r.left - centerX - touchPinch.panX) / touchPinch.zoom;
+            var localY = (touchPinch.mid.y - r.top - centerY - touchPinch.panY) / touchPinch.zoom;
+            var mid = touchMid(t);
+            panX = (mid.x - r.left) - centerX - localX * next;
+            panY = (mid.y - r.top) - centerY - localY * next;
+            zoom = next;
+            if (zoom === 1) { panX = 0; panY = 0; }
+            applyTransform();
+        }, {passive: false});
+        viewport.addEventListener('touchend', function (e) {
+            if (e.touches.length === 0) touchPinch = null;
+        }, {passive: true});
 
         viewport.addEventListener('wheel', function (e) {
             if (!hasSource() || !isDesktop()) return;
@@ -1855,12 +2078,12 @@
             e.preventDefault();
             var r = viewport.getBoundingClientRect();
             var left = r.left + centerX + panX;
-            var top = r.top + panY;
+            var top = r.top + centerY + panY;
             var localX = (e.clientX - left) / zoom;
             var localY = (e.clientY - top) / zoom;
             var next = clamp(zoom * (e.deltaY < 0 ? 1.15 : 1 / 1.15), ZOOM_MIN, ZOOM_MAX);
             panX = (e.clientX - r.left) - centerX - localX * next;
-            panY = (e.clientY - r.top) - localY * next;
+            panY = (e.clientY - r.top) - centerY - localY * next;
             zoom = next;
             if (zoom === 1) { panX = 0; panY = 0; }
             applyTransform();
@@ -1914,6 +2137,19 @@
         }
         viewport.addEventListener('pointerup', finish);
         viewport.addEventListener('pointercancel', finish);
+
+        // Fullscreen: a tap on the picture brings the faded controls back, and
+        // dismisses them again only while something is playing — a tap while
+        // paused can never hide the buttons the coach is stepping with.
+        viewport.addEventListener('click', function () {
+            if (!fullscreen) return;
+            if (root.classList.contains('workbench--fs-idle') || video.paused) {
+                fsShowControls();
+                return;
+            }
+            if (fsIdleTimer) { clearTimeout(fsIdleTimer); fsIdleTimer = null; }
+            root.classList.add('workbench--fs-idle');
+        });
     }
 
     function wireKeyboard() {
@@ -1950,7 +2186,10 @@
                 case 'd': case 'D': if (isDesktop()) setTool('line'); break;
                 case 'm': case 'M': if (isDesktop()) setTool('measure'); break;
                 case 'v': case 'V': setTool('navigate'); break;
-                case 'Escape': setLoop(null); if (calibrating) endCalibration(false); break;
+                case 'Escape':
+                    // A hardware keyboard on a tablet is the case this covers.
+                    if (fullscreen) { setFullscreen(false); break; }
+                    setLoop(null); if (calibrating) endCalibration(false); break;
                 default: break;
             }
         });
@@ -2000,6 +2239,7 @@
     if (!KEYPOINTS_URL && captionBar) captionBar.classList.add('hidden');
 
     wireControls();
+    watchFullscreenBox();
     wireStageInteraction();
     wireKeyboard();
     wireTimeline();

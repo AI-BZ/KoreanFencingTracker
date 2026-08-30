@@ -768,6 +768,185 @@ canvas {
     text-align: left;
 }
 
+/* ---- mobile fullscreen ----
+   Two things a phone cannot do in the in-page workbench: give the video the
+   whole screen, and give the frame-step buttons a finger-sized target. This
+   mode does both, and only exists below 1024px — the desktop bar already has
+   the room this is buying.
+
+   It is a CSS mode (position:fixed over the viewport), not the Fullscreen API.
+   iOS Safari on iPhone exposes no requestFullscreen for ordinary elements; the
+   one thing it does offer is video.webkitEnterFullscreen(), which hands the
+   frame to Apple's own player and takes the frame-step buttons, the seek bar
+   and the pose overlay with it — i.e. it removes exactly what this mode is
+   for. workbench.js additionally *asks* for native fullscreen where it exists
+   (Android Chrome), purely to drop the browser chrome, and carries on when
+   that request is refused. */
+
+.wb-fs-toggle {
+    display: inline-flex;
+    align-items: center;
+}
+
+/* Nothing to fill the screen with until a clip is loaded into the stage. */
+.workbench--empty .wb-fs-toggle {
+    display: none;
+}
+
+@media (min-width: 1024px) {
+    .wb-fs-toggle {
+        display: none;
+    }
+}
+
+/* The page behind must not scroll under the overlay (iOS rubber-banding). */
+body.wb-fs-lock {
+    overflow: hidden;
+}
+
+/* The navbar is `sticky z-50` next to `main.relative.z-10`, so it paints above
+   anything inside main however high the workbench's own z-index goes — main's
+   stacking context traps it. Nothing else can lift the video over the navbar,
+   and a navbar is not wanted in a fullscreen view anyway. */
+body.wb-fs-lock .dark-navbar,
+body.wb-fs-lock .dark-footer,
+body.wb-fs-lock .parallax-bg {
+    display: none;
+}
+
+/* Doubled class on purpose: .workbench sets `top: 4rem` for the sticky layout,
+   again inside the mobile media query further down, and a single class here
+   would only tie with it — leaving the "fullscreen" layer pinned 64px below
+   the top of the screen. */
+.workbench.workbench--fs {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;                  /* over the sticky navbar (z-50) */
+    /* Tailwind's p-3/mb-6 are same-specificity classes injected by the CDN at
+       runtime, so source order cannot be relied on to beat them. */
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0;
+    border-radius: 0;
+    background: #000;
+    /* The video fills the layer behind; the caption and the control bar stack
+       against the bottom edge on top of it. */
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    overscroll-behavior: contain;
+}
+
+.workbench--fs .wb-viewport {
+    position: absolute;
+    inset: 0;
+    max-height: none;
+    border-radius: 0;
+}
+
+/* Floated over the frame rather than stacked under it. The bout video is a
+   piste crop roughly five times wider than tall, so in normal flow the bar was
+   pushed into the letterbox and the frame never grew to meet it — with pinch
+   zoom the coach can now push the action out to fill the screen, and the bar
+   has to ride on top of that rather than steal a band from it. */
+.workbench--fs .wb-fs-hint,
+.workbench--fs .wb-caption,
+.workbench--fs .wb-controls {
+    position: absolute;
+    left: 0;
+    right: 0;
+    z-index: 2;
+    transition: opacity 0.25s ease;
+}
+
+.workbench--fs .wb-controls {
+    bottom: 0;
+}
+
+.workbench--fs .wb-caption {
+    bottom: auto;
+    top: 0;
+}
+
+.workbench--fs .wb-fs-hint {
+    top: 0;
+}
+
+.workbench--fs .wb-caption {
+    border: 0;
+    border-radius: 0;
+    background: rgba(8, 8, 12, 0.55);
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+}
+
+/* Translucent so the action stays readable underneath: the bar sits over the
+   frame whenever the clip is tall enough to reach it. */
+.workbench--fs .wb-controls {
+    gap: 0.375rem;
+    padding: 0.5rem max(0.5rem, env(safe-area-inset-right))
+             max(0.5rem, env(safe-area-inset-bottom))
+             max(0.5rem, env(safe-area-inset-left));
+    background: linear-gradient(to top, rgba(8, 8, 12, 0.85), rgba(8, 8, 12, 0.5));
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+}
+
+/* 44px minimum: these are driven by a thumb here, not a mouse. */
+.workbench--fs .wb-btn,
+.workbench--fs .wb-select,
+.workbench--fs .wb-chip {
+    min-height: 2.75rem;
+    min-width: 2.75rem;
+    height: auto;
+    font-size: 0.8125rem;
+}
+
+.workbench--fs .wb-btn--step {
+    min-width: 3.25rem;
+    opacity: 1;
+}
+
+/* Its own row, so the thumb dragging it never lands on a step button. */
+.workbench--fs .wb-seek {
+    flex: 1 0 100%;
+    height: 2.75rem;
+}
+
+/* Collapsing the viewport from inside the fullscreen view would leave a black
+   screen with a control bar, so the control is not offered here. */
+.workbench--fs #wb-collapse {
+    display: none;
+}
+
+/* Auto-hide. workbench.js only arms the timer during playback — stepping
+   frames is done paused, and the buttons must not vanish under the finger
+   that is stepping. A tap on the video brings them back. */
+.workbench--fs-idle .wb-fs-hint,
+.workbench--fs-idle .wb-caption,
+.workbench--fs-idle .wb-controls {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.wb-fs-hint {
+    display: none;
+    margin: 0;
+    padding: 0.5rem 0.875rem;
+    background: rgba(8, 8, 12, 0.55);
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+    color: var(--fm-text-secondary, #b4b4c4);
+    font-size: 0.75rem;
+    text-align: center;
+}
+
+@media (orientation: portrait) {
+    .workbench--fs .wb-fs-hint {
+        display: block;
+    }
+}
+
 /* Mobile is a review device: the stage shrinks and the measuring tools go
    away, because a 3.88:1 crop is ~90px tall here and pinch/drag fights the
    page scroll. */

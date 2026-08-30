@@ -346,6 +346,11 @@
         </div>
         {% endif %}
 
+        {# Fullscreen only: a 4.85:1 piste crop is ~80px tall on a portrait phone
+           however large the screen is, so the mode is really a landscape one and
+           says so rather than leaving the coach with a letterbox. #}
+        <p id="wb-fs-hint" class="wb-fs-hint">📱 폰을 가로로 돌리면 영상이 2배 이상 커집니다</p>
+
         <div id="wb-controls" class="wb-controls">
             <!-- transport -->
             <div class="wb-group">
@@ -449,6 +454,10 @@
                     <button id="wb-loop-clear" class="wb-chip-x" type="button" title="구간 반복 해제 (Esc)">&times;</button>
                 </span>
                 <button id="wb-source-chip" class="wb-chip wb-chip--action hidden" type="button">원본 영상으로</button>
+                {# Phone-sized screens only — the desktop bar already has the room
+                   the fullscreen mode is there to buy. #}
+                <button id="wb-fullscreen" class="wb-btn wb-fs-toggle" type="button"
+                        aria-pressed="false" title="전체화면으로 보기">&#9974; 전체화면</button>
                 <button id="wb-collapse" class="wb-btn" type="button" aria-expanded="true"
                         aria-controls="wb-viewport">&#9652; 접기</button>
             </div>
