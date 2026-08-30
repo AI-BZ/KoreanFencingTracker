@@ -44,6 +44,15 @@ confirmed only when a lamp event is followed by a change in one side's score
 digits before the next lamp event; a chromatic lamp with no score change is
 reported as ``annulled`` rather than silently kept or silently dropped.
 
+The one thing that check gets wrong on its own is *which* lamp closes the window.
+An off-target white lamp closes it like any other, so an operator entering the
+point a beat late lands after the boundary and the touch vanishes — measured on
+``20260828_김창환배``, where the hit that ended the bout 5–1 was reported as no
+hit at all. A white lamp is not something a referee weighs, so
+:func:`resolve_touches` looks past a run of them for the score change, under
+conditions strict enough that a genuine annulment still cannot get through. See
+its docstring; the annulment gate above is unchanged.
+
 Score values are *derived*, not read
 ------------------------------------
 :func:`resolve_touches` numbers the score by counting confirmed touches from a
@@ -1877,6 +1886,72 @@ class StartScoreReader:
 # ----------------------------------------------------------------------
 
 
+#: How long after a valid lamp a score entry can still be credited to it when
+#: only off-target lamps came in between — see :func:`resolve_touches`.
+#:
+#: Note what it bounds. Not the score change directly — the digits carry no
+#: timestamp — but the samples the change is read from, because
+#: :func:`late_entry_comparisons` cuts its after-interval off here. So the
+#: operative delay is shorter than the number: 2.5 s of it is
+#: :attr:`ScoreChangeConfig.settle_frames` before any sample is taken at all, and
+#: :attr:`ScoreChangeConfig.min_samples` settled masks need roughly 1.5 s more to
+#: accumulate at :attr:`ScoreChangeConfig.sample_stride`. Whatever is left is the
+#: real tolerance for a late button press.
+#:
+#: The value was swept over all eleven calibrated bouts at 0, 4, 5, 6, 7, 8, 9,
+#: 10, 12, 15, 20 and 30 s, and the answer is flat in between:
+#:
+#: * Below 7 s nothing is promoted anywhere, this bout included. The measured
+#:   late entry on ``20260828_김창환배_…_piste6`` — red lamp at frame 5769, white
+#:   lamp 2.7 s later, digits 4 → 5 at about 196 s — first appears at 7 s.
+#: * From 7 s to 11 s that one promotion is the only one in the set. Every other
+#:   bout resolves identically to the pre-promotion tracker.
+#: * At 12 s three more arrive, all from ``annulled`` — 260716_de32_s1 frame
+#:   10214, 260716_de64_s2 frame 7457, 260716_scout_s3 frame 4420 — and at 15 s a
+#:   fourth. These are lamps the referee waved off, 7.2–9.0 s ahead of the next
+#:   white lamp, and turning them into touches is precisely the failure the score
+#:   cross-check exists to prevent. Nothing in the footage says otherwise; there
+#:   is no ground truth for those bouts to appeal to.
+#:
+#: 8 s sits in the empty band, a second clear of what the real case needs and
+#: four short of where invented touches start. It is deliberately nearer the
+#: bottom: a promotion this rule declines costs one point in a report that
+#: already flags its score as a lower bound, and one it makes wrongly puts a
+#: touch in the timeline that never happened.
+LATE_ENTRY_WINDOW_SEC = 8.0
+
+
+@dataclass(frozen=True)
+class LatePromotion:
+    """Why a lamp that its own comparison could not confirm was counted anyway.
+
+    Recorded on the promoted :class:`TouchResolution` so a report can say how the
+    point was arrived at instead of the number simply going up. See
+    :func:`resolve_touches` for the conditions that have to hold.
+    """
+
+    #: The verdict this event carried before the promotion: ``"undetermined"``
+    #: or ``"annulled"``.
+    from_verdict: str
+    #: Onset frames of the off-target events the score change was found past, in
+    #: order. Never empty — with nothing skipped there is nothing to promote.
+    skipped_off_target: Tuple[int, ...]
+    #: Seconds from this event's lamp to the last skipped off-target lamp. The
+    #: quantity :data:`LATE_ENTRY_WINDOW_SEC` bounds.
+    delay_sec: float
+
+    def describe(self) -> str:
+        before = {
+            VERDICT_UNDETERMINED: "직후에는 점수판을 대조할 수 없었으나",
+            VERDICT_ANNULLED: "직후에는 점수가 그대로였으나",
+        }.get(self.from_verdict, f"({self.from_verdict})")
+        skipped = ", ".join(str(f) for f in self.skipped_off_target)
+        return (
+            f"{before}, 무효 램프(프레임 {skipped}) 뒤 {self.delay_sec:.1f}초 안에 "
+            "점수가 올라 승격"
+        )
+
+
 @dataclass(frozen=True)
 class TouchResolution:
     """A lamp event with its scorer decided, or explicitly not decided."""
@@ -1895,6 +1970,112 @@ class TouchResolution:
     #: totals are not, because an unknown number of points went unrecorded
     #: before it. Callers must not present these numbers as the score.
     tally_reliable: bool = True
+    #: Set only on a touch this event's own comparison did not support, reached
+    #: instead by :func:`resolve_touches`'s late-entry rule. ``None`` on every
+    #: other resolution, so ``promotion is not None`` is the test for "this
+    #: number came from somewhere other than the usual cross-check".
+    promotion: Optional[LatePromotion] = None
+
+
+def late_entry_comparisons(
+    events: Sequence[LampEvent],
+    intervals: Sequence[Tuple[int, int]],
+    detector: ScoreChangeDetector,
+    *,
+    fps: float,
+    window_sec: float = LATE_ENTRY_WINDOW_SEC,
+) -> List[Optional[ScoreComparison]]:
+    """Re-compare each lamp event's score across the off-target lamps after it.
+
+    ``[i]`` is ``events[i]``'s ordinary comparison with its *after* side moved
+    past the run of off-target events that follows — same settled "before", the
+    settled score once the white lamps are done rather than as soon as the first
+    one interrupts. ``None`` where there is no such run, which is most events.
+
+    The after side is also cut off ``window_sec`` from the lamp, so the digits
+    being compared are ones that settled while the point could still plausibly
+    have been being entered. That is what makes :func:`resolve_touches`'s window
+    a statement about the score change and not merely about the white lamp:
+    outside it, there are no samples left to promote on.
+    """
+    out: List[Optional[ScoreComparison]] = [None] * len(events)
+    window_frames = window_sec * fps if fps > 0 and window_sec > 0 else 0.0
+    for index, event in enumerate(events):
+        if not event.any_valid:
+            continue
+        end = index
+        while end + 1 < len(events) and not events[end + 1].any_valid:
+            end += 1
+        if end == index or end + 1 >= len(intervals):
+            continue
+        after_start, after_end = intervals[end + 1]
+        after_end = min(after_end, int(event.onset_frame + window_frames))
+        if after_end <= after_start:
+            continue
+        out[index] = detector.compare(intervals[index], (after_start, after_end))
+    return out
+
+
+def _late_entry_promotion(
+    index: int,
+    events: Sequence[LampEvent],
+    late_comparisons: Optional[Sequence[Optional[ScoreComparison]]],
+    from_verdict: str,
+    fps: float,
+    window_sec: float,
+) -> Optional[Tuple[str, LatePromotion]]:
+    """Decide whether ``events[index]`` earns a touch on a late score entry.
+
+    Returns ``(scorer, promotion)`` or ``None``. Every condition is required, for
+    the reason given at :func:`resolve_touches`: on the pixels alone a referee's
+    annulment and an operator's late button press look the same, and only the
+    surrounding circumstance separates them.
+    """
+    if late_comparisons is None or index >= len(late_comparisons):
+        return None
+    comparison = late_comparisons[index]
+    if comparison is None or not comparison.determined:
+        return None
+
+    event = events[index]
+
+    # 1. Only an unconfirmed chromatic lamp is a candidate. A touch is already
+    #    counted, an off-target lamp was never a point, and an inconsistent read
+    #    is a contradiction that a second look at the same digits cannot settle.
+    if from_verdict not in (VERDICT_UNDETERMINED, VERDICT_ANNULLED) or not event.any_valid:
+        return None
+
+    # 2. Nothing but off-target lamps in between. A chromatic lamp inside the
+    #    stretch is a nearer and better owner of the point, so the moment one
+    #    appears this event stops being the answer.
+    end = index
+    while end + 1 < len(events) and not events[end + 1].any_valid:
+        end += 1
+    if end == index:
+        return None
+    skipped = tuple(events[k].onset_frame for k in range(index + 1, end + 1))
+
+    # 3. One side went up, and it is the side whose lamp lit. Both sides moving
+    #    is a double touch, which arrives on a lamp event of its own; a side
+    #    moving without its own lamp is the contradiction :func:`resolve_touches`
+    #    calls ``inconsistent``, and is no more resolvable seen from here.
+    lit = {s for s in SIDES if (s == LEFT and event.left_valid) or (s == RIGHT and event.right_valid)}
+    changed = set(comparison.changed)
+    if len(changed) != 1 or not changed <= lit:
+        return None
+
+    # 4. Soon enough after the lamp to still be this lamp's point.
+    delay_frames = events[end].onset_frame - event.onset_frame
+    window_frames = window_sec * fps if fps > 0 and window_sec > 0 else 0.0
+    if delay_frames > window_frames:
+        return None
+
+    scorer = next(iter(changed))
+    return scorer, LatePromotion(
+        from_verdict=from_verdict,
+        skipped_off_target=skipped,
+        delay_sec=delay_frames / fps if fps > 0 else 0.0,
+    )
 
 
 def resolve_touches(
@@ -1902,6 +2083,9 @@ def resolve_touches(
     comparisons: Sequence[ScoreComparison],
     *,
     start_score: Tuple[int, int] = (0, 0),
+    late_comparisons: Optional[Sequence[Optional[ScoreComparison]]] = None,
+    fps: float = 30.0,
+    late_entry_window_sec: float = LATE_ENTRY_WINDOW_SEC,
 ) -> List[TouchResolution]:
     """Decide, for each lamp event, whether a point was actually awarded.
 
@@ -1921,6 +2105,37 @@ def resolve_touches(
       never counted, and never silently dropped;
     * a side's score moves with no coloured lamp of its own → ``inconsistent``.
       The lamp and the digits cannot both be right, so neither is trusted.
+
+    Late entry: a score that moves past the white lamps
+    ---------------------------------------------------
+    Each ``comparisons[i]`` window closes at the next lamp event, whatever colour
+    that lamp is, and an operator who presses the button a moment late can fall
+    on the wrong side of that boundary. Measured on
+    ``20260828_김창환배_…_piste6``: the bout-winning red lamp fires at frame 5769,
+    an off-target white lamp follows 2.7 s later, and the digits go 4 → 5 inside
+    the white lamp's window. The red lamp's own comparison closed before the
+    point landed, so the bout finished 5–1 and the report said 4–1 — the touch
+    that ended it simply gone.
+
+    A white lamp between a valid lamp and the point is not evidence about the
+    point. It is an error or a hit off target; it is not something a referee
+    weighs, and it does not stop the previous valid hit from being awarded. So
+    when ``late_comparisons[i]`` is supplied — the same "before" state as
+    ``comparisons[i]`` compared against the settled score *past* the off-target
+    run, see :func:`late_entry_comparisons` — an unconfirmed chromatic lamp is
+    promoted to a touch, and says so in :attr:`TouchResolution.promotion`.
+
+    None of that loosens the annulment gate. On the digits alone a referee waving
+    a hit off and an operator who has not pressed the button yet are the same
+    picture, so all four conditions in :func:`_late_entry_promotion` are required
+    rather than weighed: an unconfirmed lamp of that fencer's own colour, nothing
+    but off-target lamps in between, exactly that one side's digits moving, and
+    the whole thing inside :data:`LATE_ENTRY_WINDOW_SEC`. Miss one and the event
+    keeps the verdict it had. What the promotion cannot check is *how much* the
+    digits moved: :class:`ScoreChangeDetector` reports change, not value, so a
+    one-point rise and a two-point correction are the same reading — the same
+    limit the ordinary touch path lives with, and the reason a change on both
+    sides is refused here rather than split into two points.
 
     Scores are a running tally from ``start_score``, not an OCR reading, so they
     are only meaningful for a clip that starts at the beginning of the bout.
@@ -1944,7 +2159,28 @@ def resolve_touches(
                 event, None, VERDICT_OFF_TARGET, before, before, False, reliable))
             continue
 
+        def promote(from_verdict: str) -> Optional[TouchResolution]:
+            """This event as a late-entry touch, or ``None`` to keep the verdict."""
+            promotion = _late_entry_promotion(
+                index, ordered, late_comparisons, from_verdict, fps,
+                late_entry_window_sec,
+            )
+            if promotion is None:
+                return None
+            side, detail = promotion
+            after = (before[0] + 1, before[1]) if side == LEFT else (before[0], before[1] + 1)
+            return TouchResolution(
+                event, side, VERDICT_TOUCH, before, after, event.both_valid,
+                reliable, detail)
+
         if comparison is None or not comparison.determined:
+            promoted = promote(VERDICT_UNDETERMINED)
+            if promoted is not None:
+                # The point was found after all, so nothing went unrecorded here
+                # and the tally stays as trustworthy as it already was.
+                resolutions.append(promoted)
+                score = promoted.score_after
+                continue
             resolutions.append(TouchResolution(
                 event, None, VERDICT_UNDETERMINED, before, before, event.both_valid,
                 reliable))
@@ -1953,6 +2189,11 @@ def resolve_touches(
 
         sides = set(comparison.changed)
         if not sides:
+            promoted = promote(VERDICT_ANNULLED)
+            if promoted is not None:
+                resolutions.append(promoted)
+                score = promoted.score_after
+                continue
             resolutions.append(TouchResolution(
                 event, None, VERDICT_ANNULLED, before, before, event.both_valid,
                 reliable))
@@ -2426,9 +2667,11 @@ def track_scoreboard_video(
         score_detector.compare(intervals[i], intervals[i + 1])
         for i in range(len(events))
     ]
+    late = late_entry_comparisons(events, intervals, score_detector, fps=float(fps))
     return ScoreboardAnalysis(
         resolutions=resolve_touches(
-            events, comparisons, start_score=(int(baseline[0]), int(baseline[1]))
+            events, comparisons, start_score=(int(baseline[0]), int(baseline[1])),
+            late_comparisons=late, fps=float(fps),
         ),
         events=events,
         coverage_gaps=gaps,
@@ -2532,5 +2775,9 @@ def _describe(resolution: TouchResolution) -> str:
     if resolution.verdict == VERDICT_INCONSISTENT:
         return f"{lamps} — 램프와 점수 변화가 모순됨 (판독 신뢰 불가)"
     if resolution.priority_call:
-        return f"{lamps} — 양측 유효, 우선권 판정으로 {resolution.scorer} 득점"
-    return f"{lamps} — {resolution.scorer} 득점"
+        text = f"{lamps} — 양측 유효, 우선권 판정으로 {resolution.scorer} 득점"
+    else:
+        text = f"{lamps} — {resolution.scorer} 득점"
+    if resolution.promotion is not None:
+        text = f"{text} ({resolution.promotion.describe()})"
+    return text

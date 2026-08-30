@@ -451,6 +451,7 @@ def tracked_warnings(analysis, fps: float = 30.0, inference=None) -> List[dict]:
         WARNING_LAMP_ANNULLED,
         WARNING_LAMP_INCONSISTENT,
         WARNING_LAMP_UNDETERMINED,
+        WARNING_LATE_SCORE_ENTRY,
         WARNING_SCORE_LOWER_BOUND,
         WARNING_START_SCORE_ASSUMED,
         WARNING_START_SCORE_READ,
@@ -516,6 +517,29 @@ def tracked_warnings(analysis, fps: float = 30.0, inference=None) -> List[dict]:
                 "둘 중 하나가 오독이므로 터치로 집계하지 않았습니다."
             ),
             "severity": "warning",
+        })
+
+    for resolution in getattr(analysis, "touches", []):
+        late = getattr(resolution, "promotion", None)
+        if late is None:
+            continue
+        skipped = ", ".join(_clock(f, fps) for f in late.skipped_off_target)
+        # Why the lamp was unconfirmed matters to whoever reads this: "could not
+        # be compared" and "did not move" are different observations, and only
+        # the second is what a referee's annulment looks like.
+        immediate = (
+            "점수판이 그대로였고" if late.from_verdict == "annulled"
+            else "점수판을 대조할 수 없었고"
+        )
+        warnings.append({
+            "type": WARNING_LATE_SCORE_ENTRY,
+            "message": (
+                f"{_clock(resolution.event.onset_frame, fps)} 유효 램프 직후에는 {immediate}, "
+                f"무효 램프({skipped}) 뒤 {late.delay_sec:.1f}초 안에 "
+                f"{resolution.scorer} 점수가 올랐습니다. 무효 램프는 판정과 무관하므로 "
+                "이 득점을 해당 유효 램프의 터치로 집계했습니다."
+            ),
+            "severity": "info",
         })
 
     annulled = [r for r in analysis.annulled if r is not promoted]

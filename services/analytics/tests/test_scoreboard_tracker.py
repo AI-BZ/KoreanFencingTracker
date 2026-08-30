@@ -74,6 +74,7 @@ from analyzer.scoreboard_tracker import (
     mask_similarity,
     merge_runs,
     read_lamp,
+    late_entry_comparisons,
     resolutions_to_match_events,
     resolve_touches,
 )
@@ -1170,6 +1171,287 @@ class TestResolveTouches:
 
     def test_no_events_resolve_to_no_resolutions(self):
         assert resolve_touches([], []) == []
+
+
+# ----------------------------------------------------------------------
+# resolve_touches — late score entry across off-target lamps
+# ----------------------------------------------------------------------
+
+
+#: The shape of the bout this rule was written for: a valid red lamp whose own
+#: comparison could not see the point, one white lamp 2.7 s later, and the score
+#: found on the far side of it. Frames and gaps are the measured ones from
+#: ``20260828_김창환배_…_piste6``.
+LATE_ENTRY_EVENTS = [
+    _event(onset=5769, end=5837, left=COLOUR_RED),
+    _event(onset=5849, end=5917, left=COLOUR_WHITE),
+]
+
+
+def _late_case(
+    events=None,
+    comparisons=None,
+    late=None,
+    **kwargs,
+):
+    """``resolve_touches`` on the measured late-entry shape, with overrides."""
+    events = LATE_ENTRY_EVENTS if events is None else events
+    if comparisons is None:
+        comparisons = [_comparison(determined=False), _comparison(determined=False)]
+    if late is None:
+        late = [_comparison(changed={LEFT}), None]
+    return resolve_touches(
+        events, comparisons, late_comparisons=late, start_score=(4, 1), **kwargs,
+    )
+
+
+class TestLateEntryPromotion:
+    def test_a_score_that_lands_past_a_white_lamp_is_credited_to_the_valid_lamp(self):
+        resolutions = _late_case()
+
+        assert resolutions[0].verdict == VERDICT_TOUCH
+        assert resolutions[0].scorer == LEFT
+        assert resolutions[0].score_before == (4, 1)
+        assert resolutions[0].score_after == (5, 1)
+
+    def test_a_promoted_touch_records_how_it_was_decided(self):
+        promotion = _late_case()[0].promotion
+
+        assert promotion is not None
+        assert promotion.from_verdict == VERDICT_UNDETERMINED
+        assert promotion.skipped_off_target == (5849,)
+        assert promotion.delay_sec == pytest.approx((5849 - 5769) / 30.0)
+        assert "승격" in promotion.describe()
+
+    def test_an_ordinary_touch_carries_no_promotion(self):
+        resolutions = resolve_touches([_event(left=COLOUR_RED)], [_comparison(changed={LEFT})])
+
+        assert resolutions[0].verdict == VERDICT_TOUCH
+        assert resolutions[0].promotion is None
+
+    def test_the_off_target_lamp_that_was_skipped_keeps_its_own_verdict(self):
+        resolutions = _late_case()
+
+        assert resolutions[1].verdict == VERDICT_OFF_TARGET
+        assert resolutions[1].promotion is None
+        # …and sees the promoted point in its running score, not the stale one.
+        assert resolutions[1].score_before == (5, 1)
+
+    def test_promotion_leaves_the_tally_trustworthy(self):
+        # An unpromoted undetermined event poisons every later tally, because a
+        # point may have gone unrecorded. A promoted one recorded its point.
+        resolutions = _late_case()
+
+        assert all(r.tally_reliable for r in resolutions)
+
+    def test_an_annulled_lamp_is_promotable_too(self):
+        # The operator being late is exactly what "lamp lit, digits unchanged"
+        # looks like at the moment the window closes.
+        resolutions = _late_case(
+            comparisons=[_comparison(changed=set()), _comparison(changed=set())],
+        )
+
+        assert resolutions[0].verdict == VERDICT_TOUCH
+        assert resolutions[0].promotion.from_verdict == VERDICT_ANNULLED
+
+    def test_a_right_side_lamp_promotes_to_a_right_side_touch(self):
+        resolutions = _late_case(
+            events=[
+                _event(onset=5769, end=5837, right=COLOUR_GREEN),
+                _event(onset=5849, end=5917, right=COLOUR_WHITE),
+            ],
+            late=[_comparison(changed={RIGHT}), None],
+        )
+
+        assert resolutions[0].scorer == RIGHT
+        assert resolutions[0].score_after == (4, 2)
+
+    def test_both_lamps_valid_promotes_as_a_priority_call(self):
+        resolutions = _late_case(
+            events=[
+                _event(onset=5769, end=5837, left=COLOUR_RED, right=COLOUR_GREEN),
+                _event(onset=5849, end=5917, left=COLOUR_WHITE),
+            ],
+        )
+
+        assert resolutions[0].verdict == VERDICT_TOUCH
+        assert resolutions[0].scorer == LEFT
+        assert resolutions[0].priority_call is True
+
+    # ---- the four conditions, each broken on its own ----
+
+    def test_condition_1_a_verdict_that_is_not_in_doubt_is_never_promoted(self):
+        # An off-target lamp followed by another off-target lamp and a score
+        # change is the ``inconsistent``-adjacent case: no valid lamp, no touch.
+        resolutions = _late_case(
+            events=[
+                _event(onset=5769, end=5837, left=COLOUR_WHITE),
+                _event(onset=5849, end=5917, left=COLOUR_WHITE),
+            ],
+        )
+
+        assert resolutions[0].verdict == VERDICT_OFF_TARGET
+        assert resolutions[0].score_after == (4, 1)
+
+    def test_condition_1_an_already_confirmed_touch_is_not_promoted_again(self):
+        resolutions = _late_case(
+            comparisons=[_comparison(changed={LEFT}), _comparison(changed=set())],
+        )
+
+        assert resolutions[0].verdict == VERDICT_TOUCH
+        assert resolutions[0].promotion is None
+        assert resolutions[0].score_after == (5, 1)
+
+    def test_condition_2_a_chromatic_lamp_in_between_blocks_the_promotion(self):
+        # That lamp is a nearer owner of the point, so this one stops being the
+        # answer even though everything else about it still fits.
+        resolutions = _late_case(
+            events=[
+                _event(onset=5769, end=5837, left=COLOUR_RED),
+                _event(onset=5820, end=5840, left=COLOUR_RED),
+            ],
+            late=[_comparison(changed={LEFT}), _comparison(changed={LEFT})],
+        )
+
+        assert resolutions[0].verdict == VERDICT_UNDETERMINED
+        assert resolutions[0].promotion is None
+
+    def test_condition_2_a_lamp_with_nothing_after_it_is_not_promoted(self):
+        # Nothing was skipped, so there is no window to look past: this is the
+        # plain undetermined case and must stay one.
+        resolutions = _late_case(
+            events=[_event(onset=5769, end=5837, left=COLOUR_RED)],
+            comparisons=[_comparison(determined=False)],
+            late=[_comparison(changed={LEFT})],
+        )
+
+        assert resolutions[0].verdict == VERDICT_UNDETERMINED
+
+    def test_condition_3_a_change_on_the_other_side_is_refused(self):
+        resolutions = _late_case(late=[_comparison(changed={RIGHT}), None])
+
+        assert resolutions[0].verdict == VERDICT_UNDETERMINED
+        assert resolutions[0].promotion is None
+
+    def test_condition_3_both_sides_moving_is_refused_rather_than_split(self):
+        resolutions = _late_case(
+            events=[
+                _event(onset=5769, end=5837, left=COLOUR_RED, right=COLOUR_GREEN),
+                _event(onset=5849, end=5917, left=COLOUR_WHITE),
+            ],
+            late=[_comparison(changed={LEFT, RIGHT}), None],
+        )
+
+        assert resolutions[0].verdict == VERDICT_UNDETERMINED
+        assert resolutions[0].score_after == (4, 1)
+
+    def test_condition_3_no_change_at_all_leaves_the_annulment_standing(self):
+        # The whole point of the annulment gate: the referee waved it off, the
+        # digits never moved, and looking further along does not change that.
+        resolutions = _late_case(
+            comparisons=[_comparison(changed=set()), _comparison(changed=set())],
+            late=[_comparison(changed=set()), None],
+        )
+
+        assert resolutions[0].verdict == VERDICT_ANNULLED
+        assert resolutions[0].score_after == (4, 1)
+
+    def test_condition_3_an_undetermined_late_comparison_promotes_nothing(self):
+        resolutions = _late_case(late=[_comparison(determined=False), None])
+
+        assert resolutions[0].verdict == VERDICT_UNDETERMINED
+
+    def test_condition_4_a_white_lamp_past_the_window_blocks_the_promotion(self):
+        # 9 s at 30 fps, against a window of 8: the sort of gap the calibrated
+        # bouts show around lamps the referee really did annul.
+        resolutions = _late_case(
+            events=[
+                _event(onset=5769, end=5837, left=COLOUR_RED),
+                _event(onset=5769 + 270, end=5769 + 330, left=COLOUR_WHITE),
+            ],
+        )
+
+        assert resolutions[0].verdict == VERDICT_UNDETERMINED
+        assert resolutions[0].promotion is None
+
+    def test_condition_4_the_window_is_measured_in_seconds_not_frames(self):
+        # The same 80-frame gap is 2.7 s at 30 fps and 13.3 s at 6 fps. Only the
+        # first is inside the window.
+        assert _late_case(fps=30.0)[0].verdict == VERDICT_TOUCH
+        assert _late_case(fps=6.0)[0].verdict == VERDICT_UNDETERMINED
+
+    def test_the_window_is_a_parameter_and_widening_it_admits_the_late_lamp(self):
+        far = [
+            _event(onset=5769, end=5837, left=COLOUR_RED),
+            _event(onset=5769 + 270, end=5769 + 330, left=COLOUR_WHITE),
+        ]
+
+        assert _late_case(events=far)[0].verdict == VERDICT_UNDETERMINED
+        assert _late_case(events=far, late_entry_window_sec=12.0)[0].verdict == VERDICT_TOUCH
+
+    def test_without_late_comparisons_nothing_is_ever_promoted(self):
+        # Every existing caller that does not pass them keeps its old answers.
+        resolutions = resolve_touches(
+            LATE_ENTRY_EVENTS,
+            [_comparison(determined=False), _comparison(determined=False)],
+            start_score=(4, 1),
+        )
+
+        assert resolutions[0].verdict == VERDICT_UNDETERMINED
+        assert resolutions[0].score_after == (4, 1)
+
+
+class TestLateEntryComparisons:
+    """The interval surgery that feeds the promotion its evidence."""
+
+    def _detector(self, frame_count=600, change_at=None):
+        detector = ScoreChangeDetector(PROFILE, SCORE_CONFIG, TRACKER_CONFIG)
+        if change_at is None:
+            _feed_digits(detector, frame_count, "block", "block")
+        else:
+            _feed_digits(
+                detector, frame_count, ("block", "bar"), ("block", "block"),
+                change_at=change_at,
+            )
+        return detector
+
+    def test_a_lamp_with_no_off_target_run_after_it_gets_no_late_comparison(self):
+        events = [_event(onset=200, left=COLOUR_RED), _event(onset=400, left=COLOUR_RED)]
+        intervals = event_intervals([e.onset_frame for e in events], 600, SCORE_CONFIG)
+
+        late = late_entry_comparisons(
+            events, intervals, self._detector(), fps=30.0,
+        )
+
+        assert late == [None, None]
+
+    def test_the_after_side_is_taken_past_the_off_target_run(self):
+        # The change lands after the white lamp, where the red lamp's own
+        # comparison can no longer see it; the late comparison can.
+        events = [_event(onset=200, left=COLOUR_RED), _event(onset=260, left=COLOUR_WHITE)]
+        intervals = event_intervals([e.onset_frame for e in events], 600, SCORE_CONFIG)
+        detector = self._detector(change_at=300)
+
+        late = late_entry_comparisons(events, intervals, detector, fps=30.0)
+
+        assert late[1] is None
+        assert late[0].determined is True
+        assert late[0].changed == frozenset({LEFT})
+        # The ordinary comparison for the same event sees nothing: its window is
+        # the five frames between the settle and the white lamp.
+        assert detector.compare(intervals[0], intervals[1]).determined is False
+
+    def test_samples_beyond_the_window_are_not_compared(self):
+        # Same footage, same lamps; only the window changes. Cutting it to two
+        # seconds leaves the far side of the white lamp unsampled, so there is
+        # nothing to promote on rather than a stale answer.
+        events = [_event(onset=200, left=COLOUR_RED), _event(onset=260, left=COLOUR_WHITE)]
+        intervals = event_intervals([e.onset_frame for e in events], 600, SCORE_CONFIG)
+        detector = self._detector(change_at=300)
+
+        late = late_entry_comparisons(events, intervals, detector, fps=30.0, window_sec=2.0)
+
+        assert late[0] is None
 
 
 # ----------------------------------------------------------------------

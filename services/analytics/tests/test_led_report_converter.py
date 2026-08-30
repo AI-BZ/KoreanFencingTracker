@@ -30,6 +30,7 @@ from app.led_report_converter import (
     WARNING_END_OF_BOUT_INFERRED,
     WARNING_LAMP_ANNULLED,
     WARNING_LAMP_UNDETERMINED,
+    WARNING_LATE_SCORE_ENTRY,
     WARNING_NO_TOUCHES,
     WARNING_SCORE_LOWER_BOUND,
     WARNING_SCORE_NOT_MONOTONIC,
@@ -1147,6 +1148,58 @@ class TestTrackedWarnings:
     def test_no_annulment_warning_when_nothing_was_annulled(self):
         warnings = tracked_warnings(fake_analysis(undetermined=[600]))
         assert WARNING_LAMP_ANNULLED not in warning_types(warnings)
+
+    def test_a_late_entry_promotion_says_so_in_the_report(self):
+        # The point is counted, so this is not a defect warning — but the report
+        # has to be able to say the number came from past a white lamp rather
+        # than from the lamp's own score check.
+        promoted = SimpleNamespace(
+            event=SimpleNamespace(onset_frame=5769),
+            scorer="left",
+            promotion=SimpleNamespace(
+                from_verdict="undetermined",
+                skipped_off_target=(5849,),
+                delay_sec=2.67,
+            ),
+        )
+        analysis = fake_analysis()
+        analysis.touches = [promoted, fake_resolution(900)]
+
+        warnings = tracked_warnings(analysis)
+
+        assert [w["type"] for w in warnings] == [WARNING_LATE_SCORE_ENTRY]
+        assert warnings[0]["severity"] == "info"
+        assert "3:12" in warnings[0]["message"]   # the valid lamp
+        assert "3:14" in warnings[0]["message"]   # the white lamp skipped past
+        assert "2.7" in warnings[0]["message"]
+
+    def test_the_promotion_message_says_which_observation_it_started_from(self):
+        # "could not be compared" and "did not move" are different facts, and
+        # only the second is what an annulment looks like from outside.
+        def analysis_from(verdict):
+            promoted = SimpleNamespace(
+                event=SimpleNamespace(onset_frame=5769),
+                scorer="left",
+                promotion=SimpleNamespace(
+                    from_verdict=verdict,
+                    skipped_off_target=(5849,),
+                    delay_sec=2.67,
+                ),
+            )
+            out = fake_analysis()
+            out.touches = [promoted]
+            return out
+
+        undetermined = tracked_warnings(analysis_from("undetermined"))[0]
+        annulled = tracked_warnings(analysis_from("annulled"))[0]
+
+        assert undetermined["message"] != annulled["message"]
+
+    def test_touches_reached_the_ordinary_way_add_no_warning(self):
+        analysis = fake_analysis()
+        analysis.touches = [fake_resolution(900), fake_resolution(1800)]
+
+        assert tracked_warnings(analysis) == []
 
     def test_an_unreliable_score_is_flagged_as_a_lower_bound(self):
         warnings = tracked_warnings(fake_analysis(score_reliable=False))
