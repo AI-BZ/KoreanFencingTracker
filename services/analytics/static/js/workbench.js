@@ -143,6 +143,12 @@
     var ovMenuBtn = document.getElementById('wb-ov-menu-btn');
     var ovMenu = document.getElementById('wb-ov-menu');
 
+    // ---- second camera (optional) ----
+    var panes = document.getElementById('wb-panes');
+    var zoomPane = document.getElementById('wb-zoom');
+    var zoomVideo = document.getElementById('wb-zoom-video');
+    var zoomGapEl = document.getElementById('wb-zoom-gap');
+
     var ctx = canvas ? canvas.getContext('2d') : null;
     var skelCtx = skelCanvas ? skelCanvas.getContext('2d') : null;
 
@@ -184,6 +190,23 @@
     var fsIdleTimer = null;
     var fsScrollY = 0;
     var FS_IDLE_MS = 3000;
+
+    // ---- second camera ----
+    // zoomOffset is the constant in `zoom_time = wide_time + offset`, measured
+    // by scripts/sync_camera_pair.py and carried on the element. Both halves
+    // have to be present: a source with no offset would show a different moment
+    // beside the wide camera, which is worse than showing one camera.
+    var zoomOffset = zoomPane ? Number(zoomPane.dataset.offset) : NaN;
+    var hasZoom = !!(zoomVideo && zoomPane && isFinite(zoomOffset));
+    var zoomInGap = null;             // last gap state written, so DOM writes are rare
+    var solo = null;                  // null | 'wide' | 'zoom'
+
+    // Correction thresholds, in seconds of the two clocks' disagreement.
+    // Paused work is frame-accurate, so it is corrected exactly; during playback
+    // a correction is a visible jump, so it waits until the drift is worth more
+    // than the jump — 0.1 s is three frames at the 30 fps work rate, and browsers
+    // hold two independently-decoded videos well inside that.
+    var ZOOM_DRIFT_PLAYING = 0.1;
 
     // ------------------------------------------------------------------
     // helpers
@@ -291,7 +314,10 @@
         var stack = 0;
         for (var i = 0; i < root.children.length; i++) {
             var el = root.children[i];
-            if (el === viewport) continue;          // the picture layer itself
+            // The picture layer itself: the viewport, or the pane grid that
+            // holds it once there are two cameras. (With one camera the wrapper
+            // is display:contents and never appears here at all.)
+            if (el === viewport || el.contains(viewport)) continue;
             stack += el.offsetHeight || 0;
         }
         if (h + stack <= boxH) return Math.max(0, (boxH - stack - h) / 2);
@@ -1257,6 +1283,138 @@
         return true;
     }
 
+    // ------------------------------------------------------------------
+    // second camera — one clock drives both players
+    // ------------------------------------------------------------------
+
+    /**
+     * Every seek, every frame step and every timeline jump goes through the main
+     * video's currentTime, so the zoom player is driven entirely off that
+     * element's own events rather than off each call site. Nothing that moves
+     * the main video can therefore forget to move this one.
+     *
+     * Sync is refused, not approximated, while an AI overlay clip is on the
+     * stage: that clip has its own timeline starting at zero and the offset
+     * means nothing against it.
+     */
+    function zoomActive() {
+        return hasZoom && !showingClip && hasMainVideo;
+    }
+
+    /** Where the zoom camera's clock stands when the wide camera reads `t`. */
+    function zoomTimeFor(t) {
+        return t + zoomOffset;
+    }
+
+    function setZoomGap(inGap) {
+        if (zoomInGap === inGap) return;
+        zoomInGap = inGap;
+        zoomPane.classList.toggle('wb-zoom--gap', inGap);
+        if (zoomGapEl) zoomGapEl.classList.toggle('hidden', !inGap);
+    }
+
+    /**
+     * Put the zoom player where the wide player is.
+     *
+     * `hard` forces the assignment; otherwise it only corrects a drift past
+     * ZOOM_DRIFT_PLAYING, because assigning currentTime mid-playback re-seeks the
+     * decoder and shows as a stutter.
+     */
+    function syncZoom(hard) {
+        if (!zoomActive()) return;
+        var dur = zoomVideo.duration;
+        if (!isFinite(dur) || dur <= 0) return;      // metadata not in yet
+
+        var target = zoomTimeFor(video.currentTime);
+        // The two cameras were not started or stopped together: the zoom one
+        // began 9 s later here and ran out first. Outside its own recording there
+        // is no matching frame, and holding the first or last one while the wide
+        // camera moves would read as a synced frame that is not one.
+        var gap = target < 0 || target > dur;
+        setZoomGap(gap);
+        if (gap) {
+            if (!zoomVideo.paused) zoomVideo.pause();
+            zoomVideo.currentTime = clamp(target, 0, dur);
+            return;
+        }
+
+        if (hard || Math.abs(zoomVideo.currentTime - target) > ZOOM_DRIFT_PLAYING) {
+            zoomVideo.currentTime = target;
+        }
+
+        // Two elements, one transport. play()/pause() are only issued on a real
+        // mismatch so a paused step never starts playback.
+        if (video.paused) {
+            if (!zoomVideo.paused) zoomVideo.pause();
+        } else if (zoomVideo.paused) {
+            zoomVideo.play().catch(function () { /* autoplay refused; frames still seek */ });
+        }
+        if (zoomVideo.playbackRate !== video.playbackRate) {
+            zoomVideo.playbackRate = video.playbackRate;
+        }
+    }
+
+    /** Show one pane full width, or both. Passing the current solo clears it. */
+    function setSolo(next) {
+        if (!hasZoom || !panes) return;
+        solo = (solo === next) ? null : next;
+        panes.classList.toggle('wb-panes--solo-wide', solo === 'wide');
+        panes.classList.toggle('wb-panes--solo-zoom', solo === 'zoom');
+        // The wide pane's width just changed, and every stage dimension is
+        // derived from it. Its zoom/pan is left alone: the coach chose it.
+        updateLayout();
+    }
+
+    /**
+     * An overlay clip replaces the main video's source, so the offset stops
+     * meaning anything. The pane is emptied rather than frozen on a stale frame,
+     * and comes back when the source video does.
+     */
+    function syncZoomToClipState() {
+        if (!hasZoom) return;
+        var showing = !!showingClip;
+        panes.classList.toggle('wb-panes--clip', showing);
+        if (showing) {
+            zoomVideo.pause();
+            if (solo === 'zoom') setSolo('zoom');   // nothing to show; go back to both
+        } else {
+            syncZoom(true);
+        }
+        updateLayout();
+    }
+
+    function wireZoom() {
+        if (!hasZoom) return;
+        // Always silent, whatever the mute button does to the main video: two
+        // recordings of the same room playing together is an echo, not sound.
+        zoomVideo.muted = true;
+        zoomVideo.src = zoomPane.dataset.src || '';
+
+        zoomVideo.addEventListener('loadedmetadata', function () { syncZoom(true); });
+
+        // The main element is the clock. `seeked` covers frame stepping, the
+        // scrub bar and timeline jumps; `timeupdate` covers drift during play.
+        video.addEventListener('seeked', function () { syncZoom(true); });
+        video.addEventListener('timeupdate', function () { syncZoom(false); });
+        video.addEventListener('play', function () { syncZoom(true); });
+        video.addEventListener('pause', function () { syncZoom(true); });
+        video.addEventListener('ratechange', function () { syncZoom(false); });
+        video.addEventListener('loadedmetadata', function () { syncZoom(true); });
+
+        root.querySelectorAll('[data-solo]').forEach(function (b) {
+            // The wide pane's own pointer handlers draw and pan, so this button
+            // must not reach them.
+            b.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
+            b.addEventListener('click', function (e) {
+                e.stopPropagation();
+                setSolo(b.dataset.solo);
+            });
+        });
+        // The zoom pane carries no drawing tools, so its whole surface can be
+        // the control the button duplicates.
+        zoomPane.addEventListener('click', function () { setSolo('zoom'); });
+    }
+
     function onTimeUpdate() {
         if (timeEl) timeEl.textContent = fmtTime(video.currentTime);
         if (frameEl) frameEl.textContent = String(frameOf(video.currentTime));
@@ -1646,6 +1804,7 @@
         if (clipBlobUrl) URL.revokeObjectURL(clipBlobUrl);
         clipBlobUrl = URL.createObjectURL(blob);
         showingClip = true;
+        syncZoomToClipState();
         shapes = [];
         zoom = 1; panX = 0; panY = 0;
         // The clip carries a server-rendered skeleton already; ours would be
@@ -1700,6 +1859,7 @@
             return;
         }
         showingClip = false;
+        syncZoomToClipState();
         if (clipBlobUrl) { URL.revokeObjectURL(clipBlobUrl); clipBlobUrl = null; }
         video.src = mainSrc;
         video.load();
@@ -2186,6 +2346,7 @@
                 case 'd': case 'D': if (isDesktop()) setTool('line'); break;
                 case 'm': case 'M': if (isDesktop()) setTool('measure'); break;
                 case 'v': case 'V': setTool('navigate'); break;
+                case 'z': case 'Z': setSolo('zoom'); break;
                 case 'Escape':
                     // A hardware keyboard on a tablet is the case this covers.
                     if (fullscreen) { setFullscreen(false); break; }
@@ -2239,6 +2400,7 @@
     if (!KEYPOINTS_URL && captionBar) captionBar.classList.add('hidden');
 
     wireControls();
+    wireZoom();
     watchFullscreenBox();
     wireStageInteraction();
     wireKeyboard();
@@ -2265,6 +2427,15 @@
         playClip: playClip,
         setSpeed: setSpeed,
         restoreMainVideo: restoreMainVideo,
+        // The second camera's state, so the sync can be checked as numbers
+        // rather than by looking at two pictures and believing them.
+        zoom: {
+            enabled: function () { return hasZoom; },
+            offset: function () { return hasZoom ? zoomOffset : null; },
+            solo: function () { return solo; },
+            setSolo: setSolo,
+            inGap: function () { return zoomInGap; }
+        },
         // The annotation maths is pure, so the numbers drawn on the video can be
         // checked against the report's own figures without driving the UI. There
         // is no JS test runner in this repo; this is how the check is run.

@@ -349,6 +349,70 @@ canvas {
     z-index: 40;
 }
 
+/* The pane wrapper. With one camera it generates no box at all, so a report
+   without zoom footage lays out exactly as it did before the wrapper existed —
+   including the `inset: 0` the fullscreen mode gives the viewport, which still
+   resolves against .workbench because display:contents leaves no containing
+   block behind. Only .wb-panes--split turns it into a real grid. */
+.wb-panes {
+    display: contents;
+}
+
+.wb-panes--split {
+    display: grid;
+    gap: 0.375rem;
+    align-items: center;
+    /* The zoom pane keeps its 16:9 shape, so when a height cap makes it narrower
+       than its cell it has to sit in the middle of it rather than against the
+       left edge. The wide pane is told to fill instead: its box holds an
+       absolutely positioned stage and would shrink to nothing on content. */
+    justify-items: center;
+}
+
+.wb-panes--split > .wb-viewport {
+    width: 100%;
+}
+
+/* Desktop: the two cameras side by side. The wide crop is ~3.8:1 and the zoom
+   is 16:9, so at any shared row height the wide one needs twice the width; a
+   50/50 split instead spends the extra height on the zoom, which is the pane
+   that has to show a blade. Whichever pane the coach wants full size is one
+   click away, which is what the solo buttons are for. */
+@media (min-width: 1024px) {
+    .wb-panes--split {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+/* Phones have no width to divide, so the two stack. */
+@media (max-width: 1023px) {
+    .wb-panes--split {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Solo: the other pane is removed from the grid, not merely hidden, so the
+   survivor gets the full width. */
+.wb-panes--split.wb-panes--solo-wide,
+.wb-panes--split.wb-panes--solo-zoom {
+    grid-template-columns: 1fr;
+}
+
+.wb-panes--solo-wide > .wb-zoom,
+.wb-panes--solo-zoom > .wb-viewport {
+    display: none;
+}
+
+/* An AI overlay clip has its own timeline starting at zero, so the offset means
+   nothing against it and the second pane has nothing true to show. */
+.wb-panes--clip {
+    grid-template-columns: 1fr;
+}
+
+.wb-panes--clip > .wb-zoom {
+    display: none;
+}
+
 .wb-viewport {
     position: relative;
     overflow: hidden;
@@ -357,12 +421,102 @@ canvas {
     max-height: 45vh;
 }
 
+/* Second camera. No canvas layer on purpose — see the template comment: the
+   drawing and measuring tools are defined on the main video's pixel grid. */
+.wb-zoom {
+    position: relative;
+    overflow: hidden;
+    border-radius: 0.75rem;
+    background: #000;
+    aspect-ratio: 16 / 9;
+    max-height: 45vh;
+    cursor: pointer;
+}
+
+.wb-zoom > video {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: #000;
+}
+
+/* Outside the second camera's recording the frame is a lie — it would sit on
+   the first or last frame while the wide camera moves. Dim it and say so. */
+.wb-zoom--gap > video {
+    opacity: 0.25;
+}
+
+.wb-zoom-gap {
+    position: absolute;
+    inset-inline: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    text-align: center;
+    color: var(--fm-text-secondary, #b4b4c4);
+    font-size: 0.8125rem;
+    pointer-events: none;
+}
+
+.wb-zoom-gap.hidden {
+    display: none;
+}
+
+.wb-pane-tag {
+    position: absolute;
+    top: 0.375rem;
+    left: 0.375rem;
+    z-index: 3;
+    padding: 0.125rem 0.4375rem;
+    border-radius: 0.375rem;
+    background: rgba(8, 8, 12, 0.7);
+    color: var(--fm-text-secondary, #b4b4c4);
+    font-size: 0.6875rem;
+    line-height: 1.4;
+    pointer-events: none;
+}
+
+.wb-solo-btn {
+    position: absolute;
+    top: 0.375rem;
+    right: 0.375rem;
+    z-index: 3;
+    width: 2rem;
+    height: 2rem;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 0.375rem;
+    background: rgba(8, 8, 12, 0.7);
+    color: var(--fm-text-secondary, #b4b4c4);
+    font-size: 0.875rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.wb-solo-btn:hover {
+    color: #fff;
+    background: rgba(8, 8, 12, 0.9);
+}
+
+/* A thumb needs more than 32px. */
+@media (max-width: 1023px) {
+    .wb-solo-btn {
+        width: 2.5rem;
+        height: 2.5rem;
+    }
+}
+
 .workbench--empty .wb-viewport {
     max-height: none;
     background: var(--fm-bg-tertiary, #1a1a25);
 }
 
-.workbench--collapsed .wb-viewport {
+.workbench--collapsed .wb-viewport,
+.workbench--collapsed .wb-zoom {
+    display: none;
+}
+
+/* The grid itself has to go too, or its gap and padding survive the collapse. */
+.workbench--collapsed .wb-panes--split {
     display: none;
 }
 
@@ -709,9 +863,12 @@ canvas {
 }
 
 /* Square off the video's bottom corners only while the band is actually there,
-   so the two read as one object. Browsers without :has() just get two rounded
-   edges meeting, which is cosmetic. */
-.wb-viewport:has(+ .wb-caption:not(.hidden)) {
+   so the two read as one object. The caption is a sibling of the pane wrapper,
+   not of the viewport, so the match is made through .wb-panes — and it squares
+   every pane, since in split mode the band spans both. Browsers without :has()
+   just get two rounded edges meeting, which is cosmetic. */
+.wb-panes:has(+ .wb-caption:not(.hidden)) > .wb-viewport,
+.wb-panes:has(+ .wb-caption:not(.hidden)) > .wb-zoom {
     border-bottom-left-radius: 0;
     border-bottom-right-radius: 0;
 }
@@ -844,6 +1001,56 @@ body.wb-fs-lock .parallax-bg {
     border-radius: 0;
 }
 
+/* Fullscreen with two cameras: the grid takes the layer the single viewport
+   would have taken, and the panes split it between them. The viewport goes back
+   to flow inside that grid — updateLayout() already leaves its height to CSS in
+   fullscreen and measures maxH from clientHeight, so it fits the cell it gets. */
+.workbench--fs .wb-panes--split {
+    position: absolute;
+    inset: 0;
+    grid-template-columns: 1fr;
+    grid-auto-rows: 1fr;
+    gap: 0;
+}
+
+.workbench--fs .wb-panes--split > .wb-viewport,
+.workbench--fs .wb-panes--split > .wb-zoom {
+    position: relative;
+    inset: auto;
+    min-height: 0;
+    height: 100%;
+    max-height: none;
+    aspect-ratio: auto;
+    border-radius: 0;
+}
+
+/* Soloing leaves one row, so it takes the whole layer. */
+.workbench--fs .wb-panes--split.wb-panes--solo-wide,
+.workbench--fs .wb-panes--split.wb-panes--solo-zoom {
+    grid-auto-rows: 100%;
+}
+
+/* Landscape is where the phone actually gets used for review, and there the two
+   panes side by side beat two letterboxed strips. */
+@media (orientation: landscape) {
+    .workbench--fs .wb-panes--split {
+        grid-template-columns: 1fr 1fr;
+        grid-auto-rows: 100%;
+    }
+
+    .workbench--fs .wb-panes--split.wb-panes--solo-wide,
+    .workbench--fs .wb-panes--split.wb-panes--solo-zoom {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* The control bar floats over the bottom pane in fullscreen; keep the corner
+   controls clear of it and of the caption band at the top. */
+.workbench--fs .wb-solo-btn,
+.workbench--fs .wb-pane-tag {
+    top: 3rem;
+}
+
 /* Floated over the frame rather than stacked under it. The bout video is a
    piste crop roughly five times wider than tall, so in normal flow the bar was
    pushed into the letterbox and the frame never grew to meet it — with pinch
@@ -958,6 +1165,28 @@ body.wb-fs-lock .parallax-bg {
     }
 
     .wb-viewport {
+        max-height: 32vh;
+    }
+
+    /* Two stacked panes plus the transport bar have to fit inside a sticky
+       workbench, and a landscape phone is only 390px tall — at the single-video
+       budget the pair pushed the frame-step buttons off the bottom of the
+       screen, where nothing can scroll them back. So the two share roughly the
+       height one video used to have, weighted towards the zoom. On a portrait
+       phone both panes are shorter than these caps anyway, so nothing there
+       changes; the caps only bite where the screen is actually short.
+       Fullscreen is the answer for real landscape review and overrides these. */
+    .wb-panes--split > .wb-viewport {
+        max-height: 15vh;
+    }
+
+    .wb-panes--split > .wb-zoom {
+        max-height: 27vh;
+    }
+
+    /* Alone in the grid, a pane gets the whole single-video budget back. */
+    .wb-panes--split.wb-panes--solo-wide > .wb-viewport,
+    .wb-panes--split.wb-panes--solo-zoom > .wb-zoom {
         max-height: 32vh;
     }
 

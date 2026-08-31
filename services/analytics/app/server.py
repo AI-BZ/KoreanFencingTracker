@@ -540,6 +540,48 @@ def _own_video_filename(video_path: str) -> Optional[str]:
     return f"own/{resolved.name}"
 
 
+def _zoom_video_info(report_dict: dict) -> tuple[Optional[str], Optional[float]]:
+    """Second-camera work file and its clock offset, or ``(None, None)``.
+
+    The pair lives in the piste config's ``zoom`` block (written by
+    scripts/prepare_zoom_video.py), reached through ``meta.piste_config``. Both
+    halves are required together: a file with no offset would play beside the
+    wide camera showing a different moment, which is worse than not showing it,
+    so anything missing or malformed yields no zoom pane at all.
+
+    The offset is the constant in ``zoom_time = wide_time + offset_sec``.
+    """
+    meta = report_dict.get("meta") or {}
+    config_path = meta.get("piste_config")
+    if not config_path:
+        return None, None
+
+    path = Path(config_path)
+    if not path.is_absolute():
+        path = _BASE_DIR / path
+    try:
+        config = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None, None
+
+    block = config.get("zoom") or {}
+    work_file = block.get("work_file")
+    offset = block.get("offset_sec")
+    if not work_file or not isinstance(offset, (int, float)):
+        return None, None
+
+    work_path = Path(work_file)
+    if not work_path.is_absolute():
+        work_path = _BASE_DIR / work_path
+    # Same containment check as _own_video_filename: /videos/own is the only
+    # mount that serves our footage, so a work file outside it is unplayable and
+    # a ``../`` segment must not be able to name something else.
+    filename = _own_video_filename(str(work_path))
+    if not filename:
+        return None, None
+    return filename, float(offset)
+
+
 @app.get("/report/{job_id}")
 async def report_page(request: Request, job_id: str, token: Optional[str] = None):
     """
@@ -589,6 +631,10 @@ async def report_page(request: Request, job_id: str, token: Optional[str] = None
         if yt_id:
             youtube_url = f"https://www.youtube.com/watch?v={yt_id}"
 
+    # The zoom pane rides on the main video: it is a second view of the same
+    # footage, so with no main video there is nothing to synchronise it to.
+    zoom_filename, zoom_offset = _zoom_video_info(report_dict) if video_filename else (None, None)
+
     return templates.TemplateResponse(request, "report.html", {
         **_i18n_context(request),
         "report": report_dict,
@@ -601,6 +647,9 @@ async def report_page(request: Request, job_id: str, token: Optional[str] = None
         "mock_mode": mock_mode,
         "video_filename": video_filename,
         "video_version": _video_version(video_filename),
+        "zoom_video_filename": zoom_filename,
+        "zoom_video_version": _video_version(zoom_filename),
+        "zoom_offset_sec": zoom_offset,
         "youtube_url": youtube_url,
         "share_token": None,
         "has_keypoints": _has_keypoints(job_id),
@@ -838,6 +887,9 @@ def _render_saved_report(
         if yt_id:
             youtube_url = f"https://www.youtube.com/watch?v={yt_id}"
 
+    # See report_page: the zoom pane needs a main video to be synchronised to.
+    zoom_filename, zoom_offset = _zoom_video_info(report_dict) if video_filename else (None, None)
+
     return templates.TemplateResponse(request, "report.html", {
         **_i18n_context(request),
         "report": report_dict,
@@ -850,6 +902,9 @@ def _render_saved_report(
         "report_id": report_id,
         "video_filename": video_filename,
         "video_version": _video_version(video_filename),
+        "zoom_video_filename": zoom_filename,
+        "zoom_video_version": _video_version(zoom_filename),
+        "zoom_offset_sec": zoom_offset,
         "youtube_url": youtube_url,
         "share_token": share_token,
         "has_keypoints": _has_keypoints(report_id),

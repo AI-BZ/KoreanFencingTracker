@@ -101,6 +101,13 @@
        main video nor a matching frame timeline, and gets no toggle at all
        rather than a control that silently does nothing. #}
     {% set show_skeleton_toggle = has_main_video and (has_keypoints is defined and has_keypoints) %}
+    {# 두 번째 카메라(줌인)는 메인 영상과 오프셋이 둘 다 있을 때만 켠다. 하나만
+       있으면 두 화면이 서로 다른 순간을 나란히 보여주게 되고, 그건 한 화면만
+       보여주는 것보다 나쁘다 — 서버의 _zoom_video_info()도 같은 이유로 둘을
+       함께 반환하거나 함께 버린다. #}
+    {% set has_zoom_video = has_main_video
+                            and (zoom_video_filename is defined and zoom_video_filename)
+                            and (zoom_offset_sec is defined and zoom_offset_sec is not none) %}
     {% set fstats = (report.continuous_summary.fencer_stats
                      if report.continuous_summary is defined and report.continuous_summary
                         and report.continuous_summary.fencer_stats else None) %}
@@ -279,6 +286,11 @@
              data-has-video="{{ '1' if has_main_video else '0' }}"
              {% if has_main_video %}data-main-src="/videos/{{ video_filename }}?v={{ video_version|default(2) }}"{% endif %}>
 
+        {# 두 카메라를 담는 껍데기. 줌인이 없으면 `display: contents` 라서 박스
+           트리에서 완전히 사라진다 — 기존 리포트의 레이아웃은 이 div 가 생기기
+           전과 글자 그대로 같다. 줌인이 있을 때만 --split 이 붙어 실제 그리드가
+           된다. #}
+        <div id="wb-panes" class="wb-panes{% if has_zoom_video %} wb-panes--split{% endif %}">
         <div id="wb-viewport" class="wb-viewport">
             <div id="wb-stage" class="wb-stage{% if not has_main_video %} hidden{% endif %}">
                 {# muted in the markup, not in JS: slow-motion review turns the
@@ -334,6 +346,35 @@
 
             <p id="wb-error" class="wb-error hidden"></p>
             <div id="wb-toast" class="wb-toast hidden"></div>
+
+            {% if has_zoom_video %}
+            <button class="wb-solo-btn" type="button" data-solo="wide"
+                    title="이 화면만 크게 보기 (다시 누르면 둘 다)">&#9974;</button>
+            <span class="wb-pane-tag">전경</span>
+            {% endif %}
+        </div>
+
+        {% if has_zoom_video %}
+        {# 두 번째 카메라. 전경이 "피스트 어디서 일어났나"를 말한다면 이 화면은
+           "칼이 무엇을 했나"를 말한다. 두 카메라는 동시에 시작하지 않았으므로
+           오디오 포락선 상호상관으로 잰 상수 하나(zoom = wide + offset)로 시계를
+           맞춘다 — scripts/sync_camera_pair.py.
+
+           이 창에는 캔버스가 없다. 그리기·측정·BH 보정은 전부 메인 영상의 프레임
+           좌표 위에서 정의된 도구라서, 다른 화각의 두 번째 화면에 같은 것을
+           올리면 같은 픽셀이 다른 거리를 뜻하게 된다. 이 창은 보는 창이다. #}
+        <div id="wb-zoom" class="wb-zoom"
+             data-src="/videos/{{ zoom_video_filename }}?v={{ zoom_video_version|default(0) }}"
+             data-offset="{{ zoom_offset_sec }}">
+            <video id="wb-zoom-video" playsinline preload="metadata" muted></video>
+            <button class="wb-solo-btn" type="button" data-solo="zoom"
+                    title="이 화면만 크게 보기 (Z — 다시 누르면 둘 다)">&#9974;</button>
+            <span class="wb-pane-tag">줌인</span>
+            {# 줌인 카메라가 늦게 시작하고 먼저 끝났다. 그 바깥 구간에서는 마지막
+               프레임을 그대로 두는 대신, 맞는 프레임이 없다고 말한다. #}
+            <p id="wb-zoom-gap" class="wb-zoom-gap hidden">이 시점의 줌인 영상은 없습니다</p>
+        </div>
+        {% endif %}
         </div>
 
         {% if show_skeleton_toggle %}
