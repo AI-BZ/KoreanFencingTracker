@@ -450,8 +450,10 @@ def tracked_warnings(analysis, fps: float = 30.0, inference=None) -> List[dict]:
         WARNING_END_OF_BOUT_INFERRED,
         WARNING_LAMP_ANNULLED,
         WARNING_LAMP_INCONSISTENT,
+        WARNING_LAMP_OVER_SCORE,
         WARNING_LAMP_UNDETERMINED,
         WARNING_LATE_SCORE_ENTRY,
+        WARNING_SIMULTANEOUS_IMPOSSIBLE,
         WARNING_SCORE_LOWER_BOUND,
         WARNING_START_SCORE_ASSUMED,
         WARNING_START_SCORE_READ,
@@ -499,6 +501,25 @@ def tracked_warnings(analysis, fps: float = 30.0, inference=None) -> List[dict]:
     for resolution in analysis.undetermined:
         if resolution is promoted:
             continue
+        # An event the priority rule demoted is a different observation from one
+        # the digits could not be read for, and saying "could not compare" about
+        # it would point whoever reads this at the wrong thing entirely: the
+        # digits compared fine, they just said something the weapon does not
+        # allow.
+        rule = getattr(resolution, "priority_rule", None)
+        if rule is not None:
+            warnings.append({
+                "type": WARNING_SIMULTANEOUS_IMPOSSIBLE,
+                "message": (
+                    f"{_clock(resolution.event.onset_frame, fps)} 양쪽 램프가 켜지고 "
+                    f"양쪽 점수가 함께 오른 것으로 읽혔습니다. {rule.weapon}에는 양측 "
+                    "동시 득점이 없으므로 둘 중 한쪽의 점수 판독이 잘못된 것이며, "
+                    "어느 쪽인지 알 수 없어 이 이벤트는 미확정으로 두고 집계하지 "
+                    "않았습니다."
+                ),
+                "severity": "warning",
+            })
+            continue
         warnings.append({
             "type": WARNING_LAMP_UNDETERMINED,
             "message": (
@@ -538,6 +559,22 @@ def tracked_warnings(analysis, fps: float = 30.0, inference=None) -> List[dict]:
                 f"무효 램프({skipped}) 뒤 {late.delay_sec:.1f}초 안에 "
                 f"{resolution.scorer} 점수가 올랐습니다. 무효 램프는 판정과 무관하므로 "
                 "이 득점을 해당 유효 램프의 터치로 집계했습니다."
+            ),
+            "severity": "info",
+        })
+
+    for resolution in getattr(analysis, "touches", []):
+        rule = getattr(resolution, "priority_rule", None)
+        if rule is None:
+            continue
+        side = "왼쪽" if resolution.scorer == "left" else "오른쪽"
+        warnings.append({
+            "type": WARNING_LAMP_OVER_SCORE,
+            "message": (
+                f"{_clock(resolution.event.onset_frame, fps)} {side} 유효 램프만 "
+                "켜졌는데 양쪽 점수가 모두 변한 것으로 읽혔습니다. "
+                f"{rule.weapon}에는 양측 동시 득점이 없고 램프가 점수판 픽셀 대조보다 "
+                f"신뢰도가 높으므로, 램프가 지목한 {side} 득점으로 집계했습니다."
             ),
             "severity": "info",
         })
@@ -695,13 +732,18 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def track_from_config(video, tracker, start_score=None):
+def track_from_config(video, tracker, start_score=None, weapon=None):
     """Run the tracked detector for a validated ``tracker`` block.
 
     Split out of :func:`run_tracked` so a second tool can reproduce this exact
     read — same profile, same anchor, same defaults — without reimplementing it
     and drifting from what the report was generated with. Returns
     ``(analysis, elapsed_seconds)``.
+
+    ``weapon`` is part of "this exact read", not decoration: under priority it
+    decides what a comparison reading both sides as changed resolves to, so a
+    second tool re-reading the same file without it can get a different set of
+    touches than the report holds.
     """
     from analyzer.scoreboard_tracker import get_machine_profile, track_scoreboard_video
 
@@ -717,12 +759,13 @@ def track_from_config(video, tracker, start_score=None):
             (int(start_score[0]), int(start_score[1]))
             if start_score is not None else None
         ),
+        weapon=weapon,
     )
     return analysis, time.time() - started
 
 
 def run_tracked(video, tracker, fps, clock_at_cut="unknown", bout_type="pool",
-                start_score=None):
+                start_score=None, weapon=None):
     """``--tracked`` detection: returns ``(events, extra_warnings, elapsed)``."""
     from analyzer.scoreboard_tracker import (
         END_OF_BOUT_TARGET,
@@ -743,7 +786,8 @@ def run_tracked(video, tracker, fps, clock_at_cut="unknown", bout_type="pool",
             f"  Start:      {start_score[0]}-{start_score[1]} (given; the digit "
             f"reader is not consulted)"
         )
-    analysis, elapsed = track_from_config(video, tracker, start_score=start_score)
+    analysis, elapsed = track_from_config(
+        video, tracker, start_score=start_score, weapon=weapon)
 
     reading = analysis.start_score_reading
     if reading is not None and start_score is None:
@@ -864,6 +908,7 @@ def main(argv=None) -> int:
             clock_at_cut=args.clock_at_cut,
             bout_type=args.bout_type,
             start_score=args.start_score,
+            weapon=args.weapon,
         )
     else:
         print(f"  ROIs:       {', '.join(f'{k}={v}' for k, v in rois.items())}")

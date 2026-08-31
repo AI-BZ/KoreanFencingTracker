@@ -247,7 +247,11 @@ def main(argv=None) -> int:
     print(f"Report:     {report_path}")
     print(f"Scoreboard: {video}")
     print("Re-reading the scoreboard (about 20s for a 3-minute bout)...")
-    analysis, elapsed = track_from_config(video, tracker)
+    # The weapon comes from the report being amended, not from a flag: this read
+    # has to reproduce the one the report was built from, and under priority the
+    # weapon changes what a both-sides-changed comparison resolves to.
+    weapon = (report.get("summary") or {}).get("weapon")
+    analysis, elapsed = track_from_config(video, tracker, weapon=weapon)
     print(
         f"  {len(analysis.events)} lamp events in {elapsed:.1f}s -> "
         f"{len(analysis.touches)} touches, {len(analysis.annulled)} annulled, "

@@ -53,6 +53,16 @@ hit at all. A white lamp is not something a referee weighs, so
 conditions strict enough that a genuine annulment still cannot get through. See
 its docstring; the annulment gate above is unchanged.
 
+The other thing the digit comparison gets wrong is claiming *both* sides changed
+when only one did. The similarity distributions of a real change and a false one
+overlap — measured across the four ``20260828_김창환배`` bouts, real changes span
+0.149–0.604 and false "changes" 0.585–0.770 — so no threshold separates them and
+the fix cannot come from the pixels. It comes from the weapon: under priority
+(foil, sabre) one action awards one point or none, so both sides rising is not a
+result the bout can have produced, and one of the two readings is wrong. Which
+one is settled by the lamps, which are electrical signals rather than pixel
+statistics. See :func:`resolve_touches` and :data:`PRIORITY_WEAPONS`.
+
 Score values are *derived*, not read
 ------------------------------------
 :func:`resolve_touches` numbers the score by counting confirmed touches from a
@@ -1952,6 +1962,68 @@ class LatePromotion:
         )
 
 
+#: Weapons whose rules award at most one point per action, because the referee
+#: resolves a double hit on priority: either one fencer takes it or nobody does.
+#: Both sides' digits rising together is therefore not a result these weapons can
+#: produce, and :func:`resolve_touches` refuses to report it as one.
+#:
+#: Épée is deliberately absent and must stay absent. There a simultaneous double
+#: touch is a real, common result and both scores rising together is exactly what
+#: it looks like, so the same reading is evidence rather than error.
+PRIORITY_WEAPONS = frozenset({"foil", "sabre"})
+
+#: :attr:`PriorityRuleApplication.rule` values.
+RULE_NO_SIMULTANEOUS = "no_simultaneous_touch"
+RULE_LAMP_OVER_SCORE = "lamp_over_score"
+
+_SIDE_KO = {LEFT: "좌", RIGHT: "우"}
+
+
+def _similarity_ko(similarity: Mapping[str, Optional[float]]) -> str:
+    parts = [
+        f"{_SIDE_KO[side]} {similarity[side]:.3f}"
+        for side in SIDES
+        if similarity.get(side) is not None
+    ]
+    return f" (유사도 {' / '.join(parts)})" if parts else ""
+
+
+@dataclass(frozen=True)
+class PriorityRuleApplication:
+    """Why a comparison reading *both* sides up was not taken at face value.
+
+    Recorded on the :class:`TouchResolution` the rule produced, so a report can
+    say the reading was overruled and on what grounds rather than presenting the
+    outcome as an ordinary read. See :func:`resolve_touches`.
+    """
+
+    #: :data:`RULE_NO_SIMULTANEOUS` or :data:`RULE_LAMP_OVER_SCORE`.
+    rule: str
+    #: The weapon whose rules made the reading impossible.
+    weapon: str
+    #: Sides the digit comparison claimed had changed. Always both — with one
+    #: side there is nothing to overrule.
+    changed: Tuple[str, ...]
+    #: Sides whose valid lamp fired.
+    lit: Tuple[str, ...]
+    #: The comparison's per-side similarity, kept because it is the number that
+    #: was wrong and the one to look at when re-tuning anything.
+    similarity: Mapping[str, Optional[float]]
+
+    def describe(self) -> str:
+        detail = _similarity_ko(self.similarity)
+        if self.rule == RULE_LAMP_OVER_SCORE:
+            side = _SIDE_KO.get(self.lit[0], self.lit[0]) if self.lit else "?"
+            return (
+                f"양쪽 점수가 함께 변한 것으로 읽혔으나 {side}측 유효 램프만 점등 — "
+                f"램프가 지목한 {side} 득점 채택{detail}"
+            )
+        return (
+            f"양쪽 점수가 함께 오른 것으로 읽혔으나 {self.weapon}에는 양측 동시 "
+            f"득점이 없어 미확정 처리{detail}"
+        )
+
+
 @dataclass(frozen=True)
 class TouchResolution:
     """A lamp event with its scorer decided, or explicitly not decided."""
@@ -1975,6 +2047,10 @@ class TouchResolution:
     #: other resolution, so ``promotion is not None`` is the test for "this
     #: number came from somewhere other than the usual cross-check".
     promotion: Optional[LatePromotion] = None
+    #: Set only when one of the priority-weapon rules overruled a comparison that
+    #: read both sides as changing — see :func:`resolve_touches`. ``None``
+    #: everywhere else.
+    priority_rule: Optional[PriorityRuleApplication] = None
 
 
 def late_entry_comparisons(
@@ -2086,6 +2162,7 @@ def resolve_touches(
     late_comparisons: Optional[Sequence[Optional[ScoreComparison]]] = None,
     fps: float = 30.0,
     late_entry_window_sec: float = LATE_ENTRY_WINDOW_SEC,
+    weapon: Optional[str] = None,
 ) -> List[TouchResolution]:
     """Decide, for each lamp event, whether a point was actually awarded.
 
@@ -2137,6 +2214,51 @@ def resolve_touches(
     limit the ordinary touch path lives with, and the reason a change on both
     sides is refused here rather than split into two points.
 
+    Both sides at once: what the weapon's rules allow
+    -------------------------------------------------
+    ``weapon`` names the weapon being fenced, and when it is one of
+    :data:`PRIORITY_WEAPONS` it settles a reading the digits cannot settle for
+    themselves. Under priority, one action produces one point or none: the
+    referee either awards it to a fencer or, on a true simultaneous, to nobody.
+    So a comparison reporting that *both* sides' digits went up is not a result
+    the bout can have produced; one of the two readings is wrong. Two shapes of
+    that, distinguished by how many valid lamps fired:
+
+    * **Both lamps lit** (:data:`RULE_NO_SIMULTANEOUS`) — the lamps say a double
+      hit and nothing says which fencer the referee gave it to. The reading is
+      demoted to ``undetermined``. Picking a side here would be a guess, and the
+      guess would be invisible in the output; ``undetermined`` is what is
+      actually known. Measured on ``20260828_김창환배_소율vs박소윤`` at frame
+      ~730: red and green lamps, similarity 0.747 left and 0.770 right, both read
+      as changed, and the panel in fact sat at 0–0 for another fifty seconds. The
+      spurious point took the report to 6–3 against a true 5–2.
+    * **Exactly one lamp lit** (:data:`RULE_LAMP_OVER_SCORE`) — the lamp names
+      the scorer, so the other side's "change" is the spurious one and the touch
+      is awarded to the side whose lamp fired. A lamp is an electrical signal off
+      the scoring machine; a digit comparison is a similarity score on a handful
+      of blown-out pixels, and where they disagree the lamp is the better witness.
+      Measured on ``20260828_김창환배_이예은vs박소윤`` at frame ~3970: green lamp
+      only, right similarity 0.200 (a real change) and left 0.585 (not), which
+      the ``inconsistent`` gate below threw the whole event away for.
+
+    Both rules need a weapon to fire and neither fires without one, so a caller
+    that names no weapon gets the unchanged behaviour. Neither touches the
+    annulment gate: the first only ever removes a touch, and the second acts on
+    an event where a side's digits *did* change, so a lamp the referee waved off
+    — digits unmoved — reaches neither.
+
+    What can still fool the second rule is the operator zeroing the box for the
+    next bout while the camera runs: both fields change at once and neither
+    change is a point. Measured on ``260715_pool_a_piste2``, where that is
+    exactly what happens after the last lamp — and the rule still answers
+    correctly there, because the left fencer really did score 4 → 5 before the
+    reset. It would answer wrongly on the same picture with the last lamp
+    annulled and the bout ending on time, which is the ambiguity
+    :func:`infer_end_of_bout_touch` documents at length and refuses to resolve
+    without a clock reading. The exposure is one event per bout, at the end, and
+    the rule is worth it: across the eleven calibrated bouts it recovers four
+    touches, every one of them confirmed by reading the panel by eye.
+
     Scores are a running tally from ``start_score``, not an OCR reading, so they
     are only meaningful for a clip that starts at the beginning of the bout.
     Once any event is undetermined the tally keeps counting — it remains the best
@@ -2149,6 +2271,7 @@ def resolve_touches(
     score = (int(start_score[0]), int(start_score[1]))
     ordered = sorted(events, key=lambda e: e.onset_frame)
     reliable = True
+    priority_weapon = weapon is not None and weapon.strip().lower() in PRIORITY_WEAPONS
 
     for index, event in enumerate(ordered):
         comparison = comparisons[index] if index < len(comparisons) else None
@@ -2199,13 +2322,45 @@ def resolve_touches(
                 reliable))
             continue
 
+        lit = {s for s in SIDES if (s == LEFT and event.left_valid) or (s == RIGHT and event.right_valid)}
+
+        # Both sides' digits rising is a result a priority weapon cannot produce,
+        # so the reading is overruled rather than reported — see the docstring.
+        # This runs before the inconsistency gate below because the one-lamp form
+        # of it is a case that gate would otherwise discard whole.
+        if priority_weapon and len(sides) == len(SIDES):
+            detail = PriorityRuleApplication(
+                rule=RULE_LAMP_OVER_SCORE if len(lit) == 1 else RULE_NO_SIMULTANEOUS,
+                weapon=weapon.strip().lower(),
+                changed=tuple(s for s in SIDES if s in sides),
+                lit=tuple(s for s in SIDES if s in lit),
+                similarity=dict(comparison.similarity),
+            )
+            if detail.rule == RULE_LAMP_OVER_SCORE:
+                scorer = detail.lit[0]
+                score = (
+                    (before[0] + 1, before[1]) if scorer == LEFT
+                    else (before[0], before[1] + 1)
+                )
+                resolutions.append(TouchResolution(
+                    event, scorer, VERDICT_TOUCH, before, score, event.both_valid,
+                    reliable, priority_rule=detail))
+                continue
+            # Both lamps lit: the point belongs to one of them and nothing here
+            # says which, so no point is awarded and the tally stops being
+            # trustworthy — the same treatment any unreadable event gets.
+            resolutions.append(TouchResolution(
+                event, None, VERDICT_UNDETERMINED, before, before, event.both_valid,
+                reliable, priority_rule=detail))
+            reliable = False
+            continue
+
         # A fencer cannot score without their own coloured lamp. If a side's
         # score moved while only the other side's lamp fired, the two readings
         # contradict each other and there is no way to arbitrate between them —
         # so neither is reported as fact. This gate exists because output that
         # said "left lamp only" and "both scores went up" in the same breath
         # was allowed through once; it was the tracker reading a wall.
-        lit = {s for s in SIDES if (s == LEFT and event.left_valid) or (s == RIGHT and event.right_valid)}
         if not sides <= lit:
             resolutions.append(TouchResolution(
                 event, None, VERDICT_INCONSISTENT, before, before, event.both_valid,
@@ -2392,6 +2547,11 @@ class ScoreboardAnalysis:
     #: What the digit reader made of the opening frames, whether or not its
     #: answer was used. ``None`` only for analyses built by hand in tests.
     start_score_reading: Optional[StartScoreReading] = None
+    #: The weapon the resolutions were decided under, or ``None`` if the caller
+    #: named none — see :func:`resolve_touches`. Recorded because it changes what
+    #: the same pixels resolve to, so a stored analysis without it cannot be
+    #: reproduced.
+    weapon: Optional[str] = None
 
     @property
     def start_score_assumed(self) -> bool:
@@ -2584,6 +2744,7 @@ def track_scoreboard_video(
     read_config: DigitReadConfig = DigitReadConfig(),
     start_score: Optional[Tuple[int, int]] = None,
     start_score_scan_frames: int = START_SCORE_SCAN_FRAMES,
+    weapon: Optional[str] = None,
     progress=None,
 ) -> ScoreboardAnalysis:
     """Track, read and cross-validate a whole scoreboard work file.
@@ -2599,6 +2760,10 @@ def track_scoreboard_video(
     wins: a caller who has looked at the panel outranks the reader. Whichever
     way it was decided, :attr:`ScoreboardAnalysis.start_score_reading` records
     it, so a report can say which happened.
+
+    ``weapon`` is passed straight to :func:`resolve_touches`, where it decides
+    whether a reading of both sides scoring at once is possible at all. Leaving
+    it ``None`` leaves those rules off.
 
     ``anchor_frame`` defaults to 0 because a clip normally opens on the panel.
     It exists because one does not: on ``260816_venue2_bout`` the panel is
@@ -2671,7 +2836,7 @@ def track_scoreboard_video(
     return ScoreboardAnalysis(
         resolutions=resolve_touches(
             events, comparisons, start_score=(int(baseline[0]), int(baseline[1])),
-            late_comparisons=late, fps=float(fps),
+            late_comparisons=late, fps=float(fps), weapon=weapon,
         ),
         events=events,
         coverage_gaps=gaps,
@@ -2683,6 +2848,7 @@ def track_scoreboard_video(
         start_score=(int(baseline[0]), int(baseline[1])),
         start_score_source="caller" if start_score is not None else "read",
         start_score_reading=reading,
+        weapon=weapon,
     )
 
 
@@ -2771,6 +2937,8 @@ def _describe(resolution: TouchResolution) -> str:
     if resolution.verdict == VERDICT_OFF_TARGET:
         return f"{lamps} — 무효면 (득점 아님)"
     if resolution.verdict == VERDICT_UNDETERMINED:
+        if resolution.priority_rule is not None:
+            return f"{lamps} — {resolution.priority_rule.describe()}"
         return f"{lamps} — 점수판 확인 불가 (득점 여부 미확정)"
     if resolution.verdict == VERDICT_INCONSISTENT:
         return f"{lamps} — 램프와 점수 변화가 모순됨 (판독 신뢰 불가)"
@@ -2780,4 +2948,6 @@ def _describe(resolution: TouchResolution) -> str:
         text = f"{lamps} — {resolution.scorer} 득점"
     if resolution.promotion is not None:
         text = f"{text} ({resolution.promotion.describe()})"
+    if resolution.priority_rule is not None:
+        text = f"{text} ({resolution.priority_rule.describe()})"
     return text

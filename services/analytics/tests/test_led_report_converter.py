@@ -67,6 +67,8 @@ from scripts.analyze_led_scoreboard import (
     tracked_warnings,
 )
 from app.led_report_converter import (
+    WARNING_LAMP_OVER_SCORE,
+    WARNING_SIMULTANEOUS_IMPOSSIBLE,
     WARNING_START_SCORE_ASSUMED,
     WARNING_START_SCORE_READ,
 )
@@ -1490,6 +1492,65 @@ def fake_analysis_with(resolutions, score_reliable=True):
 
 def fake_inference(index, scorer="left", applied=True):
     return SimpleNamespace(applied=applied, index=index, scorer=scorer, reason="applied")
+
+
+def fake_priority_rule(rule, weapon="foil"):
+    """Stand-in for ``PriorityRuleApplication``; only these fields are read."""
+    return SimpleNamespace(rule=rule, weapon=weapon)
+
+
+class TestPriorityRuleWarnings:
+    """A reading the weapon's rules overruled has to say so in the report.
+
+    Both cases are otherwise invisible: the first silently removes a touch and
+    the second silently adds one, and either would leave a reader looking at a
+    number with no way to know it was arrived at differently.
+    """
+
+    def test_a_refused_simultaneous_touch_is_not_reported_as_unreadable_digits(self):
+        # The digits compared fine. Saying "could not compare" would send the
+        # reader after the crop or the tracker instead of the reading itself.
+        demoted = fake_lamp_resolution(3720, "undetermined", left_valid=True,
+                                       right_valid=True)
+        demoted.priority_rule = fake_priority_rule("no_simultaneous_touch")
+        analysis = fake_analysis_with([demoted])
+
+        [warning] = tracked_warnings(analysis)
+
+        assert warning["type"] == WARNING_SIMULTANEOUS_IMPOSSIBLE
+        assert warning["severity"] == "warning"
+        assert "2:04" in warning["message"]
+        assert "foil" in warning["message"]
+
+    def test_an_ordinary_undetermined_event_keeps_its_own_warning(self):
+        analysis = fake_analysis_with([fake_lamp_resolution(3720, "undetermined")])
+
+        [warning] = tracked_warnings(analysis)
+
+        assert warning["type"] == WARNING_LAMP_UNDETERMINED
+
+    def test_a_touch_recovered_from_the_lamp_says_which_lamp_it_followed(self):
+        recovered = fake_lamp_resolution(3985, "touch", left_valid=False,
+                                         right_valid=True)
+        recovered.scorer = "right"
+        recovered.priority_rule = fake_priority_rule("lamp_over_score")
+        analysis = fake_analysis_with([recovered])
+        analysis.touches = [recovered]
+
+        [warning] = tracked_warnings(analysis)
+
+        assert warning["type"] == WARNING_LAMP_OVER_SCORE
+        assert warning["severity"] == "info"
+        assert "2:12" in warning["message"]
+        assert "오른쪽" in warning["message"]
+
+    def test_an_ordinary_touch_produces_no_such_warning(self):
+        ordinary = fake_lamp_resolution(3985, "touch")
+        ordinary.scorer = "left"
+        analysis = fake_analysis_with([ordinary])
+        analysis.touches = [ordinary]
+
+        assert tracked_warnings(analysis) == []
 
 
 class TestBuildTouchesCarriesTheInferenceKeys:

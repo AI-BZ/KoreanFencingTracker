@@ -38,7 +38,10 @@ from analyzer.scoreboard_tracker import (
     COLOUR_WHITE,
     KOR_DOMESTIC_V1,
     LEFT,
+    PRIORITY_WEAPONS,
     RIGHT,
+    RULE_LAMP_OVER_SCORE,
+    RULE_NO_SIMULTANEOUS,
     SIDES,
     VERDICT_ANNULLED,
     VERDICT_INCONSISTENT,
@@ -271,11 +274,11 @@ def _event(onset=100, end=130, left=None, right=None):
     return LampEvent(onset_frame=onset, end_frame=end, left_colour=left, right_colour=right)
 
 
-def _comparison(changed=(), determined=True):
+def _comparison(changed=(), determined=True, similarity=None):
     return ScoreComparison(
         changed=frozenset(changed),
         determined=determined,
-        similarity={side: None for side in SIDES},
+        similarity=similarity or {side: None for side in SIDES},
     )
 
 
@@ -1679,6 +1682,296 @@ class TestALampAndAScoreThatContradictEachOtherAreNotATouch:
 
         assert resolutions[0].verdict == VERDICT_TOUCH
         assert resolutions[0].scorer == LEFT
+
+
+# ----------------------------------------------------------------------
+# The priority-weapon rules: both sides cannot score on one action
+# ----------------------------------------------------------------------
+
+
+#: The similarities measured at 소율vs박소윤 frame ~730, where two false "changes"
+#: produced a phantom double touch. Both sit above the values a real change
+#: produces on the same footage (0.149-0.604) and below the values an unchanged
+#: box produces (0.813-0.965), which is why no threshold separates them.
+_FALSE_BOTH_SIMILARITY = {LEFT: 0.747, RIGHT: 0.770}
+
+
+class TestPriorityWeaponRefusesASimultaneousTouch:
+    """Under priority one action awards one point or none, never two.
+
+    So a comparison reading *both* sides up cannot be right, and the failure is
+    silent: on 소율vs박소윤 the phantom point came out 6-3 against a true 5-2 with
+    complete coverage and therefore no warning of any kind attached.
+    """
+
+    def test_both_lamps_and_both_scores_is_undetermined_in_foil(self):
+        resolutions = resolve_touches(
+            [_event(left=COLOUR_RED, right=COLOUR_GREEN)],
+            [_comparison(changed={LEFT, RIGHT})],
+            weapon="foil",
+        )
+
+        assert resolutions[0].verdict == VERDICT_UNDETERMINED
+        assert resolutions[0].scorer is None
+
+    def test_the_refused_reading_awards_no_point_to_either_side(self):
+        resolutions = resolve_touches(
+            [_event(left=COLOUR_RED, right=COLOUR_GREEN)],
+            [_comparison(changed={LEFT, RIGHT})],
+            start_score=(3, 1),
+            weapon="foil",
+        )
+
+        assert resolutions[0].score_before == (3, 1)
+        assert resolutions[0].score_after == (3, 1)
+
+    def test_it_records_the_rule_the_weapon_and_the_similarities(self):
+        resolutions = resolve_touches(
+            [_event(left=COLOUR_RED, right=COLOUR_GREEN)],
+            [_comparison(changed={LEFT, RIGHT}, similarity=_FALSE_BOTH_SIMILARITY)],
+            weapon="foil",
+        )
+
+        rule = resolutions[0].priority_rule
+        assert rule is not None
+        assert rule.rule == RULE_NO_SIMULTANEOUS
+        assert rule.weapon == "foil"
+        assert rule.changed == (LEFT, RIGHT)
+        assert rule.lit == (LEFT, RIGHT)
+        assert rule.similarity == _FALSE_BOTH_SIMILARITY
+
+    def test_its_description_says_the_weapon_has_no_simultaneous_touch(self):
+        resolutions = resolve_touches(
+            [_event(left=COLOUR_RED, right=COLOUR_GREEN)],
+            [_comparison(changed={LEFT, RIGHT}, similarity=_FALSE_BOTH_SIMILARITY)],
+            weapon="foil",
+        )
+
+        described = resolutions[0].priority_rule.describe()
+        assert "동시" in described
+        assert "0.747" in described and "0.770" in described
+
+    def test_later_totals_are_flagged_unreliable(self):
+        """A point may have been scored here; which side is exactly what is unknown."""
+        resolutions = resolve_touches(
+            [_event(onset=100, left=COLOUR_RED, right=COLOUR_GREEN),
+             _event(onset=600, left=COLOUR_RED)],
+            [_comparison(changed={LEFT, RIGHT}), _comparison(changed={LEFT})],
+            weapon="foil",
+        )
+
+        assert resolutions[0].verdict == VERDICT_UNDETERMINED
+        assert resolutions[1].verdict == VERDICT_TOUCH
+        assert resolutions[1].tally_reliable is False
+
+    def test_sabre_refuses_the_same_reading(self):
+        resolutions = resolve_touches(
+            [_event(left=COLOUR_RED, right=COLOUR_GREEN)],
+            [_comparison(changed={LEFT, RIGHT})],
+            weapon="sabre",
+        )
+
+        assert resolutions[0].verdict == VERDICT_UNDETERMINED
+
+    def test_epee_is_not_one_of_the_weapons_this_rule_applies_to(self):
+        assert {"foil", "sabre"} <= PRIORITY_WEAPONS
+        assert "epee" not in PRIORITY_WEAPONS
+
+    def test_epee_still_awards_a_point_to_each_side(self):
+        """A double touch is a real épée result, not a misread."""
+        resolutions = resolve_touches(
+            [_event(left=COLOUR_RED, right=COLOUR_GREEN)],
+            [_comparison(changed={LEFT, RIGHT})],
+            weapon="epee",
+        )
+
+        assert resolutions[0].verdict == VERDICT_TOUCH
+        assert resolutions[0].scorer == "both"
+        assert resolutions[0].score_after == (1, 1)
+        assert resolutions[0].priority_rule is None
+
+    def test_naming_no_weapon_leaves_the_double_alone(self):
+        resolutions = resolve_touches(
+            [_event(left=COLOUR_RED, right=COLOUR_GREEN)],
+            [_comparison(changed={LEFT, RIGHT})],
+        )
+
+        assert resolutions[0].scorer == "both"
+        assert resolutions[0].priority_rule is None
+
+    def test_the_weapon_is_matched_however_it_is_spelled(self):
+        resolutions = resolve_touches(
+            [_event(left=COLOUR_RED, right=COLOUR_GREEN)],
+            [_comparison(changed={LEFT, RIGHT})],
+            weapon="  Foil ",
+        )
+
+        assert resolutions[0].verdict == VERDICT_UNDETERMINED
+
+    def test_both_lamps_with_one_score_changing_is_still_a_priority_call(self):
+        """The ordinary priority path — one point awarded — is what this weapon does."""
+        resolutions = resolve_touches(
+            [_event(left=COLOUR_RED, right=COLOUR_GREEN)],
+            [_comparison(changed={RIGHT})],
+            weapon="foil",
+        )
+
+        assert resolutions[0].verdict == VERDICT_TOUCH
+        assert resolutions[0].scorer == RIGHT
+        assert resolutions[0].priority_call is True
+        assert resolutions[0].priority_rule is None
+
+    def test_both_lamps_with_no_score_change_stays_annulled(self):
+        """The annulment gate is untouched: nothing here can turn it into a point."""
+        resolutions = resolve_touches(
+            [_event(left=COLOUR_RED, right=COLOUR_GREEN)],
+            [_comparison(changed=set())],
+            weapon="foil",
+        )
+
+        assert resolutions[0].verdict == VERDICT_ANNULLED
+        assert resolutions[0].priority_rule is None
+
+    def test_an_undetermined_comparison_is_undetermined_without_the_rule(self):
+        resolutions = resolve_touches(
+            [_event(left=COLOUR_RED, right=COLOUR_GREEN)],
+            [_comparison(determined=False)],
+            weapon="foil",
+        )
+
+        assert resolutions[0].verdict == VERDICT_UNDETERMINED
+        assert resolutions[0].priority_rule is None
+
+    def test_an_ordinary_single_lamp_touch_is_untouched(self):
+        resolutions = resolve_touches(
+            [_event(left=COLOUR_RED)], [_comparison(changed={LEFT})], weapon="foil",
+        )
+
+        assert resolutions[0].verdict == VERDICT_TOUCH
+        assert resolutions[0].scorer == LEFT
+        assert resolutions[0].priority_rule is None
+
+
+class TestPriorityWeaponBelievesTheLampOverTheScore:
+    """One lamp, both sides reading as changed: the lamp names the scorer.
+
+    A lamp is a signal off the scoring machine; a "change" is a similarity score
+    on a handful of blown-out pixels. Measured on 이예은vs박소윤 frame ~3970, where
+    the green lamp's own side read 0.200 — an unmistakable change — and the left
+    side read 0.585, and the contradiction threw the whole touch away.
+    """
+
+    def test_a_right_lamp_with_both_scores_changing_awards_the_right(self):
+        resolutions = resolve_touches(
+            [_event(right=COLOUR_GREEN)],
+            [_comparison(changed={LEFT, RIGHT}, similarity={LEFT: 0.585, RIGHT: 0.200})],
+            weapon="foil",
+        )
+
+        assert resolutions[0].verdict == VERDICT_TOUCH
+        assert resolutions[0].scorer == RIGHT
+        assert resolutions[0].score_after == (0, 1)
+
+    def test_a_left_lamp_with_both_scores_changing_awards_the_left(self):
+        resolutions = resolve_touches(
+            [_event(left=COLOUR_RED)], [_comparison(changed={LEFT, RIGHT})], weapon="foil",
+        )
+
+        assert resolutions[0].scorer == LEFT
+        assert resolutions[0].score_after == (1, 0)
+
+    def test_it_records_the_rule_and_the_single_lamp_it_followed(self):
+        resolutions = resolve_touches(
+            [_event(right=COLOUR_GREEN)],
+            [_comparison(changed={LEFT, RIGHT}, similarity={LEFT: 0.585, RIGHT: 0.200})],
+            weapon="foil",
+        )
+
+        rule = resolutions[0].priority_rule
+        assert rule.rule == RULE_LAMP_OVER_SCORE
+        assert rule.lit == (RIGHT,)
+        assert rule.changed == (LEFT, RIGHT)
+        assert "0.585" in rule.describe() and "0.200" in rule.describe()
+
+    def test_the_recovered_touch_is_not_a_priority_call(self):
+        """Only one lamp fired, so the referee had nothing to award on priority."""
+        resolutions = resolve_touches(
+            [_event(right=COLOUR_GREEN)], [_comparison(changed={LEFT, RIGHT})],
+            weapon="foil",
+        )
+
+        assert resolutions[0].priority_call is False
+
+    def test_the_running_total_stays_trustworthy(self):
+        """Nothing went unrecorded here — the point was found, not lost."""
+        resolutions = resolve_touches(
+            [_event(onset=100, right=COLOUR_GREEN), _event(onset=600, left=COLOUR_RED)],
+            [_comparison(changed={LEFT, RIGHT}), _comparison(changed={LEFT})],
+            weapon="foil",
+        )
+
+        assert [r.tally_reliable for r in resolutions] == [True, True]
+        assert resolutions[1].score_after == (1, 1)
+
+    def test_only_the_unlit_side_changing_is_still_inconsistent(self):
+        """The lamp and the digits name different fencers; nothing arbitrates that."""
+        resolutions = resolve_touches(
+            [_event(right=COLOUR_GREEN)], [_comparison(changed={LEFT})], weapon="foil",
+        )
+
+        assert resolutions[0].verdict == VERDICT_INCONSISTENT
+        assert resolutions[0].priority_rule is None
+
+    def test_epee_keeps_the_inconsistent_verdict(self):
+        """In épée both sides rising may be a real double whose lamp was missed."""
+        resolutions = resolve_touches(
+            [_event(right=COLOUR_GREEN)], [_comparison(changed={LEFT, RIGHT})],
+            weapon="epee",
+        )
+
+        assert resolutions[0].verdict == VERDICT_INCONSISTENT
+        assert resolutions[0].scorer is None
+
+    def test_naming_no_weapon_keeps_the_inconsistent_verdict(self):
+        resolutions = resolve_touches(
+            [_event(right=COLOUR_GREEN)], [_comparison(changed={LEFT, RIGHT})],
+        )
+
+        assert resolutions[0].verdict == VERDICT_INCONSISTENT
+
+    def test_a_white_only_lamp_is_off_target_however_the_digits_read(self):
+        """No valid lamp fired, so there is no lamp to believe."""
+        resolutions = resolve_touches(
+            [_event(left=COLOUR_WHITE, right=COLOUR_WHITE)],
+            [_comparison(changed={LEFT, RIGHT})],
+            weapon="foil",
+        )
+
+        assert resolutions[0].verdict == VERDICT_OFF_TARGET
+        assert resolutions[0].priority_rule is None
+
+    def test_a_valid_lamp_beside_the_other_sides_white_one_still_counts_as_one(self):
+        """A white lamp is not a claim on the point, so this is a single-lamp event."""
+        resolutions = resolve_touches(
+            [_event(left=COLOUR_WHITE, right=COLOUR_GREEN)],
+            [_comparison(changed={LEFT, RIGHT})],
+            weapon="foil",
+        )
+
+        assert resolutions[0].verdict == VERDICT_TOUCH
+        assert resolutions[0].scorer == RIGHT
+        assert resolutions[0].priority_rule.rule == RULE_LAMP_OVER_SCORE
+
+    def test_the_reason_reaches_the_match_event_description(self):
+        resolutions = resolve_touches(
+            [_event(right=COLOUR_GREEN)],
+            [_comparison(changed={LEFT, RIGHT}, similarity={LEFT: 0.585, RIGHT: 0.200})],
+            weapon="foil",
+        )
+
+        events = resolutions_to_match_events(resolutions)
+
+        assert "램프가 지목한" in events[0].description
 
 
 # ----------------------------------------------------------------------

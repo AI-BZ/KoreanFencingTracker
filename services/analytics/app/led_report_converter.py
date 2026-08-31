@@ -102,6 +102,8 @@ WARNING_END_OF_BOUT_INFERRED = "end_of_bout_inferred"
 WARNING_LATE_SCORE_ENTRY = "lamp_late_score_entry"
 WARNING_START_SCORE_ASSUMED = "start_score_assumed"
 WARNING_START_SCORE_READ = "start_score_read"
+WARNING_SIMULTANEOUS_IMPOSSIBLE = "simultaneous_touch_impossible"
+WARNING_LAMP_OVER_SCORE = "lamp_overrode_score_read"
 
 #: ``meta`` key marking a report that must not be merged into a continuous
 #: report. Set when the read is known to be wrong in a way the numbers alone do
