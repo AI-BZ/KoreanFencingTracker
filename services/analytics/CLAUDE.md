@@ -727,26 +727,44 @@ TV 중계나 선수 촬영은 Phase 1 이벤트가 없으므로 모든 프레임
 (20분 구간 내내 2.1GB 고정) 상한은 길이가 아니라 동시 실행 프로세스 수로 결정된다.
 분석당 약 2GB로 잡으면 된다.
 
-### 🔴 리포트 재생성 시 램프 판독이 소실된다 (2026-08-08 실제로 당함)
+### 🔴 램프 판독은 경로가 두 개다 — 섞으면 멀쩡한 판독을 덮어쓴다
 
-`generate_continuous_report.py`는 램프를 읽지 않는다. `lamp_pattern` /
-`lamp_confidence`는 **별도 스크립트** `detect_touch_lamps.py`가 나중에 주입하는
-필드다. 따라서 기존 리포트를 재생성하면 **램프가 조용히 사라지고**, 램프에 의존하는
-`no_priority_call` 판정 8건이 전부 `unclear`로 후퇴한다. 에러도 경고도 없다.
+`lamp_pattern` / `lamp_confidence`가 어디서 오는지는 **영상 종류에 따라 다르다.**
+이걸 혼동해서 TV용 스크립트를 자체 촬영본에 돌릴 뻔했다 (2026-08-31, dry-run 이
+막았다).
+
+| 영상 | 램프 출처 | 재생성하면 |
+|------|-----------|-----------|
+| **자체 촬영 (실물 LED 점수판)** | OCR 리포트(`*_report.json`)를 통해 들어온다. `generate_continuous_report.py`가 **매 실행마다 다시 머지**한다 | **사라지지 않는다.** 재주입 불필요 |
+| **TV 중계 (화면 오버레이)** | `detect_touch_lamps.py`가 나중에 주입한다 | **조용히 사라진다.** 반드시 재주입 |
+
+🔴 **`detect_touch_lamps.py`를 자체 촬영본에 돌리지 말 것.** 이 스크립트의
+`LampBarReader`는 `analyzer/tv_overlay_ocr.py`의 **방송 오버레이 램프 바** 판독기다.
+실물 LED 점수판에서는 아무것도 못 읽고(실측 0/6), 멀쩡한 판독을
+`unread`로 **덮어쓴다**. 돌려야 한다면 반드시 `--dry-run`으로 먼저 확인할 것.
 
 ```bash
-# 재생성했다면 램프를 반드시 다시 주입할 것
-PYTHONPATH=. .venv/bin/python3 scripts/generate_continuous_report.py <video> ...
-PYTHONPATH=. .venv/bin/python3 scripts/detect_touch_lamps.py \
-    --report data/reports/<id>_continuous_report.json --video <video> \
-    --labels-csv data/labels_priority_<id>.csv
+# 자체 촬영본: 재생성만 하면 램프가 따라온다. 단 --output-dir 를 빠뜨리지 말 것 (아래)
+PYTHONPATH=. .venv/bin/python3 scripts/generate_continuous_report.py <video> \
+    --output-dir data/reports/private
 
-# 확인: 램프가 살아 있는지
-python3 -c "import json,collections;d=json.load(open('data/reports/<id>_continuous_report.json'));print(collections.Counter(t.get('lamp_pattern') for t in d['touches']))"
+# 확인: 램프가 살아 있는지 (양쪽 경로 공통)
+python3 -c "import json,collections;d=json.load(open('data/reports/private/<id>_continuous_report.json'));print(collections.Counter(t.get('lamp_pattern') for t in d['touches']))"
 ```
 
-판정 분포로도 확인된다 — 램프가 있으면 `no_priority_call`이 나오고, 없으면 그 건수가
-`unclear`에 합쳐진다.
+성공 시 생성 로그에 `Lamp readings supplied by OCR report: N touch(es) promoted`
+가 찍힌다. 안 찍히면 머지가 안 된 것이다.
+
+### 🔴 `--output-dir data/reports/private` 를 빠뜨리면 조용히 빈 리포트가 나온다
+
+OCR 리포트 자동탐색이 기본 디렉터리(`data/reports/`)만 뒤진다. 우리 자체 촬영본의
+OCR 리포트는 **`private/`에 있으므로** 이 플래그가 없으면:
+
+- 머지가 통째로 안 일어나 `analysis_mode: continuous_only`, **touches 0개** 리포트가 나오고
+- 결과물이 `data/reports/`에 쓰여 `private/`의 옛 리포트와 **중복본**이 생기며
+- `resolve_report_path`가 private를 우선하므로 **공유 링크는 계속 옛 리포트를 서빙**한다
+
+에러가 안 난다. touches 수를 확인하는 것이 유일한 방어다.
 
 ### 서비스화 시 비용 구조
 
