@@ -53,6 +53,16 @@ hit at all. A white lamp is not something a referee weighs, so
 conditions strict enough that a genuine annulment still cannot get through. See
 its docstring; the annulment gate above is unchanged.
 
+The same slow hand defeats the comparison a second way, without any white lamp
+involved. When the next lamp arrives before the operator has finished, the
+after-interval spans the button press and holds both numbers, and the
+best-match rule that makes the comparison robust pairs the old number with
+itself and reports nothing. Measured on the same four bouts: two touches lost
+that way, at similarity 0.917 and 0.890 against a 0.78 threshold, with the
+digits plainly rising inside the window. :meth:`ScoreChangeDetector.compare`
+therefore gives any side it first reads as unchanged a second look against the
+number the interval *ended* on — see :meth:`ScoreChangeDetector.settled_tail`.
+
 The other thing the digit comparison gets wrong is claiming *both* sides changed
 when only one did. The similarity distributions of a real change and a false one
 overlap — measured across the four ``20260828_김창환배`` bouts, real changes span
@@ -276,6 +286,63 @@ class ScoreChangeConfig:
     #: certainly settled by then, and several samples make the comparison immune
     #: to a fencer standing in front of the box for one of them.
     tail_frames: int = 180
+
+    #: How long an interval has to *end* on a number that does not match the
+    #: previous interval before that counts as a score entry the operator made
+    #: late rather than as digits caught mid-transition. See
+    #: :meth:`ScoreChangeDetector.trailing_mismatch`.
+    #:
+    #: Measured on the two events where a real touch was lost this way. Both
+    #: sit in an after-interval shorter than ``tail_frames``, so the tail is the
+    #: whole interval and spans the button press:
+    #:
+    #: * ``20260828_김창환배_임채린vs박소윤`` event at frame 4939 — 167-frame
+    #:   interval, the right digit stops matching at frame 5055 (3.9 s after the
+    #:   lamp) and never matches again: 9 samples spanning 120 frames.
+    #: * ``20260828_김창환배_이예은vs박소윤`` event at frame 7013 — 185-frame
+    #:   interval, the left digit stops matching at frame 7155 (4.7 s after the
+    #:   lamp) and never matches again: 8 samples spanning 105 frames.
+    #:
+    #: 90 frames (3.0 s, seven samples at ``sample_stride``) clears both, by 30
+    #: and 15 frames. It cannot be raised much: 105 already sits on the second
+    #: case. Lowering it is the dangerous direction, because this rule *creates*
+    #: touches and its false positives are points that never happened — a run of
+    #: two or three mismatching samples at the end of an interval is ordinary
+    #: pixel noise and is measured at every venue here.
+    settled_tail_min_frames: int = 90
+
+    #: How unlike the previous number that trailing run has to be, as the median
+    #: of its per-sample similarities, before it counts as a different number
+    #: rather than a stretch of bad pixels. Length is not enough on its own:
+    #: ``similarity_min`` is set where it is because readings of one *unchanging*
+    #: number reach down to about 0.59, so a run can be long, entirely below that
+    #: threshold, and still be the same number seen badly.
+    #:
+    #: Every trailing run of the required length across the eleven calibrated
+    #: bouts, sixteen of them, sorted by this median:
+    #:
+    #:   0.19  0.33  0.34  0.38  0.38  0.50 | 0.62  0.65  0.66  0.70  0.70
+    #:   0.71  0.71  0.72  0.74  0.76
+    #:
+    #: The panel was read by eye at all six on the left of the break and they are
+    #: all real score changes; the ten on the right are a number that did not
+    #: move. 0.55 sits in the empty band between them.
+    #:
+    #: The band is empty here but the underlying populations do overlap — the two
+    #: lowest on the right, 0.62 (``260716_de32_s1`` frame 10214, right 8→9) and
+    #: 0.65 (``260716_de64_s1`` frame 7529, left 5→6), are also real changes,
+    #: read by eye, that this cut declines. Both are glyph pairs that share most
+    #: of their lit area. They keep the ``annulled`` verdict they already had, so
+    #: declining them costs nothing that was previously right; moving the cut up
+    #: to reach them would put it 0.02 from a run that must stay out, which is
+    #: not a threshold, it is a coincidence.
+    #:
+    #: The median, not the worst or the best sample. The first sample of a run
+    #: often straddles the digits mid-change and scores high — 0.67 on
+    #: ``260716_de32_s1`` frame 4259, whose other seven samples are 0.30–0.37 —
+    #: so the maximum would reject real changes; the minimum would accept a run
+    #: on the strength of one occluded frame.
+    delayed_entry_similarity_max: float = 0.55
 
     #: Fewer retained samples than this on either side of a boundary and the
     #: comparison is declined rather than guessed.
@@ -1339,6 +1406,14 @@ class ScoreComparison:
     changed: frozenset
     determined: bool
     similarity: Mapping[str, Optional[float]]
+    #: Sides whose change only showed up once the after side was narrowed to the
+    #: number the interval *ended* on — the operator entered the point several
+    #: seconds after the lamp. Always a subset of ``changed``; empty on every
+    #: comparison the ordinary best-match rule settled by itself. Carried so a
+    #: report can say the point was read off the end of the interval rather than
+    #: presenting it as an ordinary read. See
+    #: :meth:`ScoreChangeDetector.compare`.
+    delayed_entry: frozenset = frozenset()
 
 
 class ScoreChangeDetector:
@@ -1356,6 +1431,11 @@ class ScoreChangeDetector:
     Comparing two well-separated *settled* intervals has no such failure mode,
     and taking the best match over several samples per interval makes it immune
     to a fencer occluding the box during any one of them.
+
+    What that best match cannot see on its own is *when* inside the after
+    interval the number moved, which matters as soon as the operator is slow to
+    press the button. :meth:`compare` therefore falls back to
+    :meth:`settled_tail` for any side it first reads as unchanged.
     """
 
     def __init__(
@@ -1400,6 +1480,11 @@ class ScoreChangeDetector:
         settled = np.mean(window, axis=0, dtype=np.float32) >= 0.5
         self._samples[side].append((frame, settled.astype(np.float32)))
 
+    def _tail_samples(self, side: str, start: int, end: int) -> List[Tuple[int, np.ndarray]]:
+        """``(frame, mask)`` for the settled masks in the tail of ``[start, end)``."""
+        tail_start = max(start, end - self.config.tail_frames)
+        return [(f, m) for f, m in self._samples[side] if tail_start <= f < end]
+
     def interval_state(self, side: str, start: int, end: int) -> List[np.ndarray]:
         """Settled masks from the tail of ``[start, end)``, latest last.
 
@@ -1407,12 +1492,94 @@ class ScoreChangeDetector:
         updated yet, and a sample from then shows the *previous* number, which
         would match the previous interval and hide a real point.
         """
-        tail_start = max(start, end - self.config.tail_frames)
-        return [m for frame, m in self._samples[side] if tail_start <= frame < end]
+        return [m for _, m in self._tail_samples(side, start, end)]
+
+    def trailing_mismatch(
+        self, side: str, before: Sequence[np.ndarray], start: int, end: int,
+    ) -> List[Tuple[int, float]]:
+        """The run of samples ``[start, end)`` *ends* on that match no ``before``.
+
+        ``(frame, similarity)`` oldest first, taken as the maximal suffix of the
+        interval's samples each of which scores below
+        :attr:`ScoreChangeConfig.similarity_min` against every mask in
+        ``before``. Empty when the last sample matches, which is the ordinary
+        case: nothing moved, or it moved before the interval opened.
+
+        This is the same measurement :meth:`compare` already lives on — one
+        settled mask against the previous interval's — asked of a different set
+        of samples, so it inherits that threshold's calibration rather than
+        needing one of its own. What it adds is *where* in the interval the
+        mismatch sits. A number that changed while the interval was running
+        leaves a mismatching run at the end and a matching sample before it; one
+        that never changed leaves no run at all; and pixel noise leaves runs, but
+        short ones and rarely at the very end.
+        """
+        run: List[Tuple[int, float]] = []
+        for frame, mask in reversed(self._tail_samples(side, start, end)):
+            score = max(
+                mask_similarity(b, mask, self.config.align_radius) for b in before
+            )
+            if score >= self.config.similarity_min:
+                break
+            run.append((frame, score))
+        run.reverse()
+        return run
 
     def compare(self, previous: Tuple[int, int], current: Tuple[int, int]) -> ScoreComparison:
-        """Compare two intervals, each given as ``(start, end)`` frames."""
+        """Compare two intervals, each given as ``(start, end)`` frames.
+
+        Two passes over the after interval, and the second one exists because the
+        first is blind to a late button press. The ordinary rule asks whether
+        *any* pair of settled masks across the boundary match, which is what
+        makes it survive a fencer stepping in front of the box. When the operator
+        enters the point partway through the after interval, though, that
+        interval holds both the old number and the new one, and the rule
+        cheerfully pairs the old with the old and reports no change — the touch
+        then vanishes from the report as a referee's annulment. Measured on
+        ``20260828_김창환배``: two touches lost that way, at similarity 0.917 and
+        0.890 against a threshold of 0.78, both with the digits plainly rising
+        inside the window.
+
+        Note that the interval being *too short* is not the problem, and
+        lengthening anything does not fix this. The after interval runs to the
+        next lamp whenever that is sooner than
+        :attr:`ScoreChangeConfig.tail_frames`, and the operator's press lands
+        inside it either way; what goes wrong is which samples from inside it the
+        best-match rule is free to pick.
+
+        So a side the first pass calls unchanged is asked a second, narrower
+        question: did the interval *end* on something that matches? See
+        :meth:`trailing_mismatch`. A mismatching run at the end counts as a score
+        entry made late when it is both long enough to be a settled number rather
+        than a transition (:attr:`ScoreChangeConfig.min_samples` samples spanning
+        :attr:`ScoreChangeConfig.settled_tail_min_frames`) and unlike enough to
+        be a different number rather than bad pixels
+        (:attr:`ScoreChangeConfig.delayed_entry_similarity_max`). The side is
+        recorded in :attr:`ScoreComparison.delayed_entry` so the reading stays
+        traceable.
+
+        Both conditions are load-bearing and each was tried alone first. Length
+        alone promotes ten runs across the eleven calibrated bouts where the
+        panel demonstrably never moved — ``similarity_min`` sits at 0.78 because
+        readings of one *unchanging* number reach down to about 0.59, so a run
+        can be long, entirely below that threshold, and still be the same number
+        seen badly. Depth alone would fire on a single frame of a fencer's jacket
+        across the digits.
+
+        Two things this rule deliberately does *not* do. It does not ask whether
+        the trailing samples agree with each other, because that needs a
+        threshold on a quantity nothing here has calibrated and the quantity has
+        no usable split: 3,696 within-interval comparisons of one number against
+        itself run from 0.15 to 1.00 with 5 % of them below 0.55, so any cut
+        strict enough to catch a transition also rejects an unchanging number
+        several times a bout. And it does not touch ``determined``. Marking a
+        side undetermined whenever its trailing run was too short to confirm was
+        tried, and takes 65 touches down to 44 across the eleven bouts: a short
+        trailing dip is ordinary noise on the side that did *not* change, and
+        every such dip would drag an otherwise clean touch down with it.
+        """
         changed = set()
+        delayed = set()
         similarity: Dict[str, Optional[float]] = {}
         determined = True
         for side in SIDES:
@@ -1429,7 +1596,24 @@ class ScoreChangeDetector:
             similarity[side] = best
             if best < self.config.similarity_min:
                 changed.add(side)
-        return ScoreComparison(frozenset(changed), determined, similarity)
+                continue
+            trailing = self.trailing_mismatch(side, before, *current)
+            if len(trailing) < self.config.min_samples:
+                continue
+            if trailing[-1][0] - trailing[0][0] < self.config.settled_tail_min_frames:
+                continue
+            depth = float(np.median([score for _, score in trailing]))
+            if depth > self.config.delayed_entry_similarity_max:
+                continue
+            changed.add(side)
+            delayed.add(side)
+            # The operative number is the one the decision rests on: how unlike
+            # the previous number the settled end of the interval was. The
+            # best-match value stays out of the record precisely because it is
+            # the reading that was wrong.
+            similarity[side] = depth
+        return ScoreComparison(
+            frozenset(changed), determined, similarity, frozenset(delayed))
 
 
 def event_intervals(
@@ -2051,6 +2235,13 @@ class TouchResolution:
     #: read both sides as changing — see :func:`resolve_touches`. ``None``
     #: everywhere else.
     priority_rule: Optional[PriorityRuleApplication] = None
+    #: True when the scorer's digits were only seen to move once the comparison
+    #: was narrowed to the number the interval ended on, because the operator
+    #: entered the point several seconds after the lamp — see
+    #: :meth:`ScoreChangeDetector.compare`. The touch is an ordinary one; this
+    #: says how it was read, so a report is not silent about the fact that the
+    #: obvious reading of the same interval said nothing happened.
+    delayed_entry: bool = False
 
 
 def late_entry_comparisons(
@@ -2292,9 +2483,11 @@ def resolve_touches(
                 return None
             side, detail = promotion
             after = (before[0] + 1, before[1]) if side == LEFT else (before[0], before[1] + 1)
+            late = late_comparisons[index] if late_comparisons is not None else None
             return TouchResolution(
                 event, side, VERDICT_TOUCH, before, after, event.both_valid,
-                reliable, detail)
+                reliable, detail,
+                delayed_entry=late is not None and side in late.delayed_entry)
 
         if comparison is None or not comparison.determined:
             promoted = promote(VERDICT_UNDETERMINED)
@@ -2344,7 +2537,8 @@ def resolve_touches(
                 )
                 resolutions.append(TouchResolution(
                     event, scorer, VERDICT_TOUCH, before, score, event.both_valid,
-                    reliable, priority_rule=detail))
+                    reliable, priority_rule=detail,
+                    delayed_entry=scorer in comparison.delayed_entry))
                 continue
             # Both lamps lit: the point belongs to one of them and nothing here
             # says which, so no point is awarded and the tally stops being
@@ -2379,7 +2573,8 @@ def resolve_touches(
             score = (before[0] + 1, before[1] + 1)
 
         resolutions.append(TouchResolution(
-            event, scorer, VERDICT_TOUCH, before, score, event.both_valid, reliable))
+            event, scorer, VERDICT_TOUCH, before, score, event.both_valid, reliable,
+            delayed_entry=bool(sides & set(comparison.delayed_entry))))
 
     return resolutions
 
@@ -2950,4 +3145,6 @@ def _describe(resolution: TouchResolution) -> str:
         text = f"{text} ({resolution.promotion.describe()})"
     if resolution.priority_rule is not None:
         text = f"{text} ({resolution.priority_rule.describe()})"
+    if resolution.delayed_entry:
+        text = f"{text} (점수 입력 지연을 감안해 구간 후반의 정착된 숫자로 대조)"
     return text

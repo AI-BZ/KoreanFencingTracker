@@ -447,6 +447,7 @@ def tracked_warnings(analysis, fps: float = 30.0, inference=None) -> List[dict]:
     """
     from app.led_report_converter import (
         WARNING_COVERAGE_GAP,
+        WARNING_DELAYED_SCORE_ENTRY,
         WARNING_END_OF_BOUT_INFERRED,
         WARNING_LAMP_ANNULLED,
         WARNING_LAMP_INCONSISTENT,
@@ -559,6 +560,24 @@ def tracked_warnings(analysis, fps: float = 30.0, inference=None) -> List[dict]:
                 f"무효 램프({skipped}) 뒤 {late.delay_sec:.1f}초 안에 "
                 f"{resolution.scorer} 점수가 올랐습니다. 무효 램프는 판정과 무관하므로 "
                 "이 득점을 해당 유효 램프의 터치로 집계했습니다."
+            ),
+            "severity": "info",
+        })
+
+    # A touch the obvious reading of the same interval called "no change". Named
+    # because the alternative — reporting it as an ordinary touch — hides that
+    # the score cross-check, the thing that keeps annulled lamps out of the
+    # report, said no here and was overridden.
+    for resolution in getattr(analysis, "touches", []):
+        if not getattr(resolution, "delayed_entry", False):
+            continue
+        warnings.append({
+            "type": WARNING_DELAYED_SCORE_ENTRY,
+            "message": (
+                f"{_clock(resolution.event.onset_frame, fps)} 램프 직후 몇 초 동안은 "
+                "점수판이 그대로였고, 같은 구간이 끝날 무렵에야 숫자가 바뀌어 그대로 "
+                f"멈춰 있었습니다. 조작원의 입력 지연으로 보고 구간 후반의 정착된 "
+                f"숫자로 대조해 {resolution.scorer} 득점으로 집계했습니다."
             ),
             "severity": "info",
         })

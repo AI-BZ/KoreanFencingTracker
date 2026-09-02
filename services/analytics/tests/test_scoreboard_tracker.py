@@ -242,12 +242,19 @@ def _digit_hsv_frame(left_shape, right_shape, origin=ORIGIN):
     ``"block"`` and ``"bar"`` stand in for two different displayed numbers;
     their masks overlap far too little to survive ``similarity_min`` even after
     the ``align_radius`` shift search.
+
+    ``"narrow"`` is the awkward middle case the real footage is full of: a mask
+    close enough to ``"block"`` to be the same number read through glare or a
+    blade, and far enough to fall under ``similarity_min``. It lands at about
+    0.67, between ``delayed_entry_similarity_max`` and ``similarity_min``.
     """
     frame = np.zeros((FRAME_H, FRAME_W, 3), dtype=np.uint8)
     for side, shape in ((LEFT, left_shape), (RIGHT, right_shape)):
         x, y, w, h = absolute_roi(origin, PROFILE.digit_rois[side])
         if shape == "block":
             frame[y + 5:y + 35, x + 6:x + 30] = DIGIT_RED
+        elif shape == "narrow":
+            frame[y + 5:y + 35, x + 6:x + 22] = DIGIT_RED
         elif shape == "bar":
             frame[y + 5:y + 35, x + 16:x + 20] = DIGIT_RED
     return frame
@@ -274,11 +281,12 @@ def _event(onset=100, end=130, left=None, right=None):
     return LampEvent(onset_frame=onset, end_frame=end, left_colour=left, right_colour=right)
 
 
-def _comparison(changed=(), determined=True, similarity=None):
+def _comparison(changed=(), determined=True, similarity=None, delayed_entry=()):
     return ScoreComparison(
         changed=frozenset(changed),
         determined=determined,
         similarity=similarity or {side: None for side in SIDES},
+        delayed_entry=frozenset(delayed_entry),
     )
 
 
@@ -1037,6 +1045,114 @@ class TestScoreChangeDetectorCompare:
         assert comparison.changed == frozenset({LEFT, RIGHT})
 
 
+class TestScoreChangeDetectorLateScoreEntry:
+    """The operator presses the button partway through the after interval.
+
+    The interval then holds the old number *and* the new one, and the ordinary
+    best-match rule pairs the old with the old — which is how two real touches
+    were reported as referee annulments on ``20260828_김창환배``.
+    """
+
+    def test_a_change_arriving_late_in_the_interval_is_still_reported(self):
+        detector = ScoreChangeDetector(PROFILE, SCORE_CONFIG, TRACKER_CONFIG)
+        _feed_digits(detector, 500, ("block", "bar"), "block", change_at=380)
+
+        comparison = detector.compare((0, 200), (275, 500))
+
+        assert comparison.changed == frozenset({LEFT})
+        assert comparison.delayed_entry == frozenset({LEFT})
+        assert comparison.determined is True
+        assert comparison.similarity[LEFT] < SCORE_CONFIG.delayed_entry_similarity_max
+
+    def test_the_old_number_is_still_present_in_the_interval(self):
+        # The premise of the test above: the ordinary rule finds a matching pair
+        # and would report no change on its own. Without this the test would
+        # still pass with the second pass removed.
+        detector = ScoreChangeDetector(PROFILE, SCORE_CONFIG, TRACKER_CONFIG)
+        _feed_digits(detector, 500, ("block", "bar"), "block", change_at=380)
+
+        before = detector.interval_state(LEFT, 0, 200)
+        after = detector.interval_state(LEFT, 275, 500)
+        best = max(
+            mask_similarity(a, b, SCORE_CONFIG.align_radius)
+            for a in before for b in after
+        )
+
+        assert best >= SCORE_CONFIG.similarity_min
+
+    def test_a_change_the_ordinary_pass_finds_is_not_marked_delayed(self):
+        detector = ScoreChangeDetector(PROFILE, SCORE_CONFIG, TRACKER_CONFIG)
+        _feed_digits(detector, 500, ("block", "bar"), "block", change_at=200)
+
+        comparison = detector.compare((0, 200), (275, 500))
+
+        assert comparison.changed == frozenset({LEFT})
+        assert comparison.delayed_entry == frozenset()
+
+    def test_a_number_that_never_moves_is_still_no_change(self):
+        detector = ScoreChangeDetector(PROFILE, SCORE_CONFIG, TRACKER_CONFIG)
+        _feed_digits(detector, 500, "block", "block")
+
+        comparison = detector.compare((0, 200), (275, 500))
+
+        assert comparison.changed == frozenset()
+        assert comparison.delayed_entry == frozenset()
+        assert comparison.determined is True
+
+    def test_a_mismatch_too_brief_to_have_settled_is_not_a_touch(self):
+        # The digits stop matching only in the last second of the interval.
+        # That is as consistent with a transition in progress as with a number,
+        # and this rule creates touches, so it declines.
+        detector = ScoreChangeDetector(PROFILE, SCORE_CONFIG, TRACKER_CONFIG)
+        _feed_digits(detector, 500, ("block", "bar"), "block", change_at=460)
+
+        comparison = detector.compare((0, 200), (275, 500))
+        trailing = detector.trailing_mismatch(
+            LEFT, detector.interval_state(LEFT, 0, 200), 275, 500)
+
+        assert trailing != []
+        assert trailing[-1][0] - trailing[0][0] < SCORE_CONFIG.settled_tail_min_frames
+        assert comparison.changed == frozenset()
+        assert comparison.determined is True
+
+    def test_a_long_mismatch_that_is_only_slightly_unlike_is_not_a_touch(self):
+        # A mask this close to the old one is the same number read through
+        # glare, not a new number. Length alone would promote ten of these
+        # across the eleven calibrated bouts, every one a panel that never moved.
+        detector = ScoreChangeDetector(PROFILE, SCORE_CONFIG, TRACKER_CONFIG)
+        _feed_digits(detector, 500, ("block", "narrow"), "block", change_at=380)
+
+        comparison = detector.compare((0, 200), (275, 500))
+        trailing = detector.trailing_mismatch(
+            LEFT, detector.interval_state(LEFT, 0, 200), 275, 500)
+        depth = sorted(score for _, score in trailing)[len(trailing) // 2]
+
+        assert len(trailing) >= SCORE_CONFIG.min_samples
+        assert trailing[-1][0] - trailing[0][0] >= SCORE_CONFIG.settled_tail_min_frames
+        assert SCORE_CONFIG.delayed_entry_similarity_max < depth < SCORE_CONFIG.similarity_min
+        assert comparison.changed == frozenset()
+
+    def test_trailing_mismatch_is_empty_when_the_interval_ends_on_a_match(self):
+        detector = ScoreChangeDetector(PROFILE, SCORE_CONFIG, TRACKER_CONFIG)
+        _feed_digits(detector, 500, "block", "block")
+
+        trailing = detector.trailing_mismatch(
+            LEFT, detector.interval_state(LEFT, 0, 200), 275, 500)
+
+        assert trailing == []
+
+    def test_trailing_mismatch_stops_at_the_last_matching_sample(self):
+        detector = ScoreChangeDetector(PROFILE, SCORE_CONFIG, TRACKER_CONFIG)
+        _feed_digits(detector, 500, ("block", "bar"), "block", change_at=380)
+
+        trailing = detector.trailing_mismatch(
+            LEFT, detector.interval_state(LEFT, 0, 200), 275, 500)
+
+        assert trailing[-1][0] == 495
+        assert all(f > 380 for f, _ in trailing)
+        assert all(s < SCORE_CONFIG.similarity_min for _, s in trailing)
+
+
 # ----------------------------------------------------------------------
 # resolve_touches
 # ----------------------------------------------------------------------
@@ -1054,6 +1170,31 @@ class TestResolveTouches:
         assert resolutions[0].score_before == (0, 0)
         assert resolutions[0].score_after == (1, 0)
         assert resolutions[0].priority_call is False
+
+    def test_a_touch_read_off_a_late_entry_says_so_on_the_resolution(self):
+        resolutions = resolve_touches(
+            [_event(left=COLOUR_RED)],
+            [_comparison(changed={LEFT}, delayed_entry={LEFT})],
+        )
+
+        assert resolutions[0].verdict == VERDICT_TOUCH
+        assert resolutions[0].scorer == LEFT
+        assert resolutions[0].delayed_entry is True
+
+    def test_an_ordinary_touch_is_not_marked_as_a_late_entry(self):
+        resolutions = resolve_touches(
+            [_event(left=COLOUR_RED)], [_comparison(changed={LEFT})])
+
+        assert resolutions[0].delayed_entry is False
+
+    def test_the_other_sides_late_entry_does_not_mark_this_touch(self):
+        resolutions = resolve_touches(
+            [_event(left=COLOUR_RED)],
+            [_comparison(changed={LEFT}, delayed_entry={RIGHT})],
+        )
+
+        assert resolutions[0].scorer == LEFT
+        assert resolutions[0].delayed_entry is False
 
     def test_a_right_side_touch_increments_only_the_right_tally(self):
         resolutions = resolve_touches(
