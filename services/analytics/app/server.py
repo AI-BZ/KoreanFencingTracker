@@ -31,6 +31,11 @@ from app.credits import CreditManager, SubscriptionTier
 from app.demo import generate_demo_report, generate_demo_de_report
 from app.i18n.manager import i18n
 from app.gallery import get_demo_reports, extract_youtube_id
+from app.collection import (
+    build_entries,
+    find_collection_by_token,
+    group_by_day,
+)
 from app.report_renderer import prepare_report_view, build_timeline
 from app.sharing import (
     find_report_by_token,
@@ -935,6 +940,43 @@ async def shared_report_page(request: Request, token: str):
 
     report_id, report_dict = found
     return _render_saved_report(request, report_id, report_dict, share_token=token)
+
+
+@app.get("/c/{token}")
+async def shared_collection_page(request: Request, token: str):
+    """Open a fencer's index of unlisted bouts by its collection token.
+
+    Gated exactly like /r/{token} and for a stronger reason. A report at least
+    has an id someone could be told; a collection has none — this is its only
+    route, and a token that matches no manifest is refused with the same
+    constant string a nonexistent one gets, so probing distinguishes nothing.
+
+    The rows link to /r/{that report's token}, never to /report/saved/{id}:
+    the ids are what the private directory exists to withhold, and printing one
+    on the page would hand back what the token bought.
+    """
+    reports_dir = _reports_dir()
+    manifest = find_collection_by_token(reports_dir, token)
+    if manifest is None:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    entries = build_entries(
+        reports_dir,
+        subject=(manifest.get("fencer") or None),
+        zoom_probe=lambda report: _zoom_video_info(report)[0] is not None,
+    )
+    own = [e for e in entries if not e["is_scout"]]
+    scouting = [e for e in entries if e["is_scout"]]
+
+    return templates.TemplateResponse(request, "collection.html", {
+        **_i18n_context(request),
+        "collection_title": manifest.get("title") or manifest.get("name") or "",
+        "fencer": manifest.get("fencer") or "",
+        "days": group_by_day(own),
+        "scouting": scouting,
+        "bout_count": len(own),
+        "scout_count": len(scouting),
+    })
 
 
 @app.get("/reports")

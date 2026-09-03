@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+
+{% block title %}{{ collection_title }} - FencingMind Analytics{% endblock %}
+
+{% block head %}
+{# The page is reachable only with its token, but a crawler that is handed the
+   link once must not put a minor's bout list into a search index. #}
+<meta name="robots" content="noindex, nofollow, noarchive">
+<meta name="referrer" content="no-referrer">
+{% endblock %}
+
+{% macro bout_card(e) %}
+{#- One bout. The whole card is the link, so a thumb hits it anywhere; the
+    target is well past 44px tall on its own without a min-height. It points at
+    /r/{token}, never at /report/saved/{id} — the id is the thing the private
+    directory exists to withhold. -#}
+<a href="{{ e.url }}" class="glass-card block p-4 sm:p-5 group hover:border-brand-500/40 transition-colors">
+    <div class="flex items-start justify-between gap-3 mb-3">
+        <div class="flex flex-wrap items-center gap-1.5 min-w-0">
+            {% if e.weapon %}
+            <span class="weapon-badge-{{ e.weapon }} inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider">
+                {{ e.weapon }}
+            </span>
+            {% endif %}
+            {% if e.round_label %}
+            <span class="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium bg-white/10 text-gray-300 border border-white/10">
+                {{ e.round_label }}
+            </span>
+            {% elif e.bout_type %}
+            <span class="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium bg-white/10 text-gray-300 border border-white/10">
+                {{ '예선' if e.bout_type == 'pool' else 'DE' }}
+            </span>
+            {% endif %}
+            {% if e.has_zoom %}
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-gold/10 text-gold border border-gold/30"
+                  title="넓은 화면과 줌인 화면을 나란히 재생할 수 있습니다">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                </svg>
+                줌인 2화면
+            </span>
+            {% endif %}
+        </div>
+        {% if e.piste %}
+        <span class="text-[11px] text-gray-500 whitespace-nowrap flex-shrink-0">
+            <span class="fm-num">{{ e.piste }}</span>번 피스트
+        </span>
+        {% endif %}
+    </div>
+
+    {#- Names and score sit on one row from 400px up; below that the score drops
+        under the names rather than squeezing them to one character a line. -#}
+    <div class="flex flex-col min-[400px]:flex-row min-[400px]:items-center gap-2 min-[400px]:gap-4">
+        <div class="min-w-0 flex-1">
+            <p class="text-sm sm:text-base font-semibold truncate">
+                <span class="text-blue-400">{{ e.left_name or '좌측 선수' }}</span>
+                <span class="text-gray-600 font-normal mx-1">vs</span>
+                <span class="text-red-400">{{ e.right_name or '우측 선수' }}</span>
+            </p>
+            <p class="text-[11px] text-gray-500 mt-1">
+                {% if e.duration %}<span class="fm-num">{{ e.duration }}</span>{% endif %}
+                {% if e.duration and e.touches %} &middot; {% endif %}
+                {% if e.touches %}터치 <span class="fm-num">{{ e.touches }}</span>회{% endif %}
+                {% if e.exchanges %} &middot; 교환 <span class="fm-num">{{ e.exchanges }}</span>회{% endif %}
+            </p>
+        </div>
+
+        <div class="flex items-center gap-3 flex-shrink-0">
+            <div class="text-right">
+                {% if e.score %}
+                <p class="fm-num text-2xl sm:text-3xl font-bold text-white leading-none">{{ e.score }}</p>
+                <p class="text-[10px] text-gray-500 mt-1">
+                    {% if e.score_is_official %}
+                        경기 최종{% if e.observed_score and e.observed_score != e.score %} &middot; 영상 <span class="fm-num">{{ e.observed_score }}</span>{% elif not e.observed_score %} &middot; 영상 판독 실패{% endif %}
+                    {% else %}
+                        영상 판독
+                    {% endif %}
+                </p>
+                {% else %}
+                <p class="text-xs text-gray-500">점수판 판독 실패</p>
+                {% endif %}
+            </div>
+            <svg class="w-5 h-5 text-gray-600 group-hover:text-brand-400 transition-colors flex-shrink-0"
+                 fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+            </svg>
+        </div>
+    </div>
+</a>
+{% endmacro %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
+
+    <header class="mb-8">
+        <h1 class="text-2xl sm:text-3xl font-bold text-white">{{ collection_title }}</h1>
+        <p class="mt-2 text-sm text-gray-400">
+            분석이 끝난 경기 <span class="fm-num">{{ bout_count }}</span>개{% if scout_count %},
+            정찰 영상 <span class="fm-num">{{ scout_count }}</span>개{% endif %} &middot; 경기를 눌러 리포트를 여세요.
+        </p>
+        <p class="mt-3 text-[11px] text-gray-500 border-l-2 border-white/10 pl-3">
+            이 페이지와 각 리포트는 링크를 아는 사람만 볼 수 있습니다. 선수 실명이 포함되어 있으니 링크 공유에 주의하세요.
+        </p>
+    </header>
+
+    {% for day in days %}
+    <section class="mb-8">
+        <h2 class="flex flex-wrap items-baseline gap-x-2 gap-y-1 mb-3 pb-2 border-b border-white/10">
+            <span class="fm-num text-base sm:text-lg font-bold text-white">{{ day.date or '날짜 미상' }}</span>
+            {% if day.competition %}
+            <span class="text-sm text-gold">{{ day.competition }}</span>
+            {% endif %}
+            <span class="text-[11px] text-gray-500 ml-auto"><span class="fm-num">{{ day.entries | length }}</span>경기</span>
+        </h2>
+        <div class="space-y-3">
+            {% for e in day.entries %}{{ bout_card(e) }}{% endfor %}
+        </div>
+    </section>
+    {% endfor %}
+
+    {% if scouting %}
+    {#- Not this fencer's bouts. Filed apart rather than mixed in, so nobody
+        opens a scouting clip expecting to find her in it. -#}
+    <section class="mb-8">
+        <h2 class="flex flex-wrap items-baseline gap-x-2 mb-1 pb-2 border-b border-white/10">
+            <span class="text-base sm:text-lg font-bold text-white">정찰 영상</span>
+            <span class="text-[11px] text-gray-500 ml-auto"><span class="fm-num">{{ scouting | length }}</span>경기</span>
+        </h2>
+        <p class="text-[11px] text-gray-500 mb-3">
+            {{ fencer if fencer else '이 선수' }}의 경기가 아니라 상대 분석을 위해 촬영한 영상입니다.
+        </p>
+        <div class="space-y-3">
+            {% for e in scouting %}{{ bout_card(e) }}{% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    {% if not days and not scouting %}
+    <div class="glass-card p-8 text-center">
+        <p class="text-gray-400">아직 분석된 경기가 없습니다.</p>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}
