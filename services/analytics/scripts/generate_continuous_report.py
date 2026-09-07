@@ -31,6 +31,7 @@ from analyzer.touch_matching import (
     classify_exchange_sides,
     summarize_attack_outcomes,
 )
+from app.led_report_converter import merge_fencer_names
 from app.sharing import keypoints_path_for_report, resolve_report_path
 from ml.weapon_analyzers import build_priority_judge
 
@@ -1380,13 +1381,10 @@ def main():
                     for a, c in action_counts.most_common()
                 ]
 
-        # Merge fencer names from OCR
-        for side in ("left_fencer", "right_fencer"):
-            ocr_fencer = ocr_report.get(side, {})
-            if ocr_fencer.get("name") and ocr_fencer["name"] not in ("Left", "Right"):
-                report_dict[side]["name"] = ocr_fencer["name"]
-            if ocr_fencer.get("club"):
-                report_dict[side]["club"] = ocr_fencer["club"]
+        # Merge fencer names from OCR. Shared with scripts/set_fencer_names.py,
+        # which corrects a name after the fact — both paths have to land on the
+        # same names or a regenerated report would rename its fencers.
+        merge_fencer_names(report_dict, ocr_report)
 
         # Merge summary fields from OCR (weapon, bout_type, gender, age_group)
         ocr_summary = ocr_report.get("summary", {})

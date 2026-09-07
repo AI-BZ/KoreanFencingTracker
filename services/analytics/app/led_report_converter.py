@@ -84,6 +84,9 @@ LED_LAMP_CONFIDENCE = 0.9
 DEFAULT_LEFT_NAME = "Left"
 DEFAULT_RIGHT_NAME = "Right"
 
+#: The two sentinels as a set, for :func:`merge_fencer_names` to test against.
+NAME_SENTINELS = (DEFAULT_LEFT_NAME, DEFAULT_RIGHT_NAME)
+
 #: Warning types emitted by :func:`build_warnings`.
 WARNING_NO_TOUCHES = "no_touches_detected"
 WARNING_CLOCK_UNREAD = "clock_roi_unread"
@@ -383,6 +386,36 @@ def preserve_existing_meta(new_meta: dict, existing_meta) -> dict:
         if key not in merged:
             merged[key] = value
     return merged
+
+
+def merge_fencer_names(report_dict: dict, ocr_report: dict) -> dict:
+    """Copy the fencers' names and clubs from an OCR report into ``report_dict``.
+
+    This is the rule that decides whose name a continuous report carries.
+    ``scripts/generate_continuous_report.py`` calls it while building the
+    report, and ``scripts/set_fencer_names.py`` calls it when a name is
+    corrected afterwards — the same function on purpose, so a hand-corrected
+    report and a regenerated one end up with the same names. Two copies of a
+    four-line rule would drift the first time the rule changed, and the
+    symptom would be a report that renames its fencers when regenerated.
+
+    A sentinel name (:data:`NAME_SENTINELS` — the placeholders a scoreboard
+    with no names produces) is *not* copied: it would overwrite the continuous
+    report's own "Left Fencer"/"Right Fencer" defaults with something shorter
+    but no more informative. An empty club is likewise skipped, so a blank OCR
+    field never erases a club set by hand.
+
+    Mutates and returns ``report_dict``.
+    """
+    for side in ("left_fencer", "right_fencer"):
+        ocr_fencer = ocr_report.get(side) or {}
+        name = ocr_fencer.get("name")
+        if name and name not in NAME_SENTINELS:
+            report_dict.setdefault(side, {})["name"] = name
+        club = ocr_fencer.get("club")
+        if club:
+            report_dict.setdefault(side, {})["club"] = club
+    return report_dict
 
 
 # ------------------------------------------------------------------
