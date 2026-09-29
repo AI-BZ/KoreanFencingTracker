@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+
+{% block title %}{{ _t('FIE 세계 랭킹 · 한국 선수') }} - FencingMind Tracker{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* FIE 랭킹 — 국내 랭킹과 별도 축. 토큰만 쓰고(라이트/다크 자동), 액센트는 태극 레드/블루만 */
+    .fie-page { max-width: 1100px; margin: 0 auto; padding: 24px 16px 64px; }
+    .fie-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; margin-bottom: 20px; }
+    .fie-head h1 { font-size: 1.6rem; font-weight: 800; margin: 0 0 4px; color: var(--fm-text-primary); letter-spacing: -0.01em; }
+    .fie-head .fie-sub { color: var(--fm-text-secondary); font-size: 0.95rem; margin: 0; }
+    .fie-head .fie-sub strong { color: var(--fm-text-primary); }
+    .fie-season { display: flex; gap: 6px; }
+    .fie-season a { padding: 8px 14px; border-radius: var(--fm-radius-pill, 999px); border: 1px solid var(--fm-border); color: var(--fm-text-secondary); text-decoration: none; font-size: 0.9rem; font-weight: 600; background: var(--fm-bg-card); }
+    .fie-season a.active { background: var(--fm-accent-secondary); border-color: var(--fm-accent-secondary); color: #fff; }
+
+    /* 종목별 요약 6칸 — 한국 최고 순위 */
+    .fie-overview { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; margin-bottom: 24px; }
+    .fie-ov { background: var(--fm-bg-card); border: 1px solid var(--fm-border); border-radius: var(--fm-radius-md, 12px); padding: 12px 12px 10px; cursor: pointer; text-align: left; color: inherit; font: inherit; }
+    .fie-ov.active { border-color: var(--fm-accent-primary); box-shadow: inset 0 0 0 1px var(--fm-accent-primary); }
+    .fie-ov .fm-label { display: block; font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fm-text-muted); margin-bottom: 4px; }
+    .fie-ov .fie-ov-rank { font-size: 1.7rem; line-height: 1; color: var(--fm-accent-primary); }
+    .fie-ov .fie-ov-rank small { font-size: 0.8rem; color: var(--fm-text-muted); margin-left: 2px; }
+    .fie-ov .fie-ov-name { display: block; margin-top: 4px; font-size: 0.82rem; color: var(--fm-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .fie-ov .fie-ov-none { font-size: 0.9rem; color: var(--fm-text-muted); }
+
+    .fie-list { display: none; }
+    .fie-list.active { display: block; }
+    .fie-list-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; margin: 8px 0 12px; }
+    .fie-list-head h2 { font-size: 1.15rem; font-weight: 700; margin: 0; color: var(--fm-text-primary); }
+    .fie-list-head .fie-meta { font-size: 0.82rem; color: var(--fm-text-muted); }
+
+    .fie-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 16px; align-items: start; }
+    .fie-card { background: var(--fm-bg-card); border: 1px solid var(--fm-border); border-radius: var(--fm-radius-md, 12px); overflow: hidden; }
+    .fie-card-title { padding: 12px 16px; font-size: 0.82rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--fm-text-muted); border-bottom: 1px solid var(--fm-border); }
+    .fie-table { width: 100%; border-collapse: collapse; }
+    .fie-table th, .fie-table td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--fm-border); color: var(--fm-text-primary); font-size: 0.92rem; }
+    .fie-table th { font-size: 0.72rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--fm-text-muted); font-weight: 600; }
+    .fie-table tbody tr:last-child td { border-bottom: none; }
+    .fie-table .c-rank { width: 64px; text-align: right; font-size: 1.15rem; }
+    .fie-table .c-pts { text-align: right; font-size: 1.05rem; white-space: nowrap; }
+    .fie-table .c-nat { color: var(--fm-text-muted); font-size: 0.8rem; width: 48px; }
+    .fie-table tr.is-kor td { background: rgba(30, 58, 138, 0.08); }
+    .fie-table tr.top16 .c-rank { color: var(--fm-accent-primary); }
+    .fie-name a { color: var(--fm-text-primary); text-decoration: none; font-weight: 600; }
+    .fie-name a:hover { color: var(--fm-accent-secondary); text-decoration: underline; }
+    .fie-name .fie-alt { display: block; font-size: 0.78rem; color: var(--fm-text-muted); font-weight: 400; }
+    .fie-comp { font-size: 0.78rem; color: var(--fm-text-muted); white-space: nowrap; }
+    .fie-empty { padding: 28px 16px; color: var(--fm-text-muted); text-align: center; }
+    .fie-note { margin-top: 20px; padding: 12px 16px; border: 1px solid var(--fm-border); border-radius: var(--fm-radius-md, 12px); background: var(--fm-bg-card); color: var(--fm-text-secondary); font-size: 0.85rem; line-height: 1.6; }
+    .fie-note a { color: var(--fm-accent-secondary); }
+    .fie-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em; background: var(--fm-accent-primary); color: #fff; vertical-align: middle; margin-left: 6px; }
+
+    @media (max-width: 900px) {
+        .fie-overview { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .fie-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 480px) {
+        .fie-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .fie-table th, .fie-table td { padding: 9px 10px; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="fie-page">
+    <div class="fie-head">
+        <div>
+            <h1>{{ _t('FIE 세계 랭킹') }} <span class="fie-badge">{{ _t('국제') }}</span></h1>
+            <p class="fie-sub">
+                {% if season %}
+                {{ _t('시즌') }} <strong>{{ season_label }}</strong> ·
+                {{ _t('한국 선수') }} <strong class="fm-num">{{ kor_total }}</strong>{{ _t('명') }} ·
+                {{ _t('16위 이내') }} <strong class="fm-num">{{ top16_total }}</strong>{{ _t('명') }}
+                {% else %}
+                {{ _t('아직 수집된 랭킹이 없습니다.') }}
+                {% endif %}
+            </p>
+        </div>
+        {% if seasons|length > 0 %}
+        <nav class="fie-season" aria-label="{{ _t('시즌') }}">
+            {% for s in seasons %}
+            <a href="?season={{ s }}" class="{% if s == season %}active{% endif %}">{{ s - 1 }}/{{ s }}</a>
+            {% endfor %}
+        </nav>
+        {% endif %}
+    </div>
+
+    {% if season %}
+    <div class="fie-overview" role="tablist">
+        {% for key in list_order %}{% set l = lists[key] %}
+        <button type="button" class="fie-ov {% if loop.first %}active{% endif %}" role="tab" data-list="{{ key }}" aria-selected="{{ 'true' if loop.first else 'false' }}">
+            <span class="fm-label">{{ _t(l.label_ko) if lang == 'ko' else l.label_en }}</span>
+            {% if l.best %}
+            <span class="fie-ov-rank fm-num">{{ l.best.fie_rank }}<small>/ {{ l.total_ranked }}</small></span>
+            <span class="fie-ov-name">{{ l.best.player_name_ko if (lang == 'ko' and l.best.player_name_ko) else l.best.athlete_name }}</span>
+            {% else %}
+            <span class="fie-ov-none">{{ _t('한국 선수 없음') }}</span>
+            {% endif %}
+        </button>
+        {% endfor %}
+    </div>
+
+    {% for key in list_order %}{% set l = lists[key] %}
+    <section class="fie-list {% if loop.first %}active{% endif %}" id="fie-list-{{ key }}" role="tabpanel">
+        <div class="fie-list-head">
+            <h2>{{ _t(l.label_ko) if lang == 'ko' else l.label_en }} · {{ _t('시니어 개인') }}</h2>
+            <span class="fie-meta">
+                {% if l.total_ranked %}{{ _t('전체') }} <span class="fm-num">{{ l.total_ranked }}</span>{{ _t('명') }} · {% endif %}
+                {% if l.fetched_at %}{{ _t('수집') }} {{ l.fetched_at }}{% endif %}
+                {% if l.source_url %} · <a href="{{ l.source_url }}" target="_blank" rel="noopener" style="color:inherit">fie.org ↗</a>{% endif %}
+            </span>
+        </div>
+        <div class="fie-grid">
+            <div class="fie-card">
+                <div class="fie-card-title">{{ _t('한국 선수') }} <span class="fm-num">{{ l.kor|length }}</span></div>
+                {% if l.kor %}
+                <table class="fie-table">
+                    <thead><tr>
+                        <th class="c-rank">{{ _t('순위') }}</th>
+                        <th>{{ _t('선수') }}</th>
+                        <th class="c-pts">{{ _t('포인트') }}</th>
+                        <th>{{ _t('반영 대회') }}</th>
+                    </tr></thead>
+                    <tbody>
+                    {% for r in l.kor %}
+                    <tr class="{% if r.fie_rank <= 16 %}top16{% endif %}">
+                        <td class="c-rank fm-num">{{ r.fie_rank }}</td>
+                        <td class="fie-name">
+                            {% if r.player_name_ko %}
+                            <a href="/player/{{ r.player_name_ko }}">{{ r.player_name_ko if lang == 'ko' else r.athlete_name }}</a>
+                            <span class="fie-alt">{{ r.athlete_name if lang == 'ko' else r.player_name_ko }}</span>
+                            {% else %}
+                            {{ r.athlete_name }}
+                            {% endif %}
+                        </td>
+                        <td class="c-pts fm-num">{{ '%.1f'|format(r.points or 0) }}</td>
+                        <td class="fie-comp">
+                            {% set counted = r.results|rejectattr('discarded')|list %}
+                            <span class="fm-num">{{ counted|length }}</span>{{ _t('개') }}
+                            {% if r.results|length > counted|length %} <span title="{{ _t('버린 점수') }}">(+{{ r.results|length - counted|length }})</span>{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="fie-empty">{{ _t('이 시즌 랭킹에 한국 선수가 없습니다.') }}</div>
+                {% endif %}
+            </div>
+            <div class="fie-card">
+                <div class="fie-card-title">{{ _t('세계 상위') }} <span class="fm-num">{{ l.top|length }}</span></div>
+                {% if l.top %}
+                <table class="fie-table">
+                    <thead><tr>
+                        <th class="c-rank">#</th>
+                        <th>{{ _t('선수') }}</th>
+                        <th class="c-nat">{{ _t('국가') }}</th>
+                        <th class="c-pts">{{ _t('포인트') }}</th>
+                    </tr></thead>
+                    <tbody>
+                    {% for r in l.top %}
+                    <tr class="{% if r.country == 'KOR' %}is-kor{% endif %}">
+                        <td class="c-rank fm-num">{{ r.fie_rank }}</td>
+                        <td class="fie-name">{{ r.player_name_ko if (lang == 'ko' and r.player_name_ko) else r.athlete_name }}</td>
+                        <td class="c-nat">{{ r.country }}</td>
+                        <td class="c-pts fm-num">{{ '%.1f'|format(r.points or 0) }}</td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="fie-empty">—</div>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+    {% endfor %}
+    {% endif %}
+
+    <div class="fie-note">
+        <strong>{{ _t('출처') }}</strong> · <a href="{{ source_home }}" target="_blank" rel="noopener">FIE International Fencing Federation — fie.org</a>.
+        {{ _t('FIE 공식 개인 랭킹의 순위·포인트 수치를 주 1회 수집해 표시합니다. 이 랭킹은 국내 랭킹 포인트와 별도의 축이며, 국제대회 파견 선발은 FIE 랭킹만 기준으로 합니다.') }}
+        {{ _t('선수 이름 연결(한글 표기)은 자동 매칭 결과이며, 동명이인이 있으면 프로필 연결이 비어 있을 수 있습니다.') }}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    var tabs = document.querySelectorAll('.fie-ov');
+    function show(key) {
+        tabs.forEach(function (t) {
+            var on = t.dataset.list === key;
+            t.classList.toggle('active', on);
+            t.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        document.querySelectorAll('.fie-list').forEach(function (s) {
+            s.classList.toggle('active', s.id === 'fie-list-' + key);
+        });
+        try { history.replaceState(null, '', '#' + key); } catch (e) {}
+    }
+    tabs.forEach(function (t) { t.addEventListener('click', function () { show(t.dataset.list); }); });
+    var h = (location.hash || '').replace('#', '');
+    if (h && document.getElementById('fie-list-' + h)) show(h);
+})();
+</script>
+{% endblock %}

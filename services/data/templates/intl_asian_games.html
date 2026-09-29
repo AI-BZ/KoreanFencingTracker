@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+
+{% block title %}{{ _t('2026 아이치·나고야 아시안게임 펜싱') }} - FencingMind Tracker{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* 아시안게임 결과 — 국내 랭킹과 별도 축. 순위·스코어 수치만. 토큰만 사용 */
+    .ag-page { max-width: 1100px; margin: 0 auto; padding: 24px 16px 64px; }
+    .ag-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; margin-bottom: 20px; }
+    .ag-head h1 { font-size: 1.6rem; font-weight: 800; margin: 0 0 4px; color: var(--fm-text-primary); letter-spacing: -0.01em; }
+    .ag-head .ag-sub { color: var(--fm-text-secondary); font-size: 0.95rem; margin: 0; }
+    .ag-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em; background: var(--fm-accent-primary); color: #fff; vertical-align: middle; margin-left: 6px; }
+
+    /* 한국 메달 집계 스트립 — 태극 네이비 밴드 (홈 UPCOMING 스트립과 같은 값) */
+    .ag-medals { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: #16306e; border-radius: var(--fm-radius-md, 12px); overflow: hidden; margin-bottom: 24px; }
+    .ag-medal { background: #1e3a8a; color: #fff; padding: 14px 16px; }
+    .ag-medal .fm-label { display: block; font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.75; margin-bottom: 2px; }
+    .ag-medal .ag-medal-n { font-size: 1.9rem; line-height: 1; }
+    .ag-medal.gold .ag-medal-n { color: var(--fm-medal-gold); }
+    .ag-medal.silver .ag-medal-n { color: var(--fm-medal-silver); }
+    .ag-medal.bronze .ag-medal-n { color: var(--fm-medal-bronze); }
+
+    .ag-events { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+    .ag-card { background: var(--fm-bg-card); border: 1px solid var(--fm-border); border-radius: var(--fm-radius-md, 12px); overflow: hidden; }
+    .ag-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 14px 16px 10px; border-bottom: 1px solid var(--fm-border); }
+    .ag-card-head h2 { margin: 0; font-size: 1.05rem; font-weight: 700; color: var(--fm-text-primary); }
+    .ag-card-head .ag-status { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--fm-text-muted); white-space: nowrap; }
+    .ag-card-head .ag-status.live { color: var(--fm-accent-primary); }
+
+    .ag-podium { display: flex; gap: 0; border-bottom: 1px solid var(--fm-border); }
+    .ag-podium-item { flex: 1; padding: 10px 12px; min-width: 0; }
+    .ag-podium-item + .ag-podium-item { border-left: 1px solid var(--fm-border); }
+    .ag-podium-item .ag-medal-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+    .ag-medal-dot.gold { background: var(--fm-medal-gold); } .ag-medal-dot.silver { background: var(--fm-medal-silver); } .ag-medal-dot.bronze { background: var(--fm-medal-bronze); }
+    .ag-podium-item .ag-p-name { display: block; font-size: 0.85rem; color: var(--fm-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ag-podium-item .ag-p-nat { font-size: 0.72rem; color: var(--fm-text-muted); }
+    .ag-podium-item.is-kor .ag-p-name { font-weight: 700; }
+
+    .ag-kor { padding: 12px 16px 14px; }
+    .ag-kor-title { font-size: 0.72rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--fm-text-muted); font-weight: 700; margin-bottom: 8px; }
+    .ag-athlete { padding: 8px 0; }
+    .ag-athlete + .ag-athlete { border-top: 1px dashed var(--fm-border); }
+    .ag-athlete-row { display: flex; align-items: baseline; gap: 10px; }
+    .ag-athlete-row .ag-rank { font-size: 1.5rem; line-height: 1; color: var(--fm-accent-primary); min-width: 2.2rem; text-align: right; }
+    .ag-athlete-row .ag-rank small { font-size: 0.7rem; color: var(--fm-text-muted); }
+    .ag-athlete-row .ag-name a { color: var(--fm-text-primary); text-decoration: none; font-weight: 700; }
+    .ag-athlete-row .ag-name a:hover { color: var(--fm-accent-secondary); text-decoration: underline; }
+    .ag-athlete-row .ag-alt { font-size: 0.78rem; color: var(--fm-text-muted); margin-left: 4px; }
+    .ag-members { font-size: 0.85rem; color: var(--fm-text-secondary); margin: 4px 0 0 2.8rem; line-height: 1.6; }
+    .ag-members a { color: var(--fm-text-primary); text-decoration: none; }
+    .ag-members a:hover { text-decoration: underline; }
+    .ag-path { list-style: none; margin: 8px 0 0 2.8rem; padding: 0; font-size: 0.85rem; }
+    .ag-path li { display: flex; gap: 8px; align-items: baseline; padding: 3px 0; color: var(--fm-text-secondary); }
+    .ag-path .ag-ph { min-width: 92px; color: var(--fm-text-muted); font-size: 0.78rem; white-space: nowrap; }
+    .ag-path .ag-sc { min-width: 56px; text-align: right; font-size: 1rem; color: var(--fm-text-primary); white-space: nowrap; }
+    .ag-path .ag-sc.W { color: var(--fm-accent-secondary); } .ag-path .ag-sc.L { color: var(--fm-accent-primary); }
+    .ag-path .ag-opp { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ag-path .ag-opp small { color: var(--fm-text-muted); }
+    .ag-path-toggle { background: none; border: 1px solid var(--fm-border); color: var(--fm-text-secondary); font: inherit; font-size: 0.78rem; padding: 3px 10px; border-radius: 999px; margin: 6px 0 0 2.8rem; cursor: pointer; }
+    .ag-path.pool-hidden li.is-pool { display: none; }
+    .ag-empty { padding: 20px 16px; color: var(--fm-text-muted); font-size: 0.9rem; }
+    .ag-source { margin-top: 20px; padding: 12px 16px; border: 1px solid var(--fm-border); border-radius: var(--fm-radius-md, 12px); background: var(--fm-bg-card); color: var(--fm-text-secondary); font-size: 0.85rem; line-height: 1.6; }
+    .ag-source a { color: var(--fm-accent-secondary); }
+    .ag-card-foot { padding: 8px 16px; border-top: 1px solid var(--fm-border); font-size: 0.72rem; color: var(--fm-text-muted); }
+    .ag-card-foot a { color: inherit; }
+
+    @media (max-width: 860px) { .ag-events { grid-template-columns: 1fr; } }
+    @media (max-width: 480px) {
+        .ag-medals { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .ag-path .ag-ph { min-width: 72px; }
+        .ag-members, .ag-path, .ag-path-toggle { margin-left: 0; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="ag-page">
+    <div class="ag-head">
+        <div>
+            <h1>{{ _t('아시안게임 2026 펜싱') }} <span class="ag-badge">{{ _t('국제') }}</span></h1>
+            <p class="ag-sub">{{ _t('아이치·나고야, 2026.9.22 – 9.27 · 한국 선수 결과 중심') }}{% if fetched_at %} · {{ _t('수집') }} {{ fetched_at }}{% endif %}</p>
+        </div>
+    </div>
+
+    {% if events %}
+    <div class="ag-medals" aria-label="{{ _t('한국 메달') }}">
+        <div class="ag-medal gold"><span class="fm-label">{{ _t('금') }}</span><span class="ag-medal-n fm-num">{{ medals.gold }}</span></div>
+        <div class="ag-medal silver"><span class="fm-label">{{ _t('은') }}</span><span class="ag-medal-n fm-num">{{ medals.silver }}</span></div>
+        <div class="ag-medal bronze"><span class="fm-label">{{ _t('동') }}</span><span class="ag-medal-n fm-num">{{ medals.bronze }}</span></div>
+        <div class="ag-medal"><span class="fm-label">{{ _t('합계') }}</span><span class="ag-medal-n fm-num">{{ medals.total }}</span></div>
+    </div>
+
+    <div class="ag-events">
+    {% for e in events %}
+        <section class="ag-card" id="ev-{{ e.event_key|replace('.', '-')|replace('-', '') }}">
+            <div class="ag-card-head">
+                <h2>{{ e.event_name_ko if lang == 'ko' else e.event_name }}</h2>
+                <span class="ag-status {% if e.status != 'official' %}live{% endif %}">
+                    {% if e.status == 'official' %}{{ _t('확정') }}{% elif e.status == 'in_progress' %}{{ _t('진행 중') }}{% else %}{{ _t('예정') }}{% endif %}
+                    {% if e.start_date %} · {{ e.start_date[5:]|replace('-', '.') }}{% endif %}
+                </span>
+            </div>
+
+            {% if e.podium %}
+            <div class="ag-podium">
+                {% for p in e.podium %}
+                <div class="ag-podium-item {% if p.country == 'KOR' %}is-kor{% endif %}">
+                    <span class="ag-p-name"><span class="ag-medal-dot {{ p.medal }}"></span>{{ (p.player_name_ko if (lang == 'ko' and p.player_name_ko) else p.athlete_name) }}</span>
+                    <span class="ag-p-nat">{{ p.country }}{% if p.rank_eq %} · {{ _t('공동') }} {{ p.rank }}{% endif %}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="ag-kor">
+                <div class="ag-kor-title">{{ _t('한국') }}{% if e.is_team %} · {{ _t('단체') }}{% endif %}</div>
+                {% if e.kor %}
+                {% for r in e.kor %}
+                <div class="ag-athlete">
+                    <div class="ag-athlete-row">
+                        <span class="ag-rank fm-num">{% if r.rank %}{{ r.rank }}{% if r.rank_eq %}<small>T</small>{% endif %}{% else %}–{% endif %}</span>
+                        <span class="ag-name">
+                            {% if e.is_team %}
+                                <strong>{{ _t('대한민국') if lang == 'ko' else r.athlete_name }}</strong>
+                            {% elif r.player_name_ko %}
+                                <a href="/player/{{ r.player_name_ko }}">{{ r.player_name_ko if lang == 'ko' else r.athlete_name }}</a>
+                                <span class="ag-alt">{{ r.athlete_name if lang == 'ko' else r.player_name_ko }}</span>
+                            {% else %}
+                                <strong>{{ r.athlete_name }}</strong>
+                            {% endif %}
+                            {% if r.medal %}<span class="ag-medal-dot {{ r.medal }}" style="margin-left:6px"></span>{% endif %}
+                        </span>
+                    </div>
+                    {% if e.is_team and r.members %}
+                    <div class="ag-members">
+                        {% for m in r.members %}{% if m.player_name_ko %}<a href="/player/{{ m.player_name_ko }}">{{ m.player_name_ko if lang == 'ko' else m.name }}</a>{% else %}{{ m.name }}{% endif %}{% if not loop.last %} · {% endif %}{% endfor %}
+                    </div>
+                    {% endif %}
+                    {% set path = e.paths.get(r.athlete_name, []) %}
+                    {% if path %}
+                    {% set pools = path|selectattr('is_pool')|list %}
+                    <ul class="ag-path {% if pools %}pool-hidden{% endif %}">
+                        {% for b in path %}
+                        <li class="{% if b.is_pool %}is-pool{% endif %}">
+                            <span class="ag-ph">{% if b.is_pool %}{{ _t('풀') }} {{ b.pool_no }}{% else %}{{ b.phase_desc }}{% endif %}</span>
+                            <span class="ag-sc fm-num {{ b.result or '' }}">{% if b.result == 'bye' %}{{ _t('부전승') }}{% elif b.my_score is not none %}{{ b.my_score }}–{{ b.opp_score }}{% else %}–{% endif %}</span>
+                            <span class="ag-opp">{% if b.result == 'bye' %}{% else %}{{ b.opp_name }} <small>{{ b.opp_org }}</small>{% endif %}</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% if pools %}
+                    <button type="button" class="ag-path-toggle" data-toggle-pool>{{ _t('풀 경기 보기') }} (<span class="fm-num">{{ pools|length }}</span>)</button>
+                    {% endif %}
+                    {% endif %}
+                </div>
+                {% endfor %}
+                {% else %}
+                <div class="ag-empty">{% if e.status == 'official' %}{{ _t('한국 선수 출전 기록 없음') }}{% else %}{{ _t('아직 결과가 없습니다') }}{% endif %}</div>
+                {% endif %}
+            </div>
+            <div class="ag-card-foot">{{ _t('출처') }}: <a href="{{ e.source_url }}" target="_blank" rel="noopener">results.asiangames2026.org</a> · {{ e.fetched_at_kst }}</div>
+        </section>
+    {% endfor %}
+    </div>
+    {% else %}
+    <div class="ag-empty">{{ _t('아직 수집된 결과가 없습니다.') }}</div>
+    {% endif %}
+
+    <div class="ag-source">
+        <strong>{{ _t('출처') }}</strong> · <a href="{{ source_home }}" target="_blank" rel="noopener">Aichi-Nagoya 2026 Asian Games Official Results (results.asiangames2026.org)</a>.
+        {{ _t('공식 결과 시스템의 순위·대진·스코어 수치만 표시하며 사진·해설은 싣지 않습니다. 이 결과는 국내 랭킹 포인트에 반영되지 않는 별도 기록입니다.') }}
+        {{ _t('선수 프로필 연결은 로마자 이름 자동 매칭 결과입니다.') }}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    document.querySelectorAll('[data-toggle-pool]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var ul = btn.previousElementSibling;
+            if (!ul) return;
+            var hidden = ul.classList.toggle('pool-hidden');
+            btn.setAttribute('aria-expanded', hidden ? 'false' : 'true');
+        });
+    });
+})();
+</script>
+{% endblock %}

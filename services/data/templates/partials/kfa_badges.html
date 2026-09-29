@@ -1,0 +1,39 @@
+{# 협회 발표 명단 배지 — 원천 data_kfa_rosters (app.kfa_notices.rosters_for_player)
+   (이름, 소속) 둘 다 맞는 행만 오므로 여기서는 표시만 한다. #}
+{% if kfa_badges %}
+<style>
+    .kfa-badges { display: flex; flex-wrap: wrap; gap: var(--fm-space-2); margin: var(--fm-space-3) 0 var(--fm-space-2); }
+    .kfa-badge {
+        display: inline-flex; align-items: center; gap: var(--fm-space-2);
+        padding: var(--fm-space-1) var(--fm-space-3);
+        border: 1px solid var(--fm-border-light); border-radius: var(--fm-radius-sm);
+        background: var(--fm-bg-card); color: var(--fm-text-primary);
+        font-size: var(--fm-text-sm); line-height: 1.4; text-decoration: none;
+    }
+    .kfa-badge--kfa { border-color: var(--fm-accent-secondary); }
+    .kfa-badge--media { border-style: dashed; }
+    .kfa-badge__label { font-weight: 700; }
+    .kfa-badge__weapon { color: var(--fm-text-secondary); }
+    .kfa-badge__source { font-size: var(--fm-text-xs); color: var(--fm-text-muted); }
+    .kfa-badge--kfa .kfa-badge__source { color: var(--fm-text-link); }
+    a.kfa-badge:hover { background: var(--fm-bg-card-hover); border-color: var(--fm-accent-primary); }
+</style>
+<div class="kfa-badges" aria-label="{{ _t('협회 발표 명단') }}">
+    {% for b in kfa_badges %}
+    {% set title = b.weapon_label ~ ' · ' ~ b.team ~ (' · ' ~ _t('합산 랭킹') ~ ' ' ~ b.seed_rank ~ _t('위') if b.seed_rank else '') %}
+    {% if b.source_url %}
+    <a class="kfa-badge kfa-badge--kfa" href="{{ b.source_url }}" target="_blank" rel="noopener" title="{{ title }}">
+        <span class="kfa-badge__label">{{ b.label }}</span>
+        <span class="kfa-badge__weapon">{{ b.weapon_label }}</span>
+        <span class="kfa-badge__source">{{ b.source_label }} ↗</span>
+    </a>
+    {% else %}
+    <span class="kfa-badge kfa-badge--media" title="{{ title }}">
+        <span class="kfa-badge__label">{{ b.label }}</span>
+        <span class="kfa-badge__weapon">{{ b.weapon_label }}</span>
+        <span class="kfa-badge__source">{{ b.source_label }}</span>
+    </span>
+    {% endif %}
+    {% endfor %}
+</div>
+{% endif %}
