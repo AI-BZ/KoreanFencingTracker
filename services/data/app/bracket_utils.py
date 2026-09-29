@@ -172,6 +172,106 @@ def de_round_label(round_name: str, de_phase: Optional[str], *,
     return round_name
 
 
+# =============================================================================
+# 정본 bout 추출 — de_bracket JSONB 읽기 규약의 단일 진입점
+# =============================================================================
+# `events.raw_data.de_bracket` 은 같은 경기를 **한 브래킷 안에서 세 위치에 걸쳐**
+# 중복 보관하는 경우가 실제로 있다:
+#   - `full_bouts`       정본 (스크래퍼가 주로 쓰는 키)
+#   - `bouts`            별칭 키 (일부 경로가 이 이름으로 저장)
+#   - `bouts_by_round`   라운드별로 다시 펼쳐 담은 파생 뷰
+# 세 키가 동시에 존재하고 내용이 같은 경우가 있다는 것은 `app/data_validator.py`
+# 의 `_get_full_bouts_from_bracket` 주석에도 이미 기록되어 있다
+# ("한 브래킷이 full_bouts와 bouts에 같은 내용을 중복 보관하는 경우가 있어").
+#
+# 소비 코드가 이 중 둘 이상을 **더하면**(`full_bouts + bouts` 처럼) 경기 수가
+# 그대로 두 배가 된다 — `scripts/repair_collapsed_de.py`, `repair_computed_team_finals.py`
+# 가 실제로 이 패턴으로 되어 있다(2026-09-28 감사에서 확인). 그래서 여기 두 함수를
+# **모든 de_bracket 소비 코드가 거쳐야 하는 단일 진입점**으로 둔다:
+#
+#   1. `dedupe_bouts_by_identity()` — 어느 소스에서 몇 번을 모아 왔든,
+#      (de_phase, round_name, match_number) 복합키로 마지막에 한 번 접어 준다.
+#      우선순위 로직을 실수해도(= 두 소스를 합쳐도) 최종 결과는 중복되지 않는다.
+#   2. `get_canonical_bouts()` — 권장 읽기 순서(full_bouts → bouts → bouts_by_round,
+#      dual_de 는 first_de/second_de 로 재귀하고 최상위는 **폴백으로만** 읽는다)를
+#      따르고, 끝에 항상 `dedupe_bouts_by_identity()` 를 거친다.
+#
+# 이 모듈은 bout 딕셔너리의 내부 형식(중첩 → flat 등)은 정규화하지 않는다 —
+# 그건 `app/de_transforms.py::_normalize_bout_data()` 의 책임이다. 여기서 하는
+# 일은 오직 "어느 키에서, 몇 번 읽을 것인가" 뿐이다.
+# =============================================================================
+
+def dedupe_bouts_by_identity(bouts: List[Any]) -> List[Dict]:
+    """bout 리스트를 (de_phase, round_name, match_number) 복합키로 중복 제거한다.
+
+    같은 경기가 여러 소스(full_bouts + bouts_by_round, 최상위 + first_de/second_de
+    재분배 등)에 겹쳐 들어와도 안전망 역할을 한다. 먼저 나온 항목을 남긴다
+    (소비 코드가 이미 우선순위 순서로 리스트를 구성했다는 전제).
+
+    dict 가 아닌 항목은 조용히 버린다(방어적).
+    """
+    seen: Dict[tuple, Dict] = {}
+    for bout in bouts or []:
+        if not isinstance(bout, dict):
+            continue
+        key = phase_bout_key(bout)
+        if key not in seen:
+            seen[key] = bout
+    return list(seen.values())
+
+
+def get_canonical_bouts(de_bracket: Optional[Dict]) -> List[Dict]:
+    """de_bracket(또는 그 서브 브래킷)에서 bout 리스트를 뽑는 단일 진입점.
+
+    읽기 순서(하나라도 있으면 그것만 쓴다 — 더하지 않는다):
+      1. dual_de 형식이면 first_de/second_de 로 재귀. 둘 다 비어 있을 때만
+         (스크래핑 실패로 서브 브래킷이 깨진 경우) 최상위 키로 폴백한다 —
+         무음 데이터 유실 방지(`de_transforms._get_full_bouts_from_de_bracket`
+         의 폴백 사상과 동일).
+      2. `full_bouts`
+      3. `bouts` (별칭 키 — 일부 저장 경로가 이 이름을 쓴다)
+      4. `bouts_by_round` 의 모든 라운드를 합친 것
+
+    마지막에 항상 `dedupe_bouts_by_identity()` 를 거치므로, 위 우선순위를 어기고
+    두 소스를 합쳐 넘겨도(예: 호출부가 실수로 `full_bouts + bouts_by_round` 를
+    이어붙여도) 최종 반환값은 중복되지 않는다.
+
+    반환되는 bout 딕셔너리는 원본 그대로다(형식 정규화 없음).
+    """
+    if not de_bracket or not isinstance(de_bracket, dict):
+        return []
+
+    if de_bracket.get("format") == "dual_de":
+        collected: List[Dict] = []
+        for sub_key in ("first_de", "second_de"):
+            sub_bracket = de_bracket.get(sub_key)
+            if isinstance(sub_bracket, dict):
+                collected.extend(get_canonical_bouts(sub_bracket))
+        if collected:
+            return dedupe_bouts_by_identity(collected)
+        # 서브 브래킷이 둘 다 비었으면(저장 레코드 손상) 최상위 키로 폴백한다.
+        # first_de/second_de 를 제외한 나머지 키만 보므로 이 폴백 경로 자체가
+        # 서브 브래킷과 이중으로 겹칠 일은 없다.
+        fallback = {k: v for k, v in de_bracket.items() if k not in ("format", "first_de", "second_de")}
+        return get_canonical_bouts(fallback) if fallback else []
+
+    for key in ("full_bouts", "bouts"):
+        raw = de_bracket.get(key)
+        if isinstance(raw, list) and raw:
+            return dedupe_bouts_by_identity(raw)
+
+    bouts_by_round = de_bracket.get("bouts_by_round")
+    if isinstance(bouts_by_round, dict) and bouts_by_round:
+        collected = [
+            b for round_bouts in bouts_by_round.values()
+            if isinstance(round_bouts, list)
+            for b in round_bouts
+        ]
+        return dedupe_bouts_by_identity(collected)
+
+    return []
+
+
 @dataclass
 class BracketBout:
     """단일 DE 경기 (bout) - 새로운 기본 구조"""

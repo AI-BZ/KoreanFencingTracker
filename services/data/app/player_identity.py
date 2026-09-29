@@ -94,7 +94,7 @@ def detect_homonyms_from_competitions(competitions_data: list) -> Dict[str, Set[
             # 단체전 이벤트는 제외 (팀명이 name 필드에 있어 가짜 선수 생성됨)
             if is_team_event(event.get("name", "")):
                 continue
-            for r in event.get("final_rankings", []):
+            for r in (event.get("final_rankings") or []):
                 name = (r.get("name") or "").strip()
                 team = (r.get("team") or "").strip()
                 if name and team:
@@ -122,7 +122,7 @@ def is_same_date_homonym(name: str, competitions_data: list) -> bool:
         for event in comp_data.get("events", []):
             if is_team_event(event.get("name", "")):
                 continue
-            for r in event.get("final_rankings", []):
+            for r in (event.get("final_rankings") or []):
                 if (r.get("name") or "").strip() == name:
                     team = (r.get("team") or "").strip()
                     if team:
@@ -565,6 +565,49 @@ class PlayerIdentityResolver:
         "전하윤": {"연산중학교": [{"epee"}, {"foil"}]},
     }
 
+    # 학교→학교 진학(초→중→고→대)으로 같은 사람이라고 볼 수 있는 최대 공백(년).
+    #
+    # 기록이 비는 이유는 다양하다 — 해외 체류, 부상, 단순 미출전. 공백이 있어도
+    # ① 소속 기간이 겹치지 않고 ② 레벨이 순차적이면 진학으로 보는 것이 맞다.
+    # (실제 사례: 이예은 성남여중 ~2023-06 → 성남여고 2025-03~, 공백 2년.
+    #  1년만 허용하던 때는 같은 사람이 프로필 두 개로 갈렸다. 2026-08-27)
+    SCHOOL_PROGRESSION_MAX_GAP_YEARS = 2
+
+    # 같은 레벨 학교 간 전학(고→고 등)의 최대 공백(년).
+    # 전학은 진학과 달리 공백이 길 이유가 적고, 같은 레벨끼리 붙이면 서로 다른 사람을
+    # 합칠 위험이 커서 진학보다 좁게 둔다.
+    SCHOOL_TRANSFER_MAX_GAP_YEARS = 1
+
+    # 같은 레벨 학교 전학을 같은 지역일 때만 인정할지.
+    # 지역 정보(_org_region_cache)가 있는 팀에만 적용된다.
+    SCHOOL_TRANSFER_REQUIRE_SAME_REGION = True
+
+    # 소속 병합 후보를 '같은 지역 먼저' 순서로 시도할지.
+    # Union-Find 는 먼저 붙은 쪽이 이기므로 이 순서가 곧 우선순위다.
+    #
+    # 켜면 이윤서 건(전남체육중 → 성남여고가 성남여중 → 성남여고를 가로채던 문제)이
+    # 사라지고, 최민서(태화중·울산 → 울산고)처럼 같은 지역끼리 붙는 개선이 생긴다.
+    # 대신 클럽 단위 재편성이 함께 일어난다 — 클럽은 지역 정보가 없는 경우가 많아
+    # 순서가 바뀌면 어느 쪽에 붙을지가 달라지기 때문이다.
+    # 2026-09-10 사용자 승인 후 활성화.
+    UNION_PREFER_SAME_REGION = True
+
+    # [보조용] 두 사람이 '번갈아' 출전하는 동명이인.
+    #
+    # 나이역행 분리(_find_age_regression_split)는 "일반부 뛰던 사람이 나중에 여고부를
+    # 뛸 수는 없다"를 근거로 그 날짜에서 기록을 앞/뒤로 자른다. 한 사람이 그만두고
+    # 다른 사람이 시작하는 경우에는 맞다. 그러나 두 사람이 교차 출전하면 어느 날짜로
+    # 잘라도 조각마다 두 사람이 그대로 섞인다 — 날짜는 분리 축이 될 수 없다.
+    #
+    # 여기 등록된 이름만 날짜 분리를 건너뛰고 KNOWN_HOMONYMS 의 팀 기반 분리로 간다.
+    # 아래 KNOWN_HOMONYMS 에도 반드시 팀 그룹을 함께 등록해야 효과가 있다.
+    INTERLEAVED_HOMONYMS = {
+        # 이예은 (foil, 여) — 엘리트(성남 계열)와 동호인(한국외대)이 며칠 간격으로 교차.
+        #   2026-07-10 한국외대 / 07-15 성남여고 / 08-22 한국외대 / 08-28 성남여고.
+        #   등록 전에는 프로필 4개로 쪼개졌고 그 조각마다 두 소속이 함께 들어 있었다.
+        "이예은",
+    }
+
     # [보조용] 수동 등록 동명이인: 자동 감지(같은 대회 다른 팀)로 잡히지 않는 케이스만.
     # 대부분의 동명이인은 _find_overlapping_teams()가 자동으로 감지.
     # 여기는 두 사람이 절대 같은 대회에 나가지 않는 희귀 케이스에만 사용.
@@ -613,6 +656,16 @@ class PlayerIdentityResolver:
         # 같은 대회 같은 날 다른 종목/팀으로 출전 확인 (2026-03, 2026-04)
         "박소윤": [
             ({"최병철펜싱클럽", "송도펜싱클럽"}, {"덕원중학교"}),
+        ],
+        # Case 10: 이예은 (foil, 여) — 엘리트 A(광남초→성남여중→성남여고) vs 동호인 B(한국외대 펜싱부)
+        #   두 사람이 '번갈아' 출전한다: 2026-07-10 한국외대(일반부) / 07-15 성남여고(여고부),
+        #   08-22 한국외대 / 08-28 성남여고. 재학 신분이 겹칠 수 없다.
+        #   성적도 양립 불가: A 는 2025 국가대표 선발 여자 플뢰레 3위인데,
+        #   B 는 동호인 대회에서 52/53위, 25/27위, 16/19위다.
+        #   에페 이예은(봄내중→춘천여고)은 무기 그룹화로 이미 분리되므로 여기 넣지 않는다.
+        "이예은": [
+            ({"광남초등학교", "성남여자중학교", "성남여자고등학교"},
+             {"한국외국어대학교 펜싱부"}),
         ],
 
         # ============================================================
@@ -958,7 +1011,9 @@ class PlayerIdentityResolver:
             age_group = self._extract_age_group(event_name)
 
             # Process pool results
-            for pool in event.get("pool_rounds", []):
+            # ⚠️ `.get(key, [])` 는 값이 **저장된 null** 이면 None 을 돌려준다 —
+            #    그러면 여기서 TypeError 로 선수 식별 전체가 죽는다. `or []` 로 받는다.
+            for pool in (event.get("pool_rounds") or []):
                 for result in pool.get("results", []):
                     name = result.get("name", "")
                     team = result.get("team", "")
@@ -978,7 +1033,7 @@ class PlayerIdentityResolver:
                         )
 
             # Process final rankings
-            for ranking in event.get("final_rankings", []):
+            for ranking in (event.get("final_rankings") or []):
                 name = ranking.get("name", "")
                 team = ranking.get("team", "")
 
@@ -997,7 +1052,7 @@ class PlayerIdentityResolver:
                     )
 
             # Process DE bracket
-            de_bracket = event.get("de_bracket", {})
+            de_bracket = event.get("de_bracket") or {}
             for seeding in de_bracket.get("seeding", []):
                 name = seeding.get("name", "")
                 team = seeding.get("team", "")
@@ -1097,6 +1152,15 @@ class PlayerIdentityResolver:
             # DEBUG: Check age regression on ALL records BEFORE gender split
             # This catches impossible progressions like 일반부→여중
             all_records_age_split = self._find_age_regression_split(sorted_records)
+            if all_records_age_split and self._known_homonym_explains_records(name, sorted_records):
+                # 나이역행이 '한 사람의 불가능한 이력'이 아니라 '두 사람이 번갈아 출전한 것'
+                # 으로 이미 확인된 케이스. 날짜로 자르면 조각마다 두 사람이 그대로 섞인다 —
+                # 교차 출전은 어느 날짜로 잘라도 분리되지 않기 때문이다.
+                # (실제 사고: 이예은 foil 이 4조각으로 쪼개졌고 조각마다 성남여고+한국외대가
+                #  함께 들어 있었다. 2026-08-27)
+                # 팀을 축으로 도는 아래 경로로 내려보내면 KNOWN_HOMONYMS 가 제대로 갈라준다.
+                all_records_age_split = None
+
             if all_records_age_split:
                 print(f"[DEBUG] Pre-gender age split for {name}: split at {all_records_age_split}")
                 self._create_separate_profiles_by_age_split(name, sorted_records, all_records_age_split)
@@ -1157,6 +1221,52 @@ class PlayerIdentityResolver:
 
         # Assign special IDs for reference players
         return self._assign_special_ids()
+
+    def _region_ordered_pair_groups(self, teams_sorted: List[str]) -> List[List[Tuple[str, str]]]:
+        """팀 조합을 [같은 지역(또는 미상), 다른 지역] 두 묶음으로 나눠 돌려준다.
+
+        각 묶음 안에서는 기존과 같은 시간순을 유지한다. Union-Find 에서는 먼저
+        시도된 조합이 이기므로, 이 순서가 곧 '같은 지역 우선' 규칙이 된다.
+        지역 정보가 없는 팀(클럽 등 다수)은 첫 묶음에 둔다 — 없는 근거로 뒤로
+        밀면 기존 동작이 바뀌기 때문이다.
+        """
+        same_region: List[Tuple[str, str]] = []
+        cross_region: List[Tuple[str, str]] = []
+        cache = self._org_region_cache or {}
+        if not self.UNION_PREFER_SAME_REGION:
+            cache = {}          # 순수 시간순 (기존 동작)
+        for i, team1 in enumerate(teams_sorted):
+            for team2 in teams_sorted[i + 1:]:
+                p1 = cache.get(team1, {}).get("province", "")
+                p2 = cache.get(team2, {}).get("province", "")
+                if p1 and p2 and p1 != p2:
+                    cross_region.append((team1, team2))
+                else:
+                    same_region.append((team1, team2))
+        return [same_region, cross_region]
+
+    def _known_homonym_explains_records(self, name: str, records: List[Dict]) -> bool:
+        """나이역행을 '두 사람이 번갈아 출전한 것'으로 이미 확인한 이름인가.
+
+        확인됐다면 날짜로 자르지 않고 팀 기반 분리(KNOWN_HOMONYMS)에 맡긴다.
+        교차 출전은 어느 날짜로 잘라도 분리되지 않기 때문이다.
+
+        ⚠️ INTERLEAVED_HOMONYMS 로 대상을 좁힌 이유:
+        처음에는 'KNOWN_HOMONYMS 에 있으면' 으로 열어 뒀는데, 73명 중 13명의 프로필이
+        바뀌었다 — 이예은 말고도 12명이 대거 병합됐고(김시우 16→7개 등) 그중 일부는
+        서로 다른 고등학교가 한 프로필로 합쳐지는 등 오히려 틀려 보였다.
+        날짜 분리를 건너뛰는 것은 확인된 교차 출전에만 적용한다.
+        """
+        if name not in self.INTERLEAVED_HOMONYMS:
+            return False
+        pairs = self.KNOWN_HOMONYMS.get(name)
+        if not pairs:
+            return False
+        record_teams = {r.get("team", "") for r in records if r.get("team")}
+        return any(
+            (group_a & record_teams) and (group_b & record_teams)
+            for group_a, group_b in pairs
+        )
 
     def _find_age_regression_split(self, records: List[Dict]) -> Optional[str]:
         """
@@ -1702,9 +1812,15 @@ class PlayerIdentityResolver:
         teams_sorted = sorted(teams_list, key=get_first_date)
 
         # Union teams that DON'T overlap (could be same person with team change)
-        # Process in chronological order to prefer sequential team changes
-        for i, team1 in enumerate(teams_sorted):
-            for team2 in teams_sorted[i+1:]:
+        # Process in chronological order to prefer sequential team changes.
+        #
+        # 같은 지역 조합을 먼저 돌린다. Union-Find 는 먼저 붙은 쪽이 이기므로,
+        # 순서가 곧 우선순위다. 예전에는 순수 시간순이라 '전남체육중 → 성남여고'가
+        # '성남여중 → 성남여고'보다 먼저 걸려 엉뚱한 결합이 만들어졌다
+        # (2026-08-27 이윤서 건). 진학은 지역을 넘는 경우가 실제로 흔하므로
+        # 금지하지는 않고 '뒤로 미루기'만 한다.
+        for _pair_group in self._region_ordered_pair_groups(teams_sorted):
+            for team1, team2 in _pair_group:
                 # Skip if already in same component
                 if find(team1) == find(team2):
                     continue
@@ -1775,20 +1891,31 @@ class PlayerIdentityResolver:
                         if range1_end <= range2_start:
                             gap_years = year2_start - year1_end
                             # 진학 간격 체크: 중→고 1년, 고→대 1년 정도
-                            if gap_years <= 1:
+                            if gap_years <= self.SCHOOL_PROGRESSION_MAX_GAP_YEARS:
                                 should_union = True
                     elif level1 > level2:
                         # 역방향: team2가 먼저, team1이 나중 (예: 중학교 2020, 고등학교 2023)
                         if range2_end <= range1_start:
                             gap_years = year1_start - year2_end
-                            if gap_years <= 1:
+                            if gap_years <= self.SCHOOL_PROGRESSION_MAX_GAP_YEARS:
                                 should_union = True
                     # 같은 레벨 학교→학교는 전학 가능
                     elif level1 == level2:
-                        # 같은 레벨 학교 전학: 시간적으로 겹치지 않아야 함
-                        if range1_end <= range2_start or range2_end <= range1_start:
+                        # 같은 레벨 학교 전학: 시간적으로 겹치지 않아야 함.
+                        # 단 지역이 확인되고 서로 다르면 합치지 않는다 — 예를 들어
+                        # 성남여자고등학교와 전남체육고등학교를 한 사람으로 묶는 일을 막는다.
+                        # (진학 공백을 2년으로 넓히자 union 순서가 밀리면서 실제로 그런
+                        #  결합이 생겼다. 2026-08-27 이윤서 건)
+                        # 지역 정보가 없으면 기존대로 시간 조건만 본다(없는 근거로 막지 않는다).
+                        same_region = True
+                        if self.SCHOOL_TRANSFER_REQUIRE_SAME_REGION and self._org_region_cache:
+                            p1 = self._org_region_cache.get(team1, {}).get("province", "")
+                            p2 = self._org_region_cache.get(team2, {}).get("province", "")
+                            if p1 and p2 and p1 != p2:
+                                same_region = False
+                        if same_region and (range1_end <= range2_start or range2_end <= range1_start):
                             gap_years = abs(year2_start - year1_end)
-                            if gap_years <= 1:
+                            if gap_years <= self.SCHOOL_TRANSFER_MAX_GAP_YEARS:
                                 should_union = True
 
                 elif is_school1 != is_school2:

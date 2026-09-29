@@ -9,6 +9,7 @@
 """
 import asyncio
 import os
+import re
 from datetime import datetime, date, timedelta
 from typing import List, Dict, Any, Optional, Set
 from dataclasses import dataclass
@@ -18,6 +19,8 @@ from dotenv import load_dotenv
 
 # 풀 순위 계산 및 비교
 from app.pool_calculator import calculate_pool_total_ranking, compare_pool_rankings, enrich_with_advancement_status
+from app.pool_revisions import record_revision as record_pool_revision
+from app.de_revisions import record_revision as record_de_revision
 # 부전승 판정 — 슬롯 수와 경기 수를 섞지 않기 위해 반드시 이 함수를 쓴다
 from app.bracket_utils import is_bye_bout
 
@@ -159,6 +162,13 @@ def _de_bout_identities(de_bracket: dict) -> dict:
             if not round_name or is_bye_bout(b):
                 # 부전승/빈 placeholder 는 경기가 아니다 — 신원을 만들지 않는다.
                 continue
+            if p1 and p1 == p2:
+                # 자기경기(팬텀)도 경기가 아니다. 2026-09-28 감사에서 251종목·3,598건이
+                # 이 형태로 저장돼 있었다(빈 슬롯에 잔류 이름 '정효정' + 다른 경기 점수 복제).
+                # 신원으로 세면 **팬텀이 '기존에 있던 경기'가 되어 정상 재수집을 영구히
+                # 막는다** — 위 '부전승을 제외하는 이유'와 같은 덫이다(2026-08-15 풀 중복,
+                # 2026-08-18 DE 유실과 같은 계열). 오염본을 붙잡지 않도록 제외한다.
+                continue
             # 라운드명은 신원이 아니라 진단 메시지용으로만 들고 간다.
             identities.setdefault((bout_phase, frozenset({p1, p2})), round_name)
 
@@ -174,6 +184,51 @@ def _de_bout_identities(de_bracket: dict) -> dict:
         _ingest(de_bracket.get("full_bouts") or de_bracket.get("bouts"), "main")
 
     return identities
+
+
+def _de_scored_bout_count(de_bracket: dict) -> int:
+    """점수가 입력된 경기 수. '진행도'의 대리 지표다.
+
+    부분 스크랩은 경기를 놓치므로 점수 건수가 줄어든다. 재추첨은 대진만 바뀌고
+    이미 치른 경기의 점수는 남아 있으므로 줄지 않는다. 이 차이로 둘을 가른다.
+    """
+    if not de_bracket or not isinstance(de_bracket, dict):
+        return 0
+    seen = set()
+    count = 0
+
+    def _walk(bouts, phase: str):
+        nonlocal count
+        if not isinstance(bouts, list):
+            return
+        for b in bouts:
+            if not isinstance(b, dict) or is_bye_bout(b):
+                continue
+            try:
+                s1 = int(b.get("player1_score") or 0)
+                s2 = int(b.get("player2_score") or 0)
+            except (TypeError, ValueError):
+                continue
+            if s1 <= 0 and s2 <= 0:
+                continue
+            key = (b.get("de_phase") or phase,
+                   frozenset({(b.get("player1_name") or "").strip(),
+                              (b.get("player2_name") or "").strip()}))
+            if key in seen:
+                continue
+            seen.add(key)
+            count += 1
+
+    if de_bracket.get("format") == "dual_de":
+        for key, phase in (("first_de", "qualifying"), ("second_de", "main")):
+            sub = de_bracket.get(key) or {}
+            if isinstance(sub, dict):
+                _walk(sub.get("full_bouts") or sub.get("bouts"), phase)
+        if not count:
+            _walk(de_bracket.get("full_bouts") or de_bracket.get("bouts"), "main")
+    else:
+        _walk(de_bracket.get("full_bouts") or de_bracket.get("bouts"), "main")
+    return count
 
 
 def _de_bracket_regression(new_de: dict, existing_de: dict) -> Optional[str]:
@@ -206,6 +261,26 @@ def _de_bracket_regression(new_de: dict, existing_de: dict) -> Optional[str]:
     if not lost:
         return None
 
+    # 여기까지 왔으면 '기존에 있던 짝이 새 데이터에 없다'는 뜻인데, 원인이 두 가지다.
+    #   ① 부분 스크랩 — 경기를 놓쳤다 (2026-08-18 유실. 막아야 한다)
+    #   ② KFA 재추첨 — 대진이 정당하게 바뀌었다 (막으면 안 된다)
+    # 짝만 봐서는 구분이 안 된다. 진행도로 가른다: 새 데이터가 기존만큼 경기를 담고
+    # 있고 점수도 기존 이상이면, 정보가 준 게 아니라 대진이 바뀐 것이다.
+    #
+    # 2026-08-29 사고: 여자 플러레 예선이 재추첨되어 39경기 중 25경기의 짝이 바뀌자
+    # 이 가드가 '25경기 유실'로 오판해 올바른 새 데이터를 계속 거부했다. 그 결과
+    # 대회가 진행되는데도 화면에는 옛 대진(구지효 vs 박한별)과 결과 0이 그대로 남았다.
+    # 8/18 사고는 159 → 127경기로 **총량이 줄어든** 경우라 아래 조건에 그대로 걸린다.
+    new_scored = _de_scored_bout_count(new_de)
+    existing_scored = _de_scored_bout_count(existing_de)
+    if len(new_ids) >= len(existing_ids) and new_scored >= existing_scored:
+        logger.info(
+            f"    🔄 DE 대진 변경으로 판단 (재추첨): 기존 {len(existing_ids)}경기 중 "
+            f"{len(lost)}경기의 짝이 바뀜. 새 데이터 {len(new_ids)}경기/점수 {new_scored}건 "
+            f"(기존 점수 {existing_scored}건) → 새 데이터 채택"
+        )
+        return None
+
     # 어느 (위상, 라운드) 에서 몇 경기가 사라졌는지 집계 — 로그만 보고 판단할 수 있게.
     # 라운드명은 기존 레코드가 들고 있던 값이다(신원이 아니라 참고용).
     by_round: Dict[tuple, int] = {}
@@ -218,6 +293,199 @@ def _de_bracket_regression(new_de: dict, existing_de: dict) -> Optional[str]:
         for (phase, round_name), cnt in sorted(by_round.items(), key=lambda x: str(x[0]))
     )
     return f"기존 {len(existing_ids)}경기 중 {len(lost)}경기가 새 데이터에 없음 → {detail}"
+
+
+def _round_size_from_name(round_name: Optional[str]) -> int:
+    """'64강' → 64, '준결승' → 4, '결승' → 2, '우승' → 1. 모르면 0."""
+    name = (round_name or "").strip()
+    if not name:
+        return 0
+    if name == "결승":
+        return 2
+    if name == "준결승":
+        return 4
+    if name in ("우승", "우승자"):
+        return 1
+    m = re.match(r"^(\d+)강$", name)
+    if m:
+        try:
+            return int(m.group(1))
+        except ValueError:
+            return 0
+    return 0
+
+
+def _de_phantom_bracket_issues(de_bracket: dict) -> List[str]:
+    """새로 스크랩한 DE 브래킷에 저장을 거부해야 할 구조적 오염이 있으면 사유 목록을 반환.
+
+    ★ 실측(2026-09-28 DB 감사, 251종목 3,598건): player1_name == player2_name 인
+    '유령 경기'가 저장돼 있었다. 예) event_id=1440 '2022 제10회 대한펜싱협회장배':
+    실제로는 8명이 뛴 브래킷인데 '정효정' 대 '정효정'이 8강~32강에 걸쳐 match_number
+    1~16으로 16회 반복되고, 점수는 다른 실제 경기의 점수(15:1 등)가 그대로 복제돼
+    46경기로 부풀어 있었다. de_scraper_v4.py 의 _is_valid_match() (2026-01-24,
+    커밋 4c53d87)가 파싱 단계에서 '동일 선수' 경기를 걸러내므로 오늘 재수집하면
+    재현되지 않지만(이 세션에서 실측 확인), 이 가드를 우회하는 새 버그가 생기거나
+    스크래퍼를 거치지 않고 데이터가 들어오는 경로가 생기면 다시 뚫릴 수 있다.
+    발생 지점(스크래퍼)과 저장 지점(여기) 이중 방어가 필요하다는 것은 2026-08-15
+    풀 중복 사고(스크래퍼만 고치고 저장 가드가 없어 같은 클래스의 오염이 재발할
+    뻔했다)에서 이미 확인된 교훈이다.
+
+    검사 기준 (dual DE는 예선/본선 위상별로 각각 독립 적용):
+    1. 자기경기: player1_name == player2_name (둘 다 비어있지 않음). 부전승은
+       원래 한쪽 이름이 비므로 is_bye_bout() 으로 먼저 제외한다.
+    2. 경기 수 과다: 단일 엘리미네이션에서 부전승이 아닌 실제 대결 수는
+       참가자 수 − 1을 넘을 수 없다. seeding 명단에 이름이 있는 인원을 참가자
+       수 상한으로 쓴다. seeding이 비어 있으면 관측된 최대 라운드 크기
+       ('64강' → 64명 등)를 대신 쓴다 — 실참가자보다 항상 크거나 같으므로
+       (더 관대하므로) 오탐 위험이 낮은 쪽이다.
+
+    반환값이 비어 있지 않으면 이 de_bracket은 저장하면 안 된다 — 호출자가
+    기존 데이터를 유지하거나 저장을 보류해야 한다. 이 함수는 '있었는데 없어졌다'가
+    아니라 '지금 이 데이터 자체가 구조적으로 말이 안 된다'만 본다(비교 대상이
+    없어도 동작한다는 점이 _de_bracket_regression과 다르다).
+    """
+    issues: List[str] = []
+    advisories: List[str] = []
+    if not de_bracket or not isinstance(de_bracket, dict):
+        return issues
+
+    def _check_phase(bouts, seeding, phase_label: str) -> None:
+        if not isinstance(bouts, list) or not bouts:
+            return
+        real_bouts = [b for b in bouts if isinstance(b, dict) and not is_bye_bout(b)]
+        if not real_bouts:
+            return
+
+        # 1) 자기경기
+        self_match_example = None
+        self_match_count = 0
+        for b in real_bouts:
+            p1 = (b.get("player1_name") or "").strip()
+            p2 = (b.get("player2_name") or "").strip()
+            if p1 and p2 and p1 == p2:
+                self_match_count += 1
+                if self_match_example is None:
+                    self_match_example = f"{b.get('round_name') or '?'} #{b.get('match_number') or '?'}: {p1}"
+        if self_match_count:
+            issues.append(
+                f"{phase_label}: 자기경기(player1==player2) {self_match_count}건 "
+                f"(예: {self_match_example})"
+            )
+
+        # 2) 경기 수 과다 — **차단하지 않고 경고만** 한다 (advisory 목록).
+        #    이유(2026-09-28 실측): 기존 DB 2,070종목에 이 규칙을 그대로 돌리면 자기경기가
+        #    전혀 없는 정상 종목 122건(5.9%)이 걸린다. 원인이 여러 가지다 —
+        #      · 3-4위전이 있는 대회는 경기 수가 n−1 이 아니라 n 이다
+        #        (2020 국가대표 선발전: '결승' 칸에 1-2위전과 3-4위전이 함께 있다)
+        #      · seeding 명단이 불완전하거나 부전승 판정이 애매한 소규모 종목
+        #    이런 종목의 저장을 막으면 **진행 중 대회의 정상 갱신이 조용히 멈춘다** —
+        #    데이터가 틀린 것보다 나을 게 없다. 그래서 확실한 오염 신호(자기경기)만
+        #    차단하고, 경기 수는 사람이 볼 경고로 남긴다. 게다가 여유를 둔다:
+        #    3-4위전 1경기를 허용하고, 그보다 3경기 이상 많을 때만 보고한다.
+        named_seeds = [s for s in (seeding or []) if isinstance(s, dict) and s.get("name")]
+        participant_cap = len(named_seeds)
+        if not participant_cap:
+            for b in real_bouts:
+                participant_cap = max(
+                    participant_cap,
+                    _round_size_from_name(b.get("round_name") or b.get("round")),
+                )
+        if participant_cap:
+            allowed = participant_cap  # n−1 + 3-4위전 1경기
+            if len(real_bouts) > allowed + 2:
+                advisories.append(
+                    f"{phase_label}: 경기 수 과다 — 실제 대결 {len(real_bouts)}건이 "
+                    f"참가자 상한 {participant_cap}명 기준 허용치 {allowed}건을 초과"
+                )
+
+    if de_bracket.get("format") == "dual_de":
+        for key, label in (("first_de", "예선"), ("second_de", "본선")):
+            sub = de_bracket.get(key) or {}
+            if isinstance(sub, dict):
+                _check_phase(
+                    sub.get("full_bouts") or sub.get("bouts"),
+                    sub.get("seeding") or de_bracket.get("seeding"),
+                    label,
+                )
+        # 하위 브래킷이 비어 있고 top-level에만 있는 저장 형태도 있다 (다른 가드들과 동일 관례).
+        if not issues and (de_bracket.get("full_bouts") or de_bracket.get("bouts")):
+            has_sub_bouts = any(
+                (de_bracket.get(k) or {}).get("full_bouts") or (de_bracket.get(k) or {}).get("bouts")
+                for k in ("first_de", "second_de")
+            )
+            if not has_sub_bouts:
+                _check_phase(
+                    de_bracket.get("full_bouts") or de_bracket.get("bouts"),
+                    de_bracket.get("seeding"),
+                    "dual_de(top-level)",
+                )
+    else:
+        _check_phase(
+            de_bracket.get("full_bouts") or de_bracket.get("bouts"),
+            de_bracket.get("seeding"),
+            "단일DE",
+        )
+
+    # 차단 사유(issues)와 참고 경고(advisories)를 분리해 돌려준다.
+    # 반환값 자체는 차단 사유 목록이라 기존 호출 규약(비어 있으면 저장 가능)이 그대로다.
+    return _PhantomIssues(issues, advisories)
+
+
+class _PhantomIssues(list):
+    """차단 사유 목록. `.advisories` 에 '저장은 하되 사람이 볼 경고'가 담긴다.
+
+    list 를 상속하므로 기존 호출부(`if phantom_issues:`, `'; '.join(...)`)와
+    테스트가 그대로 동작한다.
+    """
+
+    def __init__(self, blocking, advisories=None):
+        super().__init__(blocking or [])
+        self.advisories: List[str] = list(advisories or [])
+
+
+async def _fetch_event_results_with_retry(
+    scraper,
+    comp_idx: str,
+    sub_event_cd: str,
+    event_name: str,
+    page_num: int = 1,
+    max_retries: int = 2,
+    base_delay: float = 3.0,
+    max_delay: float = 20.0,
+) -> Optional[Dict[str, Any]]:
+    """scraper.get_full_results()를 지수 백오프로 재시도한다.
+
+    ★ 배경(2026-09-28): 협회 사이트가 순간적으로 완전 무응답(ping·HTTP 타임아웃)
+    이었다가 자연 복구된 사례를 관측했다. 지금까지 세 곳의 종목별 스크래핑
+    루프(직접/선택적/스텔스)는 실패한 종목을 그냥 건너뛰고 다음 종목으로
+    넘어갔다 — 일시적 장애와 진짜 파싱 실패를 구분하지 못하고 재시도 없이
+    전부 '스킵' 처리해 events_saved 가 조용히 줄었다(호출부는 success=True를
+    그대로 반환하므로 스케줄러 쪽에서는 실패가 안 보였다).
+
+    재시도 간격은 종목 간 기존 스로틀(SCRAPE_DELAY, stealth_config의
+    between_events_delay_*)과는 별개로 **실패한 시도에만** 붙는다 — 정상적으로
+    성공하는 종목의 딜레이는 그대로 유지된다.
+    """
+    last_exc: Optional[Exception] = None
+    for attempt in range(max_retries + 1):
+        try:
+            return await scraper.get_full_results(comp_idx, sub_event_cd, page_num=page_num)
+        except Exception as e:
+            last_exc = e
+            if attempt < max_retries:
+                delay = min(base_delay * (2 ** attempt), max_delay)
+                logger.warning(
+                    f"  ⏳ 종목 스크래핑 실패, {delay:.0f}초 후 재시도 "
+                    f"({attempt + 1}/{max_retries}) ({event_name}): {e}"
+                )
+                await asyncio.sleep(delay)
+            else:
+                logger.error(
+                    f"  🚨 종목 스크래핑 최종 실패 ({max_retries + 1}회 시도, {event_name}): {e}"
+                )
+    if last_exc:
+        raise last_exc
+    return None
 
 
 # Supabase
@@ -697,12 +965,13 @@ class EventBasedScraper:
                 events_saved = 0
                 event_results = []
                 events_to_save = []  # 실제 저장할 데이터
+                failed_events = []  # 재시도 후에도 실패한 종목 (가시성 확보용)
 
                 for event in events:
                     try:
                         # 전체 결과 수집 (pool_only든 full이든 일단 전체 가져옴)
-                        results = await scraper.get_full_results(
-                            comp_idx, event.sub_event_cd, page_num=1
+                        results = await _fetch_event_results_with_retry(
+                            scraper, comp_idx, event.sub_event_cd, event.name
                         )
 
                         if not results:
@@ -733,17 +1002,26 @@ class EventBasedScraper:
 
                     except Exception as e:
                         logger.warning(f"  종목 스크래핑 오류 ({event.name}): {e}")
+                        failed_events.append(event.name)
                         continue
 
                 # DB에 저장
                 if events_to_save:
                     await self._save_scraped_data(comp, events_to_save)
 
+                if failed_events:
+                    logger.error(
+                        f"  🚨 {comp_name}: {len(failed_events)}/{len(events)}개 종목 "
+                        f"스크래핑 실패(재시도 후에도) → {failed_events}"
+                    )
+
                 return {
                     "success": True,
                     "comp_name": comp_name,
                     "events_found": len(events),
                     "events_saved": events_saved,
+                    "events_failed": len(failed_events),
+                    "failed_event_names": failed_events,
                     "results": event_results,
                 }
 
@@ -829,7 +1107,46 @@ class EventBasedScraper:
                             ),
                         })
                     else:
-                        de_bracket_to_save = new_de_bracket
+                        # ★ 저장 직전 마지막 검문: 새 데이터 자체가 구조적으로 오염됐는지
+                        # (자기경기 / 경기 수 과다) 본다. _de_bracket_regression 은 '있었는데
+                        # 없어졌다'만 보므로, 첫 스크랩이거나 기존 데이터가 없는 종목에서
+                        # 새로 생긴 유령 경기는 그 가드를 통과한다 — 실제로 2026-09-28
+                        # 감사에서 88종목이 이 상태였다. 스크래퍼 쪽 가드(_is_valid_match)를
+                        # 우회하는 새 버그가 생기더라도 여기서 한 번 더 막는다.
+                        phantom_issues = _de_phantom_bracket_issues(new_de_bracket)
+                        if phantom_issues:
+                            fallback_reason = "기존 데이터 유지" if existing_de_bracket else "빈 데이터로 저장 보류"
+                            logger.error(
+                                f"    🚨 DE 데이터 오염(유령 경기) 감지 → {fallback_reason} "
+                                f"({event.name}): {'; '.join(phantom_issues)}"
+                            )
+                            de_bracket_to_save = existing_de_bracket if existing_de_bracket else {}
+                            results.setdefault("_scrape_warnings", []).append({
+                                "type": "DE_BRACKET_PHANTOM",
+                                "severity": "ERROR",
+                                "event_name": event.name,
+                                "message": (
+                                    f"[{event.name}] 새로 수집한 DE 데이터에 구조적 오염이 "
+                                    f"발견되어 저장을 거부했습니다: {'; '.join(phantom_issues)}. "
+                                    "스크래퍼가 잘못된 경기를 만들어내고 있다는 뜻이므로 "
+                                    "원인 확인이 필요합니다."
+                                ),
+                            })
+                        else:
+                            de_bracket_to_save = new_de_bracket
+                            # 차단 사유는 아니지만 사람이 봐야 하는 경고(경기 수 과다 등).
+                            # 3-4위전이 있는 대회나 seeding 불완전 종목에서 나올 수 있어
+                            # 저장은 막지 않는다 — 근거는 위 가드 함수 주석 참조.
+                            for _adv in getattr(phantom_issues, "advisories", []):
+                                logger.warning(
+                                    f"    ⚠️ DE 경기 수 이상 (저장은 진행, {event.name}): {_adv}"
+                                )
+                                results.setdefault("_scrape_warnings", []).append({
+                                    "type": "DE_BOUT_COUNT_SUSPECT",
+                                    "severity": "WARNING",
+                                    "event_name": event.name,
+                                    "message": f"[{event.name}] {_adv}",
+                                })
 
                 # === 풀 데이터 보존 정책 ===
                 # KFF는 풀 종료 후 본선 미진출자를 삭제하므로,
@@ -973,6 +1290,34 @@ class EventBasedScraper:
                     if result.data:
                         events_saved += 1
                         logger.debug(f"    종목 저장: {event.name}")
+
+                        # 풀 조편성 개정 이력 (KFA 는 대회 직전 풀을 여러 번 다시 올린다).
+                        # 저장이 성공한 뒤에만 남긴다 — 실패한 저장을 개정으로 세면 안 된다.
+                        # 조편성이 그대로면 record_revision 이 None 을 반환하고 아무것도 쓰지 않으므로,
+                        # 5분마다 도는 이 경로에서 점수 갱신만으로 행이 쌓이지 않는다.
+                        record_pool_revision(
+                            self.db,
+                            sub_event_cd=event.sub_event_cd,
+                            pool_rounds=pool_rounds_to_save,
+                            event_id=(result.data[0] or {}).get("id"),
+                            competition_id=comp_id,
+                            entry_count=len(raw_data.get("participants") or []) or None,
+                            previous_pool_rounds=existing_pool_rounds,
+                            source="scheduler",
+                        )
+
+                        # DE 대진 개정 이력. KFA 는 대회 직전·진행 중에도 DE 출전 인원과
+                        # 대진을 다시 올린다. 대진이 그대로면 record_de_revision 이 None 을
+                        # 반환하므로, 점수만 갱신되는 5분 주기 저장으로 행이 쌓이지 않는다.
+                        record_de_revision(
+                            self.db,
+                            sub_event_cd=event.sub_event_cd,
+                            de_bracket=de_bracket_to_save,
+                            event_id=(result.data[0] or {}).get("id"),
+                            competition_id=comp_id,
+                            previous_de_bracket=existing_de_bracket,
+                            source="scheduler",
+                        )
                 except Exception as e:
                     logger.warning(f"    종목 저장 오류 ({event.name}): {e}")
 
@@ -988,6 +1333,7 @@ class EventBasedScraper:
                 ALERTING_WARNING_TYPES = {
                     "DUAL_DE_QUALIFYING_ROUND_MISSING",  # 예선 DE 라운드 유실 (2026-08-17/18 재발 감지)
                     "DE_BRACKET_REGRESSION",             # 새 DE 가 기존보다 후퇴 (저장 거부됨)
+                    "DE_BRACKET_PHANTOM",                # 새 DE 에 유령 경기(자기경기/경기수 과다) 감지 (저장 거부됨, 2026-09-28)
                 }
                 scrape_warnings = results.get("_scrape_warnings", [])
                 error_warnings = [
@@ -1565,12 +1911,13 @@ class EventBasedScraper:
                 events_saved = 0
                 event_results = []
                 events_to_save = []
+                failed_events = []  # 재시도 후에도 실패한 종목 (가시성 확보용)
 
                 for event in target_events:
                     try:
                         # 결과 수집
-                        results = await scraper.get_full_results(
-                            comp_idx, event.sub_event_cd, page_num=1
+                        results = await _fetch_event_results_with_retry(
+                            scraper, comp_idx, event.sub_event_cd, event.name
                         )
 
                         if not results:
@@ -1596,6 +1943,7 @@ class EventBasedScraper:
 
                     except Exception as e:
                         logger.warning(f"🎯 종목 스크래핑 오류 ({event.name}): {e}")
+                        failed_events.append(event.name)
                         continue
 
                 # DB 저장
@@ -1606,6 +1954,11 @@ class EventBasedScraper:
                     f"🎯 선택적 스크래핑 완료: {comp_name} - "
                     f"{events_saved}/{len(specific_event_codes)}개 종목 저장"
                 )
+                if failed_events:
+                    logger.error(
+                        f"🎯 {comp_name}: {len(failed_events)}개 종목 스크래핑 실패"
+                        f"(재시도 후에도) → {failed_events}"
+                    )
 
                 return {
                     "success": True,
@@ -1613,6 +1966,8 @@ class EventBasedScraper:
                     "requested_events": len(specific_event_codes),
                     "events_found": len(target_events),
                     "events_saved": events_saved,
+                    "events_failed": len(failed_events),
+                    "failed_event_names": failed_events,
                     "results": event_results,
                 }
 
@@ -1764,6 +2119,7 @@ class EventBasedScraper:
                 events_saved = 0
                 event_results = []
                 events_to_save = []
+                failed_events = []  # 재시도 후에도 실패한 종목 (가시성 확보용)
 
                 for event_idx, event in enumerate(events):
                     try:
@@ -1776,9 +2132,9 @@ class EventBasedScraper:
                             logger.debug(f"🥷 종목 간 딜레이: {delay:.1f}초")
                             await asyncio.sleep(delay)
 
-                        # 결과 수집
-                        results = await scraper.get_full_results(
-                            comp_idx, event.sub_event_cd, page_num=1
+                        # 결과 수집 (실패 시 지수 백오프로 재시도 — 스텔스 딜레이와는 별개)
+                        results = await _fetch_event_results_with_retry(
+                            scraper, comp_idx, event.sub_event_cd, event.name
                         )
 
                         if not results:
@@ -1804,17 +2160,26 @@ class EventBasedScraper:
 
                     except Exception as e:
                         logger.warning(f"🥷 종목 오류 ({event.name}): {e}")
+                        failed_events.append(event.name)
                         continue
 
                 # DB 저장
                 if events_to_save:
                     await self._save_scraped_data(comp, events_to_save)
 
+                if failed_events:
+                    logger.error(
+                        f"🥷 {comp_name}: {len(failed_events)}/{len(events)}개 종목 "
+                        f"스크래핑 실패(재시도 후에도) → {failed_events}"
+                    )
+
                 return {
                     "success": True,
                     "comp_name": comp_name,
                     "events_found": len(events),
                     "events_saved": events_saved,
+                    "events_failed": len(failed_events),
+                    "failed_event_names": failed_events,
                     "results": event_results,
                 }
 

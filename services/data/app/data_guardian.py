@@ -23,6 +23,20 @@ from typing import Dict, Any, List, Optional
 from loguru import logger
 
 
+# 🔴 Guardian 은 전수 검증기가 아니다.
+#
+# `_load_competitions()` 는 **최근 N개 대회만** 읽는다 (일일 점검 20, 그 외 기본 50).
+# DB 에는 대회가 148개 있으므로 기본값으로도 전체의 1/3 만 본다. 그런데 리포트 문구는
+# "전체 데이터 검증" 이라 적혀 있어서, 2026-09-28 에 이 숫자를 전수 배치 결과(6,489건)와
+# 나란히 놓고 읽다가 한 번 오해가 났다. 그래서 범위를 결과·로그·Discord 문구에 실어 낸다.
+#
+# 전 연도 전수 검증 경로는 `scripts/run_validation.py` 다 (약 14분 소요 — 운영 서버의
+# 이벤트 루프에서 돌리지 말고 배치로 돌린다).
+FULL_SCAN_SCRIPT = "scripts/run_validation.py"
+DEFAULT_SCAN_LIMIT = 50
+DAILY_SCAN_LIMIT = 20
+
+
 class DataGuardian:
     """데이터 무결성 자동 관리 봇"""
 
@@ -104,7 +118,7 @@ class DataGuardian:
                 )
 
             logger.info(
-                f"🛡️ 검증 완료 — {comp_name}: "
+                f"🛡️ 검증 완료 — {comp_name} [{self._scope_label(competitions)}]: "
                 f"이슈 {result.get('total_issues', 0)}건 "
                 f"(ERROR: {errors}, WARNING: {warnings})"
             )
@@ -112,6 +126,7 @@ class DataGuardian:
             return {
                 "status": "completed",
                 "comp_name": comp_name,
+                "scope": self._scope_label(competitions),
                 "total_issues": result.get("total_issues", 0),
                 "errors": errors,
                 "warnings": warnings,
@@ -147,13 +162,14 @@ class DataGuardian:
         }
 
         try:
-            # 1. 전체 데이터 검증 (최근 20개 대회만 — 성능 최적화)
-            competitions = self._load_competitions(limit=20)
+            # 1. 데이터 검증 — ⚠️ 최근 20개 대회만 (전수 아님, 성능 때문)
+            competitions = self._load_competitions(limit=self.DAILY_SCAN_LIMIT)
             validation_issues = []
             if competitions:
                 from app.data_validator import run_validation_async
                 validation = await run_validation_async(competitions)
                 results["checks"]["validation"] = {
+                    "scope": self._scope_label(competitions),
                     "total_issues": validation.get("total_issues", 0),
                     "errors": validation.get("errors", 0),
                     "warnings": validation.get("warnings", 0),
@@ -199,7 +215,9 @@ class DataGuardian:
             check_summary = []
             if competitions:
                 v = results["checks"]["validation"]
-                check_summary.append(f"검증: ERROR {v['errors']}건, WARNING {v['warnings']}건")
+                check_summary.append(
+                    f"검증({v['scope']}): ERROR {v['errors']}건, WARNING {v['warnings']}건"
+                )
             check_summary.append(f"신선도: {freshness.get('stale_count', 0)}개 테이블 오래됨")
             check_summary.append(f"동명이인 미등록: {len(r13_names)}건")
 
@@ -282,9 +300,14 @@ class DataGuardian:
     # 4. 수동 전체 검증 (CLI용)
     # =====================================================================
 
-    async def run_full_validation(self) -> Dict[str, Any]:
-        """전체 데이터 검증 + Discord 보고"""
-        competitions = self._load_competitions()
+    async def run_full_validation(self, limit: int = DEFAULT_SCAN_LIMIT) -> Dict[str, Any]:
+        """최근 `limit` 개 대회 검증 + Discord 보고.
+
+        ⚠️ 이름과 달리 **전 연도 전수가 아니다.** 기본 50개 대회(전체 148개 중)만 본다.
+        전수는 `scripts/run_validation.py` 로 돌린다 — 이벤트 루프를 14분간 점유하므로
+        운영 서버 안에서 돌리지 않는다.
+        """
+        competitions = self._load_competitions(limit=limit)
         if not competitions:
             return {"status": "no_data", "message": "검증할 데이터 없음"}
 
@@ -300,6 +323,8 @@ class DataGuardian:
 
         return {
             "status": "completed",
+            "scope": self._scope_label(competitions),
+            "full_scan_command": f"PYTHONPATH='.:../../packages' python {self.FULL_SCAN_SCRIPT}",
             "total_issues": result.get("total_issues", 0),
             "errors": result.get("errors", 0),
             "warnings": result.get("warnings", 0),
@@ -310,8 +335,18 @@ class DataGuardian:
     # 내부 헬퍼
     # =====================================================================
 
-    def _load_competitions(self, competition_id: Optional[int] = None, limit: int = 50) -> List[Dict]:
-        """Supabase에서 대회 + 이벤트 데이터 로드 (검증용 형식)"""
+    # 모듈 상수의 별칭 (외부에서 guardian.DAILY_SCAN_LIMIT 로도 읽을 수 있게)
+    FULL_SCAN_SCRIPT = FULL_SCAN_SCRIPT
+    DEFAULT_SCAN_LIMIT = DEFAULT_SCAN_LIMIT
+    DAILY_SCAN_LIMIT = DAILY_SCAN_LIMIT
+
+    def _load_competitions(
+        self, competition_id: Optional[int] = None, limit: int = DEFAULT_SCAN_LIMIT
+    ) -> List[Dict]:
+        """Supabase에서 대회 + 이벤트 데이터 로드 (검증용 형식).
+
+        ⚠️ `limit` 개 **최근 대회만** 읽는다. 전수가 아니다 (위 주석 참조).
+        """
         try:
             db = self._get_db()
             if not db:
@@ -343,12 +378,20 @@ class DataGuardian:
                         "pool_total_ranking": raw.get("pool_total_ranking", []),
                         "de_bracket": raw.get("de_bracket", {}),
                         "final_rankings": raw.get("final_rankings", []),
+                        # R27 이 로스터를 모을 때 쓴다. 없으면 로스터가 얇아져
+                        # 규칙이 스스로 판정을 포기한다(오탐 방지 가드).
+                        "participants": raw.get("participants", []),
                     })
 
                 result.append({
                     "competition": {
                         "id": comp["id"],
-                        "name": comp.get("name", ""),
+                        # 🔴 competitions 테이블의 컬럼명은 `comp_name` 이다. `name` 컬럼은
+                        # 존재하지 않는다 — `comp.get("name", "")` 은 **항상 빈 문자열**을
+                        # 돌려주므로 Guardian 이 만든 모든 이슈의 competition_name 이 빈칸이었다
+                        # (Discord 알림에서 어느 대회인지 알 수 없었다). 2026-09-28 수정.
+                        "name": comp.get("comp_name") or comp.get("name", ""),
+                        "event_cd": comp.get("comp_idx", ""),
                         "start_date": comp.get("start_date", ""),
                     },
                     "events": comp_events,
@@ -359,6 +402,14 @@ class DataGuardian:
         except Exception as e:
             logger.error(f"🛡️ 데이터 로드 오류: {e}")
             return []
+
+    @staticmethod
+    def _scope_label(competitions: List[Dict]) -> str:
+        """검사 범위를 사람이 읽을 문구로. 리포트에 반드시 실어 보낸다 —
+        범위를 안 적으면 전수 배치 숫자와 나란히 놓였을 때 오해를 부른다."""
+        n_comp = len(competitions)
+        n_ev = sum(len(c.get("events") or []) for c in competitions)
+        return f"최근 대회 {n_comp}개 / 종목 {n_ev}개"
 
     def _get_db(self):
         """Supabase DB 클라이언트"""
@@ -443,7 +494,15 @@ class DataGuardian:
         """동명이인 미등록 감지 (R13 기반)"""
         from app.data_validator import DataValidator
 
-        validator = DataValidator(competitions)
+        # 동명이인 판정을 '실제 분리 결과' 기준으로 하려면 리졸버가 필요하다.
+        # 서버 프로세스 안에서 돌 때만 있으므로, 없으면 예전 기준(수동 등록)으로 내려간다.
+        resolver = None
+        try:
+            from app import server as _srv
+            resolver = getattr(_srv, "_identity_resolver", None)
+        except Exception:
+            resolver = None
+        validator = DataValidator(competitions, identity_resolver=resolver)
         issues = validator.validate_all()
 
         # R13 이슈만 필터

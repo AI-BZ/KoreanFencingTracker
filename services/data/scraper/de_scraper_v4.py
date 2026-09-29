@@ -1273,6 +1273,25 @@ class DEScraper:
             for m in targets:
                 m.is_forfeit = True
                 m.forfeit_player = forfeited_by
+
+                # 기권승은 승자가 정해진 경기다. KFA 화면에는 점수가 없어서
+                # 파서가 winner 를 못 채우는데, 그대로 두면 '승자 없는 경기'가 되어
+                # 하위 계산이 어긋난다 — 예선 마지막 라운드에서 이 일이 나면 그 선수가
+                # 진출자 명단에서 빠지고, 시드는 '본선 시딩 − 진출자'로 구하므로
+                # 진출자인 사람이 시드로 잘못 분류된다.
+                # (2026-08-28 김창환배 남자 사브르: 김태윤 기권 → 구민철이 부전 진출했는데
+                #  시드 33명 / 진출자 31명으로 어긋났다. 구민철은 본선 seed 59로 남았다.)
+                # 이미 승자가 있으면 건드리지 않는다 — 파싱된 결과가 우선이다.
+                if m.winner is None:
+                    for side in (m.player1, m.player2):
+                        if side and (side.name or "").strip() == advanced:
+                            m.winner = side
+                            logger.info(
+                                f"   ↳ 기권승 승자 보정: {m.round_name} #{m.match_number} "
+                                f"→ {advanced} (상대 {forfeited_by} 기권)"
+                            )
+                            break
+
                 applied += 1
                 logger.info(
                     f"🚩 기권 표식: {m.round_name} {m.player1.name} vs {m.player2.name} "
@@ -1352,6 +1371,12 @@ class DEScraper:
                         name,
                         team,
                         score,
+                        // ⚠️ wingbn 은 선수별 승자 플래그가 아니다 — 실측(2026-09-28,
+                        // 국가대표 선발전 단체전 dump_team_de.html)으로 확인: 한 경기의
+                        // UP/DOWN 두 박스가 항상 같은 wingbn 값을 갖는다(예: D2는 양쪽 다
+                        // '1', D4는 양쪽 다 '2'). 따라서 이 값만으로는 어느 쪽이 이겼는지
+                        // 알 수 없다 — 점수 비교가 우선이고, wingbn 은 최후의 보조 신호로만
+                        // 아래 winner 결정부에서 쓴다(두 값이 실제로 다를 때만).
                         isWinner: wingbn === '1',
                         isBye: name.toLowerCase().includes('bye') || name === ''
                     }};
@@ -1390,20 +1415,19 @@ class DEScraper:
                     if (match.red && match.green) {{
                         matchNum++;
                         const roundName = match.xposition + '강';
+                        // 점수가 우선이다 — wingbn 은 경기 양쪽에 같은 값이 찍히는
+                        // 경기 단위 속성이라(위 isWinner 주석 참조) 점수로 가릴 수 있으면
+                        // 그것으로 정한다. wingbn 은 점수가 없거나 동점일 때, 그것도 두
+                        // 값이 실제로 다를 때만 최후의 보조 신호로 쓴다.
                         let winner = null;
-                        if (match.red.isWinner) {{
+                        const redScore = parseInt(match.red.score) || 0;
+                        const greenScore = parseInt(match.green.score) || 0;
+                        if (redScore > greenScore && redScore > 0) {{
                             winner = match.red;
-                        }} else if (match.green.isWinner) {{
+                        }} else if (greenScore > redScore && greenScore > 0) {{
                             winner = match.green;
-                        }} else {{
-                            // Fallback: wingbn 미설정 시 점수로 승자 추론
-                            const redScore = parseInt(match.red.score) || 0;
-                            const greenScore = parseInt(match.green.score) || 0;
-                            if (redScore > greenScore && redScore > 0) {{
-                                winner = match.red;
-                            }} else if (greenScore > redScore && greenScore > 0) {{
-                                winner = match.green;
-                            }}
+                        }} else if (match.red.isWinner !== match.green.isWinner) {{
+                            winner = match.red.isWinner ? match.red : match.green;
                         }}
 
                         matches.push({{

@@ -4,9 +4,18 @@
 모든 선수/이벤트에서 논리적 오류를 자동 탐지.
 서버 시작 시 자동 실행 + API 엔드포인트로 수동 호출 가능.
 
+범위 주의: 이 모듈은 넘겨받은 competitions 만 본다. 프로덕션 Guardian
+(`app/data_guardian.py`)은 **최근 N개 대회만** 넘긴다(일일 20, 그 외 50 / 전체 148개).
+전 연도 전수 검증은 `scripts/run_validation.py` 뿐이다(약 14분).
+
 검증 규칙:
   이벤트 레벨:
     R1: full_bouts 내부 중복 (동일 player1+player2+round)
+    R1a: self-bout (player1 == player2) — raw bout 을 직접 본다 (ERROR)
+    R1c: 라운드 정원 초과 = 팬텀 경기 (ERROR)
+    R26: final_rankings 에 1위/2위 결손 또는 중복 (ERROR)
+    R27: final_rankings 에 로스터(풀·DE·참가자)에 없는 이름 (WARNING)
+    R28: DE 슬롯이 한 이름으로 뭉개짐 (ERROR: 내용 중복 / WARNING: 동명이인 가능)
     R2: winner_name 일관성 (winner ∉ {player1, player2})
     R3: 점수 범위 이상 (DE > 15, 음수, 동점인데 승자 있음)
     R4: 빈 round_name / 비표준 round_name
@@ -14,8 +23,10 @@
     R6: final_rankings vs DE bracket 불일치
 
   선수 레벨:
-    R7: 이벤트 내 동일 라운드 2경기 이상 (tournament_bouts 중복)
-    R8: 라운드 진행 보존법칙 (round N wins > round N+1 total)
+    R7: 이벤트 내 동일 라운드 2경기 이상 (내용 중복=ERROR / 동명이인 설명 가능=WARNING)
+    R8: 라운드 진행 보존법칙 — 이긴 라운드의 다음 라운드에 선수가 없음
+        (2026-09-28 수정: 라운드를 5칸으로 뭉쳐 비교하던 산술 오류로 ERROR 3,488건이
+         전부 오탐이었다. 실제 라운드 단위 비교로 교체 → 같은 데이터에서 2건)
     R9: Pool 경기수 이상 (한 이벤트 pool_bouts > 8)
     R10: 성별 불일치 (남/여 종목 동시 출전)
     R11: 나이그룹 역행 (시간 지나면 나이그룹은 올라가거나 유지)
@@ -43,7 +54,7 @@ import re
 import time
 from dataclasses import dataclass, field, asdict
 from typing import Dict, List, Optional, Set, Tuple
-from collections import defaultdict
+from collections import Counter, defaultdict
 from loguru import logger
 
 from app.player_identity import PlayerIdentityResolver, get_team_type
@@ -56,6 +67,7 @@ from app.bracket_utils import (
     DE_PHASE_MAIN,
     EXPECTED_BOUTS_BY_ROUND,
     get_bout_phase,
+    is_bye_bout,
     phase_bout_key,
     normalize_round_name,
 )
@@ -459,14 +471,148 @@ def _is_self_bout(bout: Dict) -> bool:
     return bool(p1 and p2 and p1 == p2)
 
 
+# === 이름 정규화 (동명이인 표식) ===
+
+_STAR_SUFFIX = re.compile(r"(\(\*\))+$")
+
+
+def canon_player_name(raw: object) -> str:
+    """최종순위표의 동명이인 표식 `(*)` 를 떼어 대진표 이름과 대조 가능한 형태로 만든다.
+
+    협회 최종순위표는 같은 종목에 동명이인이 있으면 `김재원(*)` 처럼 별표를 붙이지만
+    DE 대진표와 풀 결과에는 별표가 없다. 떼지 않고 비교하면 최종순위의 거의 모든
+    동명이인이 "로스터에 없는 이름"으로 잡힌다 — 실측으로 217종목이 걸렸고, 별표를
+    떼자 7종목만 남았다(2026-09-28). 즉 210종목이 순수 오탐이었다.
+    """
+    if not isinstance(raw, str):
+        return ""
+    return _STAR_SUFFIX.sub("", raw.strip()).strip()
+
+
+# DE 라운드 진행 순서 (정규화된 이름 기준).
+# `_normalize_de_round()` 이 준결승 → 4강 으로 바꾸므로 여기서도 4강 표기를 쓴다.
+# '3-4위'(3위 결정전)는 진행 경로가 아니라 곁가지이므로 제외한다 — 준결승 승자는
+# 결승으로, 패자는 3-4위로 간다. 이걸 진행 순서에 넣으면 결승 진출자가 3-4위에
+# 없다는 이유로 오탐이 난다.
+_DE_ROUND_SEQUENCE = ["256강", "128강", "64강", "32강", "16강", "8강", "4강", "결승"]
+_DE_ROUND_INDEX = {r: i for i, r in enumerate(_DE_ROUND_SEQUENCE)}
+
+
+def _collect_phase_bouts(de_bracket: Dict) -> Dict[str, List[Dict]]:
+    """이벤트의 DE bout 을 위상별로, 저장된 그대로(raw) 모은다.
+
+    `_get_full_bouts_from_bracket()` 을 쓰지 않는 이유는 R24/R25 와 같다 — 그 함수는
+    self-bout 과 동일 선수쌍 중복을 **입력 단계에서 먼저 지운다.** 지워진 목록을 세면
+    오염이 애초에 없었던 것처럼 보인다. 오염을 세는 규칙(R1a/R1c/R28)은 raw 를 봐야 한다.
+
+    반환 키: "qualifying" / "main" / "" (위상 개념이 없거나 태깅 안 된 것).
+    같은 경기가 최상위 full_bouts 와 sub-bracket 에 이중 저장된 경우가 있어
+    `_bout_identity()` 로 합친다.
+    """
+    if not isinstance(de_bracket, dict) or not de_bracket:
+        return {}
+
+    if de_bracket.get("format") == "dual_de":
+        first_de = de_bracket.get("first_de") or {}
+        second_de = de_bracket.get("second_de") or {}
+        flat = de_bracket.get("full_bouts")
+        candidates = [b for b in flat if isinstance(b, dict)] if isinstance(flat, list) else []
+        if isinstance(first_de, dict):
+            candidates += _collect_raw_de_bouts(first_de)
+        if isinstance(second_de, dict):
+            candidates += _collect_raw_de_bouts(second_de)
+    else:
+        candidates = _collect_raw_de_bouts(de_bracket)
+
+    merged: Dict[Tuple, Dict] = {}
+    for bout in candidates:
+        merged.setdefault(_bout_identity(bout), bout)
+
+    grouped: Dict[str, List[Dict]] = defaultdict(list)
+    for bout in merged.values():
+        grouped[get_bout_phase(bout) or ""].append(bout)
+    return dict(grouped)
+
+
+def _bout_content_key(bout: Dict) -> Tuple:
+    """경기 '내용' 키 — 선수쌍과 점수. 라운드/번호는 넣지 않는다.
+
+    팬텀 경기는 빈 슬롯에 **다른 경기의 내용을 그대로 복제**해 넣은 것이므로,
+    같은 내용 키가 여러 슬롯에 나타나는 것이 오염의 지문이다.
+    """
+    return (
+        _get_player_name(bout, "player1"),
+        _get_player_name(bout, "player2"),
+        bout.get("player1_score"),
+        bout.get("player2_score"),
+    )
+
+
 class DataValidator:
     """데이터 무결성 검증기"""
 
-    def __init__(self, competitions: List[Dict], org_cache: Optional[Dict[str, Dict[str, str]]] = None):
+    def __init__(self, competitions: List[Dict], org_cache: Optional[Dict[str, Dict[str, str]]] = None,
+                 identity_resolver=None):
         self.competitions = competitions
         self.issues: List[ValidationIssue] = []
         # org_cache: {org_name: {org_type, province, city, ...}} from server.py _org_region_cache
         self.org_cache = org_cache or {}
+        # identity_resolver: PlayerIdentityResolver — 동명이인이 **실제로 분리됐는지** 판정에 쓴다.
+        # 없으면 예전처럼 KNOWN_HOMONYMS(수동 등록) 기준으로만 판정한다.
+        self.identity_resolver = identity_resolver
+        self._identity_index: Optional[Dict[str, Dict[tuple, Set[str]]]] = None
+
+    # ---------------------------------------------------------------- 동명이인 판정
+    def _build_identity_index(self) -> Dict[str, Dict[tuple, Set[str]]]:
+        """이름 → {(날짜, 팀): {player_id...}, ("G", 날짜, 성별): {...}, ("A", 날짜, 나이): {...}}
+
+        리졸버가 만든 프로필의 원본 레코드를 훑어 "어느 기록이 어느 사람에게 갔는지"를 만든다.
+        이걸로 '같은 날 다른 소속' 같은 충돌이 **서로 다른 프로필로 갈라져 있는지** 본다.
+        """
+        index: Dict[str, Dict[tuple, Set[str]]] = defaultdict(lambda: defaultdict(set))
+        resolver = self.identity_resolver
+        if not resolver:
+            return index
+        for profile in getattr(resolver, "profiles", {}).values():
+            name = profile.name
+            for rec in getattr(profile, "records", []) or []:
+                date = rec.get("comp_date") or ""
+                team = (rec.get("team") or "").strip()
+                ev = rec.get("event_name") or ""
+                if date and team:
+                    index[name][(date, team)].add(profile.player_id)
+                gender = _extract_gender(ev)
+                if date and gender:
+                    index[name][("G", date, gender)].add(profile.player_id)
+                age = rec.get("age_group") or ""
+                if date and age:
+                    index[name][("A", date, age)].add(profile.player_id)
+        return index
+
+    def _homonym_separated(self, name: str, keys: List[tuple]) -> Optional[str]:
+        """충돌하는 기록들이 서로 다른 프로필에 들어가 있으면 설명 문구를, 아니면 None.
+
+        판정 기준(2026-09-29 확정): **수동 등록 목록이 아니라 실제 분리 결과**로 본다.
+        등록 목록(KNOWN_HOMONYMS)은 자동 규칙으로 못 가르는 예외를 손으로 지정하는 수단이지,
+        "이 이름은 처리됐다"는 표식이 아니다. 예전 판정은 등록 여부만 봤기 때문에, 리졸버가
+        이미 300명을 갈라 놓은 뒤에도 전부 ERROR 로 남아 있었다(2026-09-28 전수 검증에서
+        R13 300명 전원이 '이미 분리됨'이었다).
+        """
+        if self._identity_index is None:
+            self._identity_index = self._build_identity_index()
+        per_name = self._identity_index.get(name)
+        if not per_name:
+            return None
+        id_sets = [per_name.get(k) or set() for k in keys]
+        if any(not s for s in id_sets):
+            return None
+        # 서로 겹치지 않는 조합이 하나라도 있으면 '다른 사람으로 갈라져 있다'
+        for i in range(len(id_sets)):
+            for j in range(i + 1, len(id_sets)):
+                if not (id_sets[i] & id_sets[j]):
+                    total = len({pid for s in id_sets for pid in s})
+                    return f"프로필 {total}개로 분리됨 → 서로 다른 사람으로 처리 완료"
+        return None
 
     def validate_all(self) -> List[ValidationIssue]:
         """전체 검증: 이벤트 레벨 + 선수 레벨"""
@@ -512,6 +658,14 @@ class DataValidator:
                     event, event_cd, comp_name, event_name
                 )
 
+                # R26/R27: final_rankings 자체 건전성 (DE 유무와 무관)
+                self._check_r26_final_ranking_structure(
+                    event, event_cd, comp_name, event_name
+                )
+                self._check_r27_final_ranking_roster(
+                    event, event_cd, comp_name, event_name
+                )
+
                 # R19: 이벤트 레벨 vs 참가자 org_type 교차 검증
                 if self.org_cache:
                     self._check_r19_event_level_vs_org_type(
@@ -541,6 +695,13 @@ class DataValidator:
                 self._check_r25_de_phase_tagging(
                     event, event_cd, comp_name, event_name, de_bracket
                 )
+
+                # R1a/R1c/R28: 팬텀 경기 계열. 반드시 `_get_full_bouts_from_bracket()`
+                # **앞에서** raw 로 돌린다 — 그 함수가 self-bout 과 중복을 먼저 지우므로
+                # 뒤에서 돌리면 세려는 증거가 이미 없다 (R1a 가 0건이던 원인).
+                self._check_r1a_self_bouts(event_cd, comp_name, event_name, de_bracket)
+                self._check_r1c_phantom_bouts(event_cd, comp_name, event_name, de_bracket)
+                self._check_r28_de_name_collapse(event_cd, comp_name, event_name, de_bracket)
 
                 full_bouts = _get_full_bouts_from_bracket(de_bracket)
                 if not full_bouts:
@@ -580,6 +741,10 @@ class DataValidator:
                 continue
 
             # self-bout 분리 (스크래퍼 버그: player1 == player2)
+            # ⚠️ 이 분기는 실질적으로 도달하지 않는다 — full_bouts 는
+            # `_get_full_bouts_from_bracket()` 이 self-bout 을 이미 지운 목록이다.
+            # 실제 R1a 탐지는 raw 를 보는 `_check_r1a_self_bouts()` 가 한다.
+            # 다른 호출자가 필터 없는 목록을 넘기는 경우를 위해 남겨 둔다.
             if p1 == p2:
                 self.issues.append(ValidationIssue(
                     rule_id="R1a",
@@ -605,6 +770,356 @@ class DataValidator:
                     data={"player1": p1, "player2": p2, "round": rnd, "count": seen[key] + 1},
                 ))
             seen[key] = seen.get(key, 0) + 1
+
+    # =========================================================================
+    # R1a / R1c / R28: 팬텀 경기 계열 — raw bout 을 직접 본다
+    #
+    # 2026-09-28 에 확인된 오염: 참가자가 7명뿐인 32 브래킷 종목(event 1440)에서
+    # 빈 슬롯 12개에 '정효정' 이라는 **한 이름이 양쪽에 복제**되고 점수까지 15-1 로
+    # 똑같이 들어가 있었다. 같은 형태가 2019~2025 에 걸쳐 89종목 1,218경기.
+    # self-bout 이름은 전수에서 단 하나('정효정')였다 — 즉 직전 파싱의 잔류값이
+    # 빈 슬롯에 새는 스크래퍼 버그이고, 특정 대회의 특성이 아니다.
+    # =========================================================================
+
+    def _check_r1a_self_bouts(
+        self, event_cd: str, comp_name: str, event_name: str, de_bracket: Dict
+    ):
+        """R1a: DE 에 player1 == player2 인 자기경기 (ERROR, 이벤트×이름 단위 집계)
+
+        🔴 이 규칙은 2026-09-28 까지 **한 번도 발동할 수 없었다.**
+        R1 은 `_get_full_bouts_from_bracket()` 의 반환값을 받는데 그 함수가 세 경로 모두에서
+        `p1 == p2` 를 먼저 버린다. 세려던 증거를 입력에서 지운 셈이다. 실측으로 전수 검증
+        리포트의 R1a 는 0건이었지만 DB 에는 자기경기 1,218개(89종목)가 남아 있었다.
+        그래서 여기서는 raw bout 을 직접 본다.
+
+        자기경기는 실제 펜싱에서 불가능하다 — 같은 사람이 피스트 양쪽에 설 수 없다.
+        동명이인 두 명이 맞붙는 것과는 다르다. 협회 순위표는 동명이인을 `(*)` 로 갈라
+        적고(→ `canon_player_name()`), 경기마다 점수가 다르다. 반면 이 오염은 점수까지
+        복제돼 있어 `identical_score` 로 구분된다.
+
+        bout 하나당 이슈를 만들면 1,218건이 리포트를 덮으므로 (이벤트, 이름)당 1건으로
+        집계하고 샘플만 첨부한다.
+        """
+        by_name: Dict[str, List[Dict]] = defaultdict(list)
+        for bouts in _collect_phase_bouts(de_bracket).values():
+            for bout in bouts:
+                p1 = _get_player_name(bout, "player1")
+                if p1 and p1 == _get_player_name(bout, "player2"):
+                    by_name[p1].append(bout)
+
+        for name, bouts in by_name.items():
+            scores = {(b.get("player1_score"), b.get("player2_score")) for b in bouts}
+            identical = len(scores) == 1 and len(bouts) > 1
+            samples = [_bout_label(b) for b in bouts[:5]]
+            self.issues.append(ValidationIssue(
+                rule_id="R1a",
+                severity="ERROR",
+                player_name=name,
+                event_cd=event_cd,
+                competition_name=comp_name,
+                message=(
+                    f"[{event_name}] self-bout {len(bouts)}경기: '{name}' 이 양쪽에 동시 배치"
+                    + (f" (점수까지 전부 동일 {sorted(scores)[0]} → 빈 슬롯에 복제된 팬텀)"
+                       if identical else "")
+                    + f". 샘플: {'; '.join(samples)}"
+                ),
+                data={
+                    "player": name,
+                    "bout_count": len(bouts),
+                    "identical_score": identical,
+                    "distinct_scores": len(scores),
+                    "sample_bouts": samples,
+                },
+            ))
+
+    def _check_r1c_phantom_bouts(
+        self, event_cd: str, comp_name: str, event_name: str, de_bracket: Dict
+    ):
+        """R1c: 한 라운드의 실제 경기 수가 브래킷 정원을 넘음 = 팬텀 경기 (ERROR)
+
+        16강은 최대 8경기, 32강은 16경기다 (`EXPECTED_BOUTS_BY_ROUND`). 그보다 많으면
+        존재하지 않는 경기가 빈 슬롯에 채워졌다는 뜻이다. 부전승은 경기가 아니므로
+        `is_bye_bout()` 기준으로 빼고 센다 (CLAUDE.md "슬롯 수 ≠ 경기 수").
+
+        ⚠️ dual_de 인데 de_phase 가 없는 레코드는 건너뛴다. 예선 64강 32경기와 본선 64강
+        32경기가 같은 칸에 쌓여 64 > 32 로 보이지만, 그건 정원 초과가 아니라 위상 누락이고
+        R25 가 이미 ERROR 로 잡는다. 여기서 또 세면 같은 사실이 두 규칙에서 중복 계상된다.
+        """
+        phases = _collect_phase_bouts(de_bracket)
+        if not phases:
+            return
+        if de_bracket.get("format") == "dual_de" and set(phases) == {""}:
+            return  # 위상 누락 — R25 담당
+
+        for phase, bouts in phases.items():
+            by_round: Dict[str, List[Dict]] = defaultdict(list)
+            for bout in bouts:
+                if is_bye_bout(bout):
+                    continue
+                rnd = _bout_round_name(bout)
+                if rnd:
+                    by_round[rnd].append(bout)
+
+            # 준결승 승자 — 3-4위전 판별에 쓴다 (아래 참조)
+            sf_winners = {
+                (b.get("winner_name") or "").strip()
+                for b in by_round.get("준결승", []) + by_round.get("4강", [])
+                if (b.get("winner_name") or "").strip()
+            }
+
+            for rnd, round_bouts in by_round.items():
+                capacity = EXPECTED_BOUTS_BY_ROUND.get(rnd)
+                if not capacity or len(round_bouts) <= capacity:
+                    continue
+                # ⚠️ '결승' 칸에 경기가 2개인 것은 정상일 수 있다 — 어떤 대회는 **3-4위전을
+                # 결승과 같은 칸에 넣는다**(실측 2026-09-28: 2020 국가대표 선발전 남자 에뻬의
+                # '결승' 라운드에 김상민-권영준(1-2위전)과 심승한-손태진(3-4위전)이 함께 있다;
+                # 유소년 국가대표 선발전 11종목도 같은 형태). 준결승 승자끼리 붙은 경기가
+                # 정확히 하나이고 나머지가 준결승 **패자**끼리 붙은 경기면 3-4위전이므로
+                # 팬텀이 아니다.
+                if rnd in ("결승", "우승") and len(round_bouts) == capacity + 1 and sf_winners:
+                    def _pair(b):
+                        return {(b.get("player1_name") or "").strip(),
+                                (b.get("player2_name") or "").strip()}
+                    title_bouts = [b for b in round_bouts if _pair(b) <= sf_winners]
+                    third_place = [b for b in round_bouts
+                                   if _pair(b) and not (_pair(b) & sf_winners)]
+                    if len(title_bouts) == 1 and len(third_place) == len(round_bouts) - 1:
+                        continue
+                dup = Counter(_bout_content_key(b) for b in round_bouts)
+                worst_key, worst_n = dup.most_common(1)[0]
+                label = f"{'예선' if phase == DE_PHASE_QUALIFYING else '본선'} " if phase else ""
+                self.issues.append(ValidationIssue(
+                    rule_id="R1c",
+                    severity="ERROR",
+                    player_name="",
+                    event_cd=event_cd,
+                    competition_name=comp_name,
+                    message=(
+                        f"[{event_name}] {label}{rnd} 실제 경기 {len(round_bouts)}개 > 정원 {capacity}개"
+                        f" → 빈 슬롯에 팬텀 경기 {len(round_bouts) - capacity}개."
+                        + (f" 같은 내용({worst_key[0]} vs {worst_key[1]} "
+                           f"{worst_key[2]}-{worst_key[3]})이 {worst_n}회 반복"
+                           if worst_n > 1 else "")
+                    ),
+                    data={
+                        "phase": phase or None,
+                        "round_name": rnd,
+                        "bout_count": len(round_bouts),
+                        "capacity": capacity,
+                        "excess": len(round_bouts) - capacity,
+                        "max_repeated_content": worst_n,
+                    },
+                ))
+
+    def _check_r28_de_name_collapse(
+        self, event_cd: str, comp_name: str, event_name: str, de_bracket: Dict
+    ):
+        """R28: DE 슬롯이 한 이름으로 뭉개짐 (ERROR / 동명이인 가능성은 WARNING)
+
+        한 선수가 차지할 수 있는 슬롯 수에는 상한이 있다. 단일 DE 는 256강→결승 8라운드,
+        dual DE 는 예선 최대 3 + 본선 6 = 9. 실측으로도 오염되지 않은 종목의 최대 점유는
+        **9슬롯**(정유준)이었다. 따라서 10슬롯 이상은 구조적으로 불가능하다.
+
+        다만 10슬롯이 항상 팬텀은 아니다 — 같은 종목에 동명이인 두 명이 있으면 한 이름이
+        합쳐서 10슬롯을 넘을 수 있다(CLAUDE.md: 제66회 대통령배 4종목 전부 동명이인 2명).
+        그래서 등급을 갈라 매긴다:
+          ERROR   — 그 이름이 실린 경기의 과반이 **내용까지 중복된** 경기 (= 복제 팬텀)
+          WARNING — 중복 증거 없이 슬롯만 많음 (동명이인 가능 → 사람이 확인)
+        """
+        slots: Dict[str, List[Dict]] = defaultdict(list)
+        for bouts in _collect_phase_bouts(de_bracket).values():
+            for bout in bouts:
+                if is_bye_bout(bout):
+                    continue
+                for key in ("player1", "player2"):
+                    name = _get_player_name(bout, key)
+                    if name:
+                        slots[name].append(bout)
+
+        for name, bouts in slots.items():
+            if len(bouts) < 10:
+                continue
+            dup = Counter(_bout_content_key(b) for b in bouts)
+            repeated = sum(n for n in dup.values() if n > 1)
+            is_phantom = repeated * 2 > len(bouts)
+            self.issues.append(ValidationIssue(
+                rule_id="R28",
+                severity="ERROR" if is_phantom else "WARNING",
+                player_name=name,
+                event_cd=event_cd,
+                competition_name=comp_name,
+                message=(
+                    f"[{event_name}] '{name}' 이 DE 슬롯 {len(bouts)}개 점유 "
+                    f"(한 선수의 구조적 상한은 9) — "
+                    + ("내용 중복 경기 "
+                       f"{repeated}개 → 복제된 팬텀"
+                       if is_phantom else "중복 증거 없음 → 동명이인 여부 확인 필요")
+                ),
+                data={
+                    "player": name,
+                    "slot_count": len(bouts),
+                    "repeated_content_bouts": repeated,
+                    "phantom": is_phantom,
+                },
+            ))
+
+    # =========================================================================
+    # R26 / R27: final_rankings 자체의 건전성
+    # =========================================================================
+
+    def _check_r26_final_ranking_structure(
+        self, event: Dict, event_cd: str, comp_name: str, event_name: str
+    ):
+        """R26: final_rankings 에 1위/2위가 없거나 둘 이상 (ERROR)
+
+        FIE 규정상 **동률은 3위(3T)만 존재**한다(CLAUDE.md). 1위와 2위는 결승 결과이므로
+        각각 정확히 1명이다. 0명이면 순위표가 잘린 것이고, 2명 이상이면 예선 브래킷 기준으로
+        잘못 계산된 것이다 — 2025 국가대표 선발대회·제65회 대통령배에서 실제로 1·2위가 없고
+        본선 시드 32명이 33~38위로 밀린 오염이 있었다(`scripts/audit_final_rankings.py` F01/F02).
+
+        최종순위는 KFA 가 진실의 원천이므로(제1원칙 5항) 이 규칙이 걸린 종목은 자체 계산으로
+        메우지 말고 협회 순위표를 다시 받아야 한다.
+        """
+        final = event.get("final_rankings")
+        if not isinstance(final, list) or not final:
+            return
+
+        ranks: List[int] = []
+        for entry in final:
+            if not isinstance(entry, dict) or not canon_player_name(entry.get("name")):
+                continue
+            try:
+                rank = int(entry.get("rank") or 0)
+            except (TypeError, ValueError):
+                continue
+            if rank > 0:
+                ranks.append(rank)
+        if not ranks:
+            return
+
+        counts = Counter(ranks)
+        for place in (1, 2):
+            if place == 2 and len(ranks) < 2:
+                continue
+            got = counts.get(place, 0)
+            if got == 1:
+                continue
+            self.issues.append(ValidationIssue(
+                rule_id="R26",
+                severity="ERROR",
+                player_name="",
+                event_cd=event_cd,
+                competition_name=comp_name,
+                message=(
+                    f"[{event_name}] 최종순위 {place}위가 {got}명 (정확히 1명이어야 함) — "
+                    f"총 {len(ranks)}명, 최고 순위 {min(ranks)}위. "
+                    f"{'순위표가 잘렸거나' if got == 0 else '동률로 잘못 계산됐거나'} "
+                    f"예선 기준으로 매겨진 순위표 → KFA 최종순위 재수집 필요"
+                ),
+                data={
+                    "place": place,
+                    "count": got,
+                    "total_entries": len(ranks),
+                    "best_rank": min(ranks),
+                },
+            ))
+
+    def _check_r27_final_ranking_roster(
+        self, event: Dict, event_cd: str, comp_name: str, event_name: str
+    ):
+        """R27: final_rankings 에 그 종목 로스터(풀·DE·시딩·참가자)에 없는 이름 (WARNING)
+
+        순위표에만 있고 어디에서도 경기하지 않은 이름은 ⑴ 다른 종목의 순위표가 섞였거나
+        ⑵ 팬텀 이름이 순위표까지 올라온 경우다 (실측: 종목 2개의 final_rankings 가
+        '정효정' 1명뿐이었다).
+
+        오탐을 줄이는 두 장치:
+          · 이름은 `canon_player_name()` 으로 `(*)` 를 떼고 비교한다. 안 떼면 동명이인
+            표식 때문에 217종목이 걸린다(실측) — 떼면 7종목.
+          · 로스터 자체가 결손이면(로스터 < 순위표의 80%) 판정하지 않는다. 그건 순위표가
+            아니라 풀/DE 가 없는 문제이고 R22·감사 F07/F10 이 담당한다.
+        등급은 WARNING — 풀 데이터가 부분 결손인 정상 종목도 있어 사람이 확인해야 한다.
+        """
+        if _is_team_event(event_name):
+            return
+        final = event.get("final_rankings")
+        if not isinstance(final, list) or not final:
+            return
+
+        final_names = [canon_player_name(f.get("name")) for f in final if isinstance(f, dict)]
+        final_names = [n for n in final_names if n]
+        if not final_names:
+            return
+
+        roster: Set[str] = set()
+        for pool in (event.get("pool_rounds") or []):
+            if isinstance(pool, dict):
+                for row in (pool.get("results") or []):
+                    if isinstance(row, dict):
+                        name = canon_player_name(row.get("name"))
+                        if name:
+                            roster.add(name)
+        for row in (event.get("pool_total_ranking") or []):
+            if isinstance(row, dict):
+                name = canon_player_name(row.get("name"))
+                if name:
+                    roster.add(name)
+        for row in (event.get("participants") or []):
+            if isinstance(row, dict):
+                name = canon_player_name(row.get("name"))
+                if name:
+                    roster.add(name)
+
+        de_bracket = event.get("de_bracket")
+        if isinstance(de_bracket, dict) and de_bracket:
+            for bouts in _collect_phase_bouts(de_bracket).values():
+                for bout in bouts:
+                    for key in ("player1", "player2"):
+                        name = canon_player_name(_get_player_name(bout, key))
+                        if name:
+                            roster.add(name)
+            seeds = [de_bracket]
+            seeds += [de_bracket.get("first_de") or {}, de_bracket.get("second_de") or {}]
+            for src in seeds:
+                if not isinstance(src, dict):
+                    continue
+                for key in ("seeding", "seeded_players", "first_de_qualifiers"):
+                    for row in (src.get(key) or []):
+                        if isinstance(row, dict):
+                            name = canon_player_name(row.get("name"))
+                            if name:
+                                roster.add(name)
+                        elif isinstance(row, str):
+                            name = canon_player_name(row)
+                            if name:
+                                roster.add(name)
+
+        if not roster or len(roster) < 0.8 * len(final_names):
+            return  # 로스터 결손 — 이 규칙으로 판정할 근거가 없다
+
+        missing = sorted({n for n in final_names if n not in roster})
+        if not missing:
+            return
+
+        self.issues.append(ValidationIssue(
+            rule_id="R27",
+            severity="WARNING",
+            player_name=missing[0] if len(missing) == 1 else "",
+            event_cd=event_cd,
+            competition_name=comp_name,
+            message=(
+                f"[{event_name}] 최종순위에 있으나 풀·DE·참가자 명단 어디에도 없는 이름 "
+                f"{len(missing)}명 / {len(final_names)}명 (로스터 {len(roster)}명): "
+                f"{', '.join(missing[:6])}"
+            ),
+            data={
+                "missing_names": missing[:20],
+                "missing_count": len(missing),
+                "final_count": len(final_names),
+                "roster_count": len(roster),
+            },
+        ))
 
     def _check_r2_winner_consistency(
         self, full_bouts: List[Dict], event_cd: str, comp_name: str, event_name: str
@@ -953,10 +1468,23 @@ class DataValidator:
                 event_cd = event.get("sub_event_cd", "")
                 event_name = event.get("event_name", "") or event.get("name", "")
 
+                # 🔴 단체전은 선수 레벨 규칙에서 제외한다 (2026-09-29).
+                # 단체전 순위표의 `name` 은 **팀명**이다('K1펜싱클럽', '경기선발', '경남대학교').
+                # 이것을 선수로 수집하면 같은 팀이 남자부·여자부에 모두 나갔다는 이유로
+                # R10(성별 불일치)이 '동명이인 오염'을 외친다 — 실측 2026-09-29에 R10
+                # ERROR 189개 이름 중 상당수가 팀명이었다. 선수 식별기(PlayerIdentityResolver)
+                # 는 처음부터 `is_team_event()` 로 단체전을 빼고 있었는데, 검증기만 안 빼고 있었다.
+                if _is_team_event(event_name):
+                    continue
+
                 # pool_total_ranking에서 선수 수집
-                for ranking in event.get("pool_total_ranking", []):
+                seen_in_event: Set[str] = set()
+                for ranking in (event.get("pool_total_ranking") or []):
+                    if not isinstance(ranking, dict):
+                        continue
                     name = (ranking.get("name") or "").strip()
                     if name:
+                        seen_in_event.add(name)
                         player_records[name].append({
                             "event_cd": event_cd,
                             "event_name": event_name,
@@ -966,10 +1494,20 @@ class DataValidator:
                             "team": ranking.get("team", ""),
                         })
 
-                # final_rankings에서도 수집 (pool 없는 경우)
+                # final_rankings에서도 수집 (풀이 없는 종목)
+                #
+                # 🔴 2026-09-28 수정. 이전 조건은 `if name not in player_records` 였다.
+                # 이는 "그 선수가 **다른 대회에서 한 번이라도 수집된 적 있으면** 이 종목의
+                # 최종순위는 보지 않는다"는 뜻이어서, 풀이 없는 종목의 기록이 통째로 누락됐다.
+                # 협회가 풀을 게시하지 않는 전국체육대회·전국소년체육대회(개인전 96종목)가
+                # 정확히 그런 종목이고, 그 선수들은 레코드가 1개도 안 쌓여 `len(records) < 2`
+                # 로 걸러져 **선수 레벨 규칙(R7~R13, R20, R21) 전체를 건너뛰었다.**
+                # 올바른 가드는 "이 종목에서 이미 풀로 수집했는가" 다 — 같은 종목 중복만 막는다.
                 for ranking in (event.get("final_rankings") or []):
+                    if not isinstance(ranking, dict):
+                        continue
                     name = (ranking.get("name") or "").strip()
-                    if name and name not in player_records:
+                    if name and name not in seen_in_event:
                         player_records[name].append({
                             "event_cd": event_cd,
                             "event_name": event_name,
@@ -1060,27 +1598,62 @@ class DataValidator:
                 if not isinstance(de_bracket, dict):
                     continue
 
+                # 같은 종목 순위표에 이 이름이 서로 다른 소속으로 올라와 있으면
+                # 동명이인 두 명이 그 종목에 함께 출전한 것이다 — 그러면 한 라운드에
+                # "그 이름"의 경기가 2개인 것은 정상이다. 등급 판정에 쓴다(아래 참조).
+                homonym_teams = self._r7_event_team_count(event, player_lower)
+
                 # dual_de: 서브브라켓별 독립 검증
                 if isinstance(de_bracket, dict) and de_bracket.get("format") == "dual_de":
                     first_bouts, second_bouts = _get_dual_de_sub_bouts(de_bracket)
                     for label, bouts in [("first_de", first_bouts), ("second_de", second_bouts)]:
                         self._r7_count_rounds(
                             player_lower, player_name, bouts,
-                            event_cd, event_name, comp_name, label
+                            event_cd, event_name, comp_name, label, homonym_teams
                         )
                 else:
                     full_bouts = _get_full_bouts_from_bracket(de_bracket)
                     self._r7_count_rounds(
                         player_lower, player_name, full_bouts,
-                        event_cd, event_name, comp_name, ""
+                        event_cd, event_name, comp_name, "", homonym_teams
                     )
+
+    @staticmethod
+    def _r7_event_team_count(event: Dict, player_lower: str) -> int:
+        """이 종목 순위표에서 이 이름이 몇 개의 서로 다른 소속으로 나타나는가.
+
+        2 이상이면 그 종목에 동명이인이 함께 출전했다는 뜻이다. 협회 순위표는 이 경우
+        이름에 `(*)` 를 붙이므로(→ `canon_player_name()`) 별표를 뗀 이름으로 센다.
+        """
+        teams: Set[str] = set()
+        for source in ("final_rankings", "pool_total_ranking"):
+            for row in (event.get(source) or []):
+                if not isinstance(row, dict):
+                    continue
+                if canon_player_name(row.get("name")).lower() == player_lower:
+                    team = (row.get("team") or "").strip()
+                    if team:
+                        teams.add(team)
+        return len(teams)
 
     def _r7_count_rounds(
         self, player_lower: str, player_name: str, bouts: List[Dict],
-        event_cd: str, event_name: str, comp_name: str, bracket_label: str
+        event_cd: str, event_name: str, comp_name: str, bracket_label: str,
+        homonym_teams: int = 0,
     ):
-        """R7 보조: bout 리스트에서 라운드별 중복 체크"""
-        round_counts: Dict[str, int] = defaultdict(int)
+        """R7 보조: bout 리스트에서 라운드별 중복 체크.
+
+        한 선수가 한 라운드에서 두 경기를 치를 수는 없다. 그래도 이름 기준으로는 두 경기가
+        정당하게 나올 수 있다 — **같은 종목에 동명이인 두 명**이 있는 경우다. CLAUDE.md 실측:
+        제66회 대통령배 dual 종목 4개가 전부 동명이인 2명씩이었다(김민서·김나연·김도영 …).
+
+        그래서 2026-09-28 부터 등급을 갈라 매긴다:
+          ERROR   — 두 경기의 **내용(선수쌍+점수)이 같음** = 복제된 팬텀, 또는
+                    순위표에 이 이름의 소속이 하나뿐 = 동명이인으로 설명되지 않음
+          WARNING — 순위표에 이 이름이 2개 이상의 소속으로 있음 = 동명이인으로 설명 가능
+        이렇게 하면 "사람이 봐야 하는 것"과 "데이터가 깨진 것"이 리포트에서 갈라진다.
+        """
+        by_round: Dict[str, List[Dict]] = defaultdict(list)
         seen_bouts: Set[tuple] = set()
 
         for bout in bouts:
@@ -1096,250 +1669,162 @@ class DataValidator:
                 if bout_key in seen_bouts:
                     continue
                 seen_bouts.add(bout_key)
-                round_counts[rnd] += 1
+                by_round[rnd].append(bout)
 
         bracket_info = f" [{bracket_label}]" if bracket_label else ""
-        for rnd, count in round_counts.items():
-            if count > 1:
-                self.issues.append(ValidationIssue(
-                    rule_id="R7",
-                    severity="ERROR",
-                    player_name=player_name,
-                    event_cd=event_cd,
-                    competition_name=comp_name,
-                    message=f"[{event_name}]{bracket_info} '{player_name}'이 {rnd}에서 {count}경기 (중복)",
-                    data={"round": rnd, "bout_count": count, "bracket": bracket_label},
-                ))
+        for rnd, round_bouts in by_round.items():
+            count = len(round_bouts)
+            if count <= 1:
+                continue
+
+            contents = Counter(_bout_content_key(b) for b in round_bouts)
+            duplicated = any(n > 1 for n in contents.values())
+            explained = homonym_teams >= 2 and not duplicated
+
+            if duplicated:
+                reason = "두 경기의 선수쌍·점수가 동일 → 복제된 팬텀 경기"
+            elif explained:
+                reason = (f"순위표에 이 이름이 소속 {homonym_teams}곳으로 등재 "
+                          f"→ 동명이인 {homonym_teams}명으로 설명 가능 (확인 필요)")
+            else:
+                reason = "순위표상 소속이 하나 → 동명이인으로 설명되지 않음"
+
+            self.issues.append(ValidationIssue(
+                rule_id="R7",
+                severity="WARNING" if explained else "ERROR",
+                player_name=player_name,
+                event_cd=event_cd,
+                competition_name=comp_name,
+                message=(
+                    f"[{event_name}]{bracket_info} '{player_name}'이 {rnd}에서 "
+                    f"{count}경기 (한 선수는 한 라운드에 1경기) — {reason}"
+                ),
+                data={
+                    "round": rnd,
+                    "bout_count": count,
+                    "bracket": bracket_label,
+                    "homonym_team_count": homonym_teams,
+                    "duplicated_content": duplicated,
+                    "opponents": [
+                        f"{_get_player_name(b, 'player1')} vs {_get_player_name(b, 'player2')}"
+                        for b in round_bouts[:4]
+                    ],
+                },
+            ))
 
     def _check_r8_round_progression(self, player_name: str, records: List[Dict]):
-        """R8: 라운드 진행 보존법칙 — round N wins > round N+1 total 이면 오류
+        """R8: 라운드 진행 보존법칙 — 어떤 라운드를 이겼으면 다음 라운드에 있어야 한다.
 
-        per-event 검증: 이벤트별로 독립적으로 검증하여 cross-event 합산 오탐 방지.
-        시작 라운드(bracket_size) 이하의 비교는 건너뜀.
+        🔴 2026-09-28 규칙 수정 (오탐 제거).
+        이전 구현은 라운드를 `CATEGORY_ORDER` 5칸으로 **뭉쳐서** 비교했다. 그런데
+        `get_round_category()` 는 256강·128강·64강·32강을 모두 `t32_and_below` 한 칸에 넣는다.
+        그래서 64강을 이기고 32강도 이긴 뒤 16강을 한 번 치른 **정상적인 선수**가
+        "~32강 승리 2회 → 16강 출전 1회 (1경기 유실)" 로 걸렸다. 전수 검증 3,488건 ERROR 의
+        표본이 전부 이 형태였다 — 데이터 오류가 아니라 규칙의 산술 오류다.
+
+        수정: 뭉치지 않고 **실제 라운드**(`_DE_ROUND_SEQUENCE`) 를 그대로 쓴다. 보존법칙은
+        라운드 단위로만 성립한다 — 한 라운드에서 이긴 선수는 그 브래킷에 존재하는 다음
+        라운드에 반드시 등장한다.
+
+        판정 시 두 가지를 반드시 지킨다:
+          · **다음 라운드는 '그 브래킷에 실재하는' 다음 라운드**다. 32강이 없는 브래킷에서
+            64강 승자는 16강에 나타난다. 이름표 순서로 +1 하면 오탐이 난다.
+          · **부전승도 출전으로 본다.** 부전승은 경기가 아니지만(CLAUDE.md) 그 라운드에
+            선수가 있었다는 증거다. 빼고 세면 부전승으로 올라간 선수가 유실로 잡힌다.
+
+        dual DE 는 예선/본선을 독립 브래킷으로 따로 검증한다 — 예선 64강 승자가 본선 64강에
+        없는 것은 정상이다(본선은 시드 재배정).
         """
-        player_lower = player_name.lower()
-
         for comp in self.competitions:
-            comp_info = comp.get("competition", {})
-            comp_name = comp_info.get("name", "")
+            comp_name = comp.get("competition", {}).get("name", "")
 
             for event in (comp.get("events") or []):
                 event_cd = event.get("sub_event_cd", "")
                 event_name = event.get("event_name", "") or event.get("name", "")
                 de_bracket = event.get("de_bracket", {})
-                if not isinstance(de_bracket, dict):
+                if not isinstance(de_bracket, dict) or not de_bracket:
                     continue
 
-                # dual_de: 서브브라켓별 독립 검증
-                # (first_de와 second_de의 같은 라운드명을 합산하면 오탐 발생)
                 if de_bracket.get("format") == "dual_de":
                     for label in ("first_de", "second_de"):
-                        sub = de_bracket.get(label, {})
+                        sub = de_bracket.get(label) or {}
                         if isinstance(sub, dict):
                             sub_bouts = _get_full_bouts_from_bracket(sub)
                             if sub_bouts:
                                 self._r8_validate_bouts(
-                                    player_lower, player_name, sub_bouts, sub,
+                                    player_name, sub_bouts,
                                     event_cd, f"{event_name} [{label}]", comp_name
                                 )
                     continue
 
                 full_bouts = _get_full_bouts_from_bracket(de_bracket)
-                if not full_bouts:
-                    continue
-
-                # per-event round stats
-                round_stats: Dict[str, Dict[str, int]] = {
-                    cat: {"wins": 0, "losses": 0} for cat in CATEGORY_ORDER
-                }
-                seen_bouts: Set[str] = set()
-                player_found = False
-
-                for bout in full_bouts:
-                    if bout.get("is_bye") or _is_self_bout(bout):
-                        continue
-
-                    winner = (bout.get("winner_name") or "").strip().lower()
-                    p1 = (bout.get("player1_name") or "").strip().lower()
-                    p2 = (bout.get("player2_name") or "").strip().lower()
-                    rnd = (bout.get("round_name") or bout.get("round") or "").strip()
-
-                    if not rnd or player_lower not in (p1, p2):
-                        continue
-
-                    player_found = True
-
-                    # 중복 방지
-                    opponent = p2 if player_lower == p1 else p1
-                    bout_key = f"{rnd}|{opponent}"
-                    if bout_key in seen_bouts:
-                        continue
-                    seen_bouts.add(bout_key)
-
-                    category = get_round_category(rnd)
-                    if category not in round_stats:
-                        continue
-
-                    if winner == player_lower:
-                        round_stats[category]["wins"] += 1
-                    else:
-                        round_stats[category]["losses"] += 1
-
-                if not player_found:
-                    continue
-
-                # 시작 라운드 파악: bracket 메타데이터 또는 bracket_size에서 추론
-                starting_round = de_bracket.get("starting_round", "")
-                bracket_size = de_bracket.get("bracket_size", 0)
-                if not starting_round and bracket_size:
-                    if bracket_size <= 8:
-                        starting_round = "8강"
-                    elif bracket_size <= 16:
-                        starting_round = "16강"
-                    elif bracket_size <= 32:
-                        starting_round = "32강"
-                    elif bracket_size <= 64:
-                        starting_round = "64강"
-                    else:
-                        starting_round = "128강"
-
-                starting_cat_idx = 0
-                if starting_round:
-                    starting_cat = get_round_category(starting_round)
-                    if starting_cat in CATEGORY_ORDER:
-                        starting_cat_idx = CATEGORY_ORDER.index(starting_cat)
-
-                # 보존법칙 검증: 시작 라운드 이상에서만 체크
-                for i in range(starting_cat_idx, len(CATEGORY_ORDER) - 1):
-                    curr_cat = CATEGORY_ORDER[i]
-                    next_cat = CATEGORY_ORDER[i + 1]
-
-                    curr_wins = round_stats[curr_cat]["wins"]
-                    next_total = round_stats[next_cat]["wins"] + round_stats[next_cat]["losses"]
-
-                    if curr_wins == 0 or next_total == 0:
-                        continue
-
-                    if curr_wins > next_total:
-                        diff = curr_wins - next_total
-                        self.issues.append(ValidationIssue(
-                            rule_id="R8",
-                            severity="ERROR",
-                            player_name=player_name,
-                            event_cd=event_cd,
-                            competition_name=comp_name,
-                            message=(
-                                f"[{event_name}] 라운드 진행 보존법칙 위반: "
-                                f"{CATEGORY_NAMES[curr_cat]} 승리 {curr_wins}회 → "
-                                f"{CATEGORY_NAMES[next_cat]} 출전 {next_total}회 "
-                                f"({diff}경기 유실)"
-                            ),
-                            data={
-                                "current_round": curr_cat,
-                                "current_wins": curr_wins,
-                                "next_round": next_cat,
-                                "next_total": next_total,
-                                "missing": diff,
-                                "event_cd": event_cd,
-                            },
-                        ))
+                if full_bouts:
+                    self._r8_validate_bouts(
+                        player_name, full_bouts, event_cd, event_name, comp_name
+                    )
 
     def _r8_validate_bouts(
-        self, player_lower: str, player_name: str, full_bouts: List[Dict],
-        de_bracket: Dict, event_cd: str, event_name: str, comp_name: str
+        self, player_name: str, full_bouts: List[Dict],
+        event_cd: str, event_name: str, comp_name: str
     ):
-        """R8 보조: bout 리스트에서 라운드 진행 보존법칙 검증"""
-        round_stats: Dict[str, Dict[str, int]] = {
-            cat: {"wins": 0, "losses": 0} for cat in CATEGORY_ORDER
-        }
-        seen_bouts: Set[str] = set()
-        player_found = False
+        """R8 보조: 한 브래킷 안에서 실제 라운드 단위로 보존법칙 검증."""
+        player_lower = player_name.lower()
+
+        # 이 브래킷에 실재하는 라운드 (부전승 포함 — 라운드의 존재 여부 판단용)
+        present_rounds: Set[str] = set()
+        # 선수가 등장한 라운드 (부전승 포함 = 그 라운드에 있었다는 증거)
+        appeared: Set[str] = set()
+        # 선수가 이긴 라운드 (부전승 제외 — 실제 대결에서 이긴 것만)
+        won: Set[str] = set()
 
         for bout in full_bouts:
-            if bout.get("is_bye") or _is_self_bout(bout):
+            rnd = _normalize_de_round(bout.get("round_name") or bout.get("round") or "")
+            if rnd not in _DE_ROUND_INDEX:
                 continue
+            present_rounds.add(rnd)
 
-            winner = (bout.get("winner_name") or "").strip().lower()
-            p1 = (bout.get("player1_name") or "").strip().lower()
-            p2 = (bout.get("player2_name") or "").strip().lower()
-            rnd = (bout.get("round_name") or bout.get("round") or "").strip()
-
-            if not rnd or player_lower not in (p1, p2):
+            p1 = _get_player_name(bout, "player1").strip().lower()
+            p2 = _get_player_name(bout, "player2").strip().lower()
+            if player_lower not in (p1, p2):
                 continue
+            appeared.add(rnd)
 
-            player_found = True
-
-            opponent = p2 if player_lower == p1 else p1
-            bout_key = f"{rnd}|{opponent}"
-            if bout_key in seen_bouts:
+            if is_bye_bout(bout) or _is_self_bout(bout):
                 continue
-            seen_bouts.add(bout_key)
+            # winner_name 은 자주 비어 있다 — 실측으로 한 종목의 32경기 중 승자 필드가
+            # 채워진 것이 절반이 안 됐다(점수는 다 있었다). winner_name 만 보면 규칙이
+            # 조용히 눈을 감는다(오탐이 아니라 미탐). 그래서 점수로 보완한다.
+            if self._r17_extract_winner(bout).strip().lower() == player_lower:
+                won.add(rnd)
 
-            category = get_round_category(rnd)
-            if category not in round_stats:
-                continue
-
-            if winner == player_lower:
-                round_stats[category]["wins"] += 1
-            else:
-                round_stats[category]["losses"] += 1
-
-        if not player_found:
+        if not won:
             return
 
-        starting_round = de_bracket.get("starting_round", "") if isinstance(de_bracket, dict) else ""
-        bracket_size = de_bracket.get("bracket_size", 0) if isinstance(de_bracket, dict) else 0
-        if not starting_round and bracket_size:
-            if bracket_size <= 8:
-                starting_round = "8강"
-            elif bracket_size <= 16:
-                starting_round = "16강"
-            elif bracket_size <= 32:
-                starting_round = "32강"
-            elif bracket_size <= 64:
-                starting_round = "64강"
-            else:
-                starting_round = "128강"
-
-        starting_cat_idx = 0
-        if starting_round:
-            starting_cat = get_round_category(starting_round)
-            if starting_cat in CATEGORY_ORDER:
-                starting_cat_idx = CATEGORY_ORDER.index(starting_cat)
-
-        for i in range(starting_cat_idx, len(CATEGORY_ORDER) - 1):
-            curr_cat = CATEGORY_ORDER[i]
-            next_cat = CATEGORY_ORDER[i + 1]
-
-            curr_wins = round_stats[curr_cat]["wins"]
-            next_total = round_stats[next_cat]["wins"] + round_stats[next_cat]["losses"]
-
-            if curr_wins == 0 or next_total == 0:
+        ordered = sorted(present_rounds, key=lambda r: _DE_ROUND_INDEX[r])
+        for i, rnd in enumerate(ordered):
+            if rnd not in won or i + 1 >= len(ordered):
                 continue
-
-            if curr_wins > next_total:
-                diff = curr_wins - next_total
-                self.issues.append(ValidationIssue(
-                    rule_id="R8",
-                    severity="ERROR",
-                    player_name=player_name,
-                    event_cd=event_cd,
-                    competition_name=comp_name,
-                    message=(
-                        f"[{event_name}] 라운드 진행 보존법칙 위반: "
-                        f"{CATEGORY_NAMES[curr_cat]} 승리 {curr_wins}회 → "
-                        f"{CATEGORY_NAMES[next_cat]} 출전 {next_total}회 "
-                        f"({diff}경기 유실)"
-                    ),
-                    data={
-                        "current_round": curr_cat,
-                        "current_wins": curr_wins,
-                        "next_round": next_cat,
-                        "next_total": next_total,
-                        "missing": diff,
-                        "event_cd": event_cd,
-                    },
-                ))
+            nxt = ordered[i + 1]
+            if nxt in appeared:
+                continue
+            self.issues.append(ValidationIssue(
+                rule_id="R8",
+                severity="ERROR",
+                player_name=player_name,
+                event_cd=event_cd,
+                competition_name=comp_name,
+                message=(
+                    f"[{event_name}] 라운드 진행 보존법칙 위반: "
+                    f"'{player_name}' 이 {rnd}을 이겼는데 다음 라운드 {nxt}에 없음 "
+                    f"(이 브래킷의 라운드: {' → '.join(ordered)})"
+                ),
+                data={
+                    "won_round": rnd,
+                    "missing_round": nxt,
+                    "bracket_rounds": ordered,
+                    "event_cd": event_cd,
+                },
+            ))
 
     def _check_r9_pool_bout_count(self, player_name: str, records: List[Dict]):
         """R9: Pool 경기수 이상 (한 이벤트 pool_bouts > 8)"""
@@ -1351,6 +1836,8 @@ class DataValidator:
 
             for event in (comp.get("events") or []):
                 event_name = event.get("event_name", "") or event.get("name", "")
+                if _is_team_event(event_name):
+                    continue  # 단체전 순위표의 이름은 팀명이다 (위 _validate_all_players 주석 참조)
                 event_cd = event.get("sub_event_cd", "")
 
                 for pool in (event.get("pool_rounds") or []):
@@ -1394,8 +1881,12 @@ class DataValidator:
         # 같은 날 다른 성별
         for date, genders in genders_by_date.items():
             if len(genders) > 1:
-                severity = "RESOLVED" if is_registered else "ERROR"
-                suffix = " [KNOWN_HOMONYMS 등록됨]" if is_registered else ""
+                separated = self._homonym_separated(
+                    player_name, [("G", date, g) for g in sorted(genders)]
+                )
+                severity = "RESOLVED" if (separated or is_registered) else "ERROR"
+                suffix = (f" [{separated}]" if separated
+                          else (" [KNOWN_HOMONYMS 등록됨]" if is_registered else ""))
                 self.issues.append(ValidationIssue(
                     rule_id="R10",
                     severity=severity,
@@ -1450,6 +1941,13 @@ class DataValidator:
                 severity = "ERROR"
                 if max_group_seen in ("일반부", "일반", "시니어"):
                     severity = "WARNING"
+                # 역행하는 두 기록이 이미 서로 다른 프로필로 갈라져 있으면 처리된 것이다.
+                separated = self._homonym_separated(
+                    player_name,
+                    [("A", max_date_seen, max_group_seen), ("A", comp_date, group)],
+                )
+                if separated:
+                    severity = "RESOLVED"
                 self.issues.append(ValidationIssue(
                     rule_id="R11",
                     severity=severity,
@@ -1459,6 +1957,7 @@ class DataValidator:
                     message=(
                         f"'{player_name}' 나이그룹 역행: "
                         f"{max_group_seen}({max_date_seen}) → {group}({comp_date})"
+                        + (f" [{separated}]" if separated else "")
                     ),
                     data={
                         "prev_group": max_group_seen, "prev_date": max_date_seen,
@@ -1545,7 +2044,13 @@ class DataValidator:
                 len(age_groups) > 1,
             ])
 
-            if is_registered:
+            separated = self._homonym_separated(
+                player_name, [(comp_date, t) for t in sorted(teams)]
+            )
+            if separated:
+                severity = "RESOLVED"
+                detail = separated
+            elif is_registered:
                 severity = "RESOLVED"
                 detail = "KNOWN_HOMONYMS 등록됨 → 프로필 분리 완료"
             elif diff_attrs >= 2:
@@ -1686,8 +2191,11 @@ class DataValidator:
     ):
         """R22: pool_total_ranking 있으면서 pool_rounds 비어있는 경우 (스크래핑 실패 감지)"""
         raw_data = event.get("raw_data", event)
-        pool_total = raw_data.get("pool_total_ranking", [])
-        pool_rounds = raw_data.get("pool_rounds", [])
+        # 🔴 `or []` 가 필요하다. 이 키들은 **존재하면서 값이 None** 인 레코드가 있고
+        # (`raw.get("pool_rounds")` 가 그대로 None 을 넘긴다), `.get(k, [])` 는 그때
+        # 기본값을 쓰지 않으므로 `len(None)` 으로 TypeError 가 나 검증 전체가 중단된다.
+        pool_total = raw_data.get("pool_total_ranking") or []
+        pool_rounds = raw_data.get("pool_rounds") or []
 
         if len(pool_total) > 0 and len(pool_rounds) == 0:
             self.issues.append(ValidationIssue(
@@ -1857,8 +2365,28 @@ class DataValidator:
         bracket_size = int(bracket_size)
 
         # bout 수 계산
+        #
+        # 🔴 2026-09-28 오탐 수정. 같은 경기가 **라운드명 이표기**로 두 번 저장된 레코드가 있다.
+        # 실측(2023 생활체육 고등부 남자 사브르): 4 슬롯 브래킷에 '준결승 #1 최정민 vs (공란)'
+        # 과 '4강 #1 최정민 vs (공란)' 이 따로 들어가 bout 4개로 세어졌고, bracket_size 4 <
+        # 필요 5명 으로 ERROR 가 났다. 실제 슬롯은 3개(준결승 2 + 결승 1)로 정상이다.
+        # `_get_full_bouts_from_bracket()` 의 선수쌍 dedup 은 **한쪽 이름이 공란(부전승)이면
+        # 짝을 만들 수 없어** 이 중복을 못 지운다. 그래서 여기서 라운드명을 정규화한
+        # (라운드, 경기번호, 선수1, 선수2) 로 한 번 더 합친다. 이 수정으로 ERROR 37 → 1.
+        #
+        # 부전승은 세는 데서 빼지 않는다 — 부전승도 브래킷 슬롯을 차지하므로
+        # "N 슬롯 브래킷의 경기 레코드는 N-1 개 이하" 라는 이 규칙의 근거에 포함된다.
         bouts = _get_full_bouts_from_bracket(bracket)
-        bout_count = len(bouts)
+        slot_keys = {
+            (
+                _normalize_de_round(b.get("round_name") or b.get("round") or ""),
+                b.get("match_number"),
+                _get_player_name(b, "player1"),
+                _get_player_name(b, "player2"),
+            )
+            for b in bouts
+        }
+        bout_count = len(slot_keys)
         if bout_count == 0:
             return
 
@@ -2447,6 +2975,15 @@ class DataValidator:
         'high': {'high', 'club'},
     }
 
+    # 학교급을 특정할 수 없는 org_type — R19 대상에서 제외한다.
+    #
+    # 🔴 2026-09-28 오탐 수정. R19 WARNING 271건 중 **221건이 international_school** 이었다.
+    # 국제학교는 한 학교에 K-12 가 모두 있어서 org_type 하나로 학교급을 특정할 수 없다.
+    # 초등부에 나온 국제학교 학생은 정상이지 오분류가 아니다. 'association'(시·도 펜싱협회)도
+    # 연령대를 담지 않는다. 이 둘을 제외하면 남는 것은 실제로 의심스러운 건들이다
+    # (예: 실업팀 소속이 초등부에 등장 → org_type 오분류 또는 이름 오염).
+    _AGE_AGNOSTIC_ORG_TYPES = {'international_school', 'association', 'academy', 'other'}
+
     def _check_r19_event_level_vs_org_type(
         self, event: Dict, event_cd: str, comp_name: str, event_name: str
     ):
@@ -2475,6 +3012,9 @@ class DataValidator:
             if not org_type:
                 # 캐시에 없으면 get_team_type()으로 추론
                 org_type = get_team_type(team)
+
+            if org_type in self._AGE_AGNOSTIC_ORG_TYPES:
+                continue
 
             if org_type and org_type not in allowed:
                 self.issues.append(ValidationIssue(
