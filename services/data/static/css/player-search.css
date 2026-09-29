@@ -86,15 +86,16 @@
    PLAYER HIGHLIGHT STYLES
    ===================================================== */
 .player-highlighted {
-    background: rgba(245, 158, 11, 0.15) !important;
-    border-left: 4px solid #f59e0b !important;
-    box-shadow: 0 0 10px rgba(245, 158, 11, 0.2);
+    background: rgba(212, 165, 116, 0.15) !important;
+    outline: 2px solid var(--accent-gold, #d4a574);
+    outline-offset: -2px;
+    box-shadow: 0 2px 10px rgba(212, 165, 116, 0.25);
     animation: highlightPulse 2s ease-in-out;
 }
 
 @keyframes highlightPulse {
-    0%, 100% { box-shadow: 0 0 10px rgba(245, 158, 11, 0.2); }
-    50% { box-shadow: 0 0 20px rgba(245, 158, 11, 0.4); }
+    0%, 100% { box-shadow: 0 2px 10px rgba(212, 165, 116, 0.25); }
+    50% { box-shadow: 0 4px 18px rgba(212, 165, 116, 0.45); }
 }
 
 tr.player-highlighted {
@@ -654,15 +655,12 @@ tr.player-highlighted td {
     padding: 14px;
     border-radius: 10px;
     margin-bottom: 10px;
-    border-left: 4px solid var(--accent-primary, #c9302c);
-    border-top: 1px solid var(--border-color, rgba(255, 255, 255, 0.05));
-    border-right: 1px solid var(--border-color, rgba(255, 255, 255, 0.05));
-    border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.05));
+    border: 1px solid var(--accent-primary, #c9302c);
     transition: all 0.2s ease;
 }
 
 .player-result-card:hover {
-    border-left-color: var(--accent-gold, #d4a574);
+    border-color: var(--accent-gold, #d4a574);
     transform: translateX(4px);
 }
 

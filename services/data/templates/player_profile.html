@@ -23,7 +23,7 @@
 {% block title %}{{ tr_player(player.name) }} - Korean Fencing Tracker{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="/static/css/fencinglab.css?v=20260603">
+<link rel="stylesheet" href="/static/css/fencinglab.css?v=20260928a">
 <style>
     /* Selection-points gate CTA: distinct secondary (blue) treatment so the
        guest summary doesn't end on two identical red login walls. Solid fill
@@ -390,6 +390,7 @@
             -
             {% endif %}
         </div>
+        {% include "partials/kfa_badges.html" %}
 
         <!-- Team History (소속 변경 이력) -->
         {% if player.team_history and player.team_history|length > 1 %}
@@ -504,6 +505,53 @@
                             <span class="points-label">pts</span>
                         </div>
                     </div>
+                    {% if rk.is_nt and rk.nt %}
+                    {# 국가대표 선발 포인트 — 협회 「국가대표 선발 규정」 4개 대회 합산표 그대로 (Best-N 아님) #}
+                    <div class="ranking-card-details">
+                        <div class="ranking-detail-header">
+                            <span>{{ _t("국가대표 선발 포인트") }} · {{ _t("4개 대회 중") }} {{ rk.nt.completed_count }}{{ _t("개 종료") }}</span>
+                            <span class="ranking-detail-help" onclick="event.stopPropagation(); this.nextElementSibling.classList.toggle('show')">?</span>
+                            <div class="ranking-help-popup" onclick="event.stopPropagation()">
+                                <div class="ranking-help-content">
+                                    <strong>{{ _t("대한펜싱협회 국가대표 선발 규정") }} (2025.04.23)</strong>
+                                    <p>{{ _t("제20조 ① 대통령배·김창환배·종목별오픈·국가대표선발대회 4개 대회 개인전 점수와 FIE 개인전 랭킹 점수를 합산한 순위로 선발") }}</p>
+                                    <p>{{ _t("제20조 ② 배점") }}: 1{{ _t("위") }} 32 · 2{{ _t("위") }} 26 · 3{{ _t("위") }} 20 · 5–8 14 · 9–16 8 · 17–32 4 · 33–64 2 · 65–96 1 · 97–128 0.5</p>
+                                    <p>{{ _t("예선 풀을 통과해 DE에 진출한 선수에게만 점수 부여 (풀 탈락 0점)") }}</p>
+                                    <p>{{ _t("제20조 ③ 동점: 1위가 많은 순 → 2위 … → 대통령배·김창환배·종목별오픈·국대선발 성적 순") }}</p>
+                                    <p>{{ _t("제21조 선발권") }}: {{ _t("상위") }} {{ rk.nt.quota }}{{ _t("명") }} + 25{{ _t("세이하 후보") }} {{ rk.nt.u25_quota }}{{ _t("명") }}</p>
+                                    <p>{{ _t("제18조 선발 시기: 당해 연도 8월 중. 표는 선발 시점 기준 4개 대회 각각의 최근 회차이며, 아직 결과가 없는 대회는 직전 회차를 이월 (부칙 2016.11.21 제2조)") }}</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="ranking-breakdown-list">
+                            {% for br in rk.best_results %}
+                            <div class="ranking-breakdown-item">
+                                <div class="breakdown-rank">
+                                    {% if br.rank %}{{ br.rank }}{{ _t("위") }}{% if br.qualified is sameas false %} <span class="sub-rank-tag">({{ _t("예선 탈락") }})</span>{% endif %}
+                                    {% elif br.status == 'completed' %}<span class="sub-rank-tag">{{ _t("불참") }}</span>
+                                    {% elif br.status == 'no_results' %}<span class="sub-rank-tag">{{ _t("결과 없음") }}</span>
+                                    {% elif br.status == 'in_progress' %}<span class="sub-rank-tag">{{ _t("진행 중") }}</span>
+                                    {% else %}<span class="sub-rank-tag">{{ _t("미개최") }}</span>{% endif %}
+                                </div>
+                                <div class="breakdown-comp">{% if br.edition_year %}{{ br.edition_year }} {% endif %}{{ _t(br.label) }}{% if br.carryover %} <span class="sub-rank-tag">{{ _t("직전 회차") }}</span>{% elif br.date %} <span class="sub-rank-tag">{{ br.date[:7] }}</span>{% endif %}</div>
+                                <div class="breakdown-pts">{{ br.points|round(1) }}pts</div>
+                            </div>
+                            {% endfor %}
+                            <div class="ranking-breakdown-item">
+                                <div class="breakdown-rank">{% if rk.rank <= rk.nt.quota %}<span class="sub-rank-tag">{{ _t("선발권") }} {{ rk.nt.quota }}{{ _t("위 이내") }}</span>{% endif %}</div>
+                                <div class="breakdown-comp">{{ _t("합계") }} ({{ _t("협회 합산표 순위") }} #{{ rk.rank }}){% if not rk.nt.fie_applied %} · <span class="sub-rank-tag">{{ _t("FIE 점수 미반영") }}</span>{% endif %}</div>
+                                <div class="breakdown-pts">{{ "%.1f"|format(rk.points) }}pts</div>
+                            </div>
+                            {% if rk.nt.fie_applied %}
+                            <div class="ranking-breakdown-item">
+                                <div class="breakdown-rank">{% if rk.nt.fie_rank %}FIE {{ rk.nt.fie_rank }}{{ _t("위") }}{% else %}<span class="sub-rank-tag">FIE 16{{ _t("위 밖") }}</span>{% endif %}</div>
+                                <div class="breakdown-comp">{{ _t("선발 순위") }} #{{ rk.nt.selection_rank }} <span class="sub-rank-tag">{{ _t("국내 + FIE, 제20조 ①") }}</span></div>
+                                <div class="breakdown-pts">{{ "%.1f"|format(rk.nt.selection_points) }}pts</div>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% else %}
                     <div class="ranking-card-details">
                         <div class="ranking-detail-header">
                             <span>{{ _t("포인트 산출 내역") }} (Best {{ rk.best_results|length }})</span>
@@ -532,6 +580,7 @@
                             {% endfor %}
                         </div>
                     </div>
+                    {% endif %}
                 </div>
                 {% endfor %}
             </div>
@@ -1518,7 +1567,7 @@ window.i18n = {
     }
 };
 </script>
-<script src="/static/js/fencinglab.js?v=20260603"></script>
+<script src="/static/js/fencinglab.js?v=20260928a"></script>
 <script>
 // Tab switching
 document.querySelectorAll('.tab-btn').forEach(btn => {

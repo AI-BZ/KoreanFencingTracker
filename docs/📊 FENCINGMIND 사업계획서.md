@@ -61,9 +61,9 @@
 
 ***
 
-### 2.2 SaaS 플랫폼 (FencingMind Platform)
+### 2.2 클럽 관리 SaaS (FencingMind Club)
 
-**서브도메인:** app.fencingmind.ai
+**서브도메인:** club.fencingmind.ai
 
 **제공 서비스:**
 

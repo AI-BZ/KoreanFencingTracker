@@ -16,6 +16,10 @@ from dataclasses import dataclass
 from collections import defaultdict
 from loguru import logger
 
+from ranking.national_team import (
+    NationalTeamRankingCalculator, NTRankingTable, NT_COMP_ORDER, NT_COMP_LABELS,
+)
+
 
 # =====================================================
 # 상수 정의
@@ -101,16 +105,27 @@ RANK_RATIOS = {
 }
 
 def get_rank_ratio(rank: int) -> float:
-    """순위별 포인트 비율 반환 (라운드 내 시드 기반 소폭 차등)"""
+    """순위별 포인트 비율 반환 (라운드 내 시드 기반 소폭 차등)
+
+    순위가 나빠질수록 비율은 **항상 작거나 같아야 한다.** 예전 구현은 구간 경계에서
+    이 단조성이 두 번 깨져 있었다 (2026-09-28 수정):
+      - 32위 0.025 → 33위 0.05 : 32강 탈락자보다 64강 탈락 상위 시드(33~57위)가
+        포인트를 더 받았다.
+      - 65~128위 구간의 끝값(128위 0.0074) < 129위 이하 고정값 0.01 : 순위가 더 나쁜
+        쪽이 더 받았다.
+    구간 폭과 크기 감각은 유지하고 시작값만 앞 구간 끝값 아래로 내려 이어 붙였다.
+    """
     if rank in RANK_RATIOS:
         return RANK_RATIOS[rank]
     elif 33 <= rank <= 64:
-        # 64강 탈락 (간격 ~0.001)
-        return round(0.05 - (rank - 33) * 0.001, 4)
+        # 64강 탈락 — 32위(0.025) 아래에서 시작해 내려간다 (간격 0.0003)
+        return round(0.024 - (rank - 33) * 0.0003, 4)
     elif 65 <= rank <= 128:
-        return round(0.02 - (rank - 65) * 0.0002, 4)
+        # 128강 탈락 — 64위(0.0147) 아래에서 시작 (간격 0.0001)
+        return round(0.0145 - (rank - 65) * 0.0001, 4)
     else:
-        return 0.01
+        # 129위 이하 — 128위(0.0082) 아래로 고정
+        return 0.008
 
 # 참가자 수 보정 계수
 def get_participant_factor(count: int) -> float:
@@ -263,6 +278,8 @@ class PlayerRanking:
     silver_count: int = 0
     bronze_count: int = 0
     current_rank: int = 0
+    # NT 전체 랭킹(협회 4개 대회 합산)일 때만 채워진다 — 표 머리글 정보(모든 행이 같은 dict 공유)
+    nt_info: Dict = None
 
 
 # =====================================================
@@ -270,10 +287,19 @@ class PlayerRanking:
 # =====================================================
 
 def classify_competition_tier(name: str) -> str:
-    """대회명으로 등급 분류"""
-    name_lower = name.lower()
+    """대회명으로 등급 분류
 
-    # S등급: 전국체전, 회장배
+    ⚠️ B등급 키워드를 먼저 본다. '회장배'(S)가 '협회장배'(B)의 부분 문자열이라
+    순서를 바꾸면 '대한펜싱협회장배 전국 클럽·동호인 …' 7개 대회가 S등급으로 잡힌다
+    (2026-09-28 수정). tier 는 현재 `calculate_points()` 가 쓰지 않는 legacy 값이지만
+    (`TIER_BASE_POINTS` 는 `calculate_points_legacy` 전용) 표시·집계에서 오분류가
+    되살아나지 않도록 분류 자체를 바로잡아 둔다.
+    """
+    # B등급을 먼저: 협회장배/도지사배/시장배/시도대항
+    if any(x in name for x in ["시도대항", "협회장배", "도지사배", "시장배"]):
+        return "B"
+
+    # S등급: 전국체전, 회장배, 대통령배
     if any(x in name for x in ["전국체전", "회장배", "대통령배"]):
         return "S"
 
@@ -285,9 +311,7 @@ def classify_competition_tier(name: str) -> str:
     if any(x in name for x in ["인터내셔널", "International", "국제"]):
         return "D"
 
-    # B등급: 시도대회, 협회장배
-    if any(x in name for x in ["시도대항", "협회장배", "도지사배", "시장배"]):
-        return "B"
+    # (B등급은 함수 맨 위에서 먼저 판정한다 — 위 주석 참조)
 
     # C등급: 기타
     return "C"
@@ -550,10 +574,14 @@ class RankingCalculator:
     Supabase에서 로드한 데이터 딕셔너리를 전달하세요.
     """
 
-    def __init__(self):
+    def __init__(self, fie_lookup=None, team_groups_lookup=None):
         self.results: List[PlayerResult] = []
         self.data = None
         self.org_age_lookup: Dict[str, str] = {}
+        # NT 전체 랭킹(협회 국가대표 선발 규정 그대로) — load_from_data 에서 만든다
+        self.national_team: NationalTeamRankingCalculator = None
+        self.fie_lookup = fie_lookup
+        self.team_groups_lookup = team_groups_lookup  # 동명이인 소속 그룹 (PlayerIdentityResolver)
 
     def load_from_data(self, data: dict, org_age_lookup: dict = None):
         """Supabase 캐시 데이터에서 로드 (서버 런타임 전용)
@@ -567,7 +595,77 @@ class RankingCalculator:
         self.org_age_lookup = org_age_lookup or {}
         self._extract_results()
         self._generate_national_sub_rankings()
+        self.national_team = NationalTeamRankingCalculator(
+            data, fie_lookup=self.fie_lookup, team_groups_lookup=self.team_groups_lookup)
         logger.info(f"메모리 데이터 로드 완료: {len(self.results)}개 결과")
+
+    # ---------- NT 전체 랭킹 (협회 국가대표 선발 규정) ----------
+
+    def calculate_nt_table(self, weapon: str, gender: str, year: int = None,
+                           today: date = None) -> NTRankingTable:
+        """협회 「4개 대회 합산 점수 및 랭킹 현황」 표 그대로의 NT 랭킹.
+
+        `calculate_rankings(national_team_only=True, age_group='NT')` 가 이것을 호출한다.
+        표 머리글(대회 칸 4개·종료 수·이월 칸·선발 인원·FIE 반영 여부)은 `table.meta()`.
+        `today` 는 과거 시점의 표를 재현할 때만 준다(협회 시즌 중 표 대조용).
+        """
+        if self.national_team is None:
+            self.national_team = NationalTeamRankingCalculator(
+                self.data, fie_lookup=self.fie_lookup, team_groups_lookup=self.team_groups_lookup)
+        effective_year = year if year is not None else date.today().year
+        return self.national_team.calculate(weapon, gender, effective_year, today=today)
+
+    @staticmethod
+    def nt_table_to_rankings(table: NTRankingTable) -> List[PlayerRanking]:
+        """NTRankingTable → 기존 호출자들이 쓰는 PlayerRanking 목록.
+
+        best_results 는 Best-N 이 아니라 **협회 표의 대회 칸 4개**(규정 순서)다. 불참·미개최 칸도
+        rank=None 으로 넣어 UI가 4칸을 그대로 그린다. 예선 탈락은 rank 는 있고 points=0,
+        qualified=False.
+        """
+        meta = table.meta()
+        col_by_id = {c.comp_id: c for c in table.columns}
+        rankings: List[PlayerRanking] = []
+        for r in table.rankings:
+            cells = []
+            for cid in NT_COMP_ORDER:
+                col = col_by_id[cid]
+                res = r.results.get(cid)
+                cells.append({
+                    "comp_id": cid,
+                    "label": NT_COMP_LABELS[cid],
+                    "competition": res.comp_name if res else col.comp_name,
+                    "comp_idx": res.comp_idx if res else col.comp_idx,
+                    "event": res.event_name if res else "",
+                    "date": res.comp_date if res else col.start_date,
+                    "status": col.status if res is None else "completed",
+                    "edition_year": col.edition_year,
+                    "carryover": col.is_carryover,
+                    "rank": res.rank if res else None,
+                    "points": res.points if res else 0.0,
+                    "qualified": res.qualified if res else None,
+                    "sub_rank_age": None,
+                    "total_in_group": None,
+                })
+            scored = [res for res in r.results.values() if res.points > 0]
+            rankings.append(PlayerRanking(
+                player_name=r.player_name,
+                teams=[r.team] if r.team else [],
+                weapon=table.weapon,
+                gender=table.gender,
+                age_group="NT",
+                total_points=round(r.total_points, 2),
+                competitions_count=len(scored),
+                best_results=cells,
+                gold_count=sum(1 for res in scored if res.rank == 1),
+                silver_count=sum(1 for res in scored if res.rank == 2),
+                bronze_count=sum(1 for res in scored if res.rank == 3),
+                current_rank=r.current_rank,
+                nt_info={**meta, "domestic_points": r.domestic_points,
+                         "fie_rank": r.fie_rank, "fie_points": r.fie_points,
+                         "selection_points": r.selection_points, "selection_rank": r.selection_rank},
+            ))
+        return rankings
 
     def _extract_results(self):
         """JSON 데이터에서 선수별 결과 추출"""
@@ -828,6 +926,13 @@ class RankingCalculator:
         Returns:
             랭킹 리스트
         """
+        # NT 전체 랭킹은 협회 「국가대표 선발 규정」 그대로 계산한다 (ranking/national_team.py).
+        # 4개 대회(대통령배·김창환배·종목별오픈·국대선발) 개인전, 32/26/20… 배점, 예선 통과자만,
+        # 달력 연도, 제20조 ③ 동점 규칙. Best-N 가중합·참가자 수 기반 base_points 는 쓰지 않는다.
+        # (나이리그 랭킹과 NT 나이리그 서브랭킹은 아래 기존 경로 그대로)
+        if national_team_only and age_group == 'NT':
+            return self.nt_table_to_rankings(self.calculate_nt_table(weapon, gender, year))
+
         # 필터링
         filtered = self.results
 

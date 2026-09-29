@@ -314,7 +314,10 @@ class FencingLabAnalyzer:
         unique_names = len(self.name_to_teams)
         homonyms = sum(1 for teams in self.name_to_teams.values() if len(teams) > 1)
 
-        logger.info(f"FencingLab 데이터 로드 완료: {unique_players}명 (동명이인: {homonyms}건)")
+        logger.info(
+            f"FencingLab 데이터 로드 완료: {unique_players}명, 고유 이름 {unique_names}개 "
+            f"(동명이인: {homonyms}건)"
+        )
 
     def _index_all_matches(self):
         """선수별 모든 경기 기록 인덱싱 (Pool + DE)"""
@@ -460,7 +463,6 @@ class FencingLabAnalyzer:
         """DE full_bouts에서 승자+패자 경기 결과 추출 (신규 데이터 형식)"""
         for bout in full_bouts:
             round_name = bout.get("round", "")
-            score = bout.get("score", {})
             winner = bout.get("winner", {})
             loser = bout.get("loser", {})
 

@@ -179,6 +179,40 @@ class FencingScheduler:
         )
         logger.info("🧹 매시 45분 좀비 Playwright 프로세스 정리 등록")
 
+        # 12. 📰 협회 공지사항 게시판 모니터 - 6시간 주기 (02:20, 08:20, 14:20, 20:20)
+        #     국가대표 명단·교체·후보선수·합산 랭킹·규정 공지는 게시판 첨부로만 공개된다.
+        #     0/30분 잡들과 겹치지 않게 20분에 두고, _is_running 락과 무관하게 돈다
+        #     (경량 aiohttp 요청 몇 개 — 대회 스크래핑과 자원 경쟁이 없다).
+        self.scheduler.add_job(
+            self._run_kfa_notice_monitor,
+            CronTrigger(hour="2,8,14,20", minute=20),
+            id="kfa_notice_monitor",
+            name="📰 KFA Notice Board Monitor (6h)",
+            replace_existing=True
+        )
+        logger.info("📰 6시간 주기 협회 공지사항 모니터 등록 (02/08/14/20시 20분)")
+
+        # 13. 🌐 FIE 개인 랭킹 주 1회 — 화 06:00 (FIE 는 주말 대회 후 월요일 갱신).
+        #     국내 랭킹과 분리된 data_fie_rankings 만 쓴다. NT 선발 규정 제20조 ② 3호 가산의 원천.
+        self.scheduler.add_job(
+            self._run_fie_ranking_refresh,
+            CronTrigger(day_of_week="tue", hour=6, minute=0),
+            id="fie_ranking_weekly",
+            name="🌐 FIE Ranking Refresh (weekly)",
+            replace_existing=True
+        )
+        logger.info("🌐 매주 화요일 06:00 FIE 랭킹 수집 등록")
+
+        # 14. 🏅 아시안게임 2026 결과 — 대회 기간(~2026-09-30)만 하루 2회, 이후 자동 무동작.
+        self.scheduler.add_job(
+            self._run_asian_games_refresh,
+            CronTrigger(hour="12,22", minute=30, end_date="2026-09-30"),
+            id="asian_games_2026_refresh",
+            name="🏅 Asian Games 2026 Results",
+            replace_existing=True
+        )
+        logger.info("🏅 아시안게임 2026 결과 수집 등록 (12:30/22:30, ~09-30)")
+
     async def _run_competition_detection(self):
         """대회 공고 감지 실행"""
         if self._is_running:
@@ -821,6 +855,50 @@ class FencingScheduler:
         except Exception as e:
             logger.error(f"📊 주간 리포트 오류: {e}")
 
+    async def _run_kfa_notice_monitor(self):
+        """📰 협회 공지사항 모니터 (6시간 주기)
+
+        대회 스크래핑과 격리: `_is_running` 을 잡지 않고, 어떤 예외도 여기서 끝난다.
+        모니터 내부도 공지 한 건 단위로 예외를 삼키므로 첨부 하나가 깨져도 나머지는 저장된다.
+        """
+        logger.info("=== 📰 협회 공지사항 모니터 시작 ===")
+        try:
+            from scheduler.kfa_notice_monitor import KfaNoticeMonitor
+            result = await KfaNoticeMonitor().run(pages=(1, 2, 3))
+            self._last_stats["kfa_notices"] = result
+            if result.get("new"):
+                logger.info(f"📰 새 공지 {result['new']}건 (알림 {result.get('alerted', 0)}건)")
+        except ImportError as e:
+            logger.error(f"📰 공지 모니터 import 오류: {e}")
+        except Exception as e:
+            logger.error(f"📰 공지 모니터 오류: {e}")
+
+    async def _run_fie_ranking_refresh(self):
+        """🌐 FIE 개인 랭킹(시니어 6종목, 현재+직전 시즌) → data_fie_rankings. 동기 httpx 라 스레드로."""
+        logger.info("=== 🌐 FIE 랭킹 수집 시작 ===")
+        try:
+            from scraper.fie_ranking import refresh_fie_rankings
+            result = await asyncio.to_thread(refresh_fie_rankings)
+            self._last_stats["fie_ranking"] = result
+            from app import intl_routes
+            intl_routes.invalidate_cache()
+            logger.info(f"🌐 FIE 랭킹 수집 완료: {result}")
+        except Exception as e:
+            logger.error(f"🌐 FIE 랭킹 수집 오류: {e}")
+
+    async def _run_asian_games_refresh(self):
+        """🏅 아시안게임 2026 12종목 최종순위·대진·풀 → data_intl_* (upsert)."""
+        logger.info("=== 🏅 아시안게임 2026 결과 수집 시작 ===")
+        try:
+            from scraper.asian_games_2026 import refresh_asian_games
+            result = await asyncio.to_thread(refresh_asian_games)
+            self._last_stats["asian_games_2026"] = result
+            from app import intl_routes
+            intl_routes.invalidate_cache()
+            logger.info(f"🏅 아시안게임 결과 수집 완료: {result}")
+        except Exception as e:
+            logger.error(f"🏅 아시안게임 결과 수집 오류: {e}")
+
     async def _run_guardian_post_scrape(self, comp_name: str = "", events_count: int = 0):
         """🛡️ 스크래핑 후 자동 검증 (post-scrape hook)"""
         try:
@@ -943,6 +1021,9 @@ class FencingScheduler:
                 "stealth_scraping": "🥷 30분 간격 (백업)",
                 "guardian_health": "🛡️ 매일 22:00 (Data Guardian 건강 점검)",
                 "guardian_weekly": "📊 매주 월요일 08:00 (Data Guardian 주간 리포트)",
+                "kfa_notices": "📰 6시간 주기 02/08/14/20시 20분 (협회 공지사항 게시판 1~3페이지)",
+                "fie_ranking": "🌐 매주 화요일 06:00 (FIE 개인 랭킹, 현재+직전 시즌)",
+                "asian_games_2026": "🏅 12:30/22:30 (~2026-09-30, 아시안게임 결과)",
             }
         }
 
@@ -962,6 +1043,7 @@ class FencingScheduler:
                 - "validate": 🛡️ Data Guardian 데이터 검증
                 - "health": 🛡️ Data Guardian 건강 점검
                 - "report": 📊 Data Guardian 주간 리포트
+                - "notices": 📰 협회 공지사항 모니터
                 - "all": 전체 실행
 
         Returns:
@@ -1055,9 +1137,17 @@ class FencingScheduler:
                 "stats": self._last_stats.get("guardian_weekly", {})
             }
 
+        if task_type in ["notices", "all"]:
+            # 📰 협회 공지사항 모니터
+            await self._run_kfa_notice_monitor()
+            results["kfa_notices"] = {
+                "completed": True,
+                "stats": self._last_stats.get("kfa_notices", {})
+            }
+
         valid_types = [
             "detect", "pre", "change", "scrape", "final", "players",
-            "upcoming", "monitor", "validate", "health", "report", "all",
+            "upcoming", "monitor", "validate", "health", "report", "notices", "all",
         ]
         if task_type not in valid_types:
             return {"error": f"Unknown task type: {task_type}. Valid types: {valid_types}"}

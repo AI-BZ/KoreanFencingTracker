@@ -20,7 +20,6 @@ Usage:
     # {"en": {"name": "Choi Byeongcheol Fencing Club", "verified": True, "source": "verified"}}
 """
 
-import re
 from datetime import datetime
 from typing import Dict, Any, Optional, List
 
@@ -35,7 +34,6 @@ from app.international_data import (
 from app.organization_identity import (
     OrganizationIdentityResolver,
     VERIFIED_ORG_MAPPINGS,
-    KOREAN_REGIONS,
 )
 from app.i18n.competition_names import (
     translate_competition_name as translate_competition_name_i18n,

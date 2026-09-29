@@ -35,7 +35,7 @@ except ImportError:
 
 # 데이터 파이프라인 (품질 모니터링)
 try:
-    from data_pipeline import DataQualityMonitor, DataSynchronizer
+    from data_pipeline import DataQualityMonitor
     PIPELINE_AVAILABLE = True
 except ImportError:
     PIPELINE_AVAILABLE = False
@@ -68,20 +68,14 @@ from app.player_identity import PlayerIdentityResolver, is_team_event, canonical
 from app.organization_identity import detect_org_type
 
 # DE 대진표 정규화 및 순위 계산
-from app.bracket_utils import normalize_bracket_data, compute_full_final_rankings
+from app.bracket_utils import compute_full_final_rankings
 from app.de_transforms import (
     _normalize_de_bracket_for_api,
-    _reconstruct_bouts_from_duplicated_bbr,
-    _dedup_keep_highest_round,
     _get_full_bouts_from_de_bracket,
-    _normalize_bout_data,
     _build_rank_chart_data,
-    _extract_bout_player_info,
     compute_dual_de_final_rankings,
     transform_de_bracket,
     _is_de_final_complete,
-    _ROUND_PROGRESSION,
-    _ROUND_RANK,
 )
 
 # 풀 종합 순위 계산기
@@ -318,6 +312,18 @@ app.include_router(auth_router)
 # Club Management 라우터 등록 (SaaS)
 app.include_router(club_router, prefix="/api")
 
+# 국제 트랙 (FIE 랭킹 · 아시안게임) — 국내 랭킹과 분리된 data_fie_rankings / data_intl_* 만 읽는다.
+# 실제 라우트는 app/intl_routes.py. 여기서는 의존성만 넘긴다 (server.py 편집 최소화).
+from app import intl_routes as _intl_routes
+_intl_routes.configure(
+    templates=templates,
+    get_db=lambda: _supabase_client,
+    i18n_context=lambda request, lang: get_i18n_template_context(request, lang),
+    supported_langs=SUPPORTED_LANGUAGES,
+    default_lang=DEFAULT_LANGUAGE,
+)
+app.include_router(_intl_routes.router)
+
 # 데이터 저장소 (메모리 캐시)
 _data_cache: Dict[str, Any] = {}
 _player_index: Dict[str, List[Dict]] = {}  # 선수별 전적 인덱스
@@ -364,6 +370,8 @@ class RankingEntry(BaseModel):
     bronze: int
     best_results: List[Dict] = []
     blurred: bool = False  # guest용 블러 처리 플래그
+    # NT 행 전용: FIE 순위·점수, 국내+FIE 선발 포인트·순위 (표 순위는 국내 합산 = 협회 합산표)
+    nt: Optional[Dict] = None
 
 
 class RankingResponse(BaseModel):
@@ -377,6 +385,8 @@ class RankingResponse(BaseModel):
     total: int
     rankings: List[RankingEntry]
     hidden_top: int = 0  # guest에게 숨겨진 상위 N명 (0이면 전체 공개)
+    # age_group=NT 일 때만: 협회 4개 대회 표 머리글 (columns·completed_count·quota·fie_applied)
+    nt: Optional[Dict] = None
 
 
 class EventSummary(BaseModel):
@@ -1272,6 +1282,91 @@ def matches_age_group_filter(event_age: str, filter_age: str) -> bool:
     return False
 
 
+def _de_has_collected_bouts(de_bracket) -> bool:
+    """DE 대진이 실제로 수집됐는가.
+
+    껍데기만 있는 경우를 제외한다 — 예를 들어 예선이 진행 중일 때 본선 64강은
+    32슬롯이 만들어지지만 선수 이름이 하나도 없다(2026-08-29 김창환배 실측).
+    이름이 하나라도 채워져 있어야 '대진이 나왔다'고 본다.
+    """
+    if not isinstance(de_bracket, dict):
+        return False
+
+    def _any_named(bouts) -> bool:
+        if not isinstance(bouts, list):
+            return False
+        for b in bouts:
+            if not isinstance(b, dict):
+                continue
+            if str(b.get("player1_name") or "").strip() or str(b.get("player2_name") or "").strip():
+                return True
+        return False
+
+    if _any_named(de_bracket.get("full_bouts") or de_bracket.get("bouts")):
+        return True
+    for key in ("first_de", "second_de"):
+        sub = de_bracket.get(key)
+        if isinstance(sub, dict) and _any_named(sub.get("full_bouts") or sub.get("bouts")):
+            return True
+    # 구 구조(라운드명 → 경기 목록) 폴백
+    for value in de_bracket.values():
+        if isinstance(value, list) and _any_named(value):
+            return True
+    return False
+
+
+def resolve_event_default_tab(event, de_bracket_raw=None) -> str:
+    """종목 페이지의 기본 탭 — 대회 진행 단계를 따라간다.
+
+    사용자가 종목에 들어왔을 때 '지금 볼 것'이 바로 열려야 한다. 예전에는 풀이
+    없으면 참가선수, 그 외에는 무조건 Pool 이라 DE 가 진행 중이거나 대회가 끝난
+    뒤에도 Pool 이 먼저 열렸다.
+
+    단계:
+      1. 풀 미등록 (대회 전)            → 참가선수
+      2. 풀 수집 ~ DE 수집 직전          → Pool
+      3. DE 수집 ~ 최종결과 확정 직전     → DE
+      4. 최종결과 확정 이후 (영구)        → 최종결과
+
+    최종결과 판정은 화면과 같은 기준을 쓴다: final_rankings 에 1위가 있을 때.
+    (호출 시점에는 결승 완료 게이트를 통과한 순위만 selected_event 에 들어 있다.)
+    """
+    finals = event.get("final_rankings") or []
+    if any((r or {}).get("rank") == 1 for r in finals if isinstance(r, dict)):
+        return "final"
+
+    if _de_has_collected_bouts(de_bracket_raw) or _de_has_collected_bouts(event.get("de_bracket")):
+        return "tournament"
+
+    if event.get("pool_rounds"):
+        return "pools"
+
+    # 풀이 아직 없으면 참가선수. 참가 명단조차 비어 있어도 여기로 둔다 —
+    # 대회 전 단계에서 사용자가 확인하려는 것은 '누가 나오는가'이고,
+    # 빈 Pool 표를 먼저 보여줄 이유가 없다.
+    return "participants"
+
+
+def _index_records_for_event(records, sub_event_cd, comp_name, event_name, comp_date):
+    """선수 인덱스에서 '같은 종목' 레코드를 찾는다.
+
+    sub_event_cd 가 있으면 그것만으로 판정한다 — 종목 단위 고유 키다.
+    대회명+종목명으로 잡으면 이름이 같은 다른 연도 대회가 서로를 지운다:
+    "제30회 김창환배전국남녀펜싱선수권대회 겸 국가대표선수 선발대회" 가
+    2025-08-30 과 2026-08-28 두 번 존재한다(KFA 회차 오기로 보임).
+
+    v1 구조 레코드에는 sub_event_cd 가 없어서, 그때만 대회명+종목명으로 보되
+    날짜까지 맞춰 다른 연도를 섞지 않는다.
+    """
+    if sub_event_cd:
+        return [r for r in records if r.get("sub_event_cd") == sub_event_cd]
+    return [r for r in records
+            if not r.get("sub_event_cd")
+            and r.get("competition_name") == comp_name
+            and r.get("event_name") == event_name
+            and r.get("competition_date") == comp_date]
+
+
 def build_player_index():
     """선수별 전적 인덱스 구축 (v2 데이터 구조 지원)
 
@@ -1415,10 +1510,13 @@ def build_player_index():
                 if not player_name:
                     continue
 
-                # 중복 체크 (같은 대회, 같은 종목) - 있으면 업데이트, 없으면 새로 추가
-                existing_records = [r for r in _player_index[player_name]
-                           if r["competition_name"] == comp_name
-                           and r["event_name"] == event_name]
+                # 중복 체크 - 있으면 업데이트, 없으면 새로 추가.
+                # 키는 sub_event_cd (종목 단위 고유). 대회명+종목명으로 잡으면
+                # 이름이 같은 다른 연도 대회가 서로를 지운다 — 실제로
+                # "제30회 김창환배…"가 2025-08-30 과 2026-08-28 두 번 존재해서
+                # 작년 기록이 올해 기록의 등록을 막았다 (2026-08-27 윤병헌 건).
+                existing_records = _index_records_for_event(
+                    _player_index[player_name], sub_event_cd, comp_name, event_name, comp_date)
 
                 # Pool/DE 통계 가져오기 (대소문자 무시 매칭)
                 player_name_lower = player_name.lower()
@@ -1483,11 +1581,9 @@ def build_player_index():
                 if not ptr_name or ptr_name in final_names:
                     continue  # 이미 final_rankings에서 처리됨
 
-                # 중복 체크 (같은 대회, 같은 종목)
-                existing = [r for r in _player_index[ptr_name]
-                           if r["competition_name"] == comp_name
-                           and r["event_name"] == event_name]
-                if existing:
+                # 중복 체크 — 키 규칙은 위 final_rankings 쪽과 동일(주석 참조)
+                if _index_records_for_event(
+                        _player_index[ptr_name], sub_event_cd, comp_name, event_name, comp_date):
                     continue
 
                 # Pool/DE 통계 가져오기
@@ -1960,6 +2056,28 @@ def build_identity_resolver():
     logger.info(f"조직 정보 설정 완료: {team_count}개 팀 레코드, {org_stats.get('total', 0)}개 조직")
 
 
+def _build_fie_lookup():
+    """NT 랭킹의 FIE 개인전 랭킹 점수(선발 규정 제20조 ② 3호)용 조회 함수.
+
+    `data_fie_rankings` 테이블(별도 수집 예정)이 있을 때만 값을 낸다. 없으면 None →
+    NT 표는 FIE 0점 + "FIE 점수 미반영" 표시. 실패해도 랭킹 로드는 막지 않는다.
+    """
+    if not _supabase_client:
+        return None
+    try:
+        from ranking.national_team import build_fie_lookup_from_rows
+        # 전 국가 1만 행이라 PostgREST 기본 상한(1000)에 잘린다 — 한국 선수(262행)만 읽는다.
+        rows = (_supabase_client.table("data_fie_rankings").select("*")
+                .eq("country", "KOR").limit(5000).execute().data or [])
+        if not rows:
+            return None
+        logger.info(f"FIE 랭킹 {len(rows)}행 로드 — NT 랭킹에 FIE 점수 반영")
+        return build_fie_lookup_from_rows(rows)
+    except Exception as e:
+        logger.info(f"FIE 랭킹 테이블 없음/조회 실패 — NT 랭킹은 FIE 점수 미반영: {str(e)[:120]}")
+        return None
+
+
 def load_data():
     """데이터 로드 (Supabase 전용)
 
@@ -2009,7 +2127,12 @@ def load_data():
 
     # 랭킹 계산기 초기화 (Supabase 캐시 데이터 사용)
     try:
-        _ranking_calculator = RankingCalculator()
+        # NT 랭킹 동명이인 분리: PlayerIdentityResolver 가 아는 '같은 사람의 소속 집합'(개명·이적 포함)
+        def _nt_team_groups(name: str):
+            if not _identity_resolver:
+                return []
+            return [set(p.teams) for p in _identity_resolver.get_players_by_name(name) if p.teams]
+        _ranking_calculator = RankingCalculator(fie_lookup=_build_fie_lookup(), team_groups_lookup=_nt_team_groups)
         _ranking_calculator.load_from_data(_data_cache, org_age_lookup=_org_age_group_lookup)
         logger.info(f"✅ 랭킹 계산기 초기화 완료: {len(_ranking_calculator.results)}개 결과")
     except Exception as e:
@@ -2310,21 +2433,25 @@ async def api_data_quality():
         }
 
     try:
-        # 최근 메트릭 조회
-        recent_metrics = _quality_monitor.get_recent_metrics(hours=24)
-
-        # 활성 알림 조회
-        active_alerts = _quality_monitor.get_active_alerts()
-
-        # 건강 상태 계산
-        health_status = _quality_monitor.get_health_status()
+        # ⚠️ `DataQualityMonitor` 에 실제로 있는 메서드는 `get_dashboard_data()` 와
+        #    `get_health_summary()` 둘뿐이다. 예전 코드는 존재하지 않는
+        #    `get_recent_metrics()` / `get_active_alerts()` / `get_health_status()` 를 불러
+        #    이 엔드포인트가 항상 error 를 돌려주고 있었다
+        #    ("'DataQualityMonitor' object has no attribute 'get_recent_metrics'", 2026-09-29 확인).
+        dashboard = _quality_monitor.get_dashboard_data()
+        summary = _quality_monitor.get_health_summary()
 
         return {
             "available": True,
-            "health": health_status,
-            "metrics": recent_metrics,
-            "alerts": active_alerts,
-            "last_updated": datetime.now().isoformat()
+            "health": {
+                "status": dashboard.get("health_status", "unknown"),
+                "score": dashboard.get("overall_health"),
+                "checks": summary,
+            },
+            "metrics": dashboard.get("metrics", {}),
+            "alerts": dashboard.get("alerts", {}),
+            "statistics": dashboard.get("statistics", {}),
+            "last_updated": dashboard.get("timestamp") or datetime.now().isoformat(),
         }
     except Exception as e:
         logger.error(f"품질 모니터링 조회 오류: {e}")
@@ -4734,6 +4861,11 @@ def _eh2h_is_de_match(m: Dict) -> bool:
     return (m.get("round") or "").strip() != "Pool"
 
 
+# 배지 팝업에 담을 지난 경기 수 상한. 한 상대와 20번 넘게 붙은 경우가 있는데
+# 그걸 다 실으면 풀 한 판(7명)만 열어도 응답이 몇 배로 커진다. 잘린 수는 별도로 알린다.
+_EH2H_MEETING_LIMIT = 12
+
+
 def _eh2h_build(sub_event_cd: str, player_name: str, team: str) -> Dict:
     comp, event = _eh2h_find_event(sub_event_cd)
     if not event:
@@ -4791,11 +4923,27 @@ def _eh2h_build(sub_event_cd: str, player_name: str, team: str) -> Dict:
         de_total = len(de_matches)
         de_last = de_matches[0] if de_matches else {}
 
+        # 배지를 눌렀을 때 보여줄 경기 목록. matches 는 이미 위에서 동명이인·현재
+        # 대회 필터를 거친 최신순 목록이라 추가 조회가 없다. 배지 팝업은 "언제·어디서·
+        # 몇 대 몇"만 보여주면 되므로 필요한 칸만 추려 담는다.
+        meeting_list = [
+            {
+                "date": m.get("date", ""),
+                "tournament": m.get("tournament", ""),
+                "round": m.get("round", ""),
+                "score": m.get("score", ""),
+                "result": m.get("result", ""),
+            }
+            for m in matches[:_EH2H_MEETING_LIMIT]
+        ]
+
         out[opp_name] = {
             "team": meta.get("team", ""),
             "wins": wins,
             "losses": losses,
             "total": total,
+            "matches": meeting_list,
+            "matches_truncated": max(0, len(matches) - _EH2H_MEETING_LIMIT),
             "win_rate": round(wins / total * 100, 1) if total else 0,
             "first_meeting": total == 0,
             "last_result": last.get("result", ""),
@@ -5044,7 +5192,10 @@ async def api_rankings(
             gold=r.gold_count,
             silver=r.silver_count,
             bronze=r.bronze_count,
-            best_results=r.best_results
+            best_results=r.best_results,
+            nt=({k: r.nt_info.get(k) for k in ("domestic_points", "fie_rank", "fie_points",
+                                                "selection_points", "selection_rank")}
+                if is_national_team and r.nt_info else None),
         ))
 
     # guest: 상위 N위 이름·소속 블러 처리 (페이지와 무관하게 실제 순위 기준)
@@ -5061,6 +5212,11 @@ async def api_rankings(
         total=total,
         rankings=ranking_entries,
         hidden_top=RANKINGS_HIDDEN_TOP_N if is_guest else 0,
+        # NT: 모든 행이 같은 표 머리글을 공유한다 (calculator.nt_table_to_rankings). 행이 없으면
+        # 빈 표라도 4칸 머리글이 나오도록 직접 계산한다.
+        nt=(rankings[0].nt_info if rankings else
+            _ranking_calculator.calculate_nt_table(weapon, gender, year).meta())
+        if is_national_team else None,
     )
 
 
@@ -5290,6 +5446,8 @@ async def api_player_rankings(request: Request, player_name: str, team: Optional
                         "bronze": r.bronze_count,
                         "year": current_year,
                         "is_nt": is_nt,
+                        "nt": r.nt_info if is_nt else None,
+                        "best_results": r.best_results if is_nt else [],
                     })
                     break
 
@@ -6770,6 +6928,8 @@ async def player_page(
                                     "best_results": r.best_results[:4],
                                     "year": current_year,
                                     "is_nt": is_nt,
+                                    # NT 카드: 협회 4개 대회 표 머리글 (미개최 칸·종료 수·선발 인원·FIE 반영)
+                                    "nt": r.nt_info if is_nt else None,
                                 })
                                 break
         except Exception as e:
@@ -6777,11 +6937,20 @@ async def player_page(
 
     player_data["rankings_info"] = rankings_info
 
+    # 협회 발표 명단 배지 (data_kfa_rosters) — (이름, 소속) 일치분만
+    from app.kfa_notices import rosters_for_player
+    kfa_badges = rosters_for_player(
+        player_name,
+        [player_data.get("current_team")] + [t["team"] for t in player_data.get("team_history", [])],
+        _supabase_client,
+    )
+
     # 접근 등급 확인
     access_level, _ = await get_access_level(request)
 
     context = {
         "request": request,
+        "kfa_badges": kfa_badges,
         "player": player_data,
         "today": date.today().strftime("%b %d, %Y"),
         "title": f"{player_name} - Korean Fencing Tracker",
@@ -7387,10 +7556,40 @@ async def competition_detail_page(request: Request, event_cd: str, event: Option
                             new_results.append(p)
                         pool["results"] = new_results
 
+            # 풀 조편성 개정 이력 (KFA 는 대회 직전 풀을 여러 번 다시 올린다).
+            # 조회 실패는 무시한다 — 부가 정보라 대회 페이지를 막으면 안 된다.
+            pool_revision_summary = None
+            # ?event= 는 sub_event_cd 일 수도 종목명일 수도 있다(위 매칭 참고).
+            # 개정 이력은 sub_event_cd 로만 키를 잡으므로 종목 쪽 값을 쓴다.
+            _rev_sub_cd = selected_event.get("sub_event_cd")
+            if _supabase_client and _rev_sub_cd and selected_event.get("pool_rounds"):
+                from app.pool_revisions import get_revisions, summarize
+                pool_revision_summary = summarize(
+                    get_revisions(_supabase_client, _rev_sub_cd)
+                )
+                if pool_revision_summary:
+                    # 아직 안 끝난 대회는 개정이 1건뿐이어도 띠를 보여준다 — 학부모가
+                    # "지금 이 조편성이 언제 것인지"를 알아야 하는 시점이 바로 여기다.
+                    # 이미 끝난 대회에서 '변경 없음' 만 있는 띠는 정보가 없으므로 감춘다.
+                    comp_end = (comp.get("competition", {}) or {}).get("end_date", "")
+                    still_live = True
+                    try:
+                        if comp_end:
+                            still_live = str(comp_end)[:10] >= date.today().isoformat()
+                    except Exception:
+                        still_live = True
+                    pool_revision_summary["show_baseline"] = still_live
+
+            # 기본 탭: 대회 진행 단계에 맞춰 연다 (참가선수 → Pool → DE → 최종결과).
+            # 최종순위 계산이 모두 끝난 뒤에 판정해야 4단계가 정확해진다.
+            default_tab = resolve_event_default_tab(selected_event, original_de_bracket)
+
             return templates.TemplateResponse("event_result.html", {
                 "request": request,
                 "competition": comp,
                 "event": selected_event,
+                "default_tab": default_tab,
+                "pool_revisions": pool_revision_summary,
                 "team_regions": team_regions,
                 "region_summary": region_summary,
                 "player_region_grade": player_region_grade,
@@ -7965,7 +8164,7 @@ async def get_upcoming_competitions(
 
 
 @app.get("/api/competitions/ongoing")
-async def get_ongoing_competitions():
+async def get_ongoing_competitions(lang: str = Query("ko", description="언어 코드")):
     """현재 진행 중인 대회 조회
 
     Returns:
@@ -8638,11 +8837,17 @@ async def api_favorites_dashboard(request: Request):
                 latest = sorted_records[0]
 
             # 현재 소속 (identity resolver)
+            # ⚠️ `name_to_profiles` 는 이름 → **player_id 문자열 리스트**다(프로필 객체가 아니다).
+            #    바로 `.current_team` 을 읽어 2026-07-28부터 이 엔드포인트가 500 이었다
+            #    ('str' object has no attribute 'current_team' — 즐겨찾기가 있는 회원의
+            #    홈 대시보드가 통째로 비어 보였다). id 로 `profiles` 에서 객체를 꺼내야 한다.
             current_team = ""
             if _identity_resolver:
-                profiles = _identity_resolver.name_to_profiles.get(player_name, [])
-                if profiles:
-                    current_team = profiles[0].current_team or ""
+                for _pid in _identity_resolver.name_to_profiles.get(player_name, []):
+                    _profile = _identity_resolver.profiles.get(_pid)
+                    if _profile is not None and getattr(_profile, "current_team", ""):
+                        current_team = _profile.current_team
+                        break
 
             # i18n 이름 변환
             display_name = get_localized_player_name_sync(player_name, lang)
@@ -8821,6 +9026,54 @@ async def refresh_data_cache(request: Request):
         return {"success": False, "error": str(e)}
 
 
+# ==================== 협회 공지 · 명단 API ====================
+# 원천: data_kfa_notices (scheduler/kfa_notice_monitor.py), data_kfa_rosters (scripts/load_kfa_rosters.py)
+
+@app.get("/api/kfa/notices")
+async def api_kfa_notices(
+    tag: Optional[str] = Query(None, description="태그 필터 (national_team, replacement, candidate_u25, ranking_points, dispatch, regulation, youth, kkumnamu, procurement, other)"),
+    limit: int = Query(50, ge=1, le=200),
+):
+    """협회 공지사항 아카이브. 첨부 텍스트는 크기가 커서 목록에서는 빼고 메타만 준다."""
+    if not _supabase_client:
+        raise HTTPException(status_code=503, detail="DB unavailable")
+    q = (_supabase_client.table("data_kfa_notices")
+         .select("board_no, title, posted_at, url, tags, is_pinned, first_seen_at, notified_at, attachments")
+         .order("posted_at", desc=True).limit(limit))
+    if tag:
+        q = q.contains("tags", [tag])
+    rows = q.execute().data or []
+    for r in rows:
+        r["attachments"] = [
+            {k: a.get(k) for k in ("name", "url", "kind", "text_extracted", "extract_note")}
+            for a in (r.get("attachments") or [])
+        ]
+    return {"count": len(rows), "notices": rows}
+
+
+@app.get("/api/kfa/rosters")
+async def api_kfa_rosters(
+    year: Optional[int] = Query(None),
+    roster_type: Optional[str] = Query(None, description="national_team | national_team_replacement | candidate_u25 | u23 | asian_games_dispatch | youth | kkumnamu"),
+    player_name: Optional[str] = Query(None, description="정확히 일치하는 선수명"),
+):
+    """협회 발표 명단 (프로필 배지의 원천). 필터 없이 부르면 전체(수백 행)를 준다."""
+    if not _supabase_client:
+        raise HTTPException(status_code=503, detail="DB unavailable")
+    q = (_supabase_client.table("data_kfa_rosters")
+         .select("roster_type, year, weapon, gender, player_name, team, seed_rank, "
+                 "source_board_no, source_url, source_type, announced_at, note")
+         .order("year", desc=True).order("roster_type").order("gender").order("weapon").order("seed_rank"))
+    if year:
+        q = q.eq("year", year)
+    if roster_type:
+        q = q.eq("roster_type", roster_type)
+    if player_name:
+        q = q.eq("player_name", player_name)
+    rows = q.limit(2000).execute().data or []
+    return {"count": len(rows), "rosters": rows}
+
+
 # ==================== 스케줄러 API ====================
 
 @app.get("/api/scheduler/status")
@@ -8878,7 +9131,8 @@ async def api_validate_data(request: Request):
     """전체 데이터 무결성 검증"""
     await require_admin_or_internal(request)
     from app.data_validator import DataValidator
-    validator = DataValidator(get_competitions(), org_cache=_org_region_cache)
+    validator = DataValidator(get_competitions(), org_cache=_org_region_cache,
+                              identity_resolver=_identity_resolver)
     issues = validator.validate_all()
 
     errors = [i.to_dict() for i in issues if i.severity == "ERROR"]
@@ -8904,7 +9158,8 @@ async def api_validate_player(request: Request, player_name: str):
     """특정 선수 데이터 검증"""
     await require_admin_or_internal(request)
     from app.data_validator import DataValidator
-    validator = DataValidator(get_competitions(), org_cache=_org_region_cache)
+    validator = DataValidator(get_competitions(), org_cache=_org_region_cache,
+                              identity_resolver=_identity_resolver)
     issues = validator.validate_player(player_name)
 
     return {

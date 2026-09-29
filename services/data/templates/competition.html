@@ -134,7 +134,7 @@
 
 </div>
 
-<link rel="stylesheet" href="/static/css/player-search.css?v=20260613">
+<link rel="stylesheet" href="/static/css/player-search.css?v=20260928a">
 <style>
 /* =====================================================
    COMPETITION PLAYER SEARCH - Dark Mode Compatible
@@ -288,15 +288,12 @@
     padding: 14px;
     border-radius: 10px;
     margin-bottom: 10px;
-    border-left: 4px solid var(--accent-primary, #c9302c);
-    border-top: 1px solid var(--border-color, rgba(255, 255, 255, 0.05));
-    border-right: 1px solid var(--border-color, rgba(255, 255, 255, 0.05));
-    border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.05));
+    border: 1px solid var(--accent-primary, #c9302c);
     transition: all 0.2s ease;
 }
 
 .comp-result-card:hover {
-    border-left-color: var(--accent-gold, #d4a574);
+    border-color: var(--accent-gold, #d4a574);
     transform: translateX(4px);
 }
 
@@ -744,7 +741,7 @@ details[open] > .comp-stats-toggle .stats-hint {
 }
 </style>
 
-<script src="/static/js/player-search.js"></script>
+<script src="/static/js/player-search.js?v=20260928a"></script>
 <script>
 // Competition Event Code
 const EVENT_CD = "{{ competition.competition.event_cd }}";

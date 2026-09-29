@@ -113,6 +113,7 @@
                 <a href="/{{ lang|default('ko') }}/competitions">{{ _t('대회 목록') }}</a>
                 <a href="/{{ lang|default('ko') }}/rankings">{{ _t('랭킹') }}</a>
                 <a href="/{{ lang|default('ko') }}/selection/kkumnamu/summary">{{ _t('선발 포인트') }}</a>
+                <a href="/{{ lang|default('ko') }}/fie-rankings">{{ _t('FIE 랭킹') }}</a>
                 {# FencingLab: 개편 중 임시 비공개 (2026-08-06).
                    숨긴 이유 — 클럽 선수 76명이 큐레이션 없이 전부 노출되고, 선수 카드를 누르면
                    /fencinglab/player/... 404 응답이 JSON content-type으로 나가 브라우저가 파일을 내려받음.
@@ -173,6 +174,10 @@
                 <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
                 {{ _t('선발 포인트') }}
             </a>
+            <a href="/{{ lang|default('ko') }}/fie-rankings">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
+                {{ _t('FIE 랭킹') }}
+            </a>
             {# FencingLab: 개편 중 임시 비공개 (2026-08-06). 데스크톱 내비의 같은 링크와 함께 숨김.
                사유와 복원 방법은 위쪽 데스크톱 내비 주석 참고 #}
             {# <a href="/{{ lang|default('ko') }}/fencinglab">
@@ -213,7 +218,7 @@
     <script>
     (function () { var y = document.getElementById('footer-year'); if (y) y.textContent = new Date().getFullYear(); })();
     </script>
-    <script src="/static/js/main.js"></script>
+    <script src="/static/js/main.js?v=20260928a"></script>
     <script>
     // Parallax Scrolling Effect
     (function() {

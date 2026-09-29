@@ -508,6 +508,25 @@
     }
 
     /* National Team Badge */
+    /* 국가대표(NT) 4개 대회 합산표 — 협회 공지 표와 같은 칸 구성 */
+    .nt-table-note {
+        margin: 0 0 0.75rem;
+        padding: 0.6rem 0.85rem;
+        border-left: 3px solid var(--fm-accent-primary, #c9302c);
+        background: var(--fm-bg-elevated, rgba(255, 255, 255, 0.04));
+        font-size: 0.85rem;
+        line-height: 1.5;
+    }
+    .nt-table-note-reg { display: block; opacity: 0.7; font-size: 0.78rem; }
+    .ranking-table th.nt-col { text-align: center; white-space: nowrap; font-size: 0.8rem; line-height: 1.25; }
+    .ranking-table td.nt-col { text-align: center; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .ranking-table td.nt-col--empty { opacity: 0.45; font-size: 0.8rem; }
+    .ranking-table th.nt-col--carry { font-style: italic; opacity: 0.85; }
+    .ranking-table tr.nt-selected-row td.rank-cell { box-shadow: inset 3px 0 0 var(--fm-accent-primary, #c9302c); }
+    @media (max-width: 640px) {
+        .ranking-table th.nt-col, .ranking-table td.nt-col { font-size: 0.72rem; padding-left: 0.25rem; padding-right: 0.25rem; }
+    }
+
     .national-team-badge {
         display: inline-flex;
         align-items: center;
@@ -1677,6 +1696,32 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     };
 
+    // 국가대표(NT) 표 전용 문구 — 협회 「국가대표 선발 규정」 제18·20·21조
+    const ntLabels = {
+        president_cup: {{ _t("대통령배")|tojson }},
+        kim_changhwan: {{ _t("김창환배")|tojson }},
+        jongbyul_open: {{ _t("종목별오픈")|tojson }},
+        national_selection: {{ _t("국가대표 선발대회")|tojson }}
+    };
+    const ntStatus = {
+        title: {{ _t("국가대표 선발 포인트")|tojson }},
+        progress: {{ _t("{n}개 대회 중 {k}개 종료")|tojson }},
+        quota: {{ _t("선발권 상위 {q}명")|tojson }},
+        fie_on: {{ _t("FIE 랭킹 점수 반영")|tojson }},
+        fie_off: {{ _t("FIE 점수 미반영")|tojson }},
+        upcoming: {{ _t("미개최")|tojson }},
+        in_progress: {{ _t("진행 중")|tojson }},
+        absent: {{ _t("불참")|tojson }},
+        eliminated: {{ _t("예선 탈락")|tojson }},
+        pending: {{ _t("결과 대기")|tojson }},
+        no_results: {{ _t("결과 없음")|tojson }},
+        fie_title: {{ _t("FIE 개인전 랭킹 순위 · 점수 (제20조 ②3호: 1위 32 … 16위 17)")|tojson }},
+        sel_title: {{ _t("국내 4개 대회 + FIE 합산 순위 (제20조 ①) — 협회 합산표 순위와 다를 수 있음")|tojson }},
+        sel_rank: {{ _t("선발 순위")|tojson }},
+        carryover: {{ _t("직전 회차")|tojson }},
+        carryover_note: {{ _t("아직 결과가 없는 대회 {k}개는 직전 회차 성적을 이월해 합산 (협회 선발 규정 부칙 2016.11.21 제2조 — 협회 시즌 중 합산표와 동일 방식)")|tojson }}
+    };
+
     const accessLevel = '{{ access_level|default("guest") }}';
     const loginUrl = '{{ login_url|default("/auth/login") }}';
 
@@ -1891,7 +1936,19 @@ document.addEventListener('DOMContentLoaded', function() {
         const hasBlurred = data.rankings.some(r => r.blurred);
         // 서버가 알려준 비공개 구간(#1~hidden_top)을 숫자로만 표기 — 언어 중립
         const gateRangeLabel = data.hidden_top > 0 ? `<span class="fm-num">#1–${data.hidden_top}</span> · ` : '';
-        const theadHtml = `<thead>
+        // 국가대표(NT): 협회 「4개 대회 합산 점수 및 랭킹 현황」 표와 같은 4칸(순위·점수) + 합계.
+        // 나이리그 표(포인트·대회 수·메달)와 열 구성이 다르다.
+        const nt = data.nt || null;
+        const theadHtml = nt ? `<thead>
+                        <tr>
+                            <th class="rank-cell">${i18n.table.rank}</th>
+                            <th class="col-name">${i18n.table.name}</th>
+                            <th class="col-team">${i18n.table.team}</th>
+                            ${nt.columns.map(c => `<th class="col-comp nt-col${c.is_carryover ? ' nt-col--carry' : ''}" title="${c.comp_name || ''}${c.pending_comp_name ? ' · ' + ntStatus.pending + ': ' + c.pending_comp_name : ''}">${c.edition_year ? c.edition_year + ' ' : ''}${ntLabels[c.comp_id] || c.label}<br><span class="fm-num">${c.is_carryover ? ntStatus.carryover : (c.start_date ? c.start_date.slice(0, 7) : ntStatus[c.status])}</span></th>`).join('')}
+                            <th class="points-cell col-points">${i18n.table.points}</th>
+                            ${nt.fie_applied ? `<th class="col-comp nt-col" title="${ntStatus.fie_title}">FIE</th><th class="col-comp nt-col" title="${ntStatus.sel_title}">${ntStatus.sel_rank}</th>` : ''}
+                        </tr>
+                    </thead>` : `<thead>
                         <tr>
                             <th class="rank-cell">${i18n.table.rank}</th>
                             <th class="col-name">${i18n.table.name}</th>
@@ -1902,7 +1959,34 @@ document.addEventListener('DOMContentLoaded', function() {
                         </tr>
                     </thead>`;
 
+        function ntCell(c) {
+            if (c.rank) {
+                const pts = c.qualified === false ? `<span class="best-finish">${ntStatus.eliminated}</span>` : `${Number(c.points) % 1 ? Number(c.points).toFixed(1) : Number(c.points)}`;
+                return `<td class="col-comp nt-col"><span class="fm-num">${c.rank}</span> · ${pts}</td>`;
+            }
+            return `<td class="col-comp nt-col nt-col--empty">${c.status === 'completed' ? ntStatus.absent : ntStatus[c.status] || '–'}</td>`;
+        }
+
         function buildRow(r) {
+            if (nt) {
+                const rankClass = r.rank <= 3 ? `rank-${r.rank}` : '';
+                const rowClass = (r.rank <= nt.quota ? 'nt-selected-row ' : '') + (r.rank <= 3 ? `top-rank-row top-rank-${r.rank}` : '');
+                const teamsToShow = (r.display_teams && r.display_teams.length > 0) ? r.display_teams : r.teams;
+                const displayName = r.display_name || r.name;
+                const teamStr = teamsToShow.length > 0 ? teamsToShow[0] : '';
+                const teamLine = teamStr ? `<span class="col-team-inline">${teamStr}</span>` : '';
+                const playerLink = r.blurred
+                    ? `<span>${displayName}${teamLine}</span>`
+                    : `<a href="/${currentLang}/player/${encodeURIComponent(r.name)}?team=${encodeURIComponent(teamStr)}" class="player-link">${displayName}${teamLine}</a>`;
+                return `<tr class="${rowClass}">
+                    <td class="rank-cell ${rankClass}">${r.rank}</td>
+                    <td class="col-name">${playerLink}</td>
+                    <td class="col-team">${teamStr ? `<span class="team-badge">${teamStr}</span>` : ''}</td>
+                    ${(r.best_results || []).map(ntCell).join('')}
+                    <td class="points-cell col-points">${r.points % 1 ? r.points.toFixed(1) : r.points}</td>
+                    ${nt.fie_applied ? `<td class="col-comp nt-col">${r.nt && r.nt.fie_points ? `<span class="fm-num">${r.nt.fie_rank}</span> · ${r.nt.fie_points}` : '–'}</td><td class="col-comp nt-col"><span class="fm-num">${r.nt ? r.nt.selection_rank : ''}</span> · ${r.nt ? r.nt.selection_points : ''}</td>` : ''}
+                </tr>`;
+            }
             const rankClass = r.rank <= 3 ? `rank-${r.rank}` : '';
             const rowClass = r.rank <= 3 ? `top-rank-row top-rank-${r.rank}` : '';
             const teamsToShow = (r.display_teams && r.display_teams.length > 0) ? r.display_teams : r.teams;
@@ -1926,12 +2010,23 @@ document.addEventListener('DOMContentLoaded', function() {
                         ${r.silver > 0 ? `<span class="medal medal-silver">${r.silver}</span>` : ''}
                         ${r.bronze > 0 ? `<span class="medal medal-bronze">${r.bronze}</span>` : ''}
                         ${(r.gold === 0 && r.silver === 0 && r.bronze === 0 && r.best_results && r.best_results.length > 0) ?
-                            `<span class="best-finish">${i18n.rankings.best_finish.replace('{n}', Math.min(...r.best_results.map(b => b.rank)))}</span>` : ''}
+                            `<span class="best-finish">${i18n.rankings.best_finish.replace('{n}', Math.min(...r.best_results.map(b => b.rank).filter(Boolean)))}</span>` : ''}
                     </td>
                 </tr>`;
         }
 
         let html = '';
+
+        if (nt) {
+            // 표 머리 안내: 규정 근거·종료 수·선발권·FIE 반영 여부 (협회 공지 표의 제목줄에 해당)
+            html += `<div class="nt-table-note">
+                <strong>${nt.year} ${ntStatus.title}</strong> · ${ntStatus.progress.replace('{k}', nt.completed_count).replace('{n}', nt.total_competitions)}
+                · ${ntStatus.quota.replace('{q}', nt.quota)}
+                · ${nt.fie_applied ? ntStatus.fie_on + ' (' + ntStatus.sel_rank + ')' : ntStatus.fie_off}
+                ${nt.carryover_count > 0 ? `<br>${ntStatus.carryover_note.replace('{k}', nt.carryover_count)}` : ''}
+                <span class="nt-table-note-reg">${nt.regulation}</span>
+            </div>`;
+        }
 
         if (hasBlurred) {
             // 블러 영역: 서버가 blurred로 표시한 상위 구간(hidden_top위 이내)을 access-gate로 감싸기

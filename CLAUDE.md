@@ -514,7 +514,7 @@ club_role (클럽 내 역할) — organization_id 스코프 내에서만 유효
   parent      = 이 클럽의 학부모
 
 사이트 관리자 (별개 시스템)
-  members.is_admin = true → account.fencingmind.ai/admin 접근
+  members.is_admin = true → account.fencingmind.ai/account/admin 접근 (회원 관리: /account/admin/members)
   club_role과 무관한 독립적인 권한
 ```
 - Club 서비스에서 URL에 `/admin`을 사용하지 않음 → `/dashboard/owner` 사용
@@ -742,7 +742,7 @@ from app.auth.privacy import mask_korean_name  # → shared_core.privacy.masking
 - [ ] R24: 대회 최종순위 KFA 일치 검증 자동화
 
 ### 랭킹 시스템 원칙 (RANKING SYSTEM RULES)
-- **엄격한 연도 기반**: N년 랭킹 = N년 대회 결과만. 롤링 윈도우 사용 금지
+- **엄격한 연도 기반**: N년 랭킹 = N년 대회 결과만. 롤링 윈도우 사용 금지 (유일한 예외: NT 전체 랭킹 — 협회 「국가대표 선발 규정」의 이월 규칙을 따른다, `services/data/CLAUDE.md` NT 절)
 - **새 연도 빈 데이터**: 새 해 첫 대회 결과 나올 때까지 해당 연도 랭킹 미생성
 - **🔴 자유 참가 원칙 (Open Entry Principle)**: 랭킹 포인트는 자유 참가(open entry) 대회만 인정
   - 포인트 인정: 누구나 자유롭게 참가 신청할 수 있는 대회
@@ -842,7 +842,7 @@ mcp__supabase__execute_sql("SELECT * FROM players WHERE team_name LIKE '%최병�
 대한펜싱협회(fencing.sports.or.kr) 대회 결과 데이터를 수집하여 웹사이트로 제공하는 프로젝트
 - **프로덕션 URL**: https://data.fencingmind.ai
 - **서버**: Mac Studio (Cloudflare Tunnel → nginx:9090 → FastAPI:9071)
-- **스케줄러**: `run_scheduler.py --multichannel` (자동 스크래핑 + 변경 감지)
+- **스케줄러**: data 서버 프로세스에 내장 — `app/server.py` 기동 시 `get_scheduler().start()` 자동 실행 (자동 스크래핑 + 변경 감지). 별도 프로세스·`run_scheduler.py` 없음. 상태 확인: `GET /api/scheduler/status`, 코드 반영은 서버 재시작으로
 
 ## Current Status (2026-06-22)
 
@@ -1125,7 +1125,8 @@ python scraper/full_scraper.py --competition-id 123
   에러 로그: /Users/gyejinpark/Library/Logs/FencingMind/data-server.error.log
 
 관리 스크립트: bash scripts/fencingmind-server.sh {start|stop|restart|status}
-스케줄러: python scripts/run_scheduler.py start --multichannel
+스케줄러: 서버 내장 (app/server.py 기동 시 자동 시작 — 별도 실행 명령 없음. run_scheduler.py는 타 프로젝트 ARCHIS-I의 것)
+스케줄러 상태: curl http://localhost:9071/api/scheduler/status
 개발 서버: PYTHONPATH=".:../../packages" python -m uvicorn app.server:app --host 0.0.0.0 --port 9071
 ```
 
@@ -1641,4 +1642,4 @@ services/app/
 - 2019년 이전 데이터는 디지털 형태로 존재하지 않음 (스크래핑 대상 아님)
 - 사이트 구조상 페이지 네비게이션은 클릭으로만 가능 (JavaScript 상태 의존)
 - data 서비스에서 PWA 제거됨 (2026-06-04) — CSS 변경 빈도 높아 Service Worker 캐시 방해
-- 스케줄러는 `--multichannel` 모드로 자동 스크래핑 + Discord 알림 운영 중
+- 스케줄러는 data 서버에 내장되어 자동 스크래핑 + 변경 감지 운영 중 (서버 기동 시 자동 시작)
