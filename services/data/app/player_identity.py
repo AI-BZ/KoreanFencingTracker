@@ -969,6 +969,7 @@ class PlayerIdentityResolver:
         self.name_groups: Dict[str, NameGroup] = {}
         self.profiles: Dict[str, PlayerProfile] = {}  # player_id -> profile
         self.name_to_profiles: Dict[str, List[str]] = {}  # name -> [player_id, ...]
+        self._merged_profile_collisions = 0  # 같은 id 로 두 번 만들어져 합쳐진 횟수
         self._player_id_counter: int = 0  # 선수 ID 카운터
         self._legacy_id_map: Dict[str, str] = {}  # 기존 ID -> 새 ID 매핑
         self._special_ids_assigned: Set[str] = set()  # 이미 할당된 특별 ID
@@ -1980,23 +1981,40 @@ class PlayerIdentityResolver:
                         first_team = team
 
             player_id = self._generate_player_id(name, first_team)
-            profile = PlayerProfile(
-                player_id=player_id,
-                name=name
-            )
+            component_records = [rec for team in group_teams for rec in team_records[team]]
+            self._attach_profile(name, player_id, component_records)
 
-            # Add all records from all teams in this component
-            for team in group_teams:
-                for rec in team_records[team]:
-                    self._populate_profile(profile, rec)
+    def _attach_profile(self, name: str, player_id: str, records: List[Dict]) -> PlayerProfile:
+        """프로필에 기록을 붙인다. 같은 player_id 가 이미 있으면 **덮어쓰지 않고 합친다.**
 
+        🔴 2026-09-30 수정 — 기록 유실의 원인이었다.
+        `_generate_player_id()` 는 (이름, 첫 소속)만 보고 id 를 만든다. 분리 과정이
+        한 사람의 기록을 성별·무기·나이·팀 성분으로 여러 덩어리로 나누는데, 두 덩어리의
+        첫 소속이 같으면 **같은 id 가 나오고** 예전 코드는 `self.profiles[id] = profile`
+        로 앞의 프로필을 통째로 교체했다. 앞 덩어리의 기록은 어느 프로필에도 남지 않는다.
+
+        실측(전수, 2026-09-30): 수집 307,593건 중 **7,489건(172개 이름)이 이렇게 사라졌다.**
+        김하은은 493건 중 331건(67%)이 유실돼 프로필에 162건만 남아 있었다.
+        선수 기록은 그 아이의 1년이다(제1원칙) — 합치는 쪽이 항상 맞다.
+
+        합치면 이름·소속이 모두 같은 두 사람이 한 프로필에 섞일 수 있지만, 그건
+        예전에도 마찬가지였다(뒤엣것이 앞엣것을 덮어써서 오히려 한쪽이 통째로 사라졌다).
+        그런 경우는 `SAME_TEAM_WEAPON_SPLITS` 의 discriminator 로 가른다.
+        """
+        profile = self.profiles.get(player_id)
+        if profile is None:
+            profile = PlayerProfile(player_id=player_id, name=name)
             self.profiles[player_id] = profile
-
-            if name not in self.name_to_profiles:
-                self.name_to_profiles[name] = []
-            self.name_to_profiles[name].append(player_id)
-
             self.name_groups[name].profiles.append(profile)
+        else:
+            self._merged_profile_collisions += 1
+        for rec in records:
+            self._populate_profile(profile, rec)
+        if name not in self.name_to_profiles:
+            self.name_to_profiles[name] = []
+        if player_id not in self.name_to_profiles[name]:
+            self.name_to_profiles[name].append(player_id)
+        return profile
 
     def _create_single_profile(self, name: str, records: List[Dict], discriminator: str = "") -> None:
         """Create a single profile for a person (possibly with team changes)
@@ -2012,21 +2030,7 @@ class PlayerIdentityResolver:
                 break
 
         player_id = self._generate_player_id(name, first_team, discriminator)
-        profile = PlayerProfile(
-            player_id=player_id,
-            name=name
-        )
-
-        for rec in records:
-            self._populate_profile(profile, rec)
-
-        self.profiles[player_id] = profile
-
-        if name not in self.name_to_profiles:
-            self.name_to_profiles[name] = []
-        self.name_to_profiles[name].append(player_id)
-
-        self.name_groups[name].profiles.append(profile)
+        self._attach_profile(name, player_id, records)
 
     def _populate_profile(self, profile: PlayerProfile, record: Dict) -> None:
         """Populate profile with record data"""

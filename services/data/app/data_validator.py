@@ -589,6 +589,32 @@ class DataValidator:
                     index[name][("A", date, age)].add(profile.player_id)
         return index
 
+    def _profiles_attribute_pure(self, name: str, attr: str) -> Optional[str]:
+        """이름의 모든 프로필이 그 속성으로 **각각 하나**만 갖는지. 그렇다면 설명 문구.
+
+        성별은 사람의 불변 속성이고(제1원칙), 나이그룹은 시간이 지나면 올라가기만 한다.
+        한 이름에 남·여가 섞여 있어도 **프로필마다는 한 성별뿐**이면, 그 이름은 이미
+        서로 다른 사람으로 갈라져 있다는 뜻이다. 날짜별 충돌이 아니라 '경력 전체' 신호는
+        이렇게 본다(날짜 키로는 대조할 대상이 없다).
+        """
+        resolver = self.identity_resolver
+        if not resolver:
+            return None
+        pids = getattr(resolver, "name_to_profiles", {}).get(name) or []
+        profiles = [resolver.profiles[p] for p in pids if p in getattr(resolver, "profiles", {})]
+        if len(profiles) < 2:
+            return None
+        for profile in profiles:
+            values = set()
+            for rec in getattr(profile, "records", []) or []:
+                v = _extract_gender(rec.get("event_name") or "") if attr == "gender" else (rec.get("age_group") or "")
+                if v:
+                    values.add(v)
+            if len(values) > 1:
+                return None  # 이 프로필 안에서 이미 섞여 있다 → 분리가 설명하지 못한다
+        label = "성별" if attr == "gender" else "연령대"
+        return f"프로필 {len(profiles)}개가 각각 한 {label}만 가짐 → 분리 완료"
+
     def _homonym_separated(self, name: str, keys: List[tuple]) -> Optional[str]:
         """충돌하는 기록들이 서로 다른 프로필에 들어가 있으면 설명 문구를, 아니면 None.
 
@@ -1903,8 +1929,10 @@ class DataValidator:
             all_genders.update(genders)
 
         if len(all_genders) > 1:
-            severity = "RESOLVED" if is_registered else "ERROR"
-            suffix = " [KNOWN_HOMONYMS 등록됨]" if is_registered else ""
+            pure = self._profiles_attribute_pure(player_name, "gender")
+            severity = "RESOLVED" if (pure or is_registered) else "ERROR"
+            suffix = (f" [{pure}]" if pure
+                      else (" [KNOWN_HOMONYMS 등록됨]" if is_registered else ""))
             self.issues.append(ValidationIssue(
                 rule_id="R10",
                 severity=severity,
