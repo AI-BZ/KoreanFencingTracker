@@ -236,6 +236,64 @@ def _dedup_keep_highest_round(bouts: List[Dict]) -> List[Dict]:
     return [bout for _, idx, bout in sorted(best_bout.values(), key=lambda x: x[1])]
 
 
+def _round_labels_unreliable(bouts: List[Dict]) -> bool:
+    """이 브래킷의 라운드 이름이 단계를 구분하지 못하는가.
+
+    협회는 참가 인원이 적은 종목에서 **모든 경기에 같은 라운드 이름**을 붙인다.
+    실측(2026-09-30): 4명이 뛴 종목의 3경기(준결승 2 + 결승 1)가 전부 '8강'으로,
+    또 다른 종목은 전부 '준결승'으로 저장돼 있다. 이 상태에서는
+      · 우승자의 '최고 승리 라운드'가 결승이 될 수 없고(R6)
+      · 한 선수가 같은 이름의 라운드에서 2경기를 하는 것이 정상이다(R7)
+    라운드 이름을 근거로 삼는 판정은 이 경우 성립하지 않는다.
+    """
+    real = [b for b in bouts if isinstance(b, dict) and not is_bye_bout(b)]
+    if len(real) < 2:
+        return False
+    labels = {(b.get("round_name") or b.get("round") or "").strip() for b in real}
+    labels.discard("")
+    if not labels:
+        return False
+
+    # 우승이 가려진 브래킷인데 '결승' 라운드가 **하나도 없다** → 이름표가 실제 단계와
+    # 어긋나 있다. 실측(2026-10-01): 3명이 뛴 종목이 {준결승 부전승 1, 8강 2}로 저장돼
+    # 결승전이 '8강'으로 적혀 있었다(제57회 여초 플러레, 2022·2024 클럽오픈 3종목).
+    if not any(lbl in ("결승", "우승") for lbl in labels):
+        return True
+
+    if len(labels) != 1:
+        return False
+    if len(real) < 3:
+        return False
+
+    # 라운드 이름이 하나라는 것만으로는 부족하다 — 큰 브래킷의 한 라운드에 진짜 중복
+    # 경기가 들어간 경우와 구분해야 한다. **그 이름 안에서 브래킷 진행이 일어났는지**를
+    # 본다: 어떤 경기의 양쪽이 모두 '같은 이름의 다른 경기 승자'라면, 그 경기는 사실
+    # 다음 단계(준결승 다음의 결승)인데 같은 이름표를 달고 있는 것이다.
+    def _winner_of(b: Dict) -> str:
+        """승자 이름. 기록이 없으면 점수로 정한다 — 옛 레코드는 점수만 있고
+        winner_name 이 비어 있는 경우가 있다(실측: 2025 FILA 초등1-2 여자 에뻬 2번 경기)."""
+        w = (b.get("winner_name") or "").strip()
+        if w:
+            return w
+        try:
+            s1, s2 = int(b.get("player1_score") or 0), int(b.get("player2_score") or 0)
+        except (TypeError, ValueError):
+            return ""
+        if s1 == s2:
+            return ""
+        return (b.get("player1_name") if s1 > s2 else b.get("player2_name") or "").strip()
+
+    for bout in real:
+        p1 = (bout.get("player1_name") or "").strip()
+        p2 = (bout.get("player2_name") or "").strip()
+        if not p1 or not p2:
+            continue
+        won_elsewhere = {w for o in real if o is not bout for w in [_winner_of(o)] if w}
+        if p1 in won_elsewhere and p2 in won_elsewhere:
+            return True
+    return False
+
+
 def _get_full_bouts_from_bracket(de_bracket: Dict) -> List[Dict]:
     """DE bracket에서 full_bouts 추출 (server.py:123 간소화 버전)"""
     if not de_bracket or not isinstance(de_bracket, dict):
@@ -1405,6 +1463,22 @@ class DataValidator:
         # DE에서 각 선수의 최고 도달 라운드/탈락 라운드 계산
         player_last_win_round: Dict[str, str] = {}
         player_lost_round: Dict[str, str] = {}
+        # 라운드 이름이 단계를 구분하지 못하는 브래킷(소규모 종목)에서는 '결승 승자' 판정을
+        # 하지 않는다 — 근거는 `_round_labels_unreliable()` 주석 참조.
+        labels_unreliable = _round_labels_unreliable(full_bouts)
+        # 결승 경기가 있는데 점수도 승자도 없다면 대진표만으로는 우승자를 확인할 수 없다.
+        # 협회 최종순위표가 진실의 원천이므로(제1원칙) 순위표를 의심하지 않는다.
+        # 실측: 2026 제54회 문체부 남고 사브르 — 결승 '김규탁 0-0 이산 win=None',
+        # 순위표는 이산 1위. 협회가 결승 결과를 올리지 않은 것이다.
+        _final_bouts = [b for b in full_bouts
+                        if (b.get("round_name") or b.get("round") or "").strip() in ("결승", "우승")
+                        and not is_bye_bout(b)]
+        if _final_bouts and not any(
+            (b.get("winner_name") or "").strip()
+            or (b.get("player1_score") or 0) or (b.get("player2_score") or 0)
+            for b in _final_bouts
+        ):
+            labels_unreliable = True
 
         for bout in full_bouts:
             if bout.get("is_bye") or _is_self_bout(bout):
@@ -1453,7 +1527,7 @@ class DataValidator:
 
             if rank == 1:
                 last_win = player_last_win_round.get(name, "")
-                if last_win and "결승" not in last_win:
+                if last_win and "결승" not in last_win and not labels_unreliable:
                     self.issues.append(ValidationIssue(
                         rule_id="R6",
                         severity="ERROR",
@@ -1465,7 +1539,7 @@ class DataValidator:
                     ))
             elif rank == 2:
                 lost = player_lost_round.get(name, "")
-                if lost and "결승" not in lost:
+                if lost and "결승" not in lost and not labels_unreliable:
                     self.issues.append(ValidationIssue(
                         rule_id="R6",
                         severity="WARNING",
@@ -1660,6 +1734,18 @@ class DataValidator:
                     team = (row.get("team") or "").strip()
                     if team:
                         teams.add(team)
+
+        # 🔴 대진표의 소속도 함께 본다 (2026-09-30).
+        # 협회 최종순위표에는 동명이인 중 한 명만 실리는 경우가 있다. 실측:
+        # 2022 제51회 회장배 여중 플러레 32강에 '이윤서'가 두 명(성남여자중학교·전남체육중학교)
+        # 인데 최종순위에는 성남여자중학교 한 명뿐이라, 순위표만 보면 "동명이인이 아니다"로
+        # 판정돼 R7 이 ERROR 를 냈다. 경기 자체가 서로 다른 소속을 보여 주고 있다.
+        for bout in _get_full_bouts_from_bracket(event.get("de_bracket") or {}):
+            for side in ("player1", "player2"):
+                if canon_player_name(bout.get(f"{side}_name")).lower() == player_lower:
+                    team = (bout.get(f"{side}_team") or "").strip()
+                    if team:
+                        teams.add(team)
         return len(teams)
 
     def _r7_count_rounds(
@@ -1705,10 +1791,16 @@ class DataValidator:
 
             contents = Counter(_bout_content_key(b) for b in round_bouts)
             duplicated = any(n > 1 for n in contents.values())
-            explained = homonym_teams >= 2 and not duplicated
+            # 라운드 이름이 단계를 구분하지 못하는 소규모 브래킷에서는 같은 이름의
+            # 라운드에 한 선수가 2경기 하는 것이 정상이다 (준결승+결승이 둘 다 '8강').
+            labels_unreliable = _round_labels_unreliable(bouts)
+            explained = (homonym_teams >= 2 or labels_unreliable) and not duplicated
 
             if duplicated:
                 reason = "두 경기의 선수쌍·점수가 동일 → 복제된 팬텀 경기"
+            elif labels_unreliable:
+                reason = ("이 브래킷의 모든 경기가 같은 라운드 이름이다 "
+                          "(협회가 소규모 종목에 단계 구분 없이 한 이름을 쓴다) → 정상")
             elif explained:
                 reason = (f"순위표에 이 이름이 소속 {homonym_teams}곳으로 등재 "
                           f"→ 동명이인 {homonym_teams}명으로 설명 가능 (확인 필요)")
@@ -1779,19 +1871,22 @@ class DataValidator:
                             if sub_bouts:
                                 self._r8_validate_bouts(
                                     player_name, sub_bouts,
-                                    event_cd, f"{event_name} [{label}]", comp_name
+                                    event_cd, f"{event_name} [{label}]", comp_name,
+                                    event=event,
                                 )
                     continue
 
                 full_bouts = _get_full_bouts_from_bracket(de_bracket)
                 if full_bouts:
                     self._r8_validate_bouts(
-                        player_name, full_bouts, event_cd, event_name, comp_name
+                        player_name, full_bouts, event_cd, event_name, comp_name,
+                        event=event,
                     )
 
     def _r8_validate_bouts(
         self, player_name: str, full_bouts: List[Dict],
-        event_cd: str, event_name: str, comp_name: str
+        event_cd: str, event_name: str, comp_name: str,
+        event: Optional[Dict] = None,
     ):
         """R8 보조: 한 브래킷 안에서 실제 라운드 단위로 보존법칙 검증."""
         player_lower = player_name.lower()
@@ -1826,6 +1921,13 @@ class DataValidator:
         if not won:
             return
 
+        # 라운드별 실제 경기 수 — '다음 라운드가 협회 공개분에서도 불완전한가' 판정에 쓴다.
+        real_by_round: Dict[str, int] = defaultdict(int)
+        for bout in full_bouts:
+            rnd_b = _normalize_de_round(bout.get("round_name") or bout.get("round") or "")
+            if rnd_b in _DE_ROUND_INDEX and not is_bye_bout(bout) and not _is_self_bout(bout):
+                real_by_round[rnd_b] += 1
+
         ordered = sorted(present_rounds, key=lambda r: _DE_ROUND_INDEX[r])
         for i, rnd in enumerate(ordered):
             if rnd not in won or i + 1 >= len(ordered):
@@ -1833,9 +1935,24 @@ class DataValidator:
             nxt = ordered[i + 1]
             if nxt in appeared:
                 continue
+            # 🔴 2026-09-30: 다음 라운드가 **정원보다 적게** 채워져 있으면 그 라운드 자체가
+            # 불완전하다는 뜻이다. 그런 상태에서는 "이 선수의 경기가 우리 쪽에서 빠진 것"인지
+            # "협회가 애초에 안 올린 것"인지 가릴 수 없다. 실측으로 확인했다 — R8 로 걸린
+            # 종목들을 라이브 재수집하니 경기·점수가 **한 건도 늘지 않았다**
+            # (예: 제54회 문체부 여중 사브르 126경기·점수 85, 제53회 회장배 여고 사브르
+            #  63경기·점수 46 — 재수집 후 동일). 우리 결손이 아니라 출처의 공백이다.
+            # 구조적 유실(예선 라운드 통째 실종 등)은 R24·R1c·R26 이 ERROR 로 따로 잡는다.
+            capacity = EXPECTED_BOUTS_BY_ROUND.get(nxt)
+            incomplete = bool(capacity and real_by_round.get(nxt, 0) < capacity)
+            # 이 종목에 같은 이름이 2개 이상 소속으로 나오면(동명이인 동시 출전) 이름만으로
+            # 라운드 진행을 추적할 수 없다 — R7 과 같은 기준을 쓴다.
+            # 또 라운드 이름이 실제 단계와 어긋난 브래킷에서도 추적이 성립하지 않는다.
+            if ((event is not None and self._r7_event_team_count(event, player_lower) >= 2)
+                    or _round_labels_unreliable(full_bouts)):
+                incomplete = True
             self.issues.append(ValidationIssue(
                 rule_id="R8",
-                severity="ERROR",
+                severity="WARNING" if incomplete else "ERROR",
                 player_name=player_name,
                 event_cd=event_cd,
                 competition_name=comp_name,
@@ -1843,6 +1960,9 @@ class DataValidator:
                     f"[{event_name}] 라운드 진행 보존법칙 위반: "
                     f"'{player_name}' 이 {rnd}을 이겼는데 다음 라운드 {nxt}에 없음 "
                     f"(이 브래킷의 라운드: {' → '.join(ordered)})"
+                
+                    + (f" — 다음 라운드가 협회 공개분에서도 불완전 "
+                       f"({real_by_round.get(nxt, 0)}/{capacity}경기)" if incomplete else "")
                 ),
                 data={
                     "won_round": rnd,

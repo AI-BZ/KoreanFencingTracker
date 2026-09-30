@@ -213,8 +213,9 @@ AGE_GROUP_LEVEL = {
     'U14': 6, 'Y14': 6, '여중': 6, '남중': 6, '중등부': 6,
     # 고등
     'U17': 7, 'Y17': 7, '여고': 7, '남고': 7, '고등부': 7,
-    # 대학/청년
-    'U20': 8, 'Y20': 8, '대학': 8, '청년부': 8,
+    # 대학/청년 — '남대'·'여대'(협회 종목명 표기)도 같은 단계다. 없으면 레벨 0(미상)이
+    # 되어 대학 → 중·고 역행을 놓친다 (2026-09-30 확인).
+    'U20': 8, 'Y20': 8, '대학': 8, '청년부': 8, '남대': 8, '여대': 8,
     # 일반/성인
     '일반부': 9, '일반': 9, '시니어': 10,
 }
@@ -1299,10 +1300,29 @@ class PlayerIdentityResolver:
                     prev_level = get_age_group_level(prev_age)
                     curr_level = get_age_group_level(curr_age)
 
-                    # Significant regression (2+ levels down) = definitely different person
-                    # 일반부(9) → 여중(6) = 3 levels down = IMPOSSIBLE
+                    # 2단계 이상 역행 = 확실히 다른 사람 (일반부 9 → 여중 6)
                     if prev_level > 0 and curr_level > 0 and prev_level - curr_level >= 2:
                         return curr_date
+
+                    # 1단계 역행도 시간이 충분히 지났으면 불가능하다 (2026-09-30 추가).
+                    # 중학생이 3년 뒤에 초등부로 내려갈 수는 없다. 실측 —
+                    #   박재영: 중등부(2023-08, 은성펜싱아카데미) → 초등부(3-4학년)(2026-06, 펜싱랩)
+                    #   김리아: 중등부(2024-10, 고양펜싱클럽) → 초등부(3-4학년)(2026-08, 남성초등학교)
+                    # 둘 다 한 프로필에 묶여 있었다. 같은 시즌 안에서 클럽 대회가 하위부
+                    # 이름을 다르게 쓰는 경우와 구분하려고 **1년 이상 간격**일 때만 가른다.
+                    if (prev_level > 0 and curr_level > 0
+                            and prev_level - curr_level == 1
+                            and prev_date[:4].isdigit() and curr_date[:4].isdigit()
+                            and int(curr_date[:4]) - int(prev_date[:4]) >= 1
+                            and curr_date > prev_date):
+                        # 한 번 튄 것이 아니라 그 아래 단계가 이어지는지 확인한다
+                        later_low = [
+                            r for r in sorted_records
+                            if (r.get('comp_date') or '') >= curr_date
+                            and get_age_group_level(r.get('age_group', '')) == curr_level
+                        ]
+                        if len(later_low) >= 2:
+                            return curr_date
 
             prev_record = record
 

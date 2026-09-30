@@ -398,9 +398,15 @@ class TestR8RoundProgression:
 class TestR7SeveritySplit:
 
     def _two_bouts_same_round(self, s2a=13, s2b=11):
+        """한 라운드에 같은 이름이 2경기. 결승·준결승을 함께 둬서 **라운드 이름이 실제
+        단계와 맞는 정상 브래킷**임을 분명히 한다 — 이름표가 단계를 구분하지 못하는
+        소규모 브래킷(결승 라운드가 아예 없는 경우)은 `_round_labels_unreliable()` 이
+        따로 걸러내므로, 그 경로와 섞이면 이 테스트의 의도가 흐려진다."""
         return {"bracket_size": 8, "starting_round": "8강", "full_bouts": [
             bout("8강", 1, "김민서", "상대A", 15, s2a, winner="김민서"),
             bout("8강", 2, "김민서", "상대B", 15, s2b, winner="김민서"),
+            bout("준결승", 3, "김민서", "상대C", 15, 9, winner="김민서"),
+            bout("결승", 4, "김민서", "상대D", 15, 10, winner="김민서"),
         ]}
 
     def test_single_team_is_error(self):
