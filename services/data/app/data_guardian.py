@@ -378,6 +378,14 @@ class DataGuardian:
                         "pool_total_ranking": raw.get("pool_total_ranking", []),
                         "de_bracket": raw.get("de_bracket", {}),
                         "final_rankings": raw.get("final_rankings", []),
+                        # R26 의 '협회 표 자체 이상' 판정에 쓴다 (KFA_SOURCE_ANOMALIES 는
+                        # 출처가 협회 표일 때만 적용). 빠뜨리면 등록해도 ERROR 로 남는다.
+                        "final_rankings_source": raw.get("final_rankings_source"),
+                        # 종목명·성별·나이그룹은 선수 식별기(성별·연령 판정)가 읽는다.
+                        "name": ev.get("event_name", ""),
+                        "weapon": ev.get("weapon", ""),
+                        "gender": ev.get("gender", ""),
+                        "age_group": ev.get("age_group", ""),
                         # R27 이 로스터를 모을 때 쓴다. 없으면 로스터가 얇아져
                         # 규칙이 스스로 판정을 포기한다(오탐 방지 가드).
                         "participants": raw.get("participants", []),

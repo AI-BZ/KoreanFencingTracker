@@ -152,6 +152,9 @@ def build_competitions(events, comps, limit_comps=None):
                 "pool_rounds": raw.get("pool_rounds"),
                 "pool_total_ranking": raw.get("pool_total_ranking", []),
                 "final_rankings": raw.get("final_rankings"),
+                # R26 의 '협회 표 자체 이상' 판정에 필요하다 (KFA_SOURCE_ANOMALIES 는
+                # 출처가 협회 표일 때만 적용된다). 빠뜨리면 등록해도 ERROR 로 남는다.
+                "final_rankings_source": raw.get("final_rankings_source"),
                 "participants": raw.get("participants"),
             })
         out.append(comp_obj)

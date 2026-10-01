@@ -236,6 +236,25 @@ def _dedup_keep_highest_round(bouts: List[Dict]) -> List[Dict]:
     return [bout for _, idx, bout in sorted(best_bout.values(), key=lambda x: x[1])]
 
 
+# 협회 순위표 자체의 이상 — 우리 데이터가 협회 표와 **일치하는데도** 규칙에 걸리는 종목.
+#
+# 재수집해도 같은 값이 오고, 협회 표가 그렇게 게시돼 있다. 제1원칙 5항("최종순위는 KFA 가
+# 진실의 원천")에 따라 우리 쪽을 고치지 않는다. 다만 영구 ERROR 로 두면 진짜 오염이 묻히므로
+# 여기 등록해 WARNING 으로 내리고 사유를 남긴다. **협회 표에서 받은 것(`final_rankings_source`
+# 가 'kfa')일 때만** 적용된다 — 우리가 계산한 표의 결함이 이 목록에 숨지 않게.
+#
+# 등록 기준: ① 라이브 재수집으로 같은 값을 확인했다 ② 어긋난 지점을 사람이 확인했다.
+KFA_SOURCE_ANOMALIES: Dict[str, str] = {
+    # 2025 제53회 문화체육관광부장관기 남고 에뻬 — 협회 표(110행)에 2위가 두 명(남가현·안리한)이고,
+    # 우리 대진표에서 결승에 오른 전유섭(결승 0-10, 기권 추정)이 순위표에 아예 없다.
+    # 2026-09-28 라이브 재수집 확인: 협회 표가 그대로 110행·중복 순위 9곳이다.
+    "COMPS000000000003582": (
+        "협회 표 자체에 2위가 2명(남가현·안리한)이고 결승 진출자 전유섭이 순위표에 없다 "
+        "— 2026-09-28 라이브 확인, 우리 데이터는 협회 표와 일치"
+    ),
+}
+
+
 def _round_labels_unreliable(bouts: List[Dict]) -> bool:
     """이 브래킷의 라운드 이름이 단계를 구분하지 못하는가.
 
@@ -1089,17 +1108,23 @@ class DataValidator:
             got = counts.get(place, 0)
             if got == 1:
                 continue
+            # 협회 표 자체의 이상으로 확인·등록된 종목은 WARNING (위 KFA_SOURCE_ANOMALIES 주석 참조)
+            anomaly = KFA_SOURCE_ANOMALIES.get(event_cd)
+            from_kfa = (event.get("final_rankings_source") or "").lower() == "kfa"
+            known_source_anomaly = bool(anomaly and from_kfa)
             self.issues.append(ValidationIssue(
                 rule_id="R26",
-                severity="ERROR",
+                severity="WARNING" if known_source_anomaly else "ERROR",
                 player_name="",
                 event_cd=event_cd,
                 competition_name=comp_name,
                 message=(
                     f"[{event_name}] 최종순위 {place}위가 {got}명 (정확히 1명이어야 함) — "
                     f"총 {len(ranks)}명, 최고 순위 {min(ranks)}위. "
-                    f"{'순위표가 잘렸거나' if got == 0 else '동률로 잘못 계산됐거나'} "
-                    f"예선 기준으로 매겨진 순위표 → KFA 최종순위 재수집 필요"
+                    + (f"협회 표 자체의 이상 (등록됨): {anomaly}"
+                       if known_source_anomaly else
+                       f"{'순위표가 잘렸거나' if got == 0 else '동률로 잘못 계산됐거나'} "
+                       f"예선 기준으로 매겨진 순위표 → KFA 최종순위 재수집 필요")
                 ),
                 data={
                     "place": place,

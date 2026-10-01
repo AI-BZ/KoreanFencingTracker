@@ -281,6 +281,12 @@ def extract_gender(event_name: str) -> str:
     return ''
 
 
+def _records_gender(records: List[Dict]) -> str:
+    """기록 묶음의 성별. 한 가지로 일치할 때만 'M'/'F', 섞였거나 모르면 ''."""
+    seen = {g for g in (extract_gender(r.get("event_name") or "") for r in (records or [])) if g}
+    return next(iter(seen)) if len(seen) == 1 else ""
+
+
 def is_gender_consistent(records: List[Dict]) -> Tuple[bool, str]:
     """
     레코드들의 성별이 일관성 있는지 확인
@@ -1216,6 +1222,11 @@ class PlayerIdentityResolver:
                         else:
                             self._create_single_profile(name, gender_records)
 
+        # Post-resolution: 제1원칙 불변식 강제 — 한 프로필 안에서 나이그룹은 내려가지 않는다.
+        # 분리 경로가 여러 갈래라 어느 한 곳에 규칙을 넣으면 다른 경로로 들어온 레코드가
+        # 그대로 남는다. 그래서 마지막에 한 번 전수로 검사해 가른다.
+        self._enforce_age_monotonicity()
+
         # Post-resolution: Rebuild team_history for all profiles
         # This groups consecutive same-team records and preserves 원복 케이스
         for profile in self.profiles.values():
@@ -1223,6 +1234,118 @@ class PlayerIdentityResolver:
 
         # Assign special IDs for reference players
         return self._assign_special_ids()
+
+    def _enforce_age_monotonicity(self) -> int:
+        """나이그룹이 내려가는 프로필을 두 사람으로 가른다 (제1원칙).
+
+        "시간이 지나면 나이그룹은 올라가거나 유지 (절대 내려가지 않음)" — 내려갔다면
+        한 프로필에 두 사람이 섞인 것이다. 실측 3건(2026-10-01):
+          이민혁: 초등부/청라펜싱클럽 과 남고/홍익대사대부고가 2024~2026 내내 **번갈아** 나온다
+          최민서: 고등부(2024-10, 윤남진펜싱클럽 서초) → 중등부(2025-07, 펜싱아카데미 더원)
+          김리아: 중등부(2024-10, 고양펜싱클럽) → 초등부(2026-08, 남성초등학교)
+
+        가르는 방식은 두 가지다.
+          · 두 단계가 **교차**하면(위→아래→위가 한 번 이상) 날짜로 자를 수 없다.
+            나이 단계로 묶는다 — 낮은 단계 기록은 A, 높은 단계는 B.
+          · 교차가 없으면 역행 시점에서 날짜로 자른다(기존 `_create_separate_profiles_by_age_split`
+            과 같은 사상).
+        나이그룹을 모르는 기록은 소속이 겹치는 쪽에, 그래도 모르면 큰 쪽에 붙인다 —
+        어느 쪽인지 지어내지 않되 기록을 버리지도 않는다(유실 0 유지).
+
+        1단계 역행은 같은 시즌에 클럽 대회가 하위부 이름을 다르게 쓰는 경우가 있어
+        **연도가 다를 때만** 가른다. 2단계 이상은 바로 가른다.
+        """
+        split_count = 0
+        for player_id in list(self.profiles.keys()):
+            profile = self.profiles.get(player_id)
+            if not profile or len(profile.records) < 2:
+                continue
+            leveled = [
+                (r.get("comp_date") or "", get_age_group_level(r.get("age_group") or ""), r)
+                for r in profile.records
+            ]
+            leveled = [t for t in leveled if t[0] and t[1] > 0]
+            if len(leveled) < 2:
+                continue
+            leveled.sort(key=lambda t: t[0])
+
+            # 역행 지점 찾기
+            peak_date, peak_level = leveled[0][0], leveled[0][1]
+            drop = None
+            for date, level, _rec in leveled[1:]:
+                if level < peak_level:
+                    gap_ok = (level <= peak_level - 2) or (
+                        date[:4].isdigit() and peak_date[:4].isdigit()
+                        and int(date[:4]) > int(peak_date[:4])
+                    )
+                    if gap_ok:
+                        drop = (peak_date, peak_level, date, level)
+                        break
+                elif level > peak_level:
+                    peak_level, peak_date = level, date
+            if not drop:
+                continue
+
+            _pd, high_level, split_date, low_level = drop
+            # 교차 여부: 역행 이후에 높은 단계가 다시 나오는가
+            interleaved = any(l >= high_level and d >= split_date for d, l, _ in leveled)
+
+            if interleaved:
+                low_group = [r for d, l, r in leveled if l <= low_level]
+                high_group = [r for d, l, r in leveled if l > low_level]
+            else:
+                low_group = [r for d, l, r in leveled if d >= split_date]
+                high_group = [r for d, l, r in leveled if d < split_date]
+            if not low_group or not high_group:
+                continue
+
+            # 나이그룹을 모르는 기록은 소속으로 붙인다
+            known = {id(r) for r in low_group} | {id(r) for r in high_group}
+            low_teams = {(r.get("team") or "").strip() for r in low_group}
+            high_teams = {(r.get("team") or "").strip() for r in high_group}
+            for rec in profile.records:
+                if id(rec) in known:
+                    continue
+                team = (rec.get("team") or "").strip()
+                if team and team in low_teams and team not in high_teams:
+                    low_group.append(rec)
+                elif team and team in high_teams and team not in low_teams:
+                    high_group.append(rec)
+                elif len(low_group) >= len(high_group):
+                    low_group.append(rec)
+                else:
+                    high_group.append(rec)
+
+            name = profile.name
+            # 기존 프로필 자리는 큰 쪽이 쓰고, 작은 쪽을 새 id 로 뺀다
+            keep_group, move_group = ((high_group, low_group)
+                                      if len(high_group) >= len(low_group)
+                                      else (low_group, high_group))
+            profile.records = []
+            profile.competition_ids = set()
+            profile.team_history = []
+            profile.weapons = set()
+            profile.age_groups = set()
+            profile.podium_by_season = {}
+            for rec in keep_group:
+                self._populate_profile(profile, rec)
+
+            move_team = next((r.get("team") for r in move_group if r.get("team")), "")
+            tag = "AGE" + (str(low_level) if move_group is low_group else str(high_level))
+            new_id = self._generate_player_id(name, move_team, tag)
+            if new_id == player_id:  # 안전장치 — 같은 id 면 가르지 않는다
+                for rec in move_group:
+                    self._populate_profile(profile, rec)
+                continue
+            self._attach_profile(name, new_id, move_group)
+            split_count += 1
+            logger.debug(
+                f"나이 역행 분리: {name} {player_id} → +{new_id} "
+                f"(역행 {split_date}, {'교차' if interleaved else '시점'} 기준)"
+            )
+        if split_count:
+            logger.info(f"나이 역행으로 분리한 프로필: {split_count}개")
+        return split_count
 
     def _region_ordered_pair_groups(self, teams_sorted: List[str]) -> List[List[Tuple[str, str]]]:
         """팀 조합을 [같은 지역(또는 미상), 다른 지역] 두 묶음으로 나눠 돌려준다.
@@ -2021,6 +2144,20 @@ class PlayerIdentityResolver:
         예전에도 마찬가지였다(뒤엣것이 앞엣것을 덮어써서 오히려 한쪽이 통째로 사라졌다).
         그런 경우는 `SAME_TEAM_WEAPON_SPLITS` 의 discriminator 로 가른다.
         """
+        # ⚠️ 성별이 다르면 **절대 합치지 않는다.** 성별은 사람의 불변 속성이다(제1원칙:
+        # "남자 ↔ 여자 전환 절대 불가 — 다른 사람임"). `resolve_identities()` 는 성별로 먼저
+        # 갈라 놓는데, 두 그룹의 첫 소속이 같으면 id 가 같아져서 이 합치기가 그 분리를
+        # 되돌려 버렸다. 실측(2026-10-01): 김유빈 — 한국외국어대학교 펜싱부에 남자 1명·
+        # 여자 1명이 한 프로필(20건, M 9 / F 11)로 묶이고 2025-10-24 에 둘이 동시 출전했다.
+        # 성별이 다르면 성별 꼬리표를 붙인 별도 id 로 만든다.
+        incoming_gender = _records_gender(records)
+        existing = self.profiles.get(player_id)
+        if existing is not None and incoming_gender:
+            existing_gender = _records_gender(existing.records)
+            if existing_gender and existing_gender != incoming_gender:
+                first_team = next((r["team"] for r in records if r.get("team")), "")
+                player_id = self._generate_player_id(name, first_team, f"G{incoming_gender}")
+
         profile = self.profiles.get(player_id)
         if profile is None:
             profile = PlayerProfile(player_id=player_id, name=name)
