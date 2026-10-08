@@ -226,33 +226,34 @@ def print_summary(records: List[dict]) -> None:
               + f"  {total:>5}  {seeded:>5}")
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--dry-run", action="store_true")
-    args = ap.parse_args()
+def sync_rosters(db=None, dry_run: bool = False, verbose: bool = False) -> dict:
+    """공지 첨부에서 명단을 파싱해 `data_kfa_rosters` 에 upsert. 스케줄러도 이 함수를 쓴다.
 
-    db = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
+    전체를 다시 읽어 upsert 하는 멱등 동작이다 — 새 공지 하나만 들어와도 전체를 다시
+    맞추므로, 과거 공지의 파싱이 개선되면 그 효과도 함께 반영된다.
+    UNIQUE(roster_type, year, weapon, gender, player_name) 기준 upsert 라 중복이 쌓이지 않는다.
+    """
+    db = db or create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
     notices = _fetch_notices(db, sorted(ROSTER_DOC_TAGS | {"replacement", "ranking_points"}))
-    logger.info(f"대상 공지 {len(notices)}건")
-
     lookup, source = build_ranking_lookup(notices)
     records, warnings = collect_entries(notices)
     fill_team_for_media(records)
     records = dedupe(records)
     seeded = fill_seed_rank(records, lookup, source)
-    logger.info(f"적재 행 {len(records)}건, seed_rank 대조 성공 {seeded}건")
 
-    print_summary(records)
-    if warnings:
-        print("\n검증 경고:")
-        for w in warnings:
-            print("  -", w)
-    else:
-        print("\n검증 경고 없음 (모든 명단표의 선언 인원 = 파싱 인원)")
+    if verbose:
+        print_summary(records)
+        if warnings:
+            print("\n검증 경고:")
+            for w in warnings:
+                print("  -", w)
+        else:
+            print("\n검증 경고 없음 (모든 명단표의 선언 인원 = 파싱 인원)")
 
-    if args.dry_run:
-        print("\n(dry-run: 저장 안 함)")
-        return
+    result = {"notices": len(notices), "records": len(records),
+              "seeded": seeded, "warnings": warnings[:20], "saved": 0}
+    if dry_run:
+        return result
 
     now = datetime.now().isoformat()
     for i in range(0, len(records), 200):
@@ -260,8 +261,24 @@ def main():
         db.table("data_kfa_rosters").upsert(
             batch, on_conflict="roster_type,year,weapon,gender,player_name"
         ).execute()
-    total = db.table("data_kfa_rosters").select("id", count="exact").execute().count
-    logger.info(f"저장 완료: data_kfa_rosters 총 {total}행")
+        result["saved"] += len(batch)
+    result["total"] = db.table("data_kfa_rosters").select("id", count="exact").execute().count
+    return result
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--dry-run", action="store_true")
+    args = ap.parse_args()
+
+    db = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
+    out = sync_rosters(db, dry_run=args.dry_run, verbose=True)
+    logger.info(f"대상 공지 {out['notices']}건 / 적재 행 {out['records']}건, "
+                f"seed_rank 대조 성공 {out['seeded']}건")
+    if args.dry_run:
+        print("\n(dry-run: 저장 안 함)")
+        return
+    logger.info(f"저장 완료: data_kfa_rosters 총 {out.get('total')}행")
 
 
 if __name__ == "__main__":

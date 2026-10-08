@@ -333,3 +333,47 @@ def test_homonym_groups_merge_renamed_team_via_identity_lookup():
     rows = {(r.player_name, r.team): r.total_points for r in data.calculate("foil", "여", 2026).rankings}
     # 행의 소속은 가장 최근 대회(대통령배 8월)의 표기 — 개명 전 이름이라도 한 사람으로 합산된다
     assert rows == {("김현진", "인천광역시중구청"): 14 + 32, ("김현진", "전남체육고등학교"): 2}
+
+
+def test_identity_lookup_wins_when_one_team_belongs_to_two_people():
+    """같은 소속을 두 사람이 거쳤으면 소속 집합만으로는 못 가른다 — 레코드 주인을 직접 묻는다.
+
+    실제 사고(2026-10-08, 2026 여자 플뢰레): '김현진'의 '인천광역시중구청'이 두 프로필
+    (영종구청으로 개명한 사람 / 독도스포츠단으로 옮긴 다른 사람) 양쪽에 들어 있었다.
+    `_team_group_key` 가 '먼저 걸린 집합'을 쓰던 동안에는 집합 순회 순서에 따라 답이
+    바뀌어, 서버를 재시작하면 협회 표 2위(74점)가 8위(46점)로 떨어졌다.
+    """
+    groups = [{"인천광역시중구청", "인천광역시영종구청"},
+              {"인천광역시중구청", "경상북도체육회 독도스포츠단"}]
+    team_lookup = lambda n: groups if n == "김현진" else []
+    # 리졸버는 각 순위 행의 주인을 이미 알고 있다 (comp_cd 로 구분)
+    owners = {("김현진", "pres-cd", "여자 플러레(개)", "인천광역시영종구청"): "KOP_A",
+              ("김현진", "nat-cd", "여자 플러레(개)", "인천광역시중구청"): "KOP_A"}
+    identity = lambda name, comp_cd, event_name, team: owners.get((name, comp_cd, event_name, team))
+
+    def _data(**kw):
+        pres = comp(PRES, "2026-08-12", [event(
+            "여자 플러레(개)",
+            [("김현진", 6, "인천광역시영종구청"), ("김현진", 60, "경상북도체육회 독도스포츠단")],
+            de_names=["김현진"], weapon="foil", gender="여")])
+        pres["competition"]["event_cd"] = "pres-cd"
+        nat = comp(NAT, "2026-06-06", [event(
+            "여자 플러레(개)", [("김현진", 1, "인천광역시중구청")],
+            de_names=["김현진"], weapon="foil", gender="여")])
+        nat["competition"]["event_cd"] = "nat-cd"
+        return NationalTeamRankingCalculator({"competitions": [pres, nat]}, **kw)
+
+    rows = {(r.player_name, r.team): r.total_points
+            for r in _data(team_groups_lookup=team_lookup, identity_lookup=identity)
+            .calculate("foil", "여", 2026).rankings}
+    assert rows == {("김현진", "인천광역시영종구청"): 14 + 32,
+                    ("김현진", "경상북도체육회 독도스포츠단"): 2}
+
+    # 신원 조회가 없으면 애매한 소속은 **아무 집합도 고르지 않는다** (소속명 그대로 → 분리).
+    # 틀린 쪽으로 합치는 것보다 갈라 두는 쪽이 낫다 — 제0원칙 1(모르면 추측하지 않는다).
+    rows_no_identity = {(r.player_name, r.team): r.total_points
+                        for r in _data(team_groups_lookup=team_lookup)
+                        .calculate("foil", "여", 2026).rankings}
+    assert rows_no_identity == {("김현진", "인천광역시영종구청"): 14,
+                                ("김현진", "경상북도체육회 독도스포츠단"): 2,
+                                ("김현진", "인천광역시중구청"): 32}

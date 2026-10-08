@@ -536,6 +536,10 @@ class NameGroup:
     profiles: List[PlayerProfile] = field(default_factory=list)  # Resolved profiles
 
 
+# 최종 순위표의 동명이인 표식: '김재원(*)' · '김주희050513'(생년월일 접미)
+_NAME_MARKER_RE = re.compile(r"\s*(?:\((?:\*|\d+)\)|\d{6})\s*$")
+
+
 class PlayerIdentityResolver:
     """
     Main class for resolving player identities across competitions.
@@ -980,6 +984,8 @@ class PlayerIdentityResolver:
         self._player_id_counter: int = 0  # 선수 ID 카운터
         self._legacy_id_map: Dict[str, str] = {}  # 기존 ID -> 새 ID 매핑
         self._special_ids_assigned: Set[str] = set()  # 이미 할당된 특별 ID
+        # (이름, comp_cd, event_name, 소속) → player_id 색인 (첫 조회 때 만든다)
+        self._record_owner_index: Optional[Dict[Tuple[str, str, str, str], Optional[str]]] = None
 
         # 조직 식별자 (지연 로딩)
         self._org_resolver = None
@@ -2349,9 +2355,51 @@ class PlayerIdentityResolver:
         return self.profiles.get(player_id)
 
     def get_players_by_name(self, name: str) -> List[PlayerProfile]:
-        """Get all players with exact name match"""
+        """Get all players with exact name match.
+
+        player_id 순으로 정렬해 반환한다. 이 목록의 **순서에 의존하는 소비자가 있다**
+        (랭킹/national_team 의 동명이인 소속 그룹 판정). 내부 보관 순서는 그룹 분리
+        과정의 집합 순회 순서라 프로세스마다 달라서, 정렬하지 않으면 서버를 재시작할
+        때마다 같은 선수의 순위가 바뀐다 (2026-10-08 실측: 여자 플뢰레 김현진).
+        """
         player_ids = self.name_to_profiles.get(name, [])
-        return [self.profiles[pid] for pid in player_ids if pid in self.profiles]
+        return sorted((self.profiles[pid] for pid in player_ids if pid in self.profiles),
+                      key=lambda p: p.player_id)
+
+    # ------------------------------------------------------------------
+    # 레코드 → 사람 (동명이인 판정의 1차 근거)
+    # ------------------------------------------------------------------
+    def _build_record_owner_index(self) -> Dict[Tuple[str, str, str, str], Optional[str]]:
+        """(이름, comp_cd, event_name, 소속) → player_id 색인.
+
+        소속 이름만으로 동명이인을 가르면 **한 사람이 소속 개명·이적으로 갈라지거나,
+        서로 다른 두 사람이 같은 소속을 거쳤을 때 어느 쪽인지 알 수 없다.**
+        리졸버는 이미 레코드마다 주인을 정해 뒀으므로(제1원칙: 단일 진실 원천) 그 결정을
+        그대로 되팔 수 있게 색인해 둔다. 같은 종목·같은 소속에 같은 이름이 둘이면
+        (자동 분리 불가 케이스) None 을 넣어 '모름'으로 남긴다 — 추측하지 않는다.
+        """
+        index: Dict[Tuple[str, str, str, str], Optional[str]] = {}
+        for pid, profile in self.profiles.items():
+            for rec in (profile.records or []):
+                for nm in {(rec.get("name") or "").strip(),
+                           _NAME_MARKER_RE.sub("", (rec.get("name") or "").strip())}:
+                    if not nm:
+                        continue
+                    key = (nm, rec.get("comp_cd") or "", rec.get("event_name") or "",
+                           (rec.get("team") or "").strip())
+                    if key in index and index[key] != pid:
+                        index[key] = None      # 같은 칸에 두 사람 — 판정 포기
+                    elif key not in index:
+                        index[key] = pid
+        return index
+
+    def resolve_record_owner(self, name: str, comp_cd: str, event_name: str,
+                             team: str) -> Optional[str]:
+        """그 종목 그 소속의 '이 이름'이 누구인지 player_id 로 답한다. 모르면 None."""
+        if self._record_owner_index is None:
+            self._record_owner_index = self._build_record_owner_index()
+        return self._record_owner_index.get(
+            ((name or "").strip(), comp_cd or "", event_name or "", (team or "").strip()))
 
     def has_disambiguation(self, name: str) -> bool:
         """Check if name has multiple possible identities"""

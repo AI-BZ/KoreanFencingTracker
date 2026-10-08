@@ -261,6 +261,9 @@ class NTRankingTable:
 # fie_lookup(weapon, gender, year) -> {선수명: FIE 개인전 랭킹 순위} 또는 None
 FieLookup = Callable[[str, str, int], Optional[Dict[str, int]]]
 
+# identity_lookup(name, comp_cd, event_name, team) -> player_id 또는 None('모름')
+IdentityLookup = Callable[[str, str, str, str], Optional[str]]
+
 _POINT_BRACKETS = [(1, 1), (2, 2), (3, 4), (5, 8), (9, 16), (17, 32), (33, 64), (65, 96), (97, 128)]
 
 
@@ -268,12 +271,18 @@ class NationalTeamRankingCalculator:
     """서버 캐시(`{"competitions": [{"competition": {...}, "events": [...]}]}`)로 계산한다."""
 
     def __init__(self, data: Optional[Dict], fie_lookup: Optional[FieLookup] = None,
-                 team_groups_lookup: Optional[Callable[[str], List[Set[str]]]] = None):
+                 team_groups_lookup: Optional[Callable[[str], List[Set[str]]]] = None,
+                 identity_lookup: Optional[IdentityLookup] = None):
         self.data = data or {}
         self.fie_lookup = fie_lookup
-        # 동명이인 분리용: 이름 → [같은 사람의 소속 집합, ...] (서버의 PlayerIdentityResolver).
+        # 동명이인 분리용 2차 근거: 이름 → [같은 사람의 소속 집합, ...].
         # 소속 개명(인천광역시중구청→영종구청)·이적을 한 사람으로 묶어 준다. 없으면 소속명 그대로.
         self.team_groups_lookup = team_groups_lookup
+        # 1차 근거: 이 순위 행이 **누구의 것인지** 리졸버에게 직접 묻는다.
+        # 소속 집합만으로는 한 소속이 두 사람에게 걸쳐 있을 때(김현진 — 인천광역시중구청이
+        # 영종구청 사람과 독도스포츠단 사람 양쪽에 있음) 어느 쪽인지 고를 수 없고,
+        # '먼저 걸린 집합'을 쓰면 프로세스마다 답이 달라졌다 (2026-10-08).
+        self.identity_lookup = identity_lookup
         # {year: {comp_id: comp_data}}
         self._by_year: Dict[int, Dict[str, Dict]] = defaultdict(dict)
         self._index()
@@ -464,13 +473,34 @@ class NationalTeamRankingCalculator:
             homonyms.update(n for n, ts in teams.items() if len(ts) > 1)
         return homonyms
 
+    def _identity_key(self, name: str, res: "NTCompResult") -> str:
+        """동명이인 분리 키.
+
+        ① 리졸버가 이 순위 행의 주인을 알면 그 player_id (가장 정확 — 같은 소속을
+           두 사람이 거쳐도, 한 사람의 소속이 개명돼도 흔들리지 않는다)
+        ② 모르면 같은 사람의 소속 집합 (여러 집합에 걸리면 판정 포기)
+        ③ 그래도 모르면 소속명 그대로
+        """
+        if self.identity_lookup is not None:
+            try:
+                pid = self.identity_lookup(name, res.comp_idx, res.event_name, res.team)
+                if pid:
+                    return pid
+            except Exception as e:  # 보조 정보 — 실패해도 소속으로 계속
+                logger.debug(f"identity_lookup 실패 ({name}): {e}")
+        return self._team_group_key(name, res.team)
+
     def _team_group_key(self, name: str, team: str) -> str:
-        """동명이인 분리 키. 신원 조회가 같은 사람의 소속 집합을 알면 그 집합의 대표 소속으로 묶는다."""
+        """신원 조회가 같은 사람의 소속 집합을 알면 그 집합의 대표 소속으로 묶는다.
+
+        한 소속이 여러 집합(= 여러 사람)에 걸려 있으면 **아무 쪽도 고르지 않는다** —
+        '먼저 걸린 집합'을 쓰면 집합 순회 순서에 따라 답이 달라진다.
+        """
         if self.team_groups_lookup is not None:
             try:
-                for group in self.team_groups_lookup(name) or []:
-                    if team in group:
-                        return "|".join(sorted(group))
+                hits = [g for g in (self.team_groups_lookup(name) or []) if team in g]
+                if len(hits) == 1:
+                    return "|".join(sorted(hits[0]))
             except Exception as e:  # 보조 정보 — 실패해도 소속명으로 계속
                 logger.debug(f"team_groups_lookup 실패 ({name}): {e}")
         return team
@@ -556,7 +586,7 @@ class NationalTeamRankingCalculator:
                 )
                 key = raw_name
                 if normalize_name(raw_name) in homonyms:
-                    key = f"{normalize_name(raw_name)}|{self._team_group_key(normalize_name(raw_name), res.team)}"
+                    key = f"{normalize_name(raw_name)}|{self._identity_key(normalize_name(raw_name), res)}"
                 display_name[key] = normalize_name(raw_name) if key != raw_name else raw_name
                 prev = per_player[key].get(cid)
                 # 같은 대회에 같은 이름이 두 번(데이터 중복)이면 더 좋은 순위만 남긴다.

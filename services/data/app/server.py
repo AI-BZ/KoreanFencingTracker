@@ -2132,7 +2132,14 @@ def load_data():
             if not _identity_resolver:
                 return []
             return [set(p.teams) for p in _identity_resolver.get_players_by_name(name) if p.teams]
-        _ranking_calculator = RankingCalculator(fie_lookup=_build_fie_lookup(), team_groups_lookup=_nt_team_groups)
+        def _nt_identity(name: str, comp_cd: str, event_name: str, team: str):
+            # 이 순위 행이 누구의 것인지 리졸버에게 직접 묻는다 (동명이인 분리 1차 근거).
+            if not _identity_resolver:
+                return None
+            return _identity_resolver.resolve_record_owner(name, comp_cd, event_name, team)
+        _ranking_calculator = RankingCalculator(fie_lookup=_build_fie_lookup(),
+                                                team_groups_lookup=_nt_team_groups,
+                                                identity_lookup=_nt_identity)
         _ranking_calculator.load_from_data(_data_cache, org_age_lookup=_org_age_group_lookup)
         logger.info(f"✅ 랭킹 계산기 초기화 완료: {len(_ranking_calculator.results)}개 결과")
     except Exception as e:

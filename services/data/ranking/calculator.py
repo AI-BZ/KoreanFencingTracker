@@ -574,7 +574,7 @@ class RankingCalculator:
     Supabase에서 로드한 데이터 딕셔너리를 전달하세요.
     """
 
-    def __init__(self, fie_lookup=None, team_groups_lookup=None):
+    def __init__(self, fie_lookup=None, team_groups_lookup=None, identity_lookup=None):
         self.results: List[PlayerResult] = []
         self.data = None
         self.org_age_lookup: Dict[str, str] = {}
@@ -582,6 +582,7 @@ class RankingCalculator:
         self.national_team: NationalTeamRankingCalculator = None
         self.fie_lookup = fie_lookup
         self.team_groups_lookup = team_groups_lookup  # 동명이인 소속 그룹 (PlayerIdentityResolver)
+        self.identity_lookup = identity_lookup        # 순위 행 → player_id (같은 리졸버)
 
     def load_from_data(self, data: dict, org_age_lookup: dict = None):
         """Supabase 캐시 데이터에서 로드 (서버 런타임 전용)
@@ -596,7 +597,8 @@ class RankingCalculator:
         self._extract_results()
         self._generate_national_sub_rankings()
         self.national_team = NationalTeamRankingCalculator(
-            data, fie_lookup=self.fie_lookup, team_groups_lookup=self.team_groups_lookup)
+            data, fie_lookup=self.fie_lookup, team_groups_lookup=self.team_groups_lookup,
+            identity_lookup=self.identity_lookup)
         logger.info(f"메모리 데이터 로드 완료: {len(self.results)}개 결과")
 
     # ---------- NT 전체 랭킹 (협회 국가대표 선발 규정) ----------
@@ -611,7 +613,8 @@ class RankingCalculator:
         """
         if self.national_team is None:
             self.national_team = NationalTeamRankingCalculator(
-                self.data, fie_lookup=self.fie_lookup, team_groups_lookup=self.team_groups_lookup)
+                self.data, fie_lookup=self.fie_lookup, team_groups_lookup=self.team_groups_lookup,
+                identity_lookup=self.identity_lookup)
         effective_year = year if year is not None else date.today().year
         return self.national_team.calculate(weapon, gender, effective_year, today=today)
 

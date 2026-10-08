@@ -5,6 +5,8 @@
 있을 때만 추가로 돌린다 (없으면 skip).
 """
 import os
+from pathlib import Path
+from typing import Optional
 import sys
 from datetime import date
 
@@ -328,12 +330,29 @@ def test_media_rosters_shape():
 
 SCRATCH = ("/private/tmp/claude-501/-Users-gyejinpark-Documents-GitHub-FencingMind-data/"
            "48d3ff8c-1c03-4623-ae33-b6714784c37f/scratchpad")
+# 공지 모니터가 첨부를 영구 보관하는 곳. 세션 스크래치패드는 지워지므로 이쪽을 먼저 본다
+# (2026-10-08: 스크래치패드가 비워져 이 테스트 3건이 조용히 건너뛰어졌다).
+ARCHIVE = Path(__file__).resolve().parent.parent / "data" / "kfa_notices"
 
 
-@pytest.mark.skipif(not os.path.exists(os.path.join(SCRATCH, "kfa_10576_0.pdf")), reason="원본 없음")
+def _attachment(board_no: int, idx: int) -> Optional[bytes]:
+    """보관된 첨부 원본. 없으면 None (테스트는 skip)."""
+    folder = ARCHIVE / str(board_no)
+    if folder.is_dir():
+        for f in sorted(folder.iterdir()):
+            if f.name.startswith(f"{idx}_"):
+                return f.read_bytes()
+    legacy = Path(SCRATCH) / f"kfa_{board_no}_{idx}.pdf"
+    if legacy.exists():
+        return legacy.read_bytes()
+    return None
+
+
 def test_real_national_team_pdf_2025():
-    with open(os.path.join(SCRATCH, "kfa_10576_0.pdf"), "rb") as f:
-        r = extract_text(f.read(), "x.pdf")
+    data = _attachment(10576, 0)
+    if data is None:
+        pytest.skip("보관된 첨부 없음")
+    r = extract_text(data, "x.pdf")
     doc = parse_roster_document(r["text"])
     assert doc.roster_type == "national_team" and doc.year == 2025
     assert len(doc.entries) == 56 and doc.warnings == []
@@ -343,19 +362,21 @@ def test_real_national_team_pdf_2025():
     assert by[("남", "sabre")] == 12 and by[("여", "sabre")] == 12 and by[("남", "epee")] == 8
 
 
-@pytest.mark.skipif(not os.path.exists(os.path.join(SCRATCH, "kfa_10582_0.pdf")), reason="원본 없음")
 def test_real_candidate_hwp_2025():
-    with open(os.path.join(SCRATCH, "kfa_10582_0.pdf"), "rb") as f:  # 확장자만 pdf 인 HWP
-        r = extract_text(f.read(), "x.pdf")
+    data = _attachment(10582, 0)
+    if data is None:
+        pytest.skip("보관된 첨부 없음")
+    r = extract_text(data, "x.hwp")
     assert r["kind"] == "hwp" and r["text_extracted"]
     doc = parse_roster_document(r["text"])
     assert doc.roster_type == "candidate_u25" and len(doc.entries) == 48 and doc.warnings == []
 
 
-@pytest.mark.skipif(not os.path.exists(os.path.join(SCRATCH, "kfa_10835_0.pdf")), reason="원본 없음")
 def test_real_replacement_pdf_2026_07():
-    with open(os.path.join(SCRATCH, "kfa_10835_0.pdf"), "rb") as f:
-        r = extract_text(f.read(), "x.pdf")
+    data = _attachment(10835, 0)
+    if data is None:
+        pytest.skip("보관된 첨부 없음")
+    r = extract_text(data, "x.pdf")
     rows = parse_replacement_notice(r["text"])
     assert sorted(x.player_name for x in rows) == ["김기연", "박준성", "서예찬", "원태영", "한다현"]
 

@@ -49,6 +49,13 @@ ALERT_TAGS = {
 # 이 태그가 붙으면 위 태그가 있어도 알리지 않는다 (용구 견적, 채용 공고 등)
 ALERT_SUPPRESS_TAGS = {"procurement"}
 
+# 이 태그의 공지가 새로 들어오면 **우리 데이터에 반영**한다.
+#   · 명단 계열 → `data_kfa_rosters` 재적재 (프로필 대표·후보 배지가 이걸 읽는다)
+#   · 합산표    → 우리 NT 랭킹과 자동 대조 (협회 표가 정답지다, 제1원칙 5항)
+SYNC_ROSTER_TAGS = {"national_team", "candidate_u25", "u23", "youth", "kkumnamu",
+                    "replacement", "ranking_points"}
+POINTS_TAGS = {"ranking_points"}
+
 ARCHIVE_DIR = Path(__file__).resolve().parent.parent / "data" / "kfa_notices"
 ATTACHMENT_MAX_BYTES = 40 * 1024 * 1024
 
@@ -84,7 +91,8 @@ class KfaNoticeMonitor:
         """
         stats: Dict[str, Any] = {
             "scanned": 0, "new": 0, "updated": 0, "alerted": 0,
-            "attachments": 0, "extracted": 0, "errors": [], "started_at": datetime.now().isoformat(),
+            "attachments": 0, "extracted": 0, "errors": [], "touched_tags": [],
+            "started_at": datetime.now().isoformat(),
         }
         if not self.db:
             stats["errors"].append("Supabase 클라이언트 없음")
@@ -119,13 +127,124 @@ class KfaNoticeMonitor:
             logger.error(f"📰 공지 모니터 오류: {e}")
             stats["errors"].append(str(e))
 
+        # ── 수집한 공지를 우리 데이터에 반영 ──────────────────────────────
+        # 수집만 하고 끝내면 명단이 와도 배지·랭킹이 그대로다. 아래 두 단계가 "반영"이다.
+        # 어느 쪽이 실패해도 수집 결과는 유지한다(각각 예외를 삼킨다).
+        touched = set(stats.get("touched_tags") or [])
+        if touched & SYNC_ROSTER_TAGS:
+            stats["roster_sync"] = self._sync_rosters()
+        if touched & POINTS_TAGS:
+            stats["points_check"] = self._verify_points_tables()
+
         stats["finished_at"] = datetime.now().isoformat()
         logger.info(
             f"📰 공지 모니터 완료: 스캔 {stats['scanned']} · 신규 {stats['new']} · 갱신 {stats['updated']} "
             f"· 알림 {stats['alerted']} · 첨부 {stats['attachments']}(추출 {stats['extracted']}) "
             f"· 오류 {len(stats['errors'])}"
         )
+        if stats.get("roster_sync"):
+            rs = stats["roster_sync"]
+            logger.info(f"📰 명단 반영: {rs.get('records')}행 (seed_rank {rs.get('seeded')}건) "
+                        f"→ data_kfa_rosters 총 {rs.get('total')}행")
+        if stats.get("points_check"):
+            logger.info(f"📰 합산표 대조: {stats['points_check'].get('summary')}")
         return stats
+
+
+    # ------------------------------------------------------------------
+    # 우리 데이터에 반영
+    # ------------------------------------------------------------------
+    def _sync_rosters(self) -> Dict[str, Any]:
+        """명단 계열 공지를 `data_kfa_rosters` 에 재적재한다 (멱등 upsert).
+
+        프로필의 '국가대표·후보·23세이하·청소년대표' 배지가 이 표를 읽으므로, 이 단계가
+        없으면 새 명단이 공지돼도 사이트에는 반영되지 않는다.
+        """
+        try:
+            import sys
+            scripts_dir = str(Path(__file__).resolve().parent.parent / "scripts")
+            if scripts_dir not in sys.path:
+                sys.path.insert(0, scripts_dir)
+            from load_kfa_rosters import sync_rosters
+            out = sync_rosters(self.db)
+            if out.get("warnings"):
+                logger.warning(f"📰 명단 파싱 경고 {len(out['warnings'])}건: {out['warnings'][:3]}")
+            return out
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"📰 명단 반영 실패: {e}")
+            return {"error": str(e)[:200]}
+
+    def _verify_points_tables(self) -> Dict[str, Any]:
+        """새 합산표를 우리 NT 랭킹과 대조한다.
+
+        협회 표가 정답지다(제1원칙 5항). 자동으로 맞춰 보고 **상위 선발권 인원의 집합·순서**가
+        어긋나면 경고한다 — 그 구간이 어긋나면 "누가 대표가 되는가"가 달라지기 때문이다.
+        서버 프로세스 안에서만 동작한다(랭킹 계산에 서버의 대회 캐시를 쓴다). 캐시가 없으면
+        건너뛴다 — 스케줄러가 이 때문에 실패하지는 않는다.
+        """
+        try:
+            from app.kfa_roster_parser import parse_ranking_points
+            from app import server as srv
+
+            calc = getattr(srv, "_ranking_calculator", None)
+            if calc is None or not hasattr(calc, "calculate_nt_table"):
+                return {"skipped": "랭킹 계산기 없음(서버 프로세스 밖)"}
+
+            rows = (self.db.table("data_kfa_notices")
+                    .select("board_no,title,posted_at,attachments")
+                    .contains("tags", ["ranking_points"])
+                    .order("posted_at", desc=True).limit(1).execute().data or [])
+            if not rows:
+                return {"skipped": "합산표 공지 없음"}
+            notice = rows[0]
+
+            kfa_rows = []
+            for att in (notice.get("attachments") or []):
+                kfa_rows += parse_ranking_points(att.get("text") or "")
+            if not kfa_rows:
+                return {"board_no": notice["board_no"], "skipped": "표 파싱 결과 없음"}
+
+            # 협회 표의 (연도, 무기, 성별) 별로 상위 N명을 우리 표와 대조
+            groups: Dict[tuple, List[Any]] = {}
+            for r in kfa_rows:
+                groups.setdefault((r.year, r.weapon, r.gender), []).append(r)
+
+            checked, top_match, mismatches = 0, 0, []
+            for (year, weapon, gender), krows in sorted(groups.items()):
+                krows.sort(key=lambda x: x.rank)
+                try:
+                    table = calc.calculate_nt_table(weapon, gender, year)
+                except Exception as e:  # noqa: BLE001
+                    mismatches.append(f"{year} {weapon}/{gender}: 우리 표 계산 실패 {str(e)[:60]}")
+                    continue
+                quota = table.quota or 8
+                kfa_top = [r.player_name for r in krows[:quota]]
+                our_top = [p.player_name for p in table.rankings[:quota]]
+                checked += 1
+                if kfa_top == our_top:
+                    top_match += 1
+                else:
+                    mismatches.append(
+                        f"{year} {weapon}/{gender} 상위{quota}: 협회 {kfa_top} vs 우리 {our_top}")
+
+            out = {
+                "board_no": notice["board_no"],
+                "title": (notice.get("title") or "")[:60],
+                "posted_at": notice.get("posted_at"),
+                "checked": checked,
+                "top_match": top_match,
+                "mismatches": mismatches[:6],
+                "summary": f"{top_match}/{checked} 종목 상위 선발권 일치",
+            }
+            if checked and top_match < checked:
+                logger.error(
+                    f"🚨 협회 합산표와 우리 NT 랭킹의 상위 선발권이 어긋남 "
+                    f"({top_match}/{checked}): {mismatches[:2]}"
+                )
+            return out
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"📰 합산표 대조 실패: {e}")
+            return {"error": str(e)[:200]}
 
     # ------------------------------------------------------------------
     # 내부
@@ -159,6 +278,8 @@ class KfaNoticeMonitor:
         }
         self.db.table("data_kfa_notices").upsert(record, on_conflict="board_no").execute()
         stats["new" if is_new else "updated"] += 1
+        # 어떤 태그가 들어왔는지 모아 둔다 — run() 끝에서 '반영' 단계를 띄우는 기준이다.
+        stats.setdefault("touched_tags", []).extend(tags)
         logger.info(f"📰 {'신규' if is_new else '갱신'} 공지 {row.board_no} [{','.join(tags)}] {title[:60]}")
 
         if is_new and self.notify and should_alert(tags):
