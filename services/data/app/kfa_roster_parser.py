@@ -233,7 +233,7 @@ class RankingRow:
     rank: int
     total: float
     player_name: str
-    birth: str
+    birth: Optional[str]      # 2026-10-06 표부터 협회가 생년월일을 빼고 게시한다
     team: Optional[str]
 
 
@@ -241,15 +241,21 @@ class RankingRow:
 _RANK_HEADER = re.compile(
     r"종목\s*[:：]\s*(남자|여자)\s*(사\s*브\s*르|에\s*[뻬페]|플\s*[러뢰]\s*레)\s*-\s*(20\d\d)\s*년"
 )
+# 생년월일 칸은 **있을 때도 있고 없을 때도 있다.**
+#   2026-08-26 표(10916): "1 86 최세빈 00.08.11대전광역시청 3 20 1 32 33 2 1 32"
+#   2026-10-06 표(10963): "1 110 전하영 서울특별시청 1 32 1 32 2 26 3 20"   ← 생년월일 없음
+# 생년월일을 필수로 두면 새 표가 **조용히 0행으로 파싱된다**(2026-10-08 실측:
+# 첨부가 교체되자 합산표 자동 대조가 "표 파싱 결과 없음"으로 건너뛰었다).
 _RANK_ROW = re.compile(
-    r"^\s*(\d+)\s+(\d+(?:\.\d+)?)\s+([가-힣A-Za-z]{2,12})\s*(\d{2}\.\d{2}\.\d{2})\s*(\S*)"
+    r"^\s*(\d+)\s+(\d+(?:\.\d+)?)\s+([가-힣A-Za-z]{2,12})\s*(\d{2}\.\d{2}\.\d{2})?\s*(\S*)"
 )
 
 
 def parse_ranking_points(text: str) -> List[RankingRow]:
     """합산 랭킹표 전체 텍스트(페이지 구분 \\f) → 행 목록.
 
-    같은 (종목, 이름, 생년월일)이 두 페이지에 걸쳐 중복되면 앞의 것을 남긴다.
+    같은 (종목, 순위, 이름, 생년월일)이 두 페이지에 걸쳐 중복되면 앞의 것을 남긴다.
+    생년월일은 협회 표에 있을 때만 채운다(2026-10-06 표부터 빠졌다).
     """
     rows: List[RankingRow] = []
     seen = set()
@@ -270,7 +276,10 @@ def parse_ranking_points(text: str) -> List[RankingRow]:
             team = rm.group(5)
             if not team or team == "-" or re.fullmatch(r"[\d.]+", team):
                 team = None
-            key = (gw, rm.group(3), rm.group(4))
+            # 생년월일이 없는 표에서는 (이름, 생년월일)만으로는 동명이인이 한 행으로
+            # 합쳐진다 — 순위를 키에 넣어 가른다. 페이지가 겹쳐 같은 행이 두 번
+            # 나오는 경우(원래 이 dedup 의 목적)는 순위도 같으므로 그대로 걸러진다.
+            key = (gw, year, int(rm.group(1)), rm.group(3), rm.group(4))
             if key in seen:
                 continue
             seen.add(key)

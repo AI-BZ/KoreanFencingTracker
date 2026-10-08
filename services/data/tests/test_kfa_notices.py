@@ -415,3 +415,43 @@ def test_match_rosters_requires_team_match():
     assert match_rosters(ROSTER_ROWS, "김민서", ["은성중학교"]) == []        # 명단에 소속 없음 → 대조 불가 → 미표시
     b = match_rosters(ROSTER_ROWS, "정유준", ["경덕중학교", "신수중학교"])  # 소속 이력 중 하나면 충분
     assert len(b) == 1 and b[0]["source_label"] == "합동훈련 명단(SNS)"
+
+
+# 2026-10-06 표(boardNo 10963)부터 협회가 생년월일 칸을 빼고 게시한다.
+# 생년월일을 필수로 두던 동안에는 이 표가 조용히 0행으로 파싱돼, 합산표 자동 대조가
+# "표 파싱 결과 없음"으로 건너뛰었다 (2026-10-08 실측, 실제 첨부 1,542행).
+RANK_TEXT_NO_BIRTH = (
+    "순위 점수 순위 점수 순위 점수 순위 점수\n"
+    "1 110 전하영 서울특별시청 1 32 1 32 2 26 3 20\n"
+    "2 74 홍하은 서울특별시청 7 14 3 20 1 32 10 8\n"
+    "138 1 김현진 전남체육고등학교 94 1\n"
+    "종목 : 여자사브르 - 2026년 국가대표 선발을 위한 4개 대회 결과 합산 점수 랭킹 현황\n"
+)
+
+
+def test_parse_ranking_points_without_birth_column():
+    rows = parse_ranking_points(RANK_TEXT_NO_BIRTH)
+    assert [(r.rank, r.player_name, r.team, r.birth) for r in rows] == [
+        (1, "전하영", "서울특별시청", None),
+        (2, "홍하은", "서울특별시청", None),
+        (138, "김현진", "전남체육고등학교", None),
+    ]
+    assert all(r.year == 2026 and r.gender == "여" and r.weapon == "sabre" for r in rows)
+
+
+def test_parse_ranking_points_keeps_homonyms_apart_without_birth():
+    """생년월일이 없으면 (이름, 생년월일) 키로는 동명이인이 한 행으로 합쳐진다 — 순위로 가른다."""
+    text = ("1 74 김현진 인천광역시영종구청 6 14 5 14 5 14 1 32\n"
+            "138 1 김현진 전남체육고등학교 94 1\n"
+            "종목 : 여자플러레 - 2026년 국가대표 선발을 위한 4개 대회 결과 합산 점수 랭킹 현황\n")
+    rows = parse_ranking_points(text)
+    assert [(r.rank, r.total, r.team) for r in rows] == [
+        (1, 74.0, "인천광역시영종구청"), (138, 1.0, "전남체육고등학교")]
+
+
+def test_parse_ranking_points_dedupes_rows_repeated_across_pages():
+    """페이지가 겹쳐 같은 행이 두 번 나오면 하나만 남는다 (dedup 의 원래 목적)."""
+    page = "1 110 전하영 서울특별시청 1 32 1 32 2 26 3 20\n"
+    header = "종목 : 여자사브르 - 2026년 국가대표 선발을 위한 4개 대회 결과 합산 점수 랭킹 현황\n"
+    rows = parse_ranking_points(page + header + "\f" + page + header)
+    assert len(rows) == 1
