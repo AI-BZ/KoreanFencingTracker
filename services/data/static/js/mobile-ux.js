@@ -254,11 +254,16 @@
     };
 
     window.skipOnboarding = function() {
+        // 재질문 카운터(league_ask_count·league_asked_on)는 보존한다. 건너뛸 때마다
+        // 0으로 돌아가면 하루 한 번·최대 3회 한도가 영원히 리셋돼 계속 묻게 된다.
+        var prev = FMPreferences.get() || {};
         FMPreferences.save({
             weapon: null,
             gender: null,
             age_group: null,
-            onboarded: true
+            onboarded: true,
+            league_ask_count: prev.league_ask_count || 0,
+            league_asked_on: prev.league_asked_on || null
         });
         var overlay = document.getElementById('onboarding-overlay');
         if (overlay) overlay.classList.remove('visible');

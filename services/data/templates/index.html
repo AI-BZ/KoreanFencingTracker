@@ -3798,6 +3798,48 @@ function fmIsOnboarded() {
     } catch (e) { return false; }
 }
 
+// ── 선호 리그가 비어 있으면 다시 묻는다 (2026-10-10) ────────────────────────
+// 온보딩의 '건너뛰기'는 무기·성별·리그를 전부 null 로 저장하면서 onboarded=true 를
+// 찍는다. 그 뒤로는 시트도 안 뜨고(여기서 fmIsOnboarded 로 걸렀다) 랭킹 미리보기도
+// 숨은 채라, 한 번 건너뛰면 영구히 다시 묻지 않았다. 리그를 고른 사람과 아직 안 고른
+// 사람을 구분해, 안 고른 사람에게만 다시 묻는다.
+//
+// 다시 묻는 방식은 기존 비차단 시트 그대로다(전면 모달로 되돌리지 않는다 —
+// 2026-07-31 디자인 패스 결정). 대신 **하루 한 번·최대 FM_LEAGUE_ASK_LIMIT 회**로
+// 제한한다. '건너뛰기 - 전체 보기'를 의도적으로 고른 사람을 계속 붙잡으면 안 된다.
+// 한도를 넘긴 뒤에도 '선호 리그 변경' 버튼과 '내 종목 설정' 칩은 그대로 남는다.
+var FM_LEAGUE_ASK_LIMIT = 3;
+
+function fmReadPrefs() {
+    try { return JSON.parse(localStorage.getItem('fm_preferences') || 'null'); } catch (e) { return null; }
+}
+
+function fmHasLeaguePrefs() {
+    var p = fmReadPrefs();
+    return !!(p && p.weapon && p.gender && p.age_group);
+}
+
+function fmTodayKey() {
+    var d = new Date();
+    return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+}
+
+function fmShouldReaskLeague() {
+    var p = fmReadPrefs();
+    if (!p || !p.onboarded) return false;   // 첫 방문자는 기존 온보딩 경로가 담당
+    if (fmHasLeaguePrefs()) return false;   // 이미 고름
+    if (p.league_asked_on === fmTodayKey()) return false;
+    return (p.league_ask_count || 0) < FM_LEAGUE_ASK_LIMIT;
+}
+
+function fmRecordLeagueAsk() {
+    var p = fmReadPrefs();
+    if (!p) return;
+    p.league_ask_count = (p.league_ask_count || 0) + 1;
+    p.league_asked_on = fmTodayKey();
+    try { localStorage.setItem('fm_preferences', JSON.stringify(p)); } catch (e) {}
+}
+
 function fmSheetEl() { return document.getElementById('onboarding-overlay'); }
 
 // Reset the two-step card back to step 1 (for reopening via the chip)
@@ -3879,14 +3921,19 @@ document.addEventListener('click', function (e) {
 
 // One-time auto-reveal after the user scrolls ~1 viewport past the hero
 function initSportSheetReveal() {
-    if (fmIsOnboarded()) return;                    // returning user with prefs
-    if (localStorage.getItem(FM_SEEN_KEY)) return;  // already seen / dismissed
+    // 리그를 이미 고른 사람에게는 절대 뜨지 않는다.
+    if (fmHasLeaguePrefs()) return;
+    // 리그가 비어 있는데 다시 물을 차례면, '이미 봤다' 표시를 넘어서 한 번 더 띄운다.
+    var reask = fmShouldReaskLeague();
+    if (!reask && localStorage.getItem(FM_SEEN_KEY)) return;  // already seen / dismissed
     _fmRevealHandler = function onScroll() {
-        // Re-check at fire time: prefs set or already seen → retire quietly
-        if (fmIsOnboarded() || localStorage.getItem(FM_SEEN_KEY)) { fmCancelReveal(); return; }
+        // Re-check at fire time: league chosen or already seen → retire quietly
+        if (fmHasLeaguePrefs()) { fmCancelReveal(); return; }
+        if (!reask && localStorage.getItem(FM_SEEN_KEY)) { fmCancelReveal(); return; }
         var threshold = Math.max(window.innerHeight * 0.85, 320);
         if (window.scrollY > threshold) {
             try { localStorage.setItem(FM_SEEN_KEY, '1'); } catch (e) {}
+            if (reask) fmRecordLeagueAsk();   // 하루 한 번·최대 3회 한도를 센다
             openSportSelector();   // this also calls fmCancelReveal()
         }
     };
