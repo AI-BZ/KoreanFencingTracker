@@ -456,9 +456,26 @@
                         var poolSeed = r.pool_rank ? ('#' + r.pool_rank + ' ') : '';
                         var poolText = poolSeed + 'Pool ' + (r.pool_wins || 0) + 'W-' + (r.pool_losses || 0) + 'L';
                         var deText = 'DE ' + (r.de_wins || 0) + 'W-' + (r.de_losses || 0) + 'L';
-                        var eventUrl = '/competition/' + encodeURIComponent(r.sub_event_cd || r.event_cd || '');
+                        // 종목 페이지 주소는 `/competition/{대회코드}?event={종목코드}` 다
+                        // (player_profile.html 메달 목록·index.html 대회 카드와 같은 형식).
+                        // 경로 자리에 종목 코드(COMPS…)를 넣으면 그 라우트는 대회를 못 찾고
+                        // **404 + content-type: application/json** 을 돌려준다. 브라우저는 그
+                        // 본문을 띄울 수 없어 JSON 파일로 저장한다 — 즐겨찾기 카드를 누르면
+                        // {"detail":"대회를 찾을 수 없습니다"} 가 다운로드됐다 (2026-10-10 확인).
+                        // 카드가 2026-07-28~09-30 두 달간 API 500 으로 숨어 있어 드러나지 않았다.
+                        var compCd = r.event_cd || '';
+                        var subCd = r.sub_event_cd || '';
+                        var eventUrl;
+                        if (compCd) {
+                            eventUrl = '/competition/' + encodeURIComponent(compCd);
+                            if (subCd) eventUrl += '?event=' + encodeURIComponent(subCd);
+                            eventUrl += (subCd ? '&' : '?') + 'highlight=' + encodeURIComponent(fav.player_name);
+                        } else {
+                            // 대회 코드가 없으면 깨진 주소를 내보내지 않고 선수 프로필로 보낸다
+                            eventUrl = '/player/' + encodeURIComponent(fav.player_name);
+                        }
 
-                        html += '<a href="' + eventUrl + '?highlight=' + encodeURIComponent(fav.player_name) + '" class="favorite-card-link">';
+                        html += '<a href="' + eventUrl + '" class="favorite-card-link">';
                         html += '<div class="favorite-card-header">';
                         html += '<span class="favorite-heart">&#9829;</span> ';
                         html += '<span class="favorite-player-name">' + displayName + '</span>';
